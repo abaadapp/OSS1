@@ -163,12 +163,7 @@ class OrderCorrection
      * الفاتورة مغلقة، ويبقى **الإلغاء الكامل** بابًا مفتوحًا — وهو لا يعيد
      * كتابة المستند بل يعكس قيدَه ويترك الاثنين مقروءين (انظر `cancel`).
      *
-     * ملاحظة: القاعدة المقصودة أصلًا «ما دامت الورديّة مفتوحة». وميزةُ
-     * الورديّات لا وجود لها في هذا النظام — لا مسار ولا شاشة، و`orders.shift_id`
-     * عمودٌ لا يكتبه شيء. واليومُ أقربُ حدٍّ يُنفَّذ ببيانٍ قائم، ويلتقي بها
-     * حين تُبنى: ورديّةٌ نادرًا ما تعبر يومين.
-     *
-     * @throws RuntimeException برسالةٍ تُعرض للكاشير كما هي
+     * @throws RuntimeException برسالةٍ تُعرض كما هي
      */
     private static function assertSameDay(Order $order): void
     {
@@ -633,7 +628,6 @@ class OrderCorrection
                 self::moveStock($order, $item, (int) $item->quantity);
                 self::releaseAddons($order, $item);
             }
-
 
             /*
              * لا قيدَ دخلٍ على بيعةٍ لم تقع.

@@ -36,7 +36,8 @@ class JobTitleController extends Controller
         JobTitle::create([
             'business_id' => $bid,
             'name' => $data['name'],
-            'role' => ($data['role'] ?? null) ?: 'cashier',
+            // وبلا دورٍ تسقط على `sales`: أضيقُ ما يُمنح من الأدوار العاملة
+            'role' => ($data['role'] ?? null) ?: 'sales',
             'description' => $data['description'] ?? null,
         ]);
         Activity::log('created', 'أضاف وظيفة: ' . $data['name']);
