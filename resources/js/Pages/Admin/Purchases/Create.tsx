@@ -559,7 +559,7 @@ export default function PurchaseCreate() {
                                 فاختيارُ عملةٍ ثانية هنا يعني قيدًا لا يعرف
                                 النظامُ كيف يحوّله — ورقمٌ يُعرض ولا يُحاسَب.
                             */}
-                            <Field label="عملة الشراء" hint="عملةُ المتجر — تُضبط من الإعدادات">
+                            <Field label="عملة الشراء" hint="عملةُ الشركة — تُضبط من الإعدادات">
                                 <Input value={`${currencyLabel(currency)} — ${currency.name ?? ''}`} readOnly disabled />
                             </Field>
                         </div>
@@ -933,7 +933,7 @@ export default function PurchaseCreate() {
                             {err('tax_rate') && <p className="text-[12px] text-[#b91c1c]">{err('tax_rate')}</p>}
                             {Number(form.data.tax_rate) !== taxRate && (
                                 <p className="text-[11px] text-[#b45309]">
-                                    {t('نسبة مختلفة عن نسبة المتجر')} ({taxRate}%)
+                                    {t('نسبة مختلفة عن نسبة الشركة')} ({taxRate}%)
                                 </p>
                             )}
 

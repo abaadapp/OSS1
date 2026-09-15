@@ -50,7 +50,7 @@ export default function Summary() {
         <AdminLayout title="الملخّص المالي">
             <PageHeader
                 title="الملخّص المالي"
-                subtitle={t('أين المال الآن، وماذا جرى في المدة، وماذا على المتجر')}
+                subtitle={t('أين المال الآن، وماذا جرى في المدة، وماذا على الشركة')}
             />
 
             <SectionTabs tabs={FINANCE_TABS} current="admin.finance.summary" />

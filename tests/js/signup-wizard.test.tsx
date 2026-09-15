@@ -6,11 +6,11 @@ import Register from '@/Pages/Auth/Register';
 import { pageProps } from './setup';
 
 /**
- * معالجُ فتح المتجر — ستُّ خطواتٍ وحالةٌ واحدة.
+ * معالجُ فتح الشركة — ستُّ خطواتٍ وحالةٌ واحدة.
  *
  * ═══ ولمَ يُختبر في متصفّح ═══
  *
- * اختباراتُ PHP تصل إلى الطلب الأخير وتقف عنده: أنّ متجرًا يُفتح ومالكًا
+ * اختباراتُ PHP تصل إلى الطلب الأخير وتقف عنده: أنّ شركةً تُفتح ومالكًا
  * يُنشأ. وما قبله — أنّ «السابق» لا يمحو ما كُتب، وأنّ الخطوة لا تمرّ بحقلٍ
  * ناقص، وأنّ كلمة المرور **لا تُكتب في التخزين** — لا يُشغّله إلّا متصفّح.
  *
@@ -89,11 +89,11 @@ describe('معالج التسجيل', () => {
         await firstStep(user);
         await user.click(screen.getByRole('button', { name: /متابعة/ }));
 
-        await user.type(screen.getByLabelText(/اسم المتجر/), 'زهور الخوير');
+        await user.type(screen.getByLabelText(/اسم الشركة/), 'زهور الخوير');
         await user.click(screen.getByRole('button', { name: /السابق/ }));
         await user.click(screen.getByRole('button', { name: /متابعة/ }));
 
-        expect(screen.getByLabelText(/اسم المتجر/)).toHaveValue('زهور الخوير');
+        expect(screen.getByLabelText(/اسم الشركة/)).toHaveValue('زهور الخوير');
 
         /* وحتّى أوّل خطوة: الرجوعُ خطوتين لا يمسّ الاسمَ ولا الرقم */
         await user.click(screen.getByRole('button', { name: /السابق/ }));
@@ -110,18 +110,18 @@ describe('معالج التسجيل', () => {
 
         await firstStep(user);
 
-        // النشاطُ واسمُ المتجر ليسا اختياريّين
+        // النشاطُ واسمُ الشركة ليسا اختياريّين
         expect(screen.queryByRole('button', { name: /تخطّي/ })).not.toBeInTheDocument();
 
         await user.click(screen.getByRole('button', { name: /متابعة/ }));
-        await user.type(screen.getByLabelText(/اسم المتجر/), 'زهور');
+        await user.type(screen.getByLabelText(/اسم الشركة/), 'زهور');
         await user.click(screen.getByRole('button', { name: /متابعة/ }));
 
         // حجمُ الفريق اختياريّ
         expect(screen.getByText('كم شخص يعمل معك؟')).toBeInTheDocument();
         await user.click(screen.getByRole('button', { name: /تخطّي/ }));
 
-        expect(screen.getByText(/وين موقع متجرك/)).toBeInTheDocument();
+        expect(screen.getByText(/وين موقع شركتك/)).toBeInTheDocument();
     });
 
     it('يقول شروط كلمة المرور قبل أن يفرضها، ولا يلوّنها قبل الكتابة', async () => {
@@ -130,19 +130,19 @@ describe('معالج التسجيل', () => {
 
         await firstStep(user);
         await user.click(screen.getByRole('button', { name: /متابعة/ }));
-        await user.type(screen.getByLabelText(/اسم المتجر/), 'زهور');
+        await user.type(screen.getByLabelText(/اسم الشركة/), 'زهور');
         await user.click(screen.getByRole('button', { name: /متابعة/ }));
         await user.click(screen.getByRole('button', { name: /تخطّي/ }));
         await user.click(screen.getByRole('button', { name: /تخطّي/ }));
 
-        expect(screen.getByText('بيانات الدخول لإدارة متجرك')).toBeInTheDocument();
+        expect(screen.getByText('بيانات الدخول لإدارة شركتك')).toBeInTheDocument();
 
         /* الشروطُ معروضةٌ من أوّل نظرة — لا تظهر بعد الرفض */
         expect(screen.getByText('8 أحرف على الأقل')).toBeInTheDocument();
         expect(screen.getByText('رقم واحد على الأقل')).toBeInTheDocument();
 
         /* والزرُّ الأخير يقول ماذا يفعل */
-        expect(screen.getByRole('button', { name: /ابدأ إدارة متجرك/ })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /ابدأ إدارة شركتك/ })).toBeInTheDocument();
     });
 
     /*
@@ -158,7 +158,7 @@ describe('معالج التسجيل', () => {
 
         await firstStep(user);
         await user.click(screen.getByRole('button', { name: /متابعة/ }));
-        await user.type(screen.getByLabelText(/اسم المتجر/), 'زهور');
+        await user.type(screen.getByLabelText(/اسم الشركة/), 'زهور');
         await user.click(screen.getByRole('button', { name: /متابعة/ }));
         await user.click(screen.getByRole('button', { name: /تخطّي/ }));
         await user.click(screen.getByRole('button', { name: /تخطّي/ }));

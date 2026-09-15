@@ -402,7 +402,7 @@ export default function SettingsIndex() {
         <AdminLayout title="الإعدادات">
             <PageHeader
                 title="الإعدادات"
-                subtitle={t('إعدادات المتجر والضرائب والفواتير والإشعارات')}
+                subtitle={t('إعدادات الشركة والضرائب والفواتير والإشعارات')}
             />
 
             {tab === null ? (
@@ -568,7 +568,7 @@ export default function SettingsIndex() {
                 <div className="space-y-6">
                     <SettingsSection
                         title="تنزيل نسخة احتياطية"
-                        description="يشمل الملف كامل بيانات متجرك: المنتجات، الأقسام، العملاء، الطلبات، المصروفات وغيرها."
+                        description="يشمل الملف كامل بيانات شركتك: المنتجات، الأقسام، العملاء، الطلبات، المصروفات وغيرها."
                         icon={Download}
                     >
                         <PageActions>
@@ -583,12 +583,12 @@ export default function SettingsIndex() {
 
                     <SettingsSection
                         title="استعادة من نسخة احتياطية"
-                        description="ما في الملفّ يحلّ محلّ ما في متجرك — فاقرأ التحذير قبل أن تختار."
+                        description="ما في الملفّ يحلّ محلّ ما في شركتك — فاقرأ التحذير قبل أن تختار."
                         icon={Upload}
                     >
                         <p className="mb-4 flex items-start gap-2 rounded-[12px] bg-[#fef2f2] px-3 py-2.5 text-[12px] text-[#b91c1c]">
                             <AlertTriangle className="mt-0.5 size-4 shrink-0" />
-                            {t('تحذير: ستحل بيانات النسخة محل بيانات متجرك الحالية.')}
+                            {t('تحذير: ستحل بيانات النسخة محل بيانات شركتك الحالية.')}
                         </p>
                         <form
                             onSubmit={(e) => {
@@ -633,11 +633,11 @@ export default function SettingsIndex() {
                             <>
                                 <SettingsSection
                                     title="بيانات النشاط"
-                                    description="ما يُطبع في رأس فواتيرك وإيصالاتك — واسمُ متجرك أوّلُه."
+                                    description="ما يُطبع في رأس فواتيرك وإيصالاتك — واسمُ شركتك أوّلُه."
                                     icon={Store}
                                 >
                                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                                    <Field label="اسم المتجر" required error={form.errors.shop_name}>
+                                    <Field label="اسم الشركة" required error={form.errors.shop_name}>
                                         <Input value={form.data.shop_name} onChange={(e) => form.setData('shop_name', e.target.value)} required />
                                     </Field>
                                     <Field label="رقم الهاتف" error={form.errors.phone}>
@@ -803,7 +803,7 @@ export default function SettingsIndex() {
                             <>
                                 <SettingsSection
                                     title="الضرائب والعملة والدفع"
-                                    description="ثلاثةٌ تُضبط في جلسةٍ واحدة عند تجهيز المتجر — وحفظةٌ واحدة تكتبها كلَّها."
+                                    description="ثلاثةٌ تُضبط في جلسةٍ واحدة عند تجهيز الشركة — وحفظةٌ واحدة تكتبها كلَّها."
                                     icon={Percent}
                                     divided
                                 >

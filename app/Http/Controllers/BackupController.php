@@ -56,7 +56,7 @@ class BackupController extends Controller
          */
         if ((int) ($data['meta']['version'] ?? 0) < BackupService::VERSION) {
             return back()->with('toast', [
-                'msg' => __('هذه نسخةٌ بصيغةٍ قديمة لا تحمل كلّ جداول المتجر — استعادتُها تمحو ما لا تُعيد. خُذ نسخةً جديدة واستعِد منها.'),
+                'msg' => __('هذه نسخةٌ بصيغةٍ قديمة لا تحمل كلّ جداول الشركة — استعادتُها تمحو ما لا تُعيد. خُذ نسخةً جديدة واستعِد منها.'),
                 'type' => 'danger',
             ]);
         }

@@ -325,10 +325,10 @@ export default function OrderShow() {
                                 <Button variant="outline" asChild>
                                     <a
                                         href="/admin/setup"
-                                        title={t('لم يُسمَّ متجرك بعد — والفاتورة الضريبية تحمل اسمه.')}
+                                        title={t('لم تُسمَّ شركتك بعد — والفاتورة الضريبية تحمل اسمها.')}
                                     >
                                         <ReceiptText />
-                                        {t('فاتورة ضريبية — سمِّ متجرك أولًا')}
+                                        {t('فاتورة ضريبية — سمِّ شركتك أولًا')}
                                     </a>
                                 </Button>
                             ))}

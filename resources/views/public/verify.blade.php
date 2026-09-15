@@ -157,13 +157,13 @@
         <div>
             <div class="t sm">{{ __('موثّقة من افنت بلس') }}</div>
             <div class="faint xs">
-                {{ __('هذه نسخةٌ من سجلّ المتجر، عُرضت في') }}
+                {{ __('هذه نسخةٌ من سجلّ الشركة، عُرضت في') }}
                 <span class="ltr">{{ $stampedAt }}</span>
             </div>
         </div>
     </div>
 </main>
 
-<footer class="faint xs">{{ __('افنت بلس — نظام إدارة المتاجر') }}</footer>
+<footer class="faint xs">{{ __('افنت بلس — نظام إدارة الشركة') }}</footer>
 </body>
 </html>

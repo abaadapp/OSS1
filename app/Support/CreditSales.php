@@ -76,7 +76,7 @@ final class CreditSales
         throw ValidationException::withMessages([
             'credit' => $actor && $actor->may(self::OVERRIDE)
                 ? __('سيتجاوز العميل حدَّ الائتمان بمقدار :n — اكتب سببَ التجاوز للمتابعة.', ['n' => $over])
-                : __('سيتجاوز العميل حدَّ الائتمان بمقدار :n — يلزم إذنُ صاحب المتجر.', ['n' => $over]),
+                : __('سيتجاوز العميل حدَّ الائتمان بمقدار :n — يلزم إذنُ صاحب العمل.', ['n' => $over]),
         ]);
     }
 }

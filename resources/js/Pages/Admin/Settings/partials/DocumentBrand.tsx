@@ -75,7 +75,7 @@ export default function DocumentBrand({ brand, onChange }: { brand: Brand; onCha
         <Card className="p-5">
             <h3 className="mb-1 font-bold text-[#111]">{t('هوية الأوراق')}</h3>
             <p className="mb-4 text-[12px] text-[#9ca3af]">
-                {t('تُطبَّق على كل أوراق متجرك — لا على هذا القالب وحده.')}
+                {t('تُطبَّق على كل أوراق شركتك — لا على هذا القالب وحده.')}
             </p>
 
             {/* ————— الشعار والغلاف ————— */}

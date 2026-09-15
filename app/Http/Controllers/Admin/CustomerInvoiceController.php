@@ -791,8 +791,8 @@ class CustomerInvoiceController extends Controller
             'logo.image' => __('الشعار صورة — PNG أو JPG أو WEBP'),
             'logo.max' => __('أقصى حجمٍ للشعار ٢ ميغابايت'),
         ], [
-            'display_name' => __('اسم المتجر في الفاتورة'),
-            'header' => __('سطر تحت اسم المتجر'),
+            'display_name' => __('اسم الشركة في الفاتورة'),
+            'header' => __('سطر تحت اسم الشركة'),
             'footer' => __('سطر أسفل الفاتورة'),
         ]);
 
@@ -839,7 +839,7 @@ class CustomerInvoiceController extends Controller
         $data = $request->validate([
             'customer_id' => ['nullable', 'integer', Rule::exists('customers', 'id')->where('business_id', $bid)],
         ], [
-            'customer_id.exists' => __('هذا العميل ليس من عملاء متجرك.'),
+            'customer_id.exists' => __('هذا العميل ليس من عملاء شركتك.'),
         ], ['customer_id' => __('العميل الافتراضي')]);
 
         Setting::updateOrCreate(
@@ -967,7 +967,7 @@ class CustomerInvoiceController extends Controller
 
         if (! $customer) {
             throw ValidationException::withMessages([
-                'customer_id' => __('هذا العميل ليس من عملاء متجرك.'),
+                'customer_id' => __('هذا العميل ليس من عملاء شركتك.'),
             ]);
         }
 
@@ -1288,7 +1288,7 @@ class CustomerInvoiceController extends Controller
 
         if (! $customer) {
             throw ValidationException::withMessages([
-                'customer_id' => __('هذا العميل ليس من عملاء متجرك.'),
+                'customer_id' => __('هذا العميل ليس من عملاء شركتك.'),
             ]);
         }
 

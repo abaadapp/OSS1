@@ -79,7 +79,7 @@ export default function Dashboard() {
                 على كل الصفحات، فرُفعا من ترويسة اللوحة كي لا يتكرّرا. */}
             <PageHeader
                 title="لوحة التحكم"
-                subtitle={t('نظرة عامة على أداء :name', { name: context?.businessName ?? t('متجرك') })}
+                subtitle={t('نظرة عامة على أداء :name', { name: context?.businessName ?? t('شركتك') })}
             />
 
             <StatGrid stats={liveStats} storageKey="admin" catalog={statCatalog} />

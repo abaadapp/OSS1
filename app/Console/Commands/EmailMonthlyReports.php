@@ -58,7 +58,7 @@ class EmailMonthlyReports extends Command
             $sent++;
         });
 
-        $this->info($sent ? __('تم إرسال :count تقرير عن :period.', ['count' => $sent, 'period' => $period]) : __('لا توجد متاجر ذات نشاط لإرسال تقارير.'));
+        $this->info($sent ? __('تم إرسال :count تقرير عن :period.', ['count' => $sent, 'period' => $period]) : __('لا توجد شركات ذات نشاط لإرسال تقارير.'));
 
         return self::SUCCESS;
     }

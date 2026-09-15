@@ -73,10 +73,10 @@ export default function SetupIndex({ shop, steps, confirmed, placeholders }: Pro
     const missing = steps.filter((s) => s.required && ! s.done).length;
 
     return (
-        <AdminLayout title={t('تهيئة المتجر')}>
+        <AdminLayout title={t('تهيئة الشركة')}>
             <PageHeader
-                title={t('تهيئة المتجر')}
-                subtitle={t('اسمُ متجرك يُطبع في رأس كلّ فاتورة وإيصال وتقرير — اكتبه مرّةً هنا.')}
+                title={t('تهيئة الشركة')}
+                subtitle={t('اسمُ شركتك يُطبع في رأس كلّ فاتورة وإيصال وتقرير — اكتبه مرّةً هنا.')}
                 actions={
                     confirmed
                         ? <StatusPill state="ready" label="الهويّة مُقرَّة" />
@@ -149,12 +149,12 @@ export default function SetupIndex({ shop, steps, confirmed, placeholders }: Pro
 
                 <form onSubmit={save}>
                     <SettingsSection
-                        title="بيانات متجرك"
+                        title="بيانات شركتك"
                         description="هذه الأربعة هي ما يُطبع في رأس الورقة — ولا شيء سواها هنا."
                     >
                         <div className="space-y-4">
                             <Field
-                                label="اسم المتجر"
+                                label="اسم الشركة"
                                 required
                                 htmlFor="shop_name"
                                 /*
@@ -164,7 +164,7 @@ export default function SetupIndex({ shop, steps, confirmed, placeholders }: Pro
                                 error={
                                     form.errors.shop_name ??
                                     (nameIsPlaceholder
-                                        ? t('هذا ما يكتبه النظام حين لا اسم للمتجر — اكتب اسمك التجاري كما تريده على الفاتورة.')
+                                        ? t('هذا ما يكتبه النظام حين لا اسم للشركة — اكتب اسمك التجاري كما تريده على الفاتورة.')
                                         : undefined)
                                 }
                             >
@@ -214,7 +214,7 @@ export default function SetupIndex({ shop, steps, confirmed, placeholders }: Pro
                                     checked={!form.data.vat_enabled}
                                     onChange={(e) => form.setData('vat_enabled', !e.target.checked)}
                                 />
-                                {t('متجري غير مسجّل في ضريبة القيمة المضافة')}
+                                {t('شركتي غير مسجّلة في ضريبة القيمة المضافة')}
                             </label>
                         </div>
 
@@ -231,8 +231,8 @@ export default function SetupIndex({ shop, steps, confirmed, placeholders }: Pro
                     هنا الذي يشترط ما قبله: اسمٌ يكتبه النظام لا يُقرّ.
                 */}
                 <SettingsSection
-                    title="إقرار هويّة المتجر"
-                    description="بعد الحفظ، أقرّ هويّة متجرك — عندها تحمل أوراقُك اسمَه ويختفي التنبيه."
+                    title="إقرار هويّة الشركة"
+                    description="بعد الحفظ، أقرّ هويّة شركتك — عندها تحمل أوراقُك اسمَها ويختفي التنبيه."
                     icon={BadgeCheck}
                     status={confirmed ? <StatusPill state="ready" label="مُقرَّة" /> : undefined}
                 >
@@ -241,9 +241,9 @@ export default function SetupIndex({ shop, steps, confirmed, placeholders }: Pro
                             confirmForm.errors.name
                                 ? <span className="text-[#b91c1c]">{confirmForm.errors.name}</span>
                                 : confirmed
-                                  ? t('أقرَرتَ هويّة متجرك — ولا شيء بقي هنا.')
+                                  ? t('أقرَرتَ هويّة شركتك — ولا شيء بقي هنا.')
                                   : nameIsPlaceholder
-                                    ? t('اكتب اسم متجرك واحفظه أوّلًا — لا يُقرّ اسمٌ كتبه النظام.')
+                                    ? t('اكتب اسم شركتك واحفظه أوّلًا — لا يُقرّ اسمٌ كتبه النظام.')
                                     : t('بالإقرار يُعتمد هذا الاسم على فواتيرك وإيصالاتك وتقاريرك.')
                         }
                     >
@@ -252,7 +252,7 @@ export default function SetupIndex({ shop, steps, confirmed, placeholders }: Pro
                             loading={confirmForm.processing}
                             disabled={confirmForm.processing || nameIsPlaceholder || confirmed}
                         >
-                            {confirmed ? t('الهويّة مُقرَّة') : t('أقرّ هويّة المتجر')}
+                            {confirmed ? t('الهويّة مُقرَّة') : t('أقرّ هويّة الشركة')}
                         </Button>
                     </PageActions>
                 </SettingsSection>

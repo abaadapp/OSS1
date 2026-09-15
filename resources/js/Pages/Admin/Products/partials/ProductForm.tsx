@@ -557,12 +557,12 @@ export default function ProductForm({ categories, product, description, currency
                             </Field>
                             {/* الفراغ يتبع نسبة المتجر، والصفر إعلانٌ بأن الصنف
                                 معفى — والخبز والحليب والدواء صفرية في عُمان */}
-                            <Field label="ضريبة الصنف" error={form.errors.tax} hint="اتركها فارغة لتتبع نسبة المتجر">
+                            <Field label="ضريبة الصنف" error={form.errors.tax} hint="اتركها فارغة لتتبع نسبة الشركة">
                                 <Select
                                     value={form.data.tax}
                                     onChange={(e) => form.setData('tax', e.target.value)}
                                     options={[
-                                        { label: 'نسبة المتجر', value: '' },
+                                        { label: 'نسبة الشركة', value: '' },
                                         { label: 'صفرية (معفى)', value: '0' },
                                         { label: '5%', value: '5' },
                                         { label: '10%', value: '10' },

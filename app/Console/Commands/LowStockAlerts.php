@@ -39,7 +39,7 @@ class LowStockAlerts extends Command
             $sent++;
         });
 
-        $this->info($sent ? __('تم إرسال :count تنبيه.', ['count' => $sent]) : __('لا توجد متاجر بحاجة لتنبيه.'));
+        $this->info($sent ? __('تم إرسال :count تنبيه.', ['count' => $sent]) : __('لا توجد شركات بحاجة لتنبيه.'));
 
         return self::SUCCESS;
     }

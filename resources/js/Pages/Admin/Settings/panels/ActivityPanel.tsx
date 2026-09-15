@@ -52,8 +52,6 @@ const ACTION_LABEL: Record<string, string> = {
     checkout: 'بيع',
     status: 'تغيير حالة',
     settings: 'إعدادات',
-    hold: 'تعليق',
-    shift: 'وردية',
 };
 
 /** خريطة صريحة — الاستيراد الشامل من lucide يضخّ المكتبة كاملة في الحزمة */

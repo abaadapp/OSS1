@@ -46,7 +46,7 @@ class BackupRun extends Command
 
         $businesses = $query->get();
         if ($businesses->isEmpty()) {
-            $this->warn(__('لا توجد متاجر للنسخ.'));
+            $this->warn(__('لا توجد شركات للنسخ.'));
 
             return self::SUCCESS;
         }
@@ -105,7 +105,7 @@ class BackupRun extends Command
              * cron يرسل بريدًا عند الخروج غير الصفري وحده. ونسخٌ فشل وخرج
              * بنجاح هو أسوأ الحالتين: لا نسخة، ولا خبر بأن لا نسخة.
              */
-            $this->error(__('فشل :n متجرًا — راجع الأسباب أعلاه.', ['n' => count($failed)]));
+            $this->error(__('فشلت :n شركةً — راجع الأسباب أعلاه.', ['n' => count($failed)]));
 
             return self::FAILURE;
         }
@@ -133,7 +133,7 @@ class BackupRun extends Command
         }
 
         if (($data['meta']['business_id'] ?? null) !== $bid) {
-            throw new \RuntimeException(__('الملف يحمل معرّف متجر مختلفًا.'));
+            throw new \RuntimeException(__('الملف يحمل معرّف شركةٍ مختلفًا.'));
         }
 
         $expected = Order::where('business_id', $bid)->count();

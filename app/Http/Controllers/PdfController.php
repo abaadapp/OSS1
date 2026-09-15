@@ -304,7 +304,7 @@ class PdfController extends Controller
         $order = Order::where('business_id', $bid)->where('number', $number)->with('items')->firstOrFail();
 
         if (! ShopIdentity::confirmed(BusinessModel::find($bid))) {
-            abort(409, __('لم يُسمَّ متجرك بعد — والفاتورة الضريبية تحمل اسمه. أتمّ تهيئة المتجر من «الإعدادات ‹ تهيئة المتجر» ثمّ أصدِرها.'));
+            abort(409, __('لم تُسمَّ شركتك بعد — والفاتورة الضريبية تحمل اسمها. أتمّ التهيئة من «الإعدادات ‹ تهيئة الشركة» ثمّ أصدِرها.'));
         }
 
         $vat = Demo::vatSettings();

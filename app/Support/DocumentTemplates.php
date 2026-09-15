@@ -30,7 +30,7 @@ class DocumentTemplates
      * ونسيانَ الخامسة.
      */
     public const FIELDS = [
-        'show_logo' => ['label' => 'شعار المتجر', 'hint' => 'يظهر فقط إن كان للنشاط شعار محفوظ'],
+        'show_logo' => ['label' => 'شعار الشركة', 'hint' => 'يظهر فقط إن كان للنشاط شعار محفوظ'],
         'show_branch' => ['label' => 'اسم الفرع'],
         'show_employee' => ['label' => 'اسم الموظف'],
         'show_customer' => ['label' => 'اسم العميل', 'hint' => 'يبقى ظاهرًا في الفاتورة الضريبية دائمًا — بدونه لا يخصم المشتري ضريبته'],

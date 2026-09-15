@@ -377,7 +377,7 @@ export default function SupplierInvoiceShow() {
                         url={paper.url}
                         filename={`${invoice.reference}.pdf`}
                         label={`${t('فاتورة مورّد')} ${invoice.reference}`}
-                        note={t('سندُ ما على المتجر لهذا المورّد — وورقةُ المورّد نفسُها مرفقٌ يُفتح من الأعلى.')}
+                        note={t('سندُ ما على الشركة لهذا المورّد — وورقةُ المورّد نفسُها مرفقٌ يُفتح من الأعلى.')}
                         open={previewing}
                         onOpenChange={setPreviewing}
                     />

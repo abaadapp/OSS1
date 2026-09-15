@@ -121,7 +121,7 @@ export default function ReceiptShow() {
 
                         {receipt.allocations.length === 0 ? (
                             <p className="text-[13px] leading-relaxed text-[#6b7280]">
-                                {t('لم يُخصَّص هذا المبلغُ لفاتورةٍ بعد — وهو رصيدٌ للجهة عند المتجر.')}
+                                {t('لم يُخصَّص هذا المبلغُ لفاتورةٍ بعد — وهو رصيدٌ للجهة عند الشركة.')}
                             </p>
                         ) : (
                             <ul className="divide-y divide-[var(--ui-border,#e8e8e8)] text-[13px]">

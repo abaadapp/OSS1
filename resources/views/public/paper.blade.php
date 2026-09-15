@@ -166,7 +166,7 @@
         </div>
         <div>
             <div class="t">{{ __('موثّقة عبر افنت بلس') }}</div>
-            <div class="muted xs">{{ __('قُرئت من دفتر المتجر') }} <span class="ltr">{{ $stampedAt }}</span></div>
+            <div class="muted xs">{{ __('قُرئت من دفتر الشركة') }} <span class="ltr">{{ $stampedAt }}</span></div>
         </div>
     </div>
 </main>

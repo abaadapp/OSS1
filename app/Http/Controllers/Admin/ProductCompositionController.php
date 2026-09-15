@@ -450,7 +450,7 @@ class ProductCompositionController extends Controller
             'composition.variants.*.price.required' => __('اكتب سعر المقاس.'),
             'composition.variants.*.price.numeric' => __('سعر المقاس رقمٌ.'),
             'composition.recipe.*.component_product_id.required' => __('اختر المكوّن.'),
-            'composition.recipe.*.component_product_id.exists' => __('المكوّن غير موجود في هذا المتجر.'),
+            'composition.recipe.*.component_product_id.exists' => __('المكوّن غير موجود في هذه الشركة.'),
             'composition.recipe.*.quantity.required' => __('اكتب كمية المكوّن.'),
             'composition.recipe.*.quantity.gt' => __('كمية المكوّن تكون أكبر من صفر.'),
             'composition.recipe.*.quantity.numeric' => __('كمية المكوّن رقمٌ.'),

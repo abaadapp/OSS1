@@ -352,7 +352,7 @@ class EveryDocumentOpensToItsOwnPageTest extends TestCase
      * ═══ والورقةُ اليوم تقول لمن هي ═══
      *
      * عنوانُها «فاتورة مورّد»، وكتلةُ هويّتها «المشتري» لا «البائع»، وسطرٌ
-     * فيها يقول إنّها سجلُّ المتجر لا أصلَ المورّد. وأصلُه يبقى مرفقًا يُفتح
+     * فيها يقول إنّها سجلُّ الشركة لا أصلَ المورّد. وأصلُه يبقى مرفقًا يُفتح
      * من الشاشة.
      */
     public function test_the_supplier_invoice_carries_a_paper_of_its_own(): void
@@ -365,7 +365,7 @@ class EveryDocumentOpensToItsOwnPageTest extends TestCase
                 ->where('paper.url', route('admin.purchases.invoices.pdf', $si->id))
                 ->where('paper.html', fn (string $html) => str_contains($html, 'SI-77/2026')
                     && str_contains($html, 'فاتورة المورّد')
-                    && str_contains($html, 'سجلُّ المتجر لهذه الفاتورة')));
+                    && str_contains($html, 'سجلُّ الشركة لهذه الفاتورة')));
     }
 
     /**

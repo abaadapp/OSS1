@@ -544,7 +544,7 @@ class OrderCorrection
 
         // ولا تُصحَّح إلى وسيلةٍ أطفأها التاجر — الباب المغلق مغلقٌ من الجهتين
         if (! in_array($method, $allowed, true)) {
-            throw new RuntimeException(__('وسيلة دفع غير مأذون بها في هذا المتجر.'));
+            throw new RuntimeException(__('وسيلة دفع غير مأذون بها في هذه الشركة.'));
         }
 
         $before = (string) $order->payment_method;

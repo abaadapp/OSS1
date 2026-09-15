@@ -29,12 +29,12 @@ class DemoGuard
     public static function assertDemo(?Business $business): Business
     {
         if (! $business) {
-            throw new RuntimeException(__('لا متجر تجريبيّ — أنشئه أوّلًا.'));
+            throw new RuntimeException(__('لا شركةَ تجريبيّة — أنشئها أوّلًا.'));
         }
 
         if (! $business->is_demo) {
             throw new RuntimeException(__(
-                'المتجر «:name» ليس تجريبيًّا. البيانات الوهميّة لا تُكتب في حساب تاجر.',
+                'الشركة «:name» ليست تجريبيّة. البيانات الوهميّة لا تُكتب في حسابٍ حقيقيّ.',
                 ['name' => $business->name],
             ));
         }

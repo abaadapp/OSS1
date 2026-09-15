@@ -615,7 +615,7 @@ export default function Composition({ productId, data, currency, draft, onDraft,
                     </Button>
                 </div>
                 <p className="mb-4 text-[13px] text-[#6b7280]">
-                    {t('تُعرض مع هذا المنتج وحده. وإضافات المتجر التي تظهر مع الجميع مكانها «المعلومات الأساسية».')}
+                    {t('تُعرض مع هذا المنتج وحده. والإضافات العامّة التي تظهر مع الجميع مكانها «المعلومات الأساسية».')}
                 </p>
 
                 {addonRows.length === 0 ? (

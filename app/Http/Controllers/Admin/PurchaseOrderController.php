@@ -515,7 +515,7 @@ class PurchaseOrderController extends Controller
         $data = $request->validate([
             'supplier_id' => ['nullable', 'integer', Rule::exists('suppliers', 'id')->where('business_id', $bid)],
         ], [
-            'supplier_id.exists' => __('هذا المورّد ليس من موردي متجرك.'),
+            'supplier_id.exists' => __('هذا المورّد ليس من موردي شركتك.'),
         ], ['supplier_id' => __('المورد الافتراضي')]);
 
         Setting::updateOrCreate(

@@ -139,7 +139,7 @@ class SettingController extends Controller
             'vat_rate.max' => __('نسبة الضريبة مئة بالمئة على الأكثر'),
             'vat_filed_through.before_or_equal' => __('لا يُقفل إقرارُ فترةٍ لم تنتهِ بعد — اختر تاريخًا مضى.'),
         ], [
-            'shop_name' => __('اسم المتجر'),
+            'shop_name' => __('اسم الشركة'),
             'vat_rate' => __('نسبة الضريبة'),
             'vat_filed_through' => __('آخر إقرار قُدِّم'),
         ]);

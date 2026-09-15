@@ -314,7 +314,7 @@ final class CustomerInvoices
     public static function draft(int $businessId, ?Customer $customer, array $data, array $lines): CustomerInvoice
     {
         if ($customer !== null && (int) $customer->business_id !== $businessId) {
-            throw new RuntimeException(__('هذا العميل ليس من عملاء متجرك.'));
+            throw new RuntimeException(__('هذا العميل ليس من عملاء شركتك.'));
         }
 
         $totals = self::compute($businessId, $lines);
@@ -351,14 +351,14 @@ final class CustomerInvoices
     public static function create(int $businessId, Customer $customer, array $data, array $lines, ?int $userId = null): CustomerInvoice
     {
         if ((int) $customer->business_id !== $businessId) {
-            throw new RuntimeException(__('هذا العميل ليس من عملاء متجرك.'));
+            throw new RuntimeException(__('هذا العميل ليس من عملاء شركتك.'));
         }
 
         foreach ($lines as $line) {
             if (! empty($line['product_id'])) {
                 $ok = Product::where('business_id', $businessId)->whereKey($line['product_id'])->exists();
                 if (! $ok) {
-                    throw new RuntimeException(__('هذا الصنف ليس من أصناف متجرك.'));
+                    throw new RuntimeException(__('هذا الصنف ليس من أصناف شركتك.'));
                 }
             }
         }

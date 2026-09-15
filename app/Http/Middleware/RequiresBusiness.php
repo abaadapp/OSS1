@@ -30,7 +30,7 @@ class RequiresBusiness
         }
 
         if (! $user->business_id) {
-            abort(403, __('حسابك غير مرتبط بأي متجر.'));
+            abort(403, __('حسابك غير مرتبط بأي شركة.'));
         }
 
         return $next($request);

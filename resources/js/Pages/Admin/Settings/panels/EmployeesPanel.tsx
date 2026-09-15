@@ -313,7 +313,7 @@ export default function EmployeesPanel({ employees, jobTitles }: { employees: Em
                     <form onSubmit={submitTitle} className="space-y-4 px-5 pb-5">
                         <Field
                             label="اسم الوظيفة"
-                            hint="اسمٌ حرّ يظهر في بطاقة الموظف — «منسّق زهور»، «مشرف وردية»."
+                            hint="اسمٌ حرّ يظهر في بطاقة الموظف — «مهندس شبكات»، «منسّق مشاريع»."
                             required
                             error={titleForm.errors.name}
                         >

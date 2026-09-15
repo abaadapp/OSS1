@@ -68,7 +68,7 @@ class OrderEditController extends Controller
     private function refuse()
     {
         return back()->withErrors([
-            'permission' => __('تصحيحُ فاتورةٍ صدرت يحتاج صلاحية — اطلبها من صاحب المتجر، أو اطلب منه التصحيح.'),
+            'permission' => __('تصحيحُ فاتورةٍ صدرت يحتاج صلاحية — اطلبها من صاحب العمل، أو اطلب منه التصحيح.'),
         ]);
     }
 

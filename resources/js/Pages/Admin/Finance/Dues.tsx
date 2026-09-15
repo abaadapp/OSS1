@@ -84,7 +84,7 @@ export default function Dues() {
         <AdminLayout title="المبالغ المستحقة">
             <PageHeader
                 title="المبالغ المستحقة"
-                subtitle={t('ما على المتجر: فواتير لم تُدفع، وسندات موردين، ورواتب اعتُمدت ولم تُصرف')}
+                subtitle={t('ما على الشركة: فواتير لم تُدفع، وسندات موردين، ورواتب اعتُمدت ولم تُصرف')}
             />
 
             <SectionTabs tabs={FINANCE_TABS} current="admin.finance.dues" />

@@ -108,7 +108,7 @@ export default function ReportsSales() {
         <AdminLayout title="ملخّص المبيعات">
             <PageHeader
                 title="ملخّص المبيعات"
-                subtitle={t('ملخّص أداء المتجر: المبيعات والأرباح والمصروفات')}
+                subtitle={t('ملخّص أداء الشركة: المبيعات والأرباح والمصروفات')}
                 actions={
                     /* الملفّ يحمل الفترة المعروضة — لا فترته الخاصّة */
                     <ExportMenu

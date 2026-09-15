@@ -131,9 +131,9 @@ export default function Register() {
         },
         {
             key: 'shop',
-            title: 'وش اسم متجرك؟',
+            title: 'وش اسم شركتك؟',
             emoji: '🌷',
-            body: 'هذا الاسم يظهر على فواتيرك وأوراقك ومتجرك الإلكتروني.',
+            body: 'هذا الاسم يظهر على فواتيرك وأوراقك.',
             done: form.data.shop.trim().length >= 2,
         },
         {
@@ -146,15 +146,15 @@ export default function Register() {
         },
         {
             key: 'place',
-            title: 'وين موقع متجرك؟',
+            title: 'وين موقع شركتك؟',
             emoji: '📍',
-            body: 'أضف عنوان متجرك ليظهر على أوراقك وفي بيانات نشاطك.',
+            body: 'أضف عنوان شركتك ليظهر على أوراقك وفي بياناتها.',
             done: true,
             optional: true,
         },
         {
             key: 'account',
-            title: 'بيانات الدخول لإدارة متجرك',
+            title: 'بيانات الدخول لإدارة شركتك',
             emoji: '',
             body: 'بهذا البريد تدخل إلى افنت بلس، وبه تستعيد كلمتك إن نسيتها.',
             done: form.data.email.trim() !== '' && form.data.password.length >= 8,
@@ -342,13 +342,13 @@ export default function Register() {
                 )}
 
                 {here.key === 'shop' && (
-                    <Field label="اسم المتجر" required htmlFor="shop">
+                    <Field label="اسم الشركة" required htmlFor="shop">
                         <Input
                             id="shop"
                             name="shop"
                             autoFocus
                             required
-                            placeholder={t('اكتب اسم متجرك')}
+                            placeholder={t('اكتب اسم شركتك')}
                             value={form.data.shop}
                             onChange={(e) => form.setData('shop', e.target.value)}
                         />
@@ -392,7 +392,7 @@ export default function Register() {
                 )}
 
                 {here.key === 'place' && (
-                    <Field label="عنوان المتجر" htmlFor="address">
+                    <Field label="عنوان الشركة" htmlFor="address">
                         {/*
                             عنوانٌ نصٌّ لا خريطة.
 
@@ -516,7 +516,7 @@ export default function Register() {
                     )}
 
                     <Button type="submit" size="lg" className="flex-1" loading={form.processing}>
-                        {last ? t('ابدأ إدارة متجرك') : t('متابعة')}
+                        {last ? t('ابدأ إدارة شركتك') : t('متابعة')}
                         {!last && <ArrowRight className="rtl:rotate-180" />}
                     </Button>
                 </div>

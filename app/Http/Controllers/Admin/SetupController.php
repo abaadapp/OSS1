@@ -61,7 +61,7 @@ class SetupController extends Controller
 
         if ($name === '' || in_array($name, ShopIdentity::PLACEHOLDERS, true)) {
             return back()->withErrors([
-                'name' => __('اكتب اسم متجرك كما تريده على الفاتورة — «:name» اسمٌ يكتبه النظام حين لا اسم.', ['name' => $name !== '' ? $name : '—']),
+                'name' => __('اكتب اسم شركتك كما تريده على الفاتورة — «:name» اسمٌ يكتبه النظام حين لا اسم.', ['name' => $name !== '' ? $name : '—']),
             ]);
         }
 
@@ -70,7 +70,7 @@ class SetupController extends Controller
         Activity::log('settings', 'أقرّ هويّة المتجر: '.$name);
 
         return redirect()->route('admin.dashboard')->with('toast', [
-            'msg' => __('تمّت التهيئة. أوراقُ متجرك تحمل اسمَ «:name».', ['name' => $name]),
+            'msg' => __('تمّت التهيئة. أوراقُ شركتك تحمل اسمَ «:name».', ['name' => $name]),
             'type' => 'success',
         ]);
     }

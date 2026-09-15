@@ -29,7 +29,7 @@ export default function SetupBanner() {
         <div className="mb-4 flex flex-wrap items-center gap-2 rounded-[12px] border border-[#bfdbfe] bg-[#eff6ff] px-4 py-3 text-[13px] text-[#1d4ed8]">
             <Store className="size-4 shrink-0" />
             <span className="font-medium">
-                {t('متجرك لم يُسمَّ بعد — واسمُه يُطبع على كلّ فاتورة.')}
+                {t('شركتك لم تُسمَّ بعد — واسمُها يُطبع على كلّ فاتورة.')}
             </span>
             {setup.missing.length > 0 && (
                 <span className="text-[12px] opacity-80">{setup.missing.join(' · ')}</span>

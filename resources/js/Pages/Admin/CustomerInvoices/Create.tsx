@@ -1594,7 +1594,7 @@ function BrandingDialog({
                     </Field>
 
                     <Field
-                        label="اسم المتجر في الفاتورة"
+                        label="اسم الشركة في الفاتورة"
                         hint={`${'اتركه فارغًا لاستعمال الاسم المسجَّل'}: ${branding.legal_name}`}
                         error={form.errors.display_name}
                     >
@@ -1618,7 +1618,7 @@ function BrandingDialog({
                     </Field>
 
                     <Field
-                        label="سطر تحت اسم المتجر"
+                        label="سطر تحت اسم الشركة"
                         hint="تخصّصك أو شعارُك — يُطبع في الترويسة"
                         error={form.errors.header}
                     >

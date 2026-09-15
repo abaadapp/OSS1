@@ -87,7 +87,7 @@ final class CustomerPayments
             $owned = BankAccount::where('business_id', $businessId)->whereKey($given)->exists();
 
             if (! $owned) {
-                throw new RuntimeException(__('هذا الحساب البنكي ليس من حسابات متجرك.'));
+                throw new RuntimeException(__('هذا الحساب البنكي ليس من حسابات شركتك.'));
             }
 
             // ومعطَّلٌ سمّاه المستخدم يُقبل: حسابٌ أُغلق بعد تحصيلٍ وقع فيه
@@ -120,7 +120,7 @@ final class CustomerPayments
         $amount = round($amount, 3);
 
         if ((int) $customer->business_id !== $businessId) {
-            throw new RuntimeException(__('هذا العميل ليس من عملاء متجرك.'));
+            throw new RuntimeException(__('هذا العميل ليس من عملاء شركتك.'));
         }
         if ($amount <= 0) {
             throw new RuntimeException(__('مبلغ التحصيل يجب أن يكون أكبر من صفر.'));

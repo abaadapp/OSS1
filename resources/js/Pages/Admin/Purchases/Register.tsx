@@ -122,7 +122,7 @@ export default function PurchaseRegister() {
         <AdminLayout title="قائمة المشتريات">
             <PageHeader
                 title="قائمة المشتريات"
-                subtitle={t('ما اشتراه المتجر في الشهر المعروض — من أوامر الشراء ومن سندات الموردين معًا')}
+                subtitle={t('ما اشترته الشركة في الشهر المعروض — من أوامر الشراء ومن سندات الموردين معًا')}
                 actions={
                     <>
                         <Select

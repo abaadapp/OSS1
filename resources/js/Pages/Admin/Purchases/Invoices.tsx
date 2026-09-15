@@ -735,7 +735,7 @@ export default function SupplierInvoices() {
                             {t('إلغاء السند')} <span className="font-mono">{cancelling?.reference}</span>
                         </DialogTitle>
                         <DialogDescription>
-                            {t('يُعكس قيدُ السند في الدفتر ولا يُمحى — والذمّة تسقط عن المتجر.')}
+                            {t('يُعكس قيدُ السند في الدفتر ولا يُمحى — والذمّة تسقط عن الشركة.')}
                         </DialogDescription>
                     </DialogHeader>
 

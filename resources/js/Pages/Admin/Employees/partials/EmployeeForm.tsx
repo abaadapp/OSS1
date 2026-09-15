@@ -382,7 +382,7 @@ export default function EmployeeForm({
                     <Field
                         label="اسم المستخدم"
                         required={!legacyEmail}
-                        hint="به يدخل الموظف — ولا يتكرّر على المنصة"
+                        hint="به يدخل الموظف — ولا يتكرّر في النظام"
                         error={form.errors.login_username}
                     >
                         {/*

@@ -579,7 +579,7 @@ class ProductController extends Controller
             return null;
         }
 
-        return __('«:name» في مخزونك منه :qty — وحذفُه يُنقص قيمةَ المخزون بمقداره. عطّله ليختفي من نقطة البيع ويبقى رصيدُه وتاريخه، أو أكّد الحذف.', [
+        return __('«:name» في مخزونك منه :qty — وحذفُه يُنقص قيمةَ المخزون بمقداره. عطّله ليختفي من القوائم ويبقى رصيدُه وتاريخه، أو أكّد الحذف.', [
             'name' => $product->name,
             'qty' => $onHand,
         ]);
@@ -596,8 +596,8 @@ class ProductController extends Controller
 
         return back()->with('toast', [
             'msg' => $product->active
-                ? __('فُعّل «:name» — عاد يظهر في نقطة البيع.', ['name' => $product->name])
-                : __('عُطّل «:name» — اختفى من نقطة البيع، ورصيدُه وتاريخه كما هما.', ['name' => $product->name]),
+                ? __('فُعّل «:name» — عاد يظهر في القوائم.', ['name' => $product->name])
+                : __('عُطّل «:name» — اختفى من القوائم، ورصيدُه وتاريخه كما هما.', ['name' => $product->name]),
             'type' => 'success',
         ]);
     }

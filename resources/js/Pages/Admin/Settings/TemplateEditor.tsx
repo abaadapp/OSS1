@@ -223,7 +223,7 @@ export default function TemplateEditor({ template, templates, brand }: Props) {
                         <h3 className="mb-4 font-bold text-[#111]">{t('إعدادات الورقة')}</h3>
 
                         <Field
-                            label="سطر تحت اسم المتجر"
+                            label="سطر تحت اسم الشركة"
                             hint="شعار أو عبارة ترحيب — يُترك فارغًا فلا يظهر"
                             error={form.errors.header}
                         >

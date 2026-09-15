@@ -16,7 +16,7 @@ export default function ProductCreate() {
         <AdminLayout title="إضافة منتج">
             <PageHeader
                 title="إضافة منتج"
-                subtitle={t('أضف منتجًا جديدًا إلى متجرك')}
+                subtitle={t('أضف منتجًا جديدًا إلى شركتك')}
             />
 
             <ProductForm
