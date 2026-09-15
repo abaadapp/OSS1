@@ -1,0 +1,73 @@
+{{--
+    هويّةُ المُصدِر — الشعارُ والاسمُ وما يُثبته، في الطرف المقابل.
+
+    ═══ ولمَ انتقلت من جهة البداية إلى مقابلها ═══
+
+    كانت في صدر الورقة حيث تبدأ القراءة، وعنوانُ المستند في مقابلها. وفي
+    المرجع المعتمد العكس: من يفتح الورقة يسأل «ما هي؟» قبل «ممّن؟» —
+    فالعنوانُ أوّلًا، والهويّةُ في الطرف الآخر مع الشعار حيث تعوّدت العينُ
+    أن تجدها في كلّ ورقٍ رسميّ.
+
+    ═══ وما يُطبع منها ═══
+
+    الاسمُ ثمّ سطرُ التعريف ثمّ سطورُ الاتّصال، ثمّ الرقمُ الضريبيّ حقلًا
+    مسمّى في لغتين — فمن يراجع الورقة يجده باسمه لا رقمًا عائمًا بين
+    هاتفٍ وبريد.
+
+    ولا سجلَّ تجاريًّا: لا يخزّنه النظامُ للمتجر، ولا يُخترع حقلٌ ليُملأ
+    فارغًا. انظر «استخدم البيانات الموجودة فقط».
+--}}
+@php
+    $brand = \App\Support\Paper::brand($business ?? null, $vatNumber ?? '');
+    $vat = trim((string) ($vatNumber ?? ''));
+@endphp
+
+@if ($brand['logo'])
+    <img src="{{ $brand['logo'] }}"
+         style="max-height:{{ round(\App\Support\Document\Theme::GEOMETRY['logo_height'], 2) }}pt; margin-bottom:8pt;"
+         alt="">
+@endif
+
+<table class="fields fieldsend">
+    {{--
+        وعنوانُ كتلتنا يقول أيَّ طرفٍ نحن على هذه الورقة.
+
+        المرجعُ المعتمد يترك كتلةَ المُصدِر بلا عنوان — والشعارُ فوقها
+        يكفي. لكنّ أوراقَ النظام تسعٌ لا واحدة: أمرُ شراءٍ يمضي إلى مورّد
+        وفيه اسمُ متجرنا بلا عنوان يُقرأ اسمَ المورّد. فيُكتب: «المشتري»
+        على أوراق الشراء، و«البائع» على أوراق البيع — وهو شرطُ المواصفة:
+        «لا تجعل كل الأوراق Invoice».
+
+        ولا يُكتب حيث لا يلتبس: ورقةٌ طرفُها الآخر مُسمّى ونحن مُصدِرُها
+        بشعارنا لا تحتاج أن تقول ذلك مرّتين.
+    --}}
+    @if (trim((string) ($issuerCap ?? '')) !== '')
+        @php([$issuerFirst, $issuerSecond] = \App\Support\Paper::pair($issuerCap))
+        <tr><td class="lbl">{{ $issuerFirst }}</td></tr>
+        @if ($issuerSecond !== '')
+            <tr><td class="lbl2" dir="{{ \App\Support\Paper::dirOf($issuerSecond, 'ltr') }}">{{ $issuerSecond }}</td></tr>
+        @endif
+    @endif
+
+    <tr><td class="shop">{{ $brand['name'] }}</td></tr>
+
+    @if ($brand['sub'] !== '')
+        <tr><td class="lbl2">{{ $brand['sub'] }}</td></tr>
+    @endif
+
+    @if (trim((string) ($headerNote ?? '')) !== '')
+        <tr><td class="lbl2">{{ $headerNote }}</td></tr>
+    @endif
+
+    @foreach ($brand['contact'] as $line)
+        <tr><td class="val{{ $loop->last ? ' f-end' : '' }}"
+                dir="{{ \App\Support\Paper::dirOf($line, 'ltr') }}">{{ $line }}</td></tr>
+    @endforeach
+</table>
+
+@if ($vat !== '')
+    @include('documents.v1.partials.fields', [
+        'align' => 'end',
+        'fields' => [['label' => 'الرقم الضريبي', 'value' => $vat]],
+    ])
+@endif

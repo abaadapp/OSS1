@@ -1,0 +1,265 @@
+<?php
+
+namespace App\Http\Controllers\Admin\Website;
+
+use App\Http\Controllers\Controller;
+use App\Models\WebsiteSection;
+use App\Support\MarketingSettings;
+use App\Support\Website\Blueprints;
+use App\Support\Website\Commerce;
+use App\Support\Website\Readiness;
+use App\Support\Website\Templates;
+use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
+use Inertia\Inertia;
+use Inertia\Response;
+
+/**
+ * المتجر والسيو والصيانة — الإعدادات التي بقيت بعد أن صار الباقي بنيةً.
+ *
+ * وأكثرها ليس جديدًا: `store_show_prices` و`store_allow_orders` يُحفظان
+ * منذ نسخٍ ولا يقرؤهما شيء. وقد صار لهما الآن قارئ — العارض يقرأ اللقطة،
+ * واللقطة تحملهما. فما نُقل إلى هنا لم يُخترع، وإنّما وُصل بما يعنيه.
+ *
+ * ولا يُعرض إعدادٌ لا يعني شيئًا لهذا الموقع: من اختار «تعريفيّ» لا يرى
+ * إعداداتِ السلّة ولا عرضَ الأسعار — ليست مطفأةً عنده، هي غيرُ موجودة.
+ *
+ * والدفع ليس هنا: طرقُه في «الضرائب والعملة والدفع» ومصدرُه واحد. وما يملكه
+ * الموقع أن يعرض ما فُعّل هناك، لا أن يفتح مصدرًا ثانيًا يعارضه.
+ */
+class SettingsController extends Controller
+{
+    use Concerns;
+
+    /**
+     * «الإعدادات ‹ الموقع الإلكتروني ‹ عام» — حالُ الموقع وما يُفعل به.
+     *
+     * ═══ ولماذا انتقلت من الشريط الجانبيّ ═══
+     *
+     * كانت لوحةَ القسم: أوّلُ ما يفتحه من يضغط «الموقع الإلكتروني». وفيها
+     * النشرُ والصيانةُ والنسخُ السابقة وأبوابُ التصميم والصفحات — وكلُّها
+     * يُفعل مرّةً ثمّ يُترك. والموظّفُ الذي يفتح القسم كلَّ صباح لا يريد شيئًا
+     * منها؛ يريد أن يعرف أنّ الموقع يعمل وأنّ منتجاته ظاهرة.
+     *
+     * فصار الشريطُ يفتح لوحةَ التشغيل (`HubController`)، وصارت هذه أوّلَ
+     * أقسام إعدادات الموقع — تليها التصميمُ والصفحاتُ والمتجرُ والنطاقُ
+     * والظهورُ في البحث، كلُّها بمساراتها التي لم تتبدّل.
+     *
+     * ═══ واسمُها `general` لا `site` ═══
+     *
+     * `Concerns::site()` موجودةٌ في هذا الصنف بالوراثة وتردّ **موقعَ النشاط**.
+     * وفعلٌ عامٌّ باسمها يحجبها، فتصير `siteOrFail()` تنادي الشاشةَ التي
+     * تناديها — ذهابًا وإيابًا حتّى تنفد الذاكرة. ولا يقوله المترجم: التوقيعان
+     * مختلفان والوراثةُ من سمة، فالحجبُ مسموح.
+     */
+    public function general(): Response
+    {
+        $site = $this->siteOrFail();
+        $pages = $site->pages()->withCount('sections')->get();
+
+        return Inertia::render('Admin/Website/Site', $this->shell($site) + [
+            'pages' => $pages->map(fn ($p) => [
+                'id' => $p->id,
+                'title' => $p->title,
+                'slug' => $p->slug,
+                'status' => $p->status,
+                'is_home' => $p->is_home,
+                'sections' => $p->sections_count,
+            ])->all(),
+            'summary' => [
+                'pages' => $pages->count(),
+                'sections' => WebsiteSection::where('website_id', $site->id)->whereNotNull('page_id')->count(),
+                'hidden' => WebsiteSection::where('website_id', $site->id)->where('visible', false)->count(),
+                'versions' => $site->versions()->count(),
+            ],
+            'domain' => $this->domainState(),
+            // وجاهزيةُ المتجر حقائقُ تُقاس — انظر `Readiness`
+            'readiness' => Readiness::check($site),
+            'template_label' => __(Templates::CATALOGUE[$site->template]['label'] ?? ''),
+            'versions' => $site->versions()->with('creator:id,name')->limit(5)->get()
+                ->map(fn ($v) => [
+                    'id' => $v->id,
+                    'number' => $v->number,
+                    'at' => optional($v->published_at)->format('Y-m-d H:i'),
+                    'by' => $v->creator?->name,
+                    'note' => $v->note,
+                    'current' => $v->id === $site->published_version_id,
+                ])->all(),
+        ]);
+    }
+
+    /** المتجر: ما يراه الزائر وما يستطيع فعله */
+    public function store(): Response
+    {
+        $site = $this->siteOrFail();
+        $bid = $this->bid();
+        $marketing = MarketingSettings::group($bid, 'website');
+
+        return Inertia::render('Admin/Website/Store', $this->shell($site) + [
+            'settings' => [
+                'show_prices' => ($marketing['store_show_prices'] ?? '1') === '1',
+                'allow_orders' => ($marketing['store_allow_orders'] ?? '0') === '1',
+            ],
+            'sells' => $site->sells(),
+            'hasCatalogue' => Blueprints::hasCatalogue($site->goal()),
+            /*
+             * ونوعُ الموقع يُبدَّل من هنا — وكان يُوعَد به ولا يوجد.
+             *
+             * الشاشةُ تقول في موضعين «تبدّل ذلك من إعدادات الموقع»، وشاشةُ
+             * إعدادات الموقع لم تكن موجودة: `saveSite` مسارٌ حيٌّ لا يناديه
+             * شيء في الواجهة. فمن بنى متجرًا وأراده كتالوجًا يقرأ الوعد ولا
+             * يجد البابَ الموعود.
+             *
+             * وموضعُه هنا لا في المحرّر: المحرّر يرسم الموقع، وهذا يقرّر ما
+             * هو. ولأنّه يُبدّل ما يعرضه الموقع — تسقط أقسامُ المنتجات من
+             * موقعٍ صار تعريفيًّا — فهو قرارٌ يُتّخذ في شاشة إعدادات لا في
+             * أثناء تحريك لون.
+             */
+            'goal' => $site->goal(),
+            'goals' => Blueprints::goalOptions(),
+            'name' => $site->name,
+            /*
+             * ═══ طرقُ الدفع كما هي **على الموقع** — لا كما هي على المنضدة ═══
+             *
+             * كانت تُقرأ من `PaymentMethods::state` فتقول «البطاقة مفعّلة».
+             * وذاك جوابٌ عن سؤالٍ آخر: تلك تصف ما يأخذه الكاشير من يد الزبون
+             * في المحلّ. وبينه وبين «البطاقة تُقبض على الإنترنت» بوّابةُ دفعٍ
+             * مربوطةٌ ومتحقَّق منها — ولا بوّابةَ في افنت بلس بعد.
+             *
+             * فكانت الشاشة تَعِد صاحبَ المتجر بما لا يقع: ينشر موقعه ويوزّع
+             * رابطه ثمّ يعلم من زبونه أنّ لا شيء يُدفع. انظر `Commerce`.
+             */
+            'payments' => Commerce::payments($bid),
+            // وما يفعله زرُّ الطلب فعلًا: محادثةُ واتساب، أو لا شيء
+            'channel' => Commerce::channel($bid),
+            // وجاهزيةُ المتجر قبل النشر لا بعده — حقائقُ تُقاس لا أمنيات
+            'readiness' => Readiness::check($site),
+            'counts' => [
+                'products' => \App\Models\Product::where('business_id', $bid)->where('active', true)->count(),
+                'categories' => \App\Models\Category::where('business_id', $bid)->count(),
+            ],
+        ]);
+    }
+
+    public function saveStore(Request $request)
+    {
+        $site = $this->siteOrFail();
+
+        $data = $request->validate([
+            'show_prices' => ['required', 'boolean'],
+            'allow_orders' => ['required', 'boolean'],
+        ]);
+
+        // ولا طلبَ في موقعٍ لا يبيع: الوجهة تحكم لا المفتاح
+        if (! $site->sells()) {
+            $data['allow_orders'] = false;
+        }
+
+        /*
+         * وسعرٌ مخفيٌّ لا يُطلب معه.
+         *
+         * «اطلب» على منتجٍ بلا سعر يعني زبونًا يضع في سلّته ما لا يعرف ثمنه،
+         * ثمّ يصل إلى الدفع فيفاجأ. وهذا كان تحذيرًا في الشاشة القديمة —
+         * وصار قاعدةً في الخادم: الشاشة قد تُتخطّى.
+         */
+        if (! $data['show_prices']) {
+            $data['allow_orders'] = false;
+        }
+
+        MarketingSettings::save($this->bid(), 'website', [
+            'store_show_prices' => $data['show_prices'] ? '1' : '0',
+            'store_allow_orders' => $data['allow_orders'] ? '1' : '0',
+        ]);
+
+        $site->touchDraft();
+
+        return back()->with('toast', ['msg' => __('حُفظت إعدادات المتجر'), 'type' => 'success']);
+    }
+
+    /**
+     * السيو — بلغةِ من يبيع لا بلغةِ من يبرمج.
+     *
+     * «عنوان موقعك في غوغل» لا «meta title»، و«صورة المشاركة» لا «og:image».
+     * والكلمات المفتاحية ليست محور الشاشة: `seo_keywords` تبقى محفوظةً لمن
+     * ضبطها ولا تُعرض أوّلًا — لا يقرؤها محرّك بحثٍ منذ سنين.
+     */
+    public function seo(): Response
+    {
+        $site = $this->siteOrFail();
+        $seo = $site->seo ?? [];
+
+        return Inertia::render('Admin/Website/Seo', $this->shell($site) + [
+            'seo' => [
+                'title' => (string) ($seo['title'] ?? ''),
+                'description' => (string) ($seo['description'] ?? ''),
+                'image' => (string) ($seo['image'] ?? ''),
+                'index' => (bool) ($seo['index'] ?? true),
+            ],
+            'pages' => $site->pages()->get()->map(fn ($p) => [
+                'id' => $p->id,
+                'title' => $p->title,
+                'slug' => $p->slug,
+                'status' => $p->status,
+                'seo' => $p->seo ?? ['title' => '', 'description' => '', 'image' => ''],
+            ])->all(),
+            'domain' => $this->domainState(),
+        ]);
+    }
+
+    public function saveSeo(Request $request)
+    {
+        $site = $this->siteOrFail();
+
+        $data = $request->validate([
+            // الحدّان ليسا اعتباطًا: ما زاد عنهما يُقصّ في نتائج البحث
+            'title' => ['nullable', 'string', 'max:70'],
+            'description' => ['nullable', 'string', 'max:170'],
+            'image' => ['nullable', 'string', 'max:500'],
+            'index' => ['required', 'boolean'],
+        ]);
+
+        $site->update(['seo' => [
+            'title' => (string) ($data['title'] ?? ''),
+            'description' => (string) ($data['description'] ?? ''),
+            'image' => (string) ($data['image'] ?? ''),
+            'index' => (bool) $data['index'],
+        ]]);
+        $site->touchDraft();
+
+        /*
+         * ولا تُكتب نسخةٌ ثانية في `settings`.
+         *
+         * كانت هنا كتابةٌ إلى مجموعة `seo` تقول إنّها «تُطعم الشاشة القديمة».
+         * والمجموعة مرفوعةٌ من `MarketingSettings::GROUPS` — فـ`save` كانت
+         * تُسقط المفاتيح الثلاثة بلا خبر، وشاشةُ السيو القديمة التي تقرؤها
+         * لا وجود لها في النظام. سيو الموقع يسكن `websites.seo` وحده،
+         * ومنه تُقرأ الشاشة أعلاه وتُبنى وسومُ الصفحة المنشورة.
+         */
+
+        return back()->with('toast', ['msg' => __('حُفظت إعدادات الظهور في البحث'), 'type' => 'success']);
+    }
+
+    /** إعدادات الموقع نفسه: اسمُه ووجهتُه */
+    public function saveSite(Request $request)
+    {
+        $site = $this->siteOrFail();
+
+        $data = $request->validate([
+            'name' => ['required', 'string', 'max:120'],
+            'goal' => ['required', Rule::in(array_keys(Blueprints::GOALS))],
+        ]);
+
+        /*
+         * وتبديل الوجهة لا يهدم ما بُني.
+         *
+         * من يبدّل «متجر» إلى «تعريفيّ» تبقى صفحاتُه وأقسامُه كما هي، ويسقط
+         * ما لا يصلح للوجهة الجديدة من العرض وحده. وحذفُ الأقسام عند التبديل
+         * كان سيُضيّع عملَ يومٍ بضغطةٍ في قائمةٍ منسدلة.
+         */
+        $site->update($data);
+        $site->touchDraft();
+
+        return back()->with('toast', ['msg' => __('حُفظت إعدادات الموقع'), 'type' => 'success']);
+    }
+
+}

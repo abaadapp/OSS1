@@ -1,0 +1,261 @@
+<?php
+
+namespace App\Http\Middleware;
+
+use App\Support\CrmWhatsApp;
+use App\Support\Demo;
+use App\Support\Permissions;
+use App\Support\PlanFeatures;
+use App\Support\PosCashier;
+use App\Support\PosTerminal;
+use App\Support\Reports;
+use App\Support\ShopIdentity;
+use App\Support\Support;
+use App\Support\Tenancy;
+use Illuminate\Http\Request;
+use Inertia\Middleware;
+
+class HandleInertiaRequests extends Middleware
+{
+    protected $rootView = 'app';
+
+    public function version(Request $request): ?string
+    {
+        return parent::version($request);
+    }
+
+    /**
+     * البيانات المشتركة مع كل صفحة — ما تحتاجه القشرة (القائمة الجانبية،
+     * الشريط العلوي، مبدّل الفرع والعملة، الإشعارات) دون أن يطلبها كل controller.
+     */
+    public function share(Request $request): array
+    {
+        $user = $request->user();
+
+        return [
+            ...parent::share($request),
+
+            'auth' => fn () => $user ? [
+                'user' => [
+                    'id' => $user->id,
+                    'name' => $user->name,
+                    'email' => $user->email,
+                    'role' => $user->role,
+                    'roleLabel' => $user->roleLabel(),
+                    'avatar' => $user->avatar,
+                    'branch' => $user->branch,
+                    'businessId' => $user->business_id,
+                ],
+                // هل يدخل هذا المستخدم لوحة النشاط؟ من نفس مصدر حارس المسار،
+                // فلا يظهر في نقطة البيع زرُّ عودةٍ يقود إلى 403
+                'entersPanel' => Permissions::entersPanel($user),
+                /*
+                 * وهل هو موظّف؟ — من مصدر حارس `pos.me` نفسه.
+                 *
+                 * «حسابي وراتبي» كان يُرسم لكلّ من ليس دورُه `admin`، ومديرُ
+                 * المنصّة ليس منهم — فيراه في قائمته، ويُقذف إن ضغطه.
+                 * وهو ليس موظّفًا ولا متجرَ له.
+                 *
+                 * والقاعدةُ لا تُعاد كتابتُها في TypeScript: قاعدتان تفترقان
+                 * يومًا، فيُرسم بابٌ يُردّ صاحبُه أو يُخفى بابٌ مأذون.
+                 */
+                'isEmployee' => $user->isEmployee(),
+                // وإلى أين يدخل: الوجهة لا الإذن وحده — انظر Permissions::panelEntry
+                'panelUrl' => Permissions::panelEntry($user),
+                /*
+                 * هل هذه جلسة انتحالٍ من لوحة المنصة؟
+                 *
+                 * تُعلَن في كل صفحة لا في صفحةٍ واحدة: من ينسى أنه في حساب
+                 * غيره يعدّل بيانات تاجرٍ ظنًّا أنها بياناته.
+                 */
+                'impersonating' => $request->session()->has('impersonator_id'),
+                // الأقسام المسموح بها — الواجهة تخفي ما لا يُسمح به بدل تخمينه
+                'abilities' => collect(Permissions::sections())
+                    ->filter(fn ($section) => $user->allows($section))
+                    ->values()
+                    ->all(),
+                /*
+                 * والأفعالُ معها — لأنّ بعض الشاشات صار يحرسها فعلٌ لا قسم.
+                 *
+                 * «مسيرة الرواتب» و«صرف الرواتب» تحت قسم «الرواتب والموظفين»،
+                 * و«إشعار استلام بضاعة» تحت «المخزون»، و«سندات الموردين» تحت
+                 * «المشتريات» — ومن يملك القسم ولا يملك الفعل كان سيرى تبويبها
+                 * ويصطدم بـ403. فتُرسل ليُخفى ما لا يُفتح.
+                 */
+                'mayActions' => collect(Permissions::actions())
+                    ->filter(fn ($action) => $user->may($action))
+                    ->values()
+                    ->all(),
+                /*
+                 * وما تفتحه الباقة — سؤالٌ آخر غير `abilities`.
+                 *
+                 * ذاك يسأل «هل يملك هذا الموظّف هذا القسم؟» وهذا «هل اشترى
+                 * صاحبُ المتجر هذه القدرة؟». والاثنان يقعان على البند الواحد:
+                 * مالكٌ يملك كلّ الأقسام في متجرٍ على الباقة الأساسية.
+                 *
+                 * وتُرسل ليُخفى ما لا يُفتح: بابٌ يُعرض ويردّ بـ403 يجعل صاحبه
+                 * يظنّ العطب في النظام ويعيد المحاولة — انظر `Permissions::panelEntry`.
+                 */
+                'planFeatures' => PlanFeatures::map($user->business),
+            ] : null,
+
+            // سياق المتجر: الفرع الحالي والعملة المعروضة ومنازل الكسر
+            'context' => fn () => $user?->business_id ? [
+                'businessName' => Demo::businessName(),
+                // رابط موقع التاجر — يستعمله زرّ «الموقع الإلكتروني» في الهيدر،
+                // فصار مشتركًا لا خاصًّا باللوحة. null حين لم يُضبط بعد.
+                'website' => Demo::websiteUrl(),
+                'branchId' => Demo::currentBranchId(),
+                'branchName' => Demo::currentBranchName(),
+                'branches' => Demo::branches(),
+                // اسم الصندوق الذي يقف عليه — يُعرض في ترويسة نقطة البيع
+                'deviceName' => PosTerminal::current()?->name,
+                /*
+                 * ملحقات هذا الصندوق وحده — لا ملحقات المتجر كلّه.
+                 *
+                 * الطابعة تُقرأ لتحديد عرض الورق والطباعة التلقائية بعد البيع،
+                 * والماسح ليُوجَّه التركيز إلى حقل الباركود من أول الشاشة.
+                 * وتُرسل النشطة فقط: ملحقٌ عُطِّل من الإعدادات لأنه معطوب يجب
+                 * ألّا يُطبع عليه.
+                 */
+                'peripherals' => PosTerminal::current()
+                    ?->peripherals()->where('active', true)->get()
+                    ->map(fn ($p) => [
+                        'type' => $p->type,
+                        'name' => $p->name,
+                        'paperWidth' => $p->paper_width,
+                        'autoPrint' => $p->auto_print,
+                    ])->values()->all() ?? [],
+                'currency' => Demo::displayCurrency(),
+                'currencies' => collect(Demo::currencies())->where('active', true)->values()->all(),
+                /*
+                 * الاشتراك: كم بقي من أيامه.
+                 *
+                 * الانتهاء كان يقع بلا سابق إنذار — يفتح التاجر لوحته صباحًا
+                 * فيجدها مقفلة. والتجديد يحدث حين يُذكَّر به قبل الموعد، لا
+                 * حين تُقفل الأبواب.
+                 */
+                'subscription' => ($ends = $user->business?->ends_at)
+                    ? [
+                        'endsAt' => $ends->format('Y-m-d'),
+                        'daysLeft' => Tenancy::daysLeft($user->business),
+                        /*
+                         * أيّام المهلة الباقية بعد الانتهاء — الرقم الذي يدفع
+                         * إلى الدفع. «انتهى اشتراكك» وحدها لا تقول متى يقف
+                         * الصندوق، ومن لا يعرف الموعد يؤجّل إلى أن يفاجئه.
+                         */
+                        'graceLeft' => Tenancy::graceLeft($user->business),
+                    ]
+                    : null,
+
+                /*
+                 * تهيئةُ المتجر: ما لم يُكتب بعد من هويّته.
+                 *
+                 * `null` حين أُقرّت — فلا يبقى شريطٌ يُرى كلَّ يوم بعد إتمامه.
+                 * وهو في العقد المشترك لا في اللوحة وحدها: من يهبط على
+                 * «المنتجات» أوّلًا يجب أن يراه هناك.
+                 */
+                /*
+                 * ولا يُرسَل إلّا لمن يستطيع إتمامه: الكاشيرُ لا يملك بيانات
+                 * النشاط، وشريطٌ يطلب منه ما لا باب له إليه إزعاجٌ لا تنبيه.
+                 */
+                'setup' => $user->allows('settings') ? ShopIdentity::context($user->business) : null,
+            ] : null,
+
+            // الموظف الواقف على الصندوق — تعرضه ترويسة نقطة البيع، وهو غير
+            // الحساب المسجَّل دخوله (انظر App\Support\PosCashier)
+            'posCashier' => fn () => $user?->business_id
+                ? (PosCashier::current()?->only(['id', 'name']))
+                : null,
+
+            /*
+             * فهرس التقارير — عنوانًا ووجهةً لا أكثر.
+             *
+             * يقرؤه دليلُ صفحات الشريط العلوي (lib/pages.ts). ومصدرُه
+             * `Reports::ALL` نفسه الذي يقرؤه فهرس التقارير، مصفّى بصلاحية
+             * المستخدم وبقدرات باقته — فما لا يُفتح لا يُعرض في الدليل.
+             *
+             * ونسخُ الفهرس إلى الواجهة كان سيصنع فهرسين يفترقان عند أوّل
+             * تقريرٍ يُضاف: بطاقةٌ في الشاشة لا مدخل لها في البحث، أو مدخلٌ
+             * في البحث يقود إلى تقريرٍ حُذف.
+             */
+            'reportPages' => fn () => $user?->business_id
+                ? collect(Reports::forUser($user))
+                    ->map(fn ($r) => ['title' => $r['title'], 'href' => $r['href']])
+                    ->all()
+                : null,
+
+            'notifications' => fn () => $user?->business_id ? [
+                'items' => Demo::notifications(),
+                'count' => Demo::notificationsCount(),
+            ] : null,
+
+            /*
+             * شارةُ الدعم — محسوبةٌ في كلّ طلب لا مكتوبةٌ في الشاشة.
+             *
+             * لمدير المنصّة: محادثاتٌ حيّةٌ فيها كلامٌ من متجرٍ لم يقرأه.
+             * وللتاجر: ردودٌ من افنت بلسٍ لم يقرأها. ورقمٌ ثابتٌ يقول «٨» أبدًا
+             * يصير جزءًا من الأثاث فلا تقع عليه عين.
+             *
+             * وصفرٌ لا يُرسم: شارةٌ بصفرٍ تشغل موضعَ شارةٍ تعني شيئًا.
+             */
+            'supportBadge' => fn () => $user
+                ? ($user->isSuperAdmin()
+                    ? Support::platformBadge($user)
+                    : Support::businessBadge($user))
+                : 0,
+
+            /*
+             * وشارةُ المبيعات — أخو شارة الدعم لا هي.
+             *
+             * تاجرٌ يكتب إلينا كان يُضيء الشريط، وعميلٌ محتمَلٌ يكتب إلى
+             * الرقم نفسِه لا يُضيء شيئًا: تُكتب رسالتُه وتنتظر حتّى يفتح
+             * أحدُهم الشاشةَ بالصدفة. ومن جاء ليشتري وانتظر يومًا يذهب
+             * إلى غيرنا.
+             *
+             * ولمدير المنصّة وحدَه: لا تاجرَ يقرأ دفترَ مبيعاتنا.
+             */
+            'crmBadge' => fn () => $user && $user->isSuperAdmin()
+                ? CrmWhatsApp::badge($user)
+                : 0,
+
+            // رسائل الجلسة — الواجهة تعرضها كـtoast
+            'flash' => fn () => [
+                'toast' => $request->session()->get('toast'),
+                'status' => $request->session()->get('status'),
+                /*
+                 * كلمةُ مرورٍ وُلِّدت الآن — تمرّ مرّةً واحدة ولا تُحفظ.
+                 *
+                 * كانت تُرسل داخل نصّ التوست فتختفي بعد ثوانٍ: يقرؤها المدير
+                 * نصفَ قراءة، ولا سبيل إلى استرجاعها لأنّها تُحفظ مُجزَّأةً.
+                 * فيُعيد التوليد مرّةً بعد مرّة.
+                 */
+                'password' => $request->session()->get('issued_password'),
+            ],
+
+            // الرمز الخام مع كل استجابة: وسم <meta> يُطبع مرّة عند أول تحميل
+            // ويتقادم فور تجديد الجلسة عند الدخول، فتُردّ النماذج التي تقرأه بـ419
+            'csrf' => fn () => csrf_token(),
+
+            'locale' => fn () => app()->getLocale(),
+            'dir' => fn () => app()->getLocale() === 'en' ? 'ltr' : 'rtl',
+
+            // قاموس الترجمة — نفس lang/en.json الذي يقرأه __() في Blade.
+            // يُرسل فقط عند الإنجليزية: في العربية المفتاح هو النص نفسه فلا لزوم له.
+            'translations' => fn () => app()->getLocale() === 'en' ? self::translations() : null,
+        ];
+    }
+
+    /** يُقرأ الملف مرة واحدة لكل طلب لا مرة لكل مفتاح */
+    private static function translations(): array
+    {
+        static $cache = null;
+
+        if ($cache === null) {
+            $path = lang_path('en.json');
+            $cache = is_file($path) ? (json_decode(file_get_contents($path), true) ?: []) : [];
+        }
+
+        return $cache;
+    }
+}

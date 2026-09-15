@@ -1,0 +1,143 @@
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+
+class Business extends Model
+{
+    protected $guarded = [];
+    protected $casts = [
+        'starts_at' => 'date',
+        'ends_at' => 'date',
+        'is_demo' => 'boolean',
+        // ختمُ التاجر على هويّة متجره — انظر `Support\ShopIdentity`
+        'identity_confirmed_at' => 'datetime',
+    ];
+
+    /**
+     * المتجر تاجرٌ حقيقيّ ما لم يُوسَم تجريبيًّا — والقيمة هنا لا في القاعدة
+     * وحدها: قيمة العمود الافتراضية لا تصل إلى النموذج المُنشأ في الذاكرة،
+     * فمتجرٌ يُنشأ ويُسأل عن حاله في الطلب نفسه كان يُجيب بـnull.
+     */
+    protected $attributes = ['is_demo' => false];
+
+    /**
+     * ما يُنسخ من ملفّ المتجر ويُستعاد — ولا شيء سواه.
+     *
+     * الباقةُ والاشتراكُ وحالُ الحساب تخصّ المنصّة لا التاجر: استعادةُ ملفٍّ
+     * قديم كانت ستُرجع باقةً أعلى أو تاريخَ انتهاءٍ مضى.
+     *
+     * وموضعٌ واحد يقرؤه بناءُ النسخة والاستعادة معًا: قائمتان تفترقان يومًا،
+     * فيُنسخ حقلٌ ولا يُستعاد.
+     */
+    public const BACKUP_FIELDS = [
+        'name', 'type', 'owner_name', 'phone', 'email',
+        'country', 'city', 'address', 'logo',
+        // والإقرارُ بالهويّة معها: استعادةُ متجرٍ مكتملٍ لا تُعيد سؤاله عن اسمه
+        'identity_confirmed_at',
+    ];
+
+    /** متاجر التجّار وحدها — ما تُبنى عليه إحصاءات المنصّة وتقاريرها */
+    public function scopeReal($query)
+    {
+        return $query->where('is_demo', false);
+    }
+
+    /** المتاجر التجريبيّة وحدها */
+    public function scopeDemo($query)
+    {
+        return $query->where('is_demo', true);
+    }
+
+    /**
+     * ما يُعدّ اشتراكًا ساريًا — من صفّ المتجر نفسه لا من جدولٍ آخر.
+     *
+     * «هل هذا التاجر مشترك؟» كان جوابها مكتوبًا في مكانين: `status` و
+     * `ends_at` هنا — وهما ما يُقرّر فعلًا دخوله ومنعه — وجدول
+     * `subscriptions` وهو ما تقرؤه لوحة المنصّة. والثاني لا يُكتب إلا
+     * بضغطة «تجديد» يتذكّرها إنسان.
+     *
+     * فمن أُضيف ودفع ولم يُضغط له الزرّ كان يظهر في اللوحة صفرًا: تاجرٌ
+     * يعمل ويدفع، والرقم يقول لا أحد. والنظام يعرف الحقيقة ويمنع بها،
+     * واللوحة تقرأ من دفترٍ لا يمسكه أحد.
+     *
+     * فصار المصدر واحدًا: من كان نشطًا ولم تنتهِ مدّته فهو ساري — يُحسب
+     * من نفسه، اليوم وبعد مئة تاجر.
+     */
+    public function scopeLive($query)
+    {
+        return $query->real()
+            ->whereNotIn('status', ['معطل', 'معطّل'])
+            ->where(fn ($q) => $q->whereNull('ends_at')->orWhere('ends_at', '>=', now()->startOfDay()));
+    }
+
+    /**
+     * من يدفع فعلًا: ساري، وله فاتورةٌ مدفوعة واحدة على الأقل.
+     *
+     * والتجربة ليست اشتراكًا: من دخل بأربعة عشر يومًا مجّانًا لا هو إيراد
+     * ولا هو مدين، وخلطُه بالمشتركين يجعلك تقرأ خمسةً وأنت تعرف أن اثنين
+     * لم يدفعا ريالًا.
+     */
+    public function scopeSubscribed($query)
+    {
+        return $query->live()->whereExists(
+            fn ($q) => $q->selectRaw('1')->from('invoices')
+                ->whereColumn('invoices.business_id', 'businesses.id')
+                ->where('invoices.status', 'مدفوعة'),
+        );
+    }
+
+    /** في التجربة: ساري ولم يدفع بعد */
+    public function scopeTrialing($query)
+    {
+        return $query->live()->whereNotExists(
+            fn ($q) => $q->selectRaw('1')->from('invoices')
+                ->whereColumn('invoices.business_id', 'businesses.id')
+                ->where('invoices.status', 'مدفوعة'),
+        );
+    }
+
+    /**
+     * رابط الشعار — أو لا شيء.
+     *
+     * كان يردّ صورةً من `picsum.photos` حين لا شعار: صورةٌ عشوائيّة من
+     * الإنترنت تُعرض علامةً تجاريّةً لتاجرٍ لم يرفع شيئًا — على فاتورته
+     * وفي رأس موقعه وفي قائمة المنصّة. ثلاثةُ أعطالٍ في سطر:
+     *
+     *  ١) بياناتٌ وهميّة في حساب تاجر — وهي القاعدة التي لا تُخرَق هنا.
+     *  ٢) `BackupService` يقرأ الخاصيّة لا العمود، فتُكتب الصورة في النسخة
+     *     الاحتياطية ثمّ تُستعاد قيمةً حقيقيّة: «لا شعار» تصير رابطًا ثابتًا
+     *     لصورةِ غريبٍ لا يُمحى إلا باليد.
+     *  ٣) تبعيّةٌ لخادمٍ خارجيّ في كل صفحة: يسقط أو يُحجب فتظهر صورٌ مكسورة.
+     *
+     * والفراغ يُقال فراغًا: الشاشات تعرض حرفَ الاسم أو مربّعًا خافتًا مكانه،
+     * وهي تحتمل `null` أصلًا.
+     */
+    public function getLogoAttribute($value): ?string
+    {
+        if (! $value) {
+            return null;
+        }
+
+        if (str_starts_with($value, 'http')) {
+            return $value;
+        }
+
+        return \Illuminate\Support\Facades\Storage::url($value);
+    }
+
+    public function plan(): BelongsTo { return $this->belongsTo(Plan::class); }
+    public function users(): HasMany { return $this->hasMany(User::class); }
+    public function branches(): HasMany { return $this->hasMany(Branch::class); }
+    public function categories(): HasMany { return $this->hasMany(Category::class); }
+    public function products(): HasMany { return $this->hasMany(Product::class); }
+    public function customers(): HasMany { return $this->hasMany(Customer::class); }
+    public function orders(): HasMany { return $this->hasMany(Order::class); }
+    public function subscriptions(): HasMany { return $this->hasMany(Subscription::class); }
+    public function invoices(): HasMany { return $this->hasMany(Invoice::class); }
+    public function expenses(): HasMany { return $this->hasMany(Expense::class); }
+    public function transactions(): HasMany { return $this->hasMany(Transaction::class); }
+}

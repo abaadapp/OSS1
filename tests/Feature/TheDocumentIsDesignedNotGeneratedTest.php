@@ -1,0 +1,1406 @@
+<?php
+
+namespace Tests\Feature;
+
+use App\Models\Branch;
+use App\Models\Business;
+use App\Models\Customer;
+use App\Models\Order;
+use App\Models\OrderItem;
+use App\Models\Setting;
+use App\Models\User;
+use App\Support\Color;
+use App\Support\Document\Branding;
+use App\Support\Document\PaperSize;
+use App\Support\Document\Theme;
+use App\Support\Document\Version;
+use App\Support\DocumentPaper;
+use App\Support\DocumentRenderer;
+use App\Support\Pdf;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Storage;
+use Tests\TestCase;
+
+/**
+ * الورقةُ مستندٌ صُمِّم، لا ملفٌّ ولّده نظامٌ محاسبيّ.
+ *
+ * ═══ وما يحرسه هذا الملفّ ═══
+ *
+ * أنّ هويّةَ التاجر تبلغ الورقة، وأنّ **جودةَ التصميم لا تُترك له**: لونٌ
+ * لا يُقرأ يُصحَّح، وورقةٌ بلا غلافٍ تبقى نظيفةً لا خاوية، وصفٌّ لا ينكسر
+ * بين صفحتين، ورمزٌ لا يبلغ ورقةً تمضي إلى مورّد.
+ *
+ * وهي الحالاتُ التي لا يكشفها فتحُ ملفِّ PDF بالعين: من يفتح فاتورةً
+ * بصنفين لا يرى ما يقع عند خمسين، ومن يجرّب بلونٍ داكن لا يرى ما يقع
+ * لمن اختار أصفر.
+ */
+class TheDocumentIsDesignedNotGeneratedTest extends TestCase
+{
+    use RefreshDatabase;
+
+    private Business $business;
+
+    private User $owner;
+
+    private Branch $branch;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+        app()->setLocale('ar');
+
+        $this->business = Business::create([
+            'name' => 'ورد الخوير', 'type' => 'محل ورود', 'city' => 'مسقط', 'status' => 'نشط',
+        ]);
+        $this->branch = Branch::create(['business_id' => $this->business->id, 'name' => 'الفرع الرئيسي']);
+
+        $this->owner = User::create([
+            'business_id' => $this->business->id, 'name' => 'المالك', 'email' => 'o@eventplusapp.om',
+            'password' => bcrypt('password'), 'role' => 'admin', 'status' => 'نشط',
+        ]);
+    }
+
+    /** طلبٌ بعددٍ من الأصناف — لقياس ما يقع عند الكثرة */
+    private function order(int $items = 2, string $name = 'باقة ورد', string $number = 'INV-000001'): Order
+    {
+        $order = Order::create([
+            'business_id' => $this->business->id, 'branch_id' => $this->branch->id,
+            'branch' => 'الفرع الرئيسي', 'number' => $number, 'status' => 'مكتمل',
+            'customer_name' => 'زبون', 'employee_name' => 'كاشير', 'payment_method' => 'نقدي',
+            'subtotal' => 12 * $items, 'tax' => 0.6 * $items, 'total' => 12.6 * $items,
+            'ordered_at' => now(),
+        ]);
+
+        for ($i = 0; $i < $items; $i++) {
+            OrderItem::create([
+                'order_id' => $order->id, 'name' => $name.' '.($i + 1),
+                'price' => 12, 'quantity' => 1, 'total' => 12,
+            ]);
+        }
+
+        return $order->load('items');
+    }
+
+    private function sheet(Order $order): string
+    {
+        return DocumentRenderer::saleSheet(
+            $this->business->id,
+            $order,
+            \App\Support\DocumentTemplates::settings($this->business->id, 'sale'),
+        );
+    }
+
+    /* ═══════════════════ الهويّةُ تبلغ الورقة ═══════════════════ */
+
+    /**
+     * لونُ التاجر يُطبع — ومرّتين في كلّ قاعدة.
+     *
+     * `var()` للمتصفّح وقيمةٌ حرفيّةٌ بعدها لـmpdf. وmpdf يتجاهل المتغيّرات
+     * صامتًا: بلا القيمة الحرفيّة تخرج الورقةُ بلا لونٍ ولا خطأ يقول لماذا،
+     * ويرى التاجر لونَه في المعاينة ويغيب عن الطابعة.
+     */
+    public function test_the_brand_colour_reaches_both_engines(): void
+    {
+        Branding::save($this->business->id, ['primary' => '#7c3aed']);
+
+        $html = $this->sheet($this->order());
+
+        $this->assertStringContainsString('--document-primary: #7c3aed', $html, 'المتغيّرُ لا يبلغ المتصفّح');
+        $this->assertStringContainsString(
+            'color: var(--document-text); color: '.Theme::tokens()['text'],
+            $html,
+            'القيمةُ الحرفيّة لا تتبع المتغيّر — وmpdf لا يقرأ إلّا الحرفيّة',
+        );
+    }
+
+    /**
+     * ولونٌ لا يُقرأ على الورق يُغمَّق — ولا يُستبدل بالأسود.
+     *
+     * من اختار أصفرَ فاقعًا لعلامته يخرج عنوانُ فاتورته أصفرَ على أبيض:
+     * لا يُقرأ على الشاشة، ويختفي كليًّا في طابعةٍ بالأبيض والأسود. فيرى
+     * شعارَه على الورقة ولا يرى أنّ رقمَ فاتورته غاب.
+     *
+     * والتغميقُ يُبقيه في عائلة لونه: إسقاطُه إلى الأسود يمحو هويّتَه.
+     */
+    public function test_an_unreadable_brand_colour_is_darkened_not_discarded(): void
+    {
+        $tokens = Theme::tokens(['primary' => '#fde047']);
+
+        $this->assertSame('#fde047', $tokens['primary'], 'اللونُ المختار تغيّر — والغلافُ يُرسم به');
+
+        $this->assertGreaterThanOrEqual(
+            Theme::PRINT_CONTRAST,
+            Color::contrast($tokens['primary_ink'], '#ffffff'),
+            'حبرُ الورقة لا يُقرأ على الأبيض',
+        );
+
+        $this->assertNotSame('#000000', $tokens['primary_ink'], 'اللونُ أُسقط إلى الأسود فمُحيت هويّةُ التاجر');
+        $this->assertNotSame('#111111', $tokens['primary_ink']);
+    }
+
+    /** ولمسةٌ لم تُختَر تُشتقّ — لا لونٌ من عند النظام يتنافر مع علامته */
+    public function test_the_accent_is_derived_when_not_chosen(): void
+    {
+        $tokens = Theme::tokens(['primary' => '#b91c1c']);
+
+        $this->assertNotSame('', $tokens['accent']);
+        $this->assertNotSame('#b91c1c', $tokens['accent'], 'اللمسةُ نسخةٌ من الأساسيّ لا مشتقٌّ منه');
+    }
+
+    /* ═══════════════════ الغلاف ═══════════════════ */
+
+    /**
+     * ورقةُ من لم يرفع غلافًا ولم يختر لونًا تبقى **نظيفة** لا خاوية.
+     *
+     * شريطٌ أسودُ فوق كلّ ورقةٍ لمتجرٍ لم يختر شيئًا ليس هويّةً، وإنّما حبرٌ
+     * يُطبع بلا سبب. والمواصفةُ صريحة: بلا غلافٍ تكون الورقة **أبسط** لا
+     * أسوأ.
+     */
+    public function test_a_paper_without_a_cover_prints_no_empty_band(): void
+    {
+        $html = $this->sheet($this->order());
+
+        $this->assertStringNotContainsString('class="cover"', $html);
+        $this->assertStringNotContainsString('class="cover-plain"', $html, 'شريطٌ يُطبع لمن لم يختر لونًا');
+    }
+
+    /**
+     * ولونُ التاجر يبلغ الورقةَ في خيطٍ واحدٍ أعلاها — لا في شريطٍ ثانٍ.
+     *
+     * ═══ وما ذهب ═══
+     *
+     * كان شريطٌ بلونه يُرسم لمن اختار لونًا ولم يرفع غلافًا. وصار الخيطُ
+     * أعلى الورقة يقول ذلك لكلّ متجر، فالشريطُ الثاني تكرارٌ يجعل اللونَ
+     * مساحةً بعد أن أردناه لمسة — والمرجعُ المعتمد لا لونَ فيه إلّا في
+     * الشعار.
+     */
+    public function test_the_brand_reaches_the_paper_as_one_hairline(): void
+    {
+        Branding::save($this->business->id, ['primary' => '#7c3aed']);
+        $html = $this->sheet($this->order());
+
+        $this->assertStringNotContainsString('class="cover-plain"', $html, 'عاد الشريطُ الثاني بلون التاجر');
+        $this->assertStringContainsString('class="brandrule"', $html, 'الورقةُ بلا أثرٍ من لون التاجر');
+    }
+
+    /** ومن رفع غلافًا يُرسم بعرض الورقة — ومضمَّنًا لا برابط */
+    public function test_an_uploaded_cover_is_embedded_in_the_paper(): void
+    {
+        Storage::fake('public');
+        Storage::disk('public')->put('covers/band.png', 'PNGDATA');
+
+        Setting::create([
+            'business_id' => $this->business->id,
+            'key' => Branding::COVER, 'value' => 'covers/band.png',
+        ]);
+
+        $html = $this->sheet($this->order());
+
+        $this->assertStringContainsString('class="cover"', $html);
+        $this->assertStringContainsString(
+            'data:',
+            $html,
+            'الغلافُ يُوصَل برابط — وmpdf لا جلسةَ له فيخرج الورقُ بلا غلاف',
+        );
+    }
+
+    /* ═══════════════════ الورقةُ الطويلة ═══════════════════ */
+
+    /**
+     * فاتورةٌ بخمسين صنفًا لا تنكسر صفوفُها ولا يغيب رأسُ جدولها.
+     *
+     * سطرٌ نصفُه في صفحةٍ ونصفُه في أخرى يُقرأ مرّتين، وجدولٌ يمتدّ ثلاثَ
+     * صفحاتٍ بلا رؤوسِ أعمدةٍ في الثانية يُقرأ بالتخمين: أيُّ عمودٍ الكميّةُ
+     * وأيُّها السعر.
+     */
+    public function test_a_long_invoice_keeps_its_rows_and_repeats_its_header(): void
+    {
+        $html = $this->sheet($this->order(50));
+
+        $this->assertStringContainsString('table.items tr { page-break-inside: avoid; }', $html);
+        $this->assertStringContainsString('table.items thead { display: table-header-group; }', $html);
+        $this->assertStringContainsString('باقة ورد 50', $html, 'الصنفُ الخمسون لا يبلغ الورقة');
+    }
+
+    /**
+     * وكتلةُ الإجماليّات لا تنكسر — ولا الرمزُ يركب على الجدول.
+     *
+     * «الإجمالي» في صفحةٍ ومفرداتُه في أخرى يجعل من يراجع الورقة يعود
+     * صفحةً ليعرف ممّ تكوّن المبلغ.
+     */
+    public function test_the_totals_and_the_code_are_held_whole(): void
+    {
+        $html = $this->sheet($this->order(40));
+
+        $this->assertMatchesRegularExpression('/table\.totals \{[^}]*page-break-inside: avoid/s', $html);
+        $this->assertMatchesRegularExpression('/\.qr-block \{[^}]*page-break-inside: avoid/s', $html);
+        /* والرقمُ الأهمّ كتلةٌ واحدة: تسميتُه في صفحةٍ ورقمُه في أخرى خبرٌ مبتور */
+        $this->assertMatchesRegularExpression('/table\.figwrap \{[^}]*page-break-inside: avoid/s', $html);
+    }
+
+    /**
+     * وخاتمةُ الورقة تتبع المال: المجاميعُ، ثمّ ما يُقال، ثمّ الرمز.
+     *
+     * ═══ وما تغيّر في الترتيب ═══
+     *
+     * كانت الملاحظاتُ في الجهة المقابلة للمجاميع — عمودان. وفي المرجع
+     * المعتمد تقع المجاميعُ أسطرًا تتبع الجدول بأعمدته، وما بعدها يأتي
+     * تحتها لا بإزائها: «اعرضها بعد المنطقة الرئيسية» و«QR تحت المحتوى
+     * المالي/الملاحظات».
+     *
+     * فيُحرَس الترتيبُ لا الشكل: المجاميعُ أوّلًا، فالملاحظات، فالرمز.
+     */
+    public function test_the_close_follows_the_money_then_the_words_then_the_code(): void
+    {
+        $order = $this->order();
+        $order->update(['notes' => 'يُرجى مراجعة الشحنة عند الاستلام.']);
+
+        $html = DocumentRenderer::saleSheet(
+            $this->business->id,
+            $order->fresh()->load('items'),
+            ['show_notes' => true] + \App\Support\DocumentTemplates::settings($this->business->id, 'sale'),
+            ['paperUrl' => \App\Support\PublicDocument::url($order)],
+        );
+
+        $totals = strpos($html, '<table class="totals">');
+        $notes = strpos($html, 'يُرجى مراجعة الشحنة عند الاستلام.');
+        $code = strpos($html, '<div class="qr-block">');
+
+        $this->assertNotFalse($totals, 'لا مجاميعَ على الورقة');
+        $this->assertNotFalse($notes, 'الملاحظاتُ لا تبلغ الورقة');
+        $this->assertNotFalse($code, 'الرمزُ لا يبلغ الورقة');
+
+        $this->assertLessThan($notes, $totals, 'الملاحظاتُ قبل المجاميع');
+        $this->assertLessThan($code, $notes, 'الرمزُ فوق الملاحظات لا أسفلها');
+    }
+
+    /**
+     * وورقةٌ بلا أسعار تبقى لها خاتمة.
+     *
+     * سندُ تسليمٍ أُطفئت أسعارُه لا مجاميعَ له، وملاحظاتُ التسليم عليه هي
+     * كلُّ ما يُقرأ في أسفله. وجزئيّةٌ تُرسم «إن كانت فيها أرقام» تبتلعها.
+     */
+    public function test_a_paper_without_prices_still_prints_what_it_has_to_say(): void
+    {
+        $html = view('documents.v1.partials.close', [
+            'tokens' => Theme::tokens(),
+            'panels' => [['cap' => 'ملاحظات التسليم', 'text' => 'تُسلَّم الشحنةُ صباحًا.']],
+        ])->render();
+
+        $this->assertStringContainsString('تُسلَّم الشحنةُ صباحًا.', $html, 'ملاحظاتُ ورقةٍ بلا أسعارٍ لا تُطبع');
+    }
+
+    /**
+     * واسمُ صنفٍ طويل لا يخرج عن الورقة — الخليّةُ تلفّ ولا تمتدّ.
+     *
+     * وطولُه أطولُ ما يقبله العمود لا أطولَ منه: `order_items.name` عمودٌ
+     * بـ٢٥٥ حرفًا، فاسمٌ بثلاثمئةٍ حالةٌ **لا تقع في النظام**. وSQLite لا
+     * تفرض الطولَ فيمرّ الحارس، وPostgreSQL تفرضه فيسقط — ومحرّكُ الإنتاج
+     * PostgreSQL. فحارسٌ يقيس المستحيل يكذب في المحرّكين معًا: هنا بأن
+     * يمرّ، وهناك بأن يسقط لغير ما وُضع له.
+     *
+     * وثمانيةُ تكرارٍ تبلغ ٢٥٠ حرفًا بعد لاحقة الترقيم — أطولُ اسمٍ ممكن.
+     */
+    public function test_a_very_long_item_name_does_not_overflow(): void
+    {
+        $long = str_repeat('باقة ورد جوري أحمر بتغليف فاخر ', 8);
+        $html = $this->sheet($this->order(1, $long));
+
+        $this->assertStringContainsString('table.items { width: 100%;', $html);
+        $this->assertStringNotContainsString('white-space: nowrap', substr($html, strpos($html, 'table.items td') ?: 0, 200));
+    }
+
+    /* ═══════════════════ الرمزُ وحدودُه ═══════════════════ */
+
+    /**
+     * ولا رمزَ يُبنى لأمر الشراء ولا لسند الاستلام — من مصدره.
+     *
+     * يمضيان إلى المورّد وفيهما تكلفةُ البضاعة، ورابطٌ عامٌّ لا يحرسه إلّا
+     * كونُه غير مخمَّن يضع هامشَ ربح التاجر خلف قصاصةٍ تُصوَّر بهاتف.
+     *
+     * والمنعُ في `PublicDocument` لا في القالب: مقبضٌ يُخفي رابطًا موجودًا
+     * يُنسى فيُشعَل، ورابطٌ لا يُبنى لا يُسرَّب أبدًا.
+     */
+    public function test_supplier_papers_are_never_granted_a_public_face(): void
+    {
+        $po = \App\Models\PurchaseOrder::create([
+            'business_id' => $this->business->id, 'number' => 'PO-0001',
+            'status' => 'مسودة', 'ordered_at' => now(), 'total' => 100,
+        ]);
+
+        $this->assertFalse(\App\Support\PublicDocument::allows($po));
+        $this->assertNull(\App\Support\PublicDocument::url($po), 'أمرُ الشراء نال رابطًا عامًّا');
+        $this->assertSame(0, \App\Models\DocumentLink::count(), 'رمزٌ كُتب لورقةٍ لا تُمنح وجهًا');
+    }
+
+    /** وأوراقُ الزبون تناله: الإيصالُ يبهت، والزبونُ يعود بضمانٍ بعد سنة */
+    public function test_customer_papers_do_earn_a_public_face(): void
+    {
+        $order = $this->order();
+
+        $this->assertTrue(\App\Support\PublicDocument::allows($order));
+        $this->assertNotNull(\App\Support\PublicDocument::url($order));
+    }
+
+    /** ورمزٌ واحدٌ لورقةٍ واحدة مهما طُبعت مرّتين */
+    public function test_printing_twice_does_not_mint_two_codes(): void
+    {
+        $order = $this->order();
+
+        $first = \App\Support\PublicDocument::token($order);
+        $second = \App\Support\PublicDocument::token($order);
+
+        $this->assertSame($first, $second);
+        $this->assertSame(1, \App\Models\DocumentLink::count());
+    }
+
+    /* ═══════════════════ الاتّجاهُ واللغة ═══════════════════ */
+
+    /** الورقةُ العربية من اليمين، والإنجليزية من اليسار — بقالبٍ واحد */
+    public function test_one_template_serves_both_directions(): void
+    {
+        $order = $this->order();
+
+        app()->setLocale('ar');
+        $ar = $this->sheet($order);
+
+        app()->setLocale('en');
+        $en = $this->sheet($order);
+
+        $this->assertStringContainsString('direction: rtl', $ar);
+        $this->assertStringContainsString('text-align: right', $ar);
+
+        $this->assertStringContainsString('direction: ltr', $en);
+        $this->assertStringContainsString('text-align: left', $en);
+
+        // وقالبٌ واحد لا نسخةٌ لكلّ لغة
+        $this->assertSame(Version::views(null).'.sale', Version::views(null).'.sale');
+    }
+
+    /**
+     * والشريطُ الحراريُّ يتبع لغتَه كالورقة — لا يُثبَّت على العربية.
+     *
+     * ═══ وهذا عطبٌ وقع فعلًا ولم يُرَ ═══
+     *
+     * كان `direction: rtl` مكتوبًا في أنماط الشريط، فإيصالٌ إنجليزيّ يخرج
+     * بأعمدةٍ معكوسة وبنقطةٍ تقفز إلى أوّل السطر: «‎.Invoice no» بدل
+     * «Invoice no.». ولا يراه من ضبط متجرَه بالعربية أبدًا — يراه زبونُه
+     * الذي اختار الإنجليزية، ولا يشتكي: يظنّ أنّ هكذا يطبع هذا المتجر.
+     */
+    public function test_the_thermal_strip_follows_its_language(): void
+    {
+        $order = $this->order();
+        $values = \App\Support\DocumentTemplates::settings($this->business->id, 'sale');
+
+        app()->setLocale('ar');
+        $ar = DocumentRenderer::saleStrip($this->business->id, $order, $values, 80);
+
+        app()->setLocale('en');
+        $en = DocumentRenderer::saleStrip($this->business->id, $order, $values, 80);
+
+        $this->assertStringContainsString('direction: rtl', $ar);
+        $this->assertStringContainsString('text-align: right', $ar);
+
+        $this->assertStringContainsString('direction: ltr', $en);
+        $this->assertStringContainsString('text-align: left', $en);
+        $this->assertStringNotContainsString('direction: rtl', $en, 'الشريطُ الإنجليزيّ يُرسم بترتيبٍ عربيّ');
+    }
+
+    /**
+     * والمبلغُ يُقرأ رقمًا ثمّ عملة — في اللغتين.
+     *
+     * «5.000 ر.ع» في فقرةٍ عربيّة ينقلب فيخرج «ر.ع 5.000»: الرقمُ محايدٌ
+     * ضعيف و«ر.ع» عربيّةٌ قويّة، فيتقدّمها ترتيبُ الفقرة. ولا يلاحظه من
+     * كتب المبلغ — يعرف ما كتب فيقرؤه صحيحًا في رأسه.
+     */
+    public function test_amounts_are_isolated_from_the_line_direction(): void
+    {
+        $order = $this->order();
+        $values = \App\Support\DocumentTemplates::settings($this->business->id, 'sale');
+
+        foreach ([
+            DocumentRenderer::saleSheet($this->business->id, $order, $values),
+            DocumentRenderer::saleStrip($this->business->id, $order, $values, 80),
+        ] as $html) {
+            /* كلُّ مبلغٍ ملفوفٌ بـ`dir` — والقاعدةُ في CSS وحدها لا يقرؤها mpdf هنا */
+            $this->assertMatchesRegularExpression(
+                '/<span dir="ltr">[^<]*'.preg_quote(__('ر.ع'), '/').'/u',
+                $html,
+                'مبلغٌ يُرسم بلا عزلٍ عن اتّجاه السطر',
+            );
+        }
+    }
+
+    /**
+     * والأرقامُ تُقرأ من اليسار في اللغتين — معزولةً عمّا حولها.
+     *
+     * رقمُ فاتورةٍ أو آيبانٌ داخل سطرٍ عربيّ يتبع اتّجاهَ السطر لا اتّجاهَ
+     * نفسِه، فينقلب طرفاه. ولا يلاحظه التاجر — يعرف ما كتب فيقرؤه صحيحًا
+     * في رأسه. من يقرؤه غلطًا هو الزبون.
+     */
+    public function test_latin_runs_are_isolated_from_the_arabic_line(): void
+    {
+        $html = $this->sheet($this->order());
+
+        $this->assertStringContainsString('unicode-bidi: isolate', $html);
+        $this->assertStringContainsString('.ltr', $html);
+    }
+
+    /* ═══════════════════ الضريبة ═══════════════════ */
+
+    /** ورقةٌ بضريبةٍ تقول نسبتَها — لا مبلغًا لا يُراجَع */
+    public function test_the_vat_line_carries_the_rate_it_was_computed_at(): void
+    {
+        $order = $this->order();
+        $order->update(['subtotal' => 100, 'discount' => 0, 'tax' => 5, 'total' => 105]);
+
+        $doc = DocumentPaper::forSale($order->fresh('items'));
+        $vat = collect($doc['totals'])->firstWhere('label', __('ضريبة القيمة المضافة'));
+
+        $this->assertNotNull($vat, 'سطرُ الضريبة غاب عن ورقةٍ فيها ضريبة');
+        $this->assertSame('(5%)', $vat['hint'], 'النسبةُ لا تُطبع مع القيمة');
+    }
+
+    /** وورقةٌ بلا ضريبةٍ لا تطبع «الضريبة 0.000» — صفرٌ يُقرأ حقلًا لم يُملأ */
+    public function test_a_paper_without_vat_prints_no_zero_line(): void
+    {
+        $order = $this->order();
+        $order->update(['tax' => 0]);
+
+        $doc = DocumentPaper::forSale($order->fresh('items'));
+
+        $this->assertNull(collect($doc['totals'])->firstWhere('label', __('ضريبة القيمة المضافة')));
+    }
+
+    /* ═══════════════════ حقولُ السداد ═══════════════════ */
+
+    /**
+     * بيعةٌ نقديّة لا تطبع «المسدَّد» و«الباقي».
+     *
+     * دُفعت عند الصندوق، وسطرٌ يقول «الباقي 0.000» يجعل الزبون يبحث عمّا
+     * لم يدفعه.
+     */
+    public function test_a_cash_sale_prints_no_settlement_lines(): void
+    {
+        $doc = DocumentPaper::forSale($this->order());
+
+        $this->assertNull(collect($doc['totals'])->firstWhere('label', __('المسدَّد')));
+        $this->assertNull(collect($doc['totals'])->firstWhere('due', true));
+    }
+
+    /**
+     * ولا عمودَ سدادٍ في `orders` — الرقمُ يُقرأ من الدفتر.
+     *
+     * ═══ ولمَ يُحرَس هذا ═══
+     *
+     * `CustomerInvoice::paidTotal()` يجمع ما سُدِّد من
+     * `customer_payment_allocations`. وعمودٌ ثانٍ في `orders` يحمل الرقمَ
+     * نفسَه يعني أنّ كلّ تحصيلٍ وكلّ إلغاءٍ وكلّ إشعارٍ دائن يجب أن يكتب في
+     * الاثنين — ونسيانُ أحدها مرّةً يُخرج ورقةً تقول «الباقي صفر» ودفترًا
+     * يقول غير ذلك. وهو صنفٌ لا يُكتشف إلّا عند مراجعةٍ خارجيّة.
+     */
+    public function test_the_order_table_holds_no_second_copy_of_what_was_paid(): void
+    {
+        $columns = \Illuminate\Support\Facades\Schema::getColumnListing('orders');
+
+        foreach (['paid_amount', 'paid_total', 'outstanding', 'due_at', 'payment_terms_days'] as $column) {
+            $this->assertNotContains(
+                $column,
+                $columns,
+                "«{$column}» عمودٌ ثانٍ لرقمٍ يحسبه الدفتر — انظر DocumentPaper::payment",
+            );
+        }
+    }
+
+    /* ═══════════════════ مقاسُ الورقة ═══════════════════ */
+
+    /**
+     * الورقةُ تخرج بمقاسها المعلَن — والمحتوى يملؤها بهوامشها هي.
+     *
+     * ═══ والعطبُ الذي وُلد منه هذا الحارس ═══
+     *
+     * كانت هندسةُ الورقة تعيش في مُنشئ mpdf وحده: لا `@page` في القالب،
+     * ولا عرضَ في `body`، ولا هامش. فالورقةُ في المتصفّح — وهو ما يراه
+     * التاجر في المعاينة ويفتحه الزبون من الرابط — بلا مقاسٍ ولا هامش:
+     * تمتدّ على عرض ما تُوضع فيه ثمّ يُقلّصها المتصفّح عند الطبع.
+     *
+     * فيُفحص أنّ القالب **يقول مقاسَه**: `@page` بمقاس الورقة، وصندوقٌ
+     * بعرضها وحشوِها للشاشة. ويُفحص أنّ الأرقام من السجلّ لا مكتوبةً.
+     */
+    public function test_every_paper_declares_its_own_size(): void
+    {
+        $order = $this->order();
+
+        foreach ([PaperSize::A4, PaperSize::A5] as $paper) {
+            $values = \App\Support\DocumentTemplates::settings($this->business->id, 'sale');
+            $values['paper'] = $paper;
+
+            $html = DocumentRenderer::saleSheet($this->business->id, $order, $values, ['paper' => $paper]);
+            $p = PaperSize::of($paper);
+
+            $this->assertStringContainsString(
+                'size: '.(int) $p['width'].'mm '.(int) $p['height'].'mm',
+                $html,
+                "{$paper}: الورقةُ لا تعلن مقاسَها لمن يطبعها من المتصفّح",
+            );
+            $this->assertStringContainsString('width: '.(int) $p['width'].'mm', $html);
+            $this->assertStringContainsString('.paper {', $html, 'لا صندوقَ للورقة على الشاشة');
+        }
+    }
+
+    /**
+     * ولا تصغيرَ في أيّ موضع — لا `scale` ولا `zoom`.
+     *
+     * تصميمٌ صغيرٌ يُكبَّر داخل الورقة، أو كبيرٌ يُصغَّر لتسعه، كلاهما يجعل
+     * مقاسَ الخطّ على الورق غيرَ الذي اختير. والتخطيطُ مبنيٌّ على المقاس
+     * الحقيقيّ، فيُطبع بمقياس ١٠٠٪ بلا «ملاءمةٍ للصفحة».
+     */
+    public function test_no_paper_is_scaled_to_fit(): void
+    {
+        $order = $this->order();
+        $values = \App\Support\DocumentTemplates::settings($this->business->id, 'sale');
+
+        foreach ([
+            DocumentRenderer::saleSheet($this->business->id, $order, $values),
+            DocumentRenderer::saleStrip($this->business->id, $order, $values, 80),
+            DocumentRenderer::preview($this->business->id, 'purchase'),
+        ] as $html) {
+            foreach (['transform:', 'zoom:', 'scale('] as $forbidden) {
+                $this->assertStringNotContainsString($forbidden, $html, "الورقةُ تُصغَّر بـ«{$forbidden}»");
+            }
+        }
+    }
+
+    /**
+     * و`@page` لا يبلغ mpdf — وإلّا اختفى ترقيمُ الصفحات.
+     *
+     * mpdf يقرأ `@media print` افتراضًا، و`@page` عنده يُبطل
+     * `SetHTMLFooter`. وقد وقع فعلًا: خرجت الورقةُ بلا رقمِ صفحة، ولم
+     * يظهر إلّا بقياس آخر سطرٍ فيه حبر — ١٨٣ مم بدل ٢٩٠.
+     */
+    public function test_the_page_rule_is_kept_away_from_the_engine(): void
+    {
+        $html = DocumentRenderer::saleSheet(
+            $this->business->id,
+            $this->order(),
+            \App\Support\DocumentTemplates::settings($this->business->id, 'sale'),
+        );
+
+        /* `@page` محبوسٌ في `@media print` — لا في جسد الأنماط */
+        $this->assertStringNotContainsString("\n    @page", $html, '`@page` خارج `@media print` فيقرؤه mpdf');
+        $this->assertStringContainsString('@media print {', $html);
+
+        $engine = file_get_contents(app_path('Support/Document/Pdf/MpdfDriver.php'));
+        $this->assertStringContainsString("'CSSselectMedia' => 'mpdf'", $engine, 'المحرّكُ ما زال يقرأ `print`');
+    }
+
+    /**
+     * وكلُّ مقاسٍ في السجلّ مقبولٌ في الحفظ — كلٌّ في حقله.
+     *
+     * والحقلان اثنان لأنّهما سؤالان: «على أيّ ورقةٍ تُطبع فاتورتي؟» جوابُه
+     * ورقٌ مقصوص، و«ما عرضُ ورق طابعة الصندوق؟» جوابُه شريط. وقائمةٌ واحدة
+     * تخلطهما تجعل الجوابَ عن أحدهما إلغاءً للآخر.
+     */
+    public function test_the_registry_is_the_only_list_of_papers(): void
+    {
+        $this->assertSame(PaperSize::sheets(), \App\Support\DocumentTemplates::papers());
+        $this->assertSame(PaperSize::strips(), \App\Support\DocumentTemplates::strips());
+
+        /* ولا مقاسَ في السجلّ خارجَ القائمتين: يُضاف فلا يقبله حقلٌ ولا يعرضه */
+        $this->assertSame(
+            PaperSize::keys(),
+            array_merge(PaperSize::sheets(), PaperSize::strips()),
+        );
+
+        foreach (PaperSize::sheets() as $paper) {
+            $this->actingAs($this->owner)
+                ->post(route('admin.settings.templates.update', 'sale'), ['paper' => $paper])
+                ->assertSessionHasNoErrors();
+        }
+
+        foreach (PaperSize::strips() as $strip) {
+            $this->actingAs($this->owner)
+                ->post(route('admin.settings.templates.update', 'sale'), ['strip' => $strip])
+                ->assertSessionHasNoErrors();
+        }
+    }
+
+    /* ═══════════════════ المحرّكُ خلف واجهة ═══════════════════ */
+
+    /** والطباعةُ تمرّ بالسائق — فيُستبدل يومًا بلا أن تُمسّ القوالب */
+    public function test_printing_goes_through_a_swappable_driver(): void
+    {
+        $fake = new class implements \App\Support\Document\Pdf\Driver
+        {
+            public array $calls = [];
+
+            public function sheet(string $html, string $name, array $preset, bool $landscape = false, ?string $runningHeader = null, ?string $context = null): \Illuminate\Http\Response
+            {
+                $this->calls[] = $name;
+
+                return response('FAKE');
+            }
+
+            public function strip(string $html, string $name, int $widthMm): \Illuminate\Http\Response
+            {
+                $this->calls[] = $name;
+
+                return response('FAKE');
+            }
+
+            public function stripHeight(string $html, int $widthMm): float
+            {
+                return 100.0;
+            }
+        };
+
+        $was = Pdf::swap($fake);
+
+        try {
+            $this->assertSame('FAKE', Pdf::a4('<p>x</p>', 'probe')->getContent());
+            $this->assertSame(['probe'], $fake->calls);
+        } finally {
+            Pdf::swap($was);
+        }
+    }
+
+    /* ═══════════════════ نسخةُ القالب ═══════════════════ */
+
+    /** ونسخةٌ لا نعرفها تُرسم بالحاليّ ولا تُسقط الورقة */
+    public function test_an_unknown_template_version_falls_back_without_breaking(): void
+    {
+        $this->assertSame(Version::views(Version::CURRENT), Version::views('eventplus-modern-v99'));
+        $this->assertSame(Version::views(Version::CURRENT), Version::views(null));
+        $this->assertFalse(Version::known('eventplus-modern-v99'));
+        $this->assertTrue(Version::known(Version::CURRENT));
+    }
+
+    /** ولقطةُ الهويّة تحمل ما يُعاد به البناء — مساراتٍ لا صورًا مرمَّزة */
+    public function test_the_snapshot_stores_paths_not_encoded_images(): void
+    {
+        Branding::save($this->business->id, ['primary' => '#7c3aed']);
+
+        $snapshot = Version::snapshot($this->business->id);
+
+        $this->assertSame(Version::CURRENT, $snapshot['template']);
+        $this->assertSame('#7c3aed', $snapshot['primary']);
+        $this->assertStringNotContainsString('data:', $snapshot['logo'].$snapshot['cover']);
+    }
+
+    /* ═══════════════════ الشريطُ الحراريّ ═══════════════════ */
+
+    /** والإيصالُ قالبٌ مستقلّ — لا A4 مُصغَّرة */
+    public function test_the_thermal_receipt_is_its_own_template(): void
+    {
+        $this->order();
+
+        $strip = DocumentRenderer::preview($this->business->id, 'sale', ['strip' => '80mm'], thermal: true);
+        $sheet = DocumentRenderer::preview($this->business->id, 'sale', ['paper' => 'A4']);
+
+        // الشريطُ بلا غلافٍ ولا حوافَّ مُدوَّرة: الطابعةُ الحرارية لا ترسمها
+        $this->assertStringNotContainsString('class="cover', $strip);
+        $this->assertStringContainsString('border-top: 0.5pt dashed', $strip, 'الفاصلُ مصمتٌ فيشرب الحبر');
+
+        // والورقةُ A4 لها ما ليس للشريط
+        $this->assertStringContainsString('table.items', $sheet);
+        $this->assertStringNotContainsString('table.items', $strip);
+    }
+
+    /** وعرضُ ٥٨ يُصغّر القياس — لا يترك خطَّ ٨٠ على ثلثي العرض */
+    public function test_the_narrow_strip_shrinks_its_scale(): void
+    {
+        $this->order();
+
+        $wide = DocumentRenderer::preview($this->business->id, 'sale', ['strip' => '80mm'], thermal: true);
+        $narrow = DocumentRenderer::preview($this->business->id, 'sale', ['strip' => '58mm'], thermal: true);
+
+        preg_match('/font-size: ([\d.]+)pt;\s*line-height: 1\.35/', $wide, $w);
+        preg_match('/font-size: ([\d.]+)pt;\s*line-height: 1\.35/', $narrow, $n);
+
+        $this->assertNotEmpty($w);
+        $this->assertNotEmpty($n);
+        $this->assertLessThan((float) $w[1], (float) $n[1], 'الشريطُ الضيّق بخطّ الشريط العريض');
+    }
+
+    /* ═══════════════════ لا بابَ طباعةٍ متروك ═══════════════════ */
+
+    /**
+     * وكلُّ بابٍ يطبع مستندًا يمرّ بالقوالب الجديدة — لا واحدٌ متروك.
+     *
+     * ═══ وهذا الحارسُ وُلد من عطبٍ وقع فعلًا ═══
+     *
+     * وُصلت **معاينةُ** فاتورة البيع بالقالب الجديد ونُسي **زرُّ الطباعة**:
+     * فيرى التاجر في محرّر القوالب ورقةً، ويخرج من الطابعة غيرُها. ولا شيء
+     * يقول إنّهما افترقتا — لأنّ كليهما يعمل.
+     *
+     * فيُفحص المستودعُ نفسُه: لا نداءَ لقالبٍ في `pdf/` من متحكّمٍ يطبع
+     * مستندًا. والتقاريرُ تبقى هناك بحقّ — ورقةُ مخزونٍ ليست مستندًا يحمل
+     * هويّةَ التاجر إلى جهةٍ خارجية، وجرُّها إلى إعادة التصميم عملٌ لم
+     * يُطلَب.
+     */
+    public function test_no_printing_door_is_left_on_the_old_templates(): void
+    {
+        $documents = ['pdf.invoice', 'pdf.receipt', 'pdf.tax-invoice', 'pdf.customer-invoice', 'pdf.document'];
+
+        $guilty = [];
+
+        foreach (new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator(app_path())) as $file) {
+            if ($file->isDir() || $file->getExtension() !== 'php') {
+                continue;
+            }
+
+            $source = file_get_contents($file->getPathname());
+
+            foreach ($documents as $view) {
+                // النداءُ لا الذِّكر: تعليقٌ يشرح تاريخَ الملفّ ليس بناءً للورقة
+                if (str_contains($source, "view('".$view."'")) {
+                    $guilty[] = basename($file->getPathname()).' → '.$view;
+                }
+            }
+        }
+
+        $this->assertSame([], $guilty, 'بابُ طباعةٍ ما زال يرسم بالقالب القديم');
+    }
+
+    /** والفاتورةُ الضريبية وجهٌ ثالثٌ للقالب نفسه — لا قالبٌ رابع */
+    public function test_the_tax_invoice_is_a_face_of_the_same_template(): void
+    {
+        $order = $this->order();
+
+        Setting::create([
+            'business_id' => $this->business->id, 'key' => 'vat_number', 'value' => 'OM1100123456',
+        ]);
+
+        $values = \App\Support\DocumentTemplates::settings($this->business->id, 'sale');
+
+        /*
+         * والرقمُ الضريبيّ يُطبع وإن أطفأ التاجر مقبضَه.
+         *
+         * ورقةٌ عنوانها «فاتورة ضريبية» بلا رقم بائعها تُردّ من أوّل جهةٍ
+         * تراجعها — ويظنّ صاحبُها نفسَه ممتثلًا حتى تُردّ.
+         */
+        $off = $values + ['show_vat_no' => false];
+
+        $plain = DocumentRenderer::saleSheet($this->business->id, $order, $off);
+        $tax = DocumentRenderer::saleSheet($this->business->id, $order, $off, ['taxInvoice' => true]);
+
+        $this->assertStringNotContainsString('OM1100123456', $plain, 'المقبضُ لا يُطفئ الرقم في الورقة العادية');
+        $this->assertStringContainsString('OM1100123456', $tax, 'الفاتورةُ الضريبية طُبعت بلا رقم بائعها');
+        $this->assertStringContainsString(__('فاتورة ضريبية'), $tax);
+        $this->assertStringContainsString(__('فاتورة ضريبية صادرة آليًا عبر نظام افنت بلس'), $tax);
+    }
+
+    /* ═══════════════════ صفحةُ التحقّق ═══════════════════ */
+
+    /** ورقةٌ تُفتح برمزها، ولا تُفتح برمزٍ مُخمَّن */
+    public function test_the_verification_page_opens_only_with_its_code(): void
+    {
+        $order = $this->order();
+        $token = \App\Support\PublicDocument::token($order);
+
+        $this->get(route('paper.show', $token))->assertOk()->assertSee('INV-000001');
+        $this->get(route('paper.show', str_repeat('z', 22)))->assertNotFound();
+    }
+
+    /**
+     * وفاتورةُ العميل تُعرض ملخّصًا — لا بنودَ ولا آيبان.
+     *
+     * ما يحتاجه من يمسح الرمز سؤالٌ واحد: أهذه الورقةُ صحيحة؟ فلا تُحمَّل
+     * الصفحةُ بما لا يجيب عنه — ورقةٌ تُصوَّر بهاتفٍ في ممرّ، ورابطُها
+     * يُعاد إرساله.
+     */
+    public function test_a_customer_invoice_verifies_without_exposing_its_lines(): void
+    {
+        $customer = Customer::create([
+            'business_id' => $this->business->id, 'name' => 'وزارة الثقافة',
+        ]);
+
+        $invoice = \App\Support\CustomerInvoices::issue(
+            \App\Support\CustomerInvoices::create(
+                $this->business->id,
+                $customer,
+                ['issued_at' => now()->toDateString(), 'payment_terms_days' => 30],
+                [['description' => 'تنسيق قاعة', 'quantity' => 1, 'unit_price' => 500, 'discount' => 0]],
+            ),
+            $this->owner->id,
+        );
+
+        $token = \App\Support\PublicDocument::token($invoice);
+        $this->assertNotNull($token, 'فاتورةُ العميل لم تنل رمزًا — وهي ورقةُ زبون');
+
+        $page = $this->get(route('paper.show', $token))->assertOk();
+
+        $page->assertSee($invoice->number);
+        $page->assertSee('ورد الخوير', false);
+        // والمبلغُ من الفاتورة لا رقمًا مكتوبًا هنا: ضريبةٌ تُضاف تجعل الحارس يكذب
+        $page->assertSee(number_format((float) $invoice->total, 3), false);
+
+        /*
+         * ولا اسمَ الجهة ولا بنودَها.
+         *
+         * الرقمُ والتاريخُ والمبلغُ والحالُ تكفي للتحقّق. و**إلى من** صدرت
+         * لا تُضيف شيئًا إلى الجواب، وتُضيف كثيرًا إلى ما يعرفه من وصله
+         * الرابطُ منقولًا: مَن يشتري من هذا المتجر، وبكم.
+         */
+        $page->assertDontSee('وزارة الثقافة', false);
+        $page->assertDontSee('تنسيق قاعة', false);
+    }
+
+    /* ═══════════════════ هيكلُ الورقة البصريّ ═══════════════════ */
+
+    /**
+     * خاتمةُ الورقة تقف في أسفل الصفحة، لا حيث انتهى الجدول.
+     *
+     * ═══ ما يحرسه ═══
+     *
+     * فاتورةٌ بصنفٍ واحد تنتهي مجاميعُها عند ثلثَي الورقة. وكان رمزُها
+     * وسطرُ شكرها يقعان هناك ثمّ يبقى تحتهما شبرٌ من البياض إلى التذييل —
+     * فتُقرأ الورقةُ محتوًى تجمّع في أعلاها لا تكوينًا على A4.
+     *
+     * ═══ ويُقاس على الملفّ المطبوع، لا على الرسم ═══
+     *
+     * الإزاحةُ يحسبها `MpdfDriver::writeAnchored` عند الرسم — لا أثرَ لها
+     * في HTML. فيُفكّ مجرى محتوى الصفحة وتُقرأ مواضعُ السطور: مصفوفةُ
+     * النصّ `1 0 0 -1 x y Tm`، و`y` يزيد نزولًا.
+     *
+     * وورقةُ A4 ‏٨٤١٫٩ نقطة، وهامشُها السفليّ ٢٠ مم ≈ ٥٧ نقطة. فآخرُ سطرٍ
+     * في الخاتمة يجب أن يقع تحت ثلثَي الورقة — وبلا التثبيت يقع عند ثلثها.
+     */
+    public function test_the_close_stands_at_the_foot_of_the_page(): void
+    {
+        $html = DocumentRenderer::saleSheet(
+            $this->business->id,
+            $this->order(1),
+            \App\Support\DocumentTemplates::settings($this->business->id, 'sale'),
+            ['paperUrl' => 'https://app.eventplusapp.om/d/testcode'],
+        );
+
+        $this->assertStringContainsString('<!--eventplus:close-->', $html, 'الرسمُ بلا علامةِ خاتمة');
+        $this->assertStringContainsString('class="closezone"', $html, 'الورقةُ بلا منطقةِ خاتمة');
+
+        /* والرمزُ خرج من كتلة الملاحظات إلى الخاتمة */
+        $this->assertGreaterThan(
+            strpos($html, '<!--eventplus:close-->'),
+            strpos($html, '<barcode'),
+            'الرمزُ ما زال في مجرى المحتوى قبل الخاتمة',
+        );
+
+        $pdf = fn (string $h): string => \App\Support\Pdf::sheet($h, 'p', 'A4', false, null, 'INV · متجر')->getContent();
+
+        $anchored = $this->lastInk($pdf($html));
+
+        /*
+         * وبلا العلامة يُرسم المجرى دفعةً واحدة — وهو حالُ الورقة قبل
+         * التثبيت. فيُقاس الفرقُ لا الرقمُ وحدَه: حارسٌ يثبّت رقمًا واحدًا
+         * يسقط عند أوّل سطرٍ يُضاف إلى الترويسة.
+         */
+        $loose = $this->lastInk($pdf(str_replace('<!--eventplus:close-->', '', $html)));
+
+        /* والورقةُ ٨٤١٫٩ نقطة، وحدُّ المحتوى ٥٧ — فأسفلُ الثلث دون ٢٥٠ */
+        $this->assertLessThan(250.0, $anchored, 'خاتمةُ الورقة لا تقف في أسفل الصفحة');
+        $this->assertGreaterThan($anchored + 100.0, $loose, 'التثبيتُ لم يُزِح الخاتمة عمّا كانت عليه');
+    }
+
+    /**
+     * والخاتمةُ مرّةً واحدة في المستند، لا على كلّ صفحة.
+     *
+     * المواصفة: «QR لا يتكرر في كل صفحة»، و«Closing لا يتكرر». وهو سببُ
+     * رفض `position: fixed` طريقًا للتثبيت: mpdf يعيد رسم الكتلة المثبَّتة
+     * على كلّ صفحة — فتخرج فاتورةٌ بثلاث صفحات بثلاثة رموز.
+     *
+     * والذي يتكرّر تذييلُ المحرّك وحدَه: اسمُ المتجر ورقمُ الصفحة ورقمُ
+     * المستند — وهو المطلوب.
+     */
+    public function test_the_close_is_written_once_in_a_long_document(): void
+    {
+        $html = DocumentRenderer::saleSheet(
+            $this->business->id,
+            $this->order(40, 'باقة ورد', 'INV-000040'),
+            \App\Support\DocumentTemplates::settings($this->business->id, 'sale'),
+            ['paperUrl' => 'https://app.eventplusapp.om/d/testcode'],
+        );
+
+        $pdf = \App\Support\Pdf::sheet($html, 'p', 'A4', false, null, 'INV · متجر')->getContent();
+        $pages = substr_count($pdf, '/Type /Page') - substr_count($pdf, '/Type /Pages');
+
+        $this->assertGreaterThan(1, $pages, 'أربعون صنفًا لم تتجاوز صفحةً واحدة، فلا يُختبر التكرار');
+        $this->assertSame(1, substr_count($html, 'class="closezone"'), 'الخاتمةُ مرسومةٌ أكثر من مرّة');
+        $this->assertSame(1, substr_count($html, '<barcode'), 'الرمزُ مرسومٌ أكثر من مرّة');
+
+        /*
+         * والشريطُ الحراريّ خارجَ هذا كلِّه.
+         *
+         * المواصفة: «لا تطبق full-page A4 anchoring على 58mm و80mm».
+         * وورقٌ يخرج بطول محتواه لا أسفلَ له يُثبَّت إليه — فلو حملت
+         * علامةَ الخاتمة لقاس المحرّكُ فراغًا على ورقةٍ لا تنتهي.
+         */
+        $strip = DocumentRenderer::saleStrip(
+            $this->business->id,
+            $this->order(2, 'باقة ورد', 'INV-000002'),
+            \App\Support\DocumentTemplates::settings($this->business->id, 'sale'),
+            80,
+        );
+
+        $this->assertStringNotContainsString('<!--eventplus:close-->', $strip, 'علامةُ التثبيت بلغت الشريط الحراريّ');
+        $this->assertStringNotContainsString('closezone', $strip, 'خاتمةُ A4 بلغت الشريط الحراريّ');
+    }
+
+    /**
+     * موضعُ آخرِ حبرٍ على الورقة بالنقطة — من مجرى المحتوى نفسِه.
+     *
+     * وإحداثيّاتُ PDF تبدأ من أسفل الصفحة وتزيد صعودًا: فأدنى `y` أوطأُ
+     * سطرٍ. وmpdf يكتب `BT x y Td` لا مصفوفةَ نصّ.
+     *
+     * وتذييلُ المحرّك خارجَ القياس: يُرسم في الهامش السفليّ (دون ٥٧ نقطة)
+     * على كلّ صفحة، فلو حُسب لقالت كلُّ ورقةٍ إنّ حبرَها يبلغ أسفلَها.
+     */
+    private function lastInk(string $pdf): float
+    {
+        $lowest = 841.89;
+
+        foreach (self::streams($pdf) as $stream) {
+            preg_match_all('/BT\s+([\d.-]+)\s+([\d.-]+)\s+Td/', $stream, $hits);
+
+            foreach ($hits[2] as $y) {
+                $y = (float) $y;
+
+                if ($y >= 57.0) {
+                    $lowest = min($lowest, $y);
+                }
+            }
+        }
+
+        return $lowest;
+    }
+
+    /**
+     * مجارِي المحتوى — مفكوكةَ الضغط، أو كما هي إن لم تُضغط.
+     *
+     * وضغطُ المجارى إعدادٌ في المحرّك قد يتبدّل، فحارسٌ يفترض الضغطَ يقرأ
+     * لا شيء ويقول «سليم» على ورقةٍ معطوبة.
+     */
+    private static function streams(string $pdf): array
+    {
+        preg_match_all('/stream\r?\n(.*?)endstream/s', $pdf, $raw);
+
+        return array_map(
+            fn (string $s): string => (string) (@gzuncompress($s) ?: $s),
+            $raw[1],
+        );
+    }
+
+    /**
+     * اسمُ المتجر مرّةً واحدةً في أسفل الورقة، لا مرّتين.
+     *
+     * ═══ والعطبُ الذي وُلد منه هذا الحارس ═══
+     *
+     * التذييلُ كان في موضعين: كتلةٌ في مجرى الورقة تحمل اسمَ المتجر
+     * وسطًا، وتذييلُ المحرّك الذي يرسم على **كلّ** صفحة اسمَه في طرفٍ
+     * و«Page 1 of 1 - INV-…» في الآخر. فيُطبع الاسمُ مرّتين بفارق
+     * سنتيمتر.
+     *
+     * وأسوأُ من التكرار أثرُه: كتلةٌ في آخر المجرى لا يتّسع لها ما بقي
+     * من الصفحة تفتح صفحةً جديدة. فاتورةٌ بثلاثين صنفًا كانت تخرج ثلاثَ
+     * صفحات، ثالثتُها بيضاءُ إلّا من اسم المتجر — وهي تُطبع وتُرسل
+     * وتُحفظ.
+     *
+     * والكتلةُ باقيةٌ للشاشة: الرابطُ العامُّ والمعاينةُ لا محرّكَ فيهما
+     * ولا تذييلَ صفحة.
+     */
+    public function test_the_shop_name_closes_the_paper_once(): void
+    {
+        $html = $this->sheet($this->order());
+
+        /* وهي في الرسم — للمعاينة والرابط */
+        $this->assertStringContainsString('class="docfoot"', $html, 'ذهب تذييلُ الشاشة');
+        $this->assertStringContainsString('div.docfoot { display: none; }', $html, 'كتلةُ التذييل تُطبع في الـPDF');
+        $this->assertStringContainsString('div.docfoot { display: block; }', $html, 'كتلةُ التذييل لا تُرى على الشاشة');
+
+        /*
+         * و`display: none` على `<table>` يتجاهله mpdf ويحترمه على `<div>`
+         * — قِيس. فالغلافُ كتلةٌ لا جدول، وإلّا عاد الاسمُ مرّتين صامتًا.
+         */
+        $this->assertMatchesRegularExpression(
+            '#<div class="docfoot">\s*<table#u',
+            $html,
+            'جدولُ التذييل بلا غلافِ كتلةٍ يُخفيه المحرّك',
+        );
+    }
+
+    /**
+     * الرقمُ الأهمّ يُسمّى «الرصيد المستحق» حين يبقى، و«الإجمالي» حين سُدِّد.
+     *
+     * ═══ ولمَ لا تُؤخذ التسميةُ من سطر المجاميع ═══
+     *
+     * سطرُ المجاميع اسمُه «الباقي» — وهو صحيحٌ في سلّمٍ يسبقه إجماليٌّ
+     * ومسدَّد. لكنّه وحدَه في صدر الورقة بمقاس العنوان، بلا ما قبله،
+     * يُقرأ «باقي ماذا». فيُسمّى بما هو: «الرصيد المستحق / Total due» —
+     * وهي تسميةُ المرجع نفسُها.
+     *
+     * وفاتورةٌ سُدِّدت كاملةً باقيها صفر. وصفرٌ بمقاس العنوان في صدر
+     * الورقة يُقرأ خبرًا وليس بخبر — فيعود الرقمُ الأهمّ إجماليَّها،
+     * ويبقى الصفرُ في سلّم المجاميع حيث يُقرأ إقرارًا بالسداد.
+     */
+    public function test_the_headline_figure_is_named_by_what_it_is(): void
+    {
+        $paper = fn (array $totals): string => DocumentRenderer::generic(
+            $this->business->id,
+            'supplier_invoice',
+            [
+                'title' => 'فاتورة مورّد', 'number' => 'SU-1', 'status' => '',
+                'date' => '2026-09-14', 'branch' => null, 'employee' => null, 'meta' => [],
+                'parties' => [], 'items' => [], 'totals' => $totals, 'notes' => '',
+            ],
+        );
+
+        /*
+            وتُقرأ كتلةُ الرقم وحدَها لا الرسمُ كلُّه: شرحُ `partials/tokens`
+            يذكر «الرصيد المستحق» مثالًا، فحارسٌ يفحص الرسمَ كلَّه يقع على
+            تعليقٍ ويقول «سليم».
+        */
+        $figure = function (string $html): string {
+            preg_match('#<table class="fields fieldsend figwrap">(.*?)</table>#su', $html, $m);
+
+            return $m[1] ?? '';
+        };
+
+        /* وعليها باقٍ: الرصيدُ المستحقّ هو الخبر */
+        $owing = $figure($paper([
+            ['label' => 'الإجمالي', 'value' => '30.000', 'grand' => true],
+            ['label' => 'المسدَّد', 'value' => '10.000'],
+            ['label' => 'الباقي', 'value' => '20.000', 'due' => true],
+        ]));
+        $this->assertStringContainsString('الرصيد المستحق', $owing, 'الورقةُ لا تسمّي رصيدَها المستحقّ');
+        $this->assertStringContainsString('Total due', $owing, 'التسميةُ بلغةٍ واحدة');
+        $this->assertStringContainsString('>20.000', $owing, 'الرقمُ الأهمّ ليس الباقي');
+
+        /* وقد سُدِّدت: الإجماليُّ هو الخبر، ولا صفرَ بمقاس العنوان */
+        $settled = $figure($paper([
+            ['label' => 'الإجمالي', 'value' => '30.000', 'grand' => true],
+            ['label' => 'المسدَّد', 'value' => '30.000'],
+            ['label' => 'الباقي', 'value' => '0.000', 'due' => false],
+        ]));
+        $this->assertStringNotContainsString('الرصيد المستحق', $settled, 'فاتورةٌ مسدَّدةٌ تعلن رصيدًا مستحقًّا');
+        $this->assertStringContainsString('>30.000', $settled, 'الرقمُ الأهمّ على فاتورةٍ سُدِّدت ليس إجماليَّها');
+    }
+
+    /**
+     * حقولُ المستند تُقسَم عمودين حين تزيد على أربعة.
+     *
+     * للمرجع المعتمد أربعةُ حقول. ولفاتورةِ بيعٍ آجلةٍ هنا سبعة: رقمٌ
+     * وتاريخٌ ووسيلةُ دفعٍ وشروطُه وتاريخُ استحقاقٍ وفرعٌ وموظّف. وسبعةٌ
+     * في عمودٍ واحدٍ بُرجٌ يبلغ ثلثَ الورقة ويترك ثلثَي عرضِ الترويسة
+     * بياضًا إلى جانبه — ثمّ يدفع الملاحظاتِ والتذييلَ إلى صفحةٍ ثانية.
+     */
+    public function test_many_document_fields_become_two_columns(): void
+    {
+        /* أربعةٌ فأقلّ: عمودٌ واحد */
+        $lean = DocumentRenderer::generic($this->business->id, 'purchase', [
+            'title' => 'أمر شراء', 'number' => 'PU-1', 'status' => '', 'date' => '2026-09-14',
+            'branch' => null, 'employee' => null, 'meta' => [],
+            'parties' => [], 'items' => [], 'totals' => [], 'notes' => '',
+        ]);
+        $this->assertStringNotContainsString('class="metasplit"', $lean, 'حقلان قُسما عمودين');
+
+        /* وخمسةٌ فأكثر: عمودان */
+        $full = DocumentRenderer::generic($this->business->id, 'purchase', [
+            'title' => 'أمر شراء', 'number' => 'PU-2', 'status' => '', 'date' => '2026-09-14',
+            'branch' => null, 'employee' => null,
+            'meta' => [
+                ['label' => 'تاريخ الاستلام المتوقع', 'value' => '2026-09-21'],
+                ['label' => 'شروط الدفع', 'value' => 'صافي 30 يومًا'],
+                ['label' => 'طريقة الدفع', 'value' => 'تحويل بنكي'],
+                ['label' => 'مرجع المورّد', 'value' => 'REF-9'],
+                ['label' => 'الحالة', 'value' => 'مُرسل'],
+            ],
+            'parties' => [], 'items' => [], 'totals' => [], 'notes' => '',
+        ]);
+        $this->assertStringContainsString('class="metasplit"', $full, 'سبعةُ حقولٍ بقيت برجًا في عمود');
+
+        /* والجدولُ مقيَّدُ التخطيط: بدونه يتداخل العمودان عند mpdf */
+        $this->assertStringContainsString('table.metasplit { width: 100%; table-layout: fixed;', $full);
+    }
+
+    /**
+     * الترويسةُ ثلاثةُ أعمدةٍ بلا صندوقٍ واحد، وعنوانٌ في لغتين.
+     *
+     * ═══ وثلاثةُ أطوارٍ مرّت بها ═══
+     *
+     * عنوانٌ أسودُ في ركنٍ ورقمٌ رماديٌّ تحته؛ ثمّ لوحةٌ مصمتةٌ بلون التاجر
+     * تجمع النوعَ والرقمَ والحالة؛ ثمّ عنوانٌ كبيرٌ بحبر التاجر بلا صندوق.
+     *
+     * وهذا الطورُ الرابعُ مقيسٌ من المرجع: العنوانُ في جهة البداية سطرين —
+     * بلغة الورقة داكنًا ثقيلًا، وباللغة الأخرى تحته أفتحَ وأخفّ — وحقولُ
+     * المستند في الوسط، والهويّةُ مع الشعار في الطرف المقابل. ولا أرضيّةَ
+     * في الترويسة كلِّها.
+     */
+    public function test_the_header_is_three_columns_and_a_bilingual_title(): void
+    {
+        $html = $this->sheet($this->order());
+
+        $this->assertStringContainsString('class="brandrule"', $html, 'الورقةُ بلا خيطٍ يحمل لونَ التاجر');
+        $this->assertStringContainsString('class="doctitle"', $html, 'الورقةُ بلا عنوان');
+        $this->assertStringContainsString('doctitle2', $html, 'العنوانُ بلغةٍ واحدة');
+
+        /* ولا لوحةَ مستندٍ ولا صندوقَ في الترويسة */
+        $this->assertStringNotContainsString('idpanel', $html, 'عادت لوحةُ المستند إلى الترويسة');
+
+        /*
+            والعنوانُ أكبرُ ما على الورقة — وبمقاس المرجع بلا معامل.
+
+            قِيس في مجرى محتوى المرجع: `Tf` يقول ٢٨٫٨ نقطة على ورقةٍ
+            مقاسُها ٥٩٥٫٩×٨٤١٫٩. وكان مكتوبًا هنا ٢١٫٤ — وهي ٢٨٫٨ مضروبةً
+            في ٠٫٧٤١٧٦، معاملٌ قُرئ من مصفوفة التحويل وضُرب في مقاسات
+            الخطّ وحدَها دون الهندسة. فخرجت ورقةٌ خطُّها عند ثلاثة أرباعه
+            وفراغُها عند تمامه — وهو ما يجعلها تُقرأ مصغَّرةً على A4.
+        */
+        $this->assertSame(28.8, Theme::GEOMETRY['text_display']);
+        $this->assertSame(12.0, Theme::GEOMETRY['text_base']);
+        $this->assertStringContainsString(
+            'font-size: '.round(Theme::GEOMETRY['text_display'], 2).'pt',
+            $html,
+            'العنوانُ لا يُرسم بمقاس العرض',
+        );
+    }
+
+    /**
+     * ورأسُ جدول الأصناف خطٌّ واحدٌ أسفله — لا أرضيّةَ ولا لون.
+     *
+     * ═══ وثلاثةٌ جُرّبت قبله ═══
+     *
+     * رأسٌ رماديٌّ باهت — لا يفصل نفسَه عن الصفوف. ثمّ شريطٌ مصمتٌ بلون
+     * التاجر — ففصل، وصار أثقلَ ما على الورقة. ثمّ خطٌّ بحبر التاجر —
+     * وهو لونٌ رابعٌ على ورقةٍ أردنا بياضَها.
+     *
+     * وفي المرجع المعتمد خطٌّ واحدٌ بلون خطوط الورقة كلِّها (`#cbd5e1`)
+     * بسُمك `0.74pt`، وتسمياتٌ بمقاس الصفوف نفسِه يفصلها الوزنُ لا الصبغ.
+     */
+    public function test_the_items_header_is_one_hairline(): void
+    {
+        $html = $this->sheet($this->order());
+
+        $this->assertSame(1, preg_match('/table\\.items th \\{([^}]*)\\}/s', $html, $m));
+
+        $this->assertStringNotContainsString('background', $m[1], 'عادت الأرضيّةُ إلى رأس الجدول');
+        $this->assertStringContainsString(
+            'border-bottom: '.round(Theme::HAIRLINE, 2).'pt solid '.Theme::tokens()['rule'],
+            $m[1],
+            'رأسُ الجدول بلا خطِّ الورقة الواحد',
+        );
+    }
+
+    /**
+     * و«الإجمالي» سطرٌ أثقلُ وزنًا — لا كتلةٌ ولا لونٌ ولا خطٌّ فوقه.
+     *
+     * ═══ وأين صار الرقمُ الأهمّ ═══
+     *
+     * لم يعد أسفلَ الورقة أصلًا: الرقمُ الذي يُبحث عنه أوّلًا انتقل إلى
+     * **أعلاها** بمقاس العنوان — انظر `partials/figure`. وما بقي في
+     * المجاميع أسطرٌ تتبع الجدول بأعمدته، أثقلُها الإجماليّ.
+     *
+     * فلا كتلةَ داكنةً ولا أرضيّةَ فاتحةً ولا إطار: «Typography + spacing
+     * + alignment» وحدها.
+     */
+    public function test_the_grand_total_is_a_heavier_line_not_a_block(): void
+    {
+        $html = $this->sheet($this->order());
+
+        $this->assertSame(1, preg_match('/table\\.totals tr\\.grand td \\{([^}]*)\\}/s', $html, $m));
+        $this->assertStringNotContainsString('background', $m[1], 'عادت الكتلةُ إلى الإجمالي');
+        $this->assertStringNotContainsString('border', $m[1], 'عاد الإطارُ إلى الإجمالي');
+        $this->assertStringContainsString('font-weight: bold', $m[1], 'الإجماليُّ بوزن ما حوله');
+
+        /* ولا لوحةَ مجاميعَ أصلًا */
+        $this->assertStringNotContainsString('totalcard', $html, 'عادت لوحةُ المجاميع');
+    }
+
+    /**
+     * ولونُ التاجر لا يملأ شيئًا — خيطٌ واحدٌ وحبرُ حالٍ، لا غير.
+     *
+     * ═══ وهذا الشرطُ الذي يجمع التصميمَ كلَّه ═══
+     *
+     * «Merchant Primary Color = ACCENT ONLY … White يجب أن يبقى اللون
+     * المسيطر». والمرجعُ المعتمد لا لونَ فيه إلّا في الشعار: ورقةٌ بيضاء
+     * وحبرٌ كحليٌّ وخطوطٌ رماديّة.
+     *
+     * فلا يبقى للون سطحٌ إلّا حيث يكون **خطًّا**: `.brandrule` بنقطةٍ
+     * واحدةٍ أعلى الورقة. وسطرُ الحال يحمله حبرًا لا أرضيّة.
+     */
+    public function test_the_brand_colour_fills_nothing_but_one_hairline(): void
+    {
+        Branding::save($this->business->id, ['primary' => '#7c3aed']);
+        $html = $this->sheet($this->order());
+
+        $style = substr($html, (int) strpos($html, '<style>'), (int) strpos($html, '</style>') - (int) strpos($html, '<style>'));
+
+        preg_match_all('/\\.([a-z-]+) \\{([^}]*background: #7c3aed[^}]*)\\}/s', $style, $hits, PREG_SET_ORDER);
+
+        $filled = array_map(fn ($h) => $h[1], $hits);
+        sort($filled);
+
+        $this->assertSame(['brandrule'], $filled, 'لونُ التاجر يملأ سطحًا ليس خطًّا: '.implode('، ', $filled));
+
+        $this->assertSame(1, preg_match('/height: ([0-9.]+)pt/', $hits[0][2], $h), 'الخيطُ بلا ارتفاعٍ معلَن');
+        $this->assertLessThanOrEqual(1.0, (float) $h[1], 'الخيطُ أعرضُ من أن يكون خطًّا');
+    }
+
+    /**
+     * وما يُزيَّن يقع على **الخليّة** لا على كتلةٍ داخلها.
+     *
+     * ═══ العطبُ الذي وُلد منه هذا الحارس ═══
+     *
+     * mpdf يمدّ كتلةَ `div` عبر الورقة حين تقع في مجرى الجسد، ويُقلّصها إلى
+     * عرض نصِّها حين تقع **داخل خليّة جدول** — ولو صُرّح لها `width: 100%`.
+     * ويُسقط هوامشَها وحشوَها هناك أيضًا.
+     *
+     * والمتصفّحُ يعمل في الحالين — فالورقةُ تُرى سليمةً في المعاينة وتخرج
+     * مشوّهةً من الطابعة. وهو بعينه ما تحذّر منه المواصفة: «لا تفترض أن
+     * نجاح HTML يعني نجاح PDF».
+     *
+     * ولم يبق على هذه الورقة أرضيّةٌ واحدة، فما يُحرَس هو الخطوط: خطُّ
+     * الجدول وخطُّ خانة التوقيع — كلاهما على خليّة.
+     */
+    public function test_rules_sit_on_the_cell_not_on_a_block_inside_it(): void
+    {
+        $html = $this->sheet($this->order());
+
+        foreach (['table.items th', 'table.items td', 'table.sign td.box'] as $selector) {
+            $this->assertStringContainsString(
+                $selector.' {',
+                $html,
+                "الخطُّ على كتلةٍ داخل الخليّة لا على الخليّة: {$selector}",
+            );
+        }
+
+        /* ولا أرضيّةَ على الورقة أصلًا — لا لبطاقةٍ ولا لرأسٍ ولا لإجمالي */
+        $style = substr($html, (int) strpos($html, '<style>'), (int) strpos($html, '</style>') - (int) strpos($html, '<style>'));
+        preg_match_all('/background: (#[0-9a-f]{3,8})/i', $style, $bg);
+
+        /* والأبيضُ ليس أرضيّة: هو الورقةُ نفسُها */
+        $white = ['#fff', '#ffffff'];
+        $surfaces = array_values(array_unique(array_diff(
+            array_map('strtolower', $bg[1] ?? []),
+            $white,
+        )));
+
+        $this->assertSame(
+            [strtolower(Theme::tokens()['primary'])],
+            $surfaces,
+            'أرضيّةٌ عادت إلى الورقة: '.implode('، ', $surfaces),
+        );
+    }
+
+    /**
+     * والجدولُ يُفصل بخطوطٍ لا بظلال — ولا محدّدَ بنيويًّا فيه.
+     *
+     * ═══ حارسان في واحد ═══
+     *
+     * الأوّل شكليّ: الزِّبرةُ — تناوبُ أرضيّة الصفوف — حيلةُ جدولِ أرقامٍ
+     * بعشرين عمودًا، وفاتورةٌ بأربعةٍ تُقرأ سطرًا سطرًا على شعرةٍ فاصلة.
+     * والمرجعُ المعتمد: «عدم تحويله إلى spreadsheet».
+     *
+     * والثاني تقنيٌّ وأقدم: mpdf لا يُعوَّل عليه في المحدّدات البنيويّة،
+     * فيخرج ما يُبنى عليها في المتصفّح ولا يخرج في الـPDF. والزِّبرةُ ذهبت،
+     * والدرسُ باقٍ لكلّ قاعدةٍ تُكتب بعدها.
+     */
+    public function test_the_items_table_is_ruled_not_shaded(): void
+    {
+        $html = $this->sheet($this->order(4));
+
+        $this->assertStringNotContainsString('table.items tr.alt', $html, 'عادت الزِّبرةُ إلى الجدول');
+        $this->assertStringNotContainsString('<tr class="alt">', $html, 'صفوفٌ تحمل صنفًا لا قاعدةَ له');
+        $this->assertStringNotContainsString(':nth-child(', $html, 'محدّدٌ بنيويٌّ لا يقرؤه mpdf');
+
+        /* وما يفصل الصفوف شعرةٌ تحت كلٍّ منها */
+        $this->assertMatchesRegularExpression(
+            '/table\.items td \{[^}]*border-bottom: [0-9.]+pt solid/s',
+            $html,
+            'الصفوفُ بلا خطٍّ يفصلها',
+        );
+    }
+
+    /**
+     * والحالةُ خَتمٌ على الورقة — ولا تُختم حالٌ ليست في النموذج.
+     *
+     * ورقةُ أمرٍ ملغيٍّ تُطبع وتُرسل إلى المورّد فيجهّز شحنةً لا أحدَ
+     * ينتظرها. و«مكتمل» في المقابل هي الحالُ الطبيعيّ لكلّ فاتورةٍ في الدرج:
+     * ختمُها على كلّ ورقةٍ ضجيجٌ لا خبر.
+     */
+    public function test_the_status_is_stamped_only_when_the_model_carries_one(): void
+    {
+        $order = $this->order();
+
+        $this->assertStringNotContainsString('class="stamp"', $this->sheet($order), 'ورقةٌ مكتملةٌ تُختم بلا خبر');
+
+        $order->update(['status' => 'ملغي']);
+
+        $this->assertStringContainsString(
+            'class="stamp"',
+            $this->sheet($order->fresh()->load('items')),
+            'فاتورةٌ ملغاةٌ تخرج بلا ما يقول إنّها أُلغيت',
+        );
+    }
+
+    /**
+     * وتذييلُ الورقة اسمُ المتجر وحدَه — هادئًا في الوسط.
+     *
+     * ═══ وأين صار الرقمُ الضريبيّ ═══
+     *
+     * كان في التذييل حيث «يُطلب في التدقيق». وصار **حقلًا مسمّى** في كتلة
+     * الهويّة أعلى الورقة — «الرقم الضريبي / Tax number» — فمن يراجع يجده
+     * باسمه في لغتين لا سطرًا رماديًّا في حاشية. وهو المرجعُ المعتمد.
+     *
+     * وما بقي في الأسفل ما يفعله المرجع: اسمُ المُصدِر صغيرًا. ورقمُ
+     * الصفحة ورقمُ المستند في تذييل المحرّك على **كلّ** صفحة — انظر
+     * `MpdfDriver::pageNumbers`.
+     */
+    public function test_the_footer_is_the_shop_name_and_the_tax_number_is_a_named_field(): void
+    {
+        Setting::create([
+            'business_id' => $this->business->id, 'key' => 'vat_number', 'value' => 'OM1100234567',
+        ]);
+
+        /* و«إظهار الرقم الضريبي» مُطفأٌ افتراضًا في ورقة البيع — فيُشعَل هنا */
+        $html = DocumentRenderer::saleSheet(
+            $this->business->id,
+            $this->order(),
+            ['show_vat_no' => true] + \App\Support\DocumentTemplates::settings($this->business->id, 'sale'),
+        );
+
+        $this->assertStringContainsString('class="docfoot"', $html, 'الورقةُ بلا تذييل');
+
+        $foot = substr($html, (int) strpos($html, '<table class="docfoot"'));
+        $this->assertStringContainsString('ورد الخوير', $foot, 'التذييلُ بلا اسم المتجر');
+        $this->assertStringNotContainsString('OM1100234567', $foot, 'الرقمُ الضريبيُّ عاد إلى الحاشية');
+
+        /* وهو أعلى الورقة حقلًا له تسميتان */
+        $head = substr($html, 0, (int) strpos($html, '<table class="items"'));
+        $this->assertStringContainsString('OM1100234567', $head, 'الرقمُ الضريبيُّ ليس في كتلة الهويّة');
+        $this->assertStringContainsString(__('الرقم الضريبي'), $head, 'الرقمُ الضريبيُّ بلا تسمية');
+    }
+
+    /**
+     * وتذييلُ الورقة هادئٌ لا ينافس ما فوقه.
+     *
+     * ولا يخلو من اسمٍ أبدًا: `Paper::brand` تردّ اسمًا دائمًا — متجرٌ لم
+     * يُسمِّ نفسَه يُسمّى باسم النظام. فما يُحرَس هنا **وزنُه** لا وجودُه:
+     * مقاسٌ أصغرُ من الجسد وحبرٌ ثانويٌّ، بلا خطٍّ فوقه ولا وزن.
+     */
+    public function test_the_footer_is_quiet(): void
+    {
+        $html = $this->sheet($this->order());
+
+        $this->assertSame(1, preg_match('/table\\.docfoot td \\{([^}]*)\\}/s', $html, $m));
+
+        $this->assertStringContainsString(
+            'font-size: '.round(Theme::GEOMETRY['text_xs'], 2).'pt',
+            $m[1],
+            'التذييلُ بمقاس الجسد',
+        );
+        $this->assertStringContainsString('color: var(--document-second)', $m[1], 'التذييلُ بحبر الجسد');
+
+        /* ولا خطَّ فوقه: المرجعُ يتركه يطفو في بياض أسفل الصفحة */
+        $this->assertSame(1, preg_match('/table\\.docfoot \\{([^}]*)\\}/s', $html, $t));
+        $this->assertStringNotContainsString('border-top', $t[1], 'عاد الخطُّ فوق التذييل');
+    }
+}

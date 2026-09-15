@@ -1,0 +1,365 @@
+import type { LucideIcon } from 'lucide-react';
+import {
+    CUSTOMER_TABS,
+    EMPLOYEE_TABS,
+    FINANCE_TABS,
+    INVENTORY_TABS,
+    PURCHASE_TABS,
+    WEBSITE_TABS,
+    type SectionTab,
+} from '@/Components/SectionTabs';
+import {
+    AppWindow,
+    BarChart3,
+    Blocks,
+    FileText,
+    Boxes,
+    Building2,
+    ClipboardList,
+    Contact,
+    FlaskConical,
+    GitBranch,
+    History,
+    Layers,
+    LifeBuoy,
+    LayoutDashboard,
+    ScrollText,
+    Search,
+    Megaphone,
+    MessageCircle,
+    MessageSquare,
+    MessagesSquare,
+    Package,
+    RefreshCw,
+    Settings,
+    ShoppingCart,
+    Star,
+    TicketPercent,
+    Truck,
+    UserCog,
+    Users,
+    Wallet,
+} from 'lucide-react';
+
+export interface NavItem {
+    label: string;
+    icon: LucideIcon;
+    route: string;
+    /**
+     * قسم الصلاحية — يُخفى العنصر إن لم يملكه المستخدم.
+     * بلا قيمة يظهر دائمًا: قائمة المنصة يحرسها middleware الدور نفسه
+     * (role:super_admin) لا صلاحيات الأقسام، فلا معنى لتصفيتها هنا.
+     */
+    section?: string;
+    /**
+     * قدرةُ الباقة التي يفتحها هذا العنصر — يُخفى إن لم تشمله باقة المتجر.
+     *
+     * غير `section`: ذاك صلاحيةُ الموظّف، وهذا ما اشتراه صاحب المتجر. وبابٌ
+     * يُعرض ويردّ بـ403 يجعل صاحبه يظنّ العطب في النظام ويعيد المحاولة.
+     */
+    feature?: string;
+    /**
+     * صفحات تتبع هذا العنصر ولا مدخل لها في القائمة — تُبقيه مضيئًا.
+     *
+     * كلّ ما يُفتح من شريط تبويبات القسم: «القيود اليومية» و«شجرة الحسابات»
+     * صفحتا المالية، و«سندات الموردين» صفحة المشتريات. وبلا هذا كان الضغط
+     * عليها يُطفئ القائمة كلّها: لا عنصر مضيء، فلا يعرف من فتحها أين هو.
+     */
+    covers?: string[];
+    /**
+     * شارةُ عددٍ على العنصر — تُقرأ من `supportBadge` المشترك.
+     *
+     * والعددُ لا يُكتب هنا: الشريطُ لا يعرف كم محادثةً تنتظر، ورقمٌ ثابتٌ
+     * في القائمة يقول الشيءَ نفسه أبدًا. فالحقلُ يقول «لهذا العنصر شارة»
+     * والقيمةُ تأتي من الخادم في كلّ طلب.
+     */
+    badge?: 'support' | 'crm';
+    /**
+     * قائمةٌ منسدلة تحت العنصر — لا وجهةَ له هو.
+     *
+     * «أدوات التسويق» ستّ أدوات لا تجمعها صفحة: من يريد إعدادات الموقع لا
+     * يمرّ بالكوبونات. فالعنصر يفتح ما تحته ولا ينقل إلى صفحةٍ جامعة.
+     */
+    children?: NavItem[];
+}
+
+export interface NavGroup {
+    heading?: string;
+    /**
+     * مجموعةٌ تُدفع إلى أسفل الشريط.
+     *
+     * «الإعدادات» تُفتح مرّةً في الشهر ولا تُفتح مرّةً في الساعة، فمكانها
+     * أسفل القائمة لا وسطها بين ما يُستعمل كلّ يوم.
+     */
+    footer?: boolean;
+    items: NavItem[];
+}
+
+/**
+ * صفحات الشريط مصدرها شريط تبويبات القسم نفسه.
+ *
+ * قائمةٌ ثانية مكتوبة باليد كانت ستفترق عن الأولى عند أوّل تبويب يُضاف —
+ * فيظهر تبويبٌ لا يُضيء قسمه في القائمة.
+ */
+const covers = (tabs: SectionTab[]) => tabs.map((tb) => tb.routeName);
+
+/**
+ * القائمة الجانبية للوحة التاجر.
+ *
+ * المجموعات تفصلها خطوط لا عناوين: العناوين («المتجر»، «الإدارة») تسمية
+ * لا تُقرأ — لا أحد يبحث عن «المالية» تحت «الإدارة»، ويبحث عن «المالية».
+ * والخطّ يفصل بلا أن يشغل سطرًا ولا أن يدّعي معنى.
+ */
+export const NAV: NavGroup[] = [
+    {
+        items: [
+            { label: 'لوحة التحكم', icon: LayoutDashboard, route: 'admin.dashboard', section: 'dashboard' },
+            {
+                label: 'العملاء',
+                icon: Users,
+                route: 'admin.customers.index',
+                section: 'customers',
+                covers: covers(CUSTOMER_TABS),
+            },
+        ],
+    },
+    {
+        items: [
+            { label: 'المنتجات', icon: Package, route: 'admin.products.index', section: 'products' },
+            // «الطلبات» سابقًا: المتجر يبيع ولا يستقبل طلبات وحسب
+            { label: 'المبيعات', icon: ShoppingCart, route: 'admin.orders.index', section: 'orders' },
+            // فواتيرُ العملاء بابٌ واحدٌ لا يتكرّر في «المالية»: ميزةٌ في
+            // موضعين تجعل التاجر يعدّل في أحدهما ويقرأ من الآخر
+            {
+                label: 'فواتير العملاء',
+                icon: FileText,
+                route: 'admin.customerInvoices.index',
+                section: 'orders',
+                covers: ['admin.customerInvoices.show', 'admin.customerInvoices.create'],
+            },
+            // لوحة التجهيز — قسمٌ مستقلّ، فمن مُنحه وحده يراه ولا يرى المبيعات
+            { label: 'لوحة التجهيز', icon: ClipboardList, route: 'admin.preparation.index', section: 'preparation' },
+            {
+                label: 'المشتريات',
+                icon: Truck,
+                route: 'admin.purchases.index',
+                section: 'purchases',
+                covers: covers(PURCHASE_TABS),
+            },
+        ],
+    },
+    {
+        items: [
+            {
+                label: 'المالية',
+                icon: Wallet,
+                route: 'admin.finance.index',
+                section: 'finance',
+                covers: [...covers(FINANCE_TABS), 'admin.finance.statement'],
+            },
+            {
+                label: 'الرواتب والموظفين',
+                icon: UserCog,
+                route: 'admin.employees.index',
+                section: 'employees',
+                covers: covers(EMPLOYEE_TABS),
+            },
+        ],
+    },
+    {
+        items: [
+            {
+                label: 'المخزون',
+                icon: Boxes,
+                route: 'admin.inventory.index',
+                section: 'inventory',
+                covers: covers(INVENTORY_TABS),
+            },
+        ],
+    },
+    {
+        /*
+         * التقارير مجموعةٌ وحدها بين المخزون والتسويق.
+         *
+         * وهي بابٌ لا شاشةُ أرقام: تجمع ما تفرّق في اثنتي عشرة شاشة وتقود
+         * إليها.
+         */
+        items: [{ label: 'التقارير', icon: BarChart3, route: 'admin.reports.index', section: 'reports' }],
+    },
+    {
+        items: [
+            {
+                label: 'أدوات التسويق',
+                icon: Megaphone,
+                route: 'admin.marketing.loyalty',
+                section: 'marketing',
+                children: [
+                    { label: 'برنامج ولاء', icon: Star, route: 'admin.marketing.loyalty', section: 'marketing', feature: 'loyalty' },
+                    { label: 'تقييمات العملاء', icon: MessageSquare, route: 'admin.marketing.reviews', section: 'marketing' },
+                    /* واسمُها ما تفعله: تربط Analytics وتفحص الصفحة — والكتابةُ في «الموقع الإلكتروني ‹ الظهور في البحث» */
+                    { label: 'التحليلات وفحص الظهور', icon: Search, route: 'admin.marketing.seo', section: 'marketing' },
+                    { label: 'الكوبونات والعروض', icon: TicketPercent, route: 'admin.marketing.coupons', section: 'marketing' },
+                    { label: 'إشعارات واتساب', icon: MessageCircle, route: 'admin.marketing.whatsapp', section: 'marketing', feature: 'whatsapp' },
+                    /*
+                        وسجلُّ ما خرج فعلًا بابٌ في القائمة لا زرٌّ في شاشةٍ أخرى.
+
+                        من يسأل «لماذا لم تصل رسالةُ زبوني؟» لا يبدأ من شاشة
+                        المقابض ليجد زرًّا فيها — يفتح القائمة ويبحث عن سجلّ.
+                    */
+                    { label: 'سجلّ رسائل واتساب', icon: ScrollText, route: 'admin.marketing.whatsapp.log', section: 'marketing', feature: 'whatsapp' },
+                ],
+            },
+        ],
+    },
+    {
+        items: [
+            /*
+             * الموقع الإلكتروني — بابُ التشغيل اليوميّ لا بابُ الإعدادات.
+             *
+             * وكان يُضيء لستّ شاشاتٍ من تبويباته (`covers(WEBSITE_TABS)`):
+             * التصميمُ والصفحاتُ والنطاقُ والسيو. وكلُّها انتقلت إلى
+             * «الإعدادات ‹ الموقع الإلكتروني» لأنّها تُضبط مرّةً ثمّ تُترك —
+             * فلم يعد يضيء لها، ويُضيء لها قسمُها الجديد.
+             *
+             * والمحرّرُ يبقى معه: هو تحرير محتوى لا ضبطُ بنية، ويُفتح من
+             * اللوحتين معًا.
+             */
+            {
+                label: 'الموقع الإلكتروني',
+                icon: AppWindow,
+                route: 'admin.website.index',
+                section: 'website',
+                covers: ['admin.website.editor'],
+            },
+        ],
+    },
+    {
+        /*
+         * التطبيقات التكاملية والإعدادات — مجموعةُ القاع.
+         *
+         * وكانت التكاملات مجموعةً مستقلّةً فوق هذه، فبدت تابعةً لـ«الموقع
+         * الإلكتروني» لا جارةً لـ«الإعدادات»: `footer` يدفع مجموعتَه وحدها
+         * بـ`mt-auto` إلى أسفل الشريط، فيقع بين الاثنتين فراغُ الشريط كلُّه.
+         * والجوارُ في الشاشة هو ما يُقرأ، لا الترتيبُ في الملفّ.
+         *
+         * ويجاوران لأنّ كليهما يُفتح مرّةً ثمّ لا يُفتح — لا لأنّهما شيءٌ
+         * واحد: ربطُ أداةٍ خارجية ليس ضبطَ ضريبةٍ ولا إضافةَ فرع، بل تسليمُ
+         * مفتاحٍ يُنفِق على حساب المتجر أو فتحُ قناةٍ تخاطب زبائنه باسمه.
+         * فصلاحيّتُه تُمنح على حدة — انظر Permissions::SECTIONS.
+         */
+        footer: true,
+        items: [
+            {
+                label: 'التطبيقات التكاملية',
+                icon: Blocks,
+                route: 'admin.integrations.index',
+                section: 'integrations',
+                covers: [
+                    'admin.integrations.google',
+                    'admin.integrations.googleBusiness',
+                    'admin.integrations.whatsapp',
+                ],
+            },
+            /*
+             * والمساعدةُ بلا حارسِ قسم.
+             *
+             * من يدخل اللوحة يستطيع أن يسأل. وبابُ دعمٍ يُغلق أمام كاشيرٍ
+             * يرى العطبَ بعينه يعني أن يمرّ البلاغُ بصاحب المتجر أو لا يمرّ.
+             */
+            {
+                label: 'المساعدة والدعم',
+                icon: LifeBuoy,
+                route: 'admin.help.index',
+                covers: ['admin.help.show'],
+                badge: 'support',
+            },
+            {
+                label: 'الإعدادات',
+                icon: Settings,
+                route: 'admin.settings.index',
+                section: 'settings',
+                // وإعداداتُ الموقع منها — فيُضيء قسمُها حين تُفتح إحداها
+                covers: covers(WEBSITE_TABS),
+            },
+        ],
+    },
+];
+
+/**
+ * القائمة الجانبية للوحة المنصة — منقولة عن $menu في layouts/super-admin.blade.php.
+ * تمرّ على نفس مكوّن Sidebar، فتُعرض بنفس ثيمة لوحة التاجر حرفيًا.
+ */
+export const PLATFORM_NAV: NavGroup[] = [
+    {
+        items: [{ label: 'الرئيسية', icon: LayoutDashboard, route: 'super-admin.dashboard' }],
+    },
+    {
+        heading: 'الإدارة',
+        items: [
+            { label: 'الشركات', icon: Building2, route: 'super-admin.businesses.index' },
+            { label: 'الاشتراكات', icon: RefreshCw, route: 'super-admin.subscriptions.index' },
+            { label: 'الباقات', icon: Layers, route: 'super-admin.subscriptions.plans' },
+            { label: 'المستخدمون', icon: Users, route: 'super-admin.users.index' },
+        ],
+    },
+    {
+        /*
+         * الدعمُ قسمٌ قائمٌ بذاته لا بندٌ في «أخرى».
+         *
+         * هو البابُ الذي يُفتح كلّ يوم — ومن يبحث عن رسالةِ تاجرٍ ينتظر لا
+         * يمرّ بالتقارير ليجدها.
+         */
+        heading: 'الدعم',
+        items: [
+            {
+                label: 'مركز المحادثات',
+                icon: MessagesSquare,
+                route: 'super-admin.conversations.index',
+                badge: 'support',
+            },
+        ],
+    },
+    {
+        /*
+         * CRM — بيعُ افنت بلسٍ نفسِها، لا بيعُ التاجر لزبائنه.
+         *
+         * قسمٌ قائمٌ بذاته لأنّه بابُ فريق المبيعات اليوميّ: من يتابع عميلًا
+         * محتملًا لا يمرّ بـ«أخرى» ليجده.
+         *
+         * ولا يُعرض هنا بندٌ لميزةٍ لم تُبنَ: «المحادثات» و«عروض الأسعار»
+         * يُضافان يوم يعملان — بابٌ معروضٌ لا يُفتح أسوأ من بابٍ لا يُعرض.
+         */
+        heading: 'CRM',
+        items: [
+            { label: 'لوحة CRM', icon: LayoutDashboard, route: 'super-admin.crm.dashboard' },
+            {
+                label: 'العملاء المحتملون',
+                icon: Contact,
+                route: 'super-admin.crm.leads.index',
+                covers: ['super-admin.crm.leads.show'],
+            },
+            /*
+             * والمحادثاتُ هنا واتسابُ **المبيعات** لا مركزَ الدعم.
+             *
+             * البابان متجاوران في القائمة عمدًا؟ لا — «مركز المحادثات» تحت
+             * «الدعم»، وهذا تحت CRM. ومن يخلط بينهما يقرأ خيطَ تاجرٍ في
+             * دفتر البيع أو العكس.
+             */
+            /* وشارةٌ عليها: من كتب إلينا يُرى ولا يُعثر عليه بالصدفة */
+            { label: 'المحادثات', icon: MessagesSquare, route: 'super-admin.crm.conversations', badge: 'crm' },
+            { label: 'مسار البيع', icon: GitBranch, route: 'super-admin.crm.pipeline' },
+            { label: 'المهام والمتابعات', icon: ClipboardList, route: 'super-admin.crm.tasks' },
+            { label: 'تقارير CRM', icon: BarChart3, route: 'super-admin.crm.reports' },
+        ],
+    },
+    {
+        heading: 'أخرى',
+        items: [
+            // الديمو قسمٌ قائم بذاته لا زرٌّ في الإعدادات: يُفتح في كل عرض
+            { label: 'الديمو', icon: FlaskConical, route: 'super-admin.demo.index' },
+            { label: 'التقارير', icon: BarChart3, route: 'super-admin.reports.index' },
+            { label: 'سجل النشاط', icon: History, route: 'super-admin.activity.index' },
+            { label: 'الإعدادات', icon: Settings, route: 'super-admin.settings.index' },
+        ],
+    },
+];

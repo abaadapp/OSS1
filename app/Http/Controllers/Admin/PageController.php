@@ -1,0 +1,881 @@
+<?php
+
+namespace App\Http\Controllers\Admin;
+
+use App\Http\Controllers\ActivityController;
+use App\Http\Controllers\Admin\Finance\ChartController;
+use App\Http\Controllers\Controller;
+use App\Http\Controllers\PdfController;
+use App\Http\Controllers\Pos\DeviceController;
+use App\Models\Branch;
+use App\Models\Business;
+use App\Models\CustomAlert;
+use App\Models\CustomerAddress;
+use App\Models\JobTitle;
+use App\Models\Order;
+use App\Models\Product;
+use App\Models\User;
+use App\Support\BranchGoogle;
+use App\Support\Demo;
+use App\Support\DocumentTemplates;
+use App\Support\Emojis;
+use App\Support\InvoiceBranding;
+use App\Support\Mailer;
+use App\Support\MarketingSettings;
+use App\Support\OrderNotice;
+use App\Support\OrderStatus;
+use App\Support\Permissions;
+use App\Support\ProductImages;
+use App\Support\PurchaseOrders;
+use App\Support\PurchaseOrderTotals;
+use App\Support\PurchaseUnits;
+use App\Support\Reports;
+use App\Support\Roles;
+use App\Support\ShopIdentity;
+use App\Support\Storefront;
+use Carbon\Carbon;
+use Illuminate\Http\Request;
+use Illuminate\Support\Str;
+use Inertia\Inertia;
+use Inertia\Response;
+
+/**
+ * صفحات العرض في لوحة صاحب المتجر.
+ *
+ * كانت كلها Route::view تجلب بياناتها من داخل قوالب Blade. Inertia يمرّر
+ * البيانات من الخادم، فنُقل الجلب إلى هنا كما هو — نفس الدوال ونفس النتائج.
+ */
+class PageController extends Controller
+{
+    /* ------------------------------ المنتجات ------------------------------ */
+
+    public function productsCreate(): Response
+    {
+        // التركيب يُملأ مع المنتج: القوائم (المكوّنات والإضافات) تُرسل فارغةَ
+        // الصفوف لا فارغةَ الخيارات — فمن يكتب باقةً يختار مكوّناتها الآن
+        return Inertia::render('Admin/Products/Create', [
+            'categories' => Demo::categories(),
+            'composition' => ProductCompositionController::blank(
+                auth()->user()->business_id ?? Demo::bid(),
+            ),
+        ]);
+    }
+
+    public function productsShow(string $id): Response
+    {
+        $product = Demo::product($id);
+        abort_if(empty($product), 404);
+
+        // الصفّ نفسه لا نسخته المسطّحة: المعرض علاقةٌ لا عمود
+        $model = Product::where('business_id', auth()->user()->business_id ?? Demo::bid())
+            ->with('images')->find($id);
+
+        $margin = $product['price'] - $product['cost'];
+        $marginPct = $product['price'] > 0 ? round(($margin / $product['price']) * 100) : 0;
+
+        return Inertia::render('Admin/Products/Show', [
+            'product' => $product,
+            'stats' => [
+                ['label' => __('الكمية المتوفرة'), 'value' => __(':n قطعة', ['n' => $product['qty']]), 'icon' => 'package', 'color' => 'primary'],
+                ['label' => __('إجمالي المبيعات'), 'value' => __(':n قطعة', ['n' => Demo::productSold($id)]), 'icon' => 'shopping-cart', 'color' => 'success'],
+                ['label' => __('سعر التكلفة'), 'value' => Demo::money($product['cost']), 'icon' => 'wallet', 'color' => 'info'],
+                ['label' => __('هامش الربح'), 'value' => $marginPct.'%', 'icon' => 'trending-up', 'color' => 'primary',
+                    'trend' => Demo::money($margin), 'up' => true],
+            ],
+            // حركات هذا المنتج وحده، لا كل حركات المتجر
+            'movements' => array_slice(array_values(array_filter(
+                Demo::movements(),
+                fn ($m) => $m['product'] === $product['name'],
+            )), 0, 6),
+            /*
+             * المعرض من بابه الواحد — الرئيسية أوّلًا ثمّ ما بعدها.
+             *
+             * كان سطرًا يبني قائمةً من صورةٍ واحدة، فالمصفوفة موجودةٌ
+             * والمعرض لا. والشاشة تعرض المصغّرات حين تزيد على واحدة —
+             * فبقيت لا تعرضها أبدًا.
+             */
+            'thumbs' => $model
+                ? array_column(ProductImages::gallery($model), 'url')
+                : array_values(array_filter([$product['image']])),
+            'description' => $product['description']
+                ?? __('باقة أنيقة من الورود الطبيعية الطازجة مناسبة لجميع المناسبات، منسّقة بعناية بأيدي خبراء التنسيق لدينا لتمنح لمسة جمالية مميزة.'),
+        ]);
+    }
+
+    public function productsEdit(string $id): Response
+    {
+        $product = Demo::product($id);
+        abort_if(empty($product), 404);
+
+        $model = Product::where('business_id', auth()->user()->business_id ?? Demo::bid())
+            ->with('images')->find($id);
+
+        return Inertia::render('Admin/Products/Edit', [
+            'product' => $product,
+            'categories' => Demo::categories(),
+            'description' => $product['description'] ?? '',
+            'composition' => $model
+                ? ProductCompositionController::payload($model)
+                : null,
+            /*
+             * المعرض يصل إلى شاشة التعديل لتُدار منه الصور.
+             *
+             * والسقف معه: الشاشة تُخفي زرّ الرفع عند بلوغه بدل أن تقبل الملفّ
+             * ثمّ تردّه — ورفضٌ بعد انتظار رفعِ أربعة ميغابايت أسوأ من زرٍّ
+             * مطفأ يقول لماذا.
+             */
+            'gallery' => $model ? ProductImages::gallery($model) : [],
+            'galleryMax' => ProductImages::MAX,
+            'galleryLimits' => ProductImages::uploadLimits(),
+        ]);
+    }
+
+    /* ----------------------------- التصنيفات ----------------------------- */
+
+    /** ألوان الأقسام — نفس اللوحة التي كانت مضمّنة في القالب */
+    private const PALETTE = [
+        '#7c3aed', '#8b5cf6', '#6366f1', '#3b82f6', '#0ea5e9',
+        '#06b6d4', '#14b8a6', '#10b981', '#22c55e', '#84cc16',
+        '#eab308', '#f59e0b', '#f97316', '#ef4444', '#e11d48',
+        '#db2777', '#d946ef', '#a855f7', '#64748b', '#78716c',
+    ];
+
+    /* ------------------------------ الإضافات ------------------------------ */
+
+    /** مجموعات الإيموجي بصيغة منتقي الواجهة — مصدرها App\Support\Emojis وحدها */
+    private static function emojiGroups(): array
+    {
+        $out = [];
+        foreach (Emojis::groups() as $label => $items) {
+            $out[__($label)] = array_map(fn ($it) => ['e' => $it[0], 'k' => mb_strtolower($it[1])], $items);
+        }
+
+        return $out;
+    }
+
+    /* ------------------------------- الفروع ------------------------------- */
+
+    public function branchesIndex(): Response
+    {
+        return Inertia::render('Admin/Branches/Index', [
+            'branches' => Demo::branches(),
+        ]);
+    }
+
+    /* ------------------------------ الطلبات ------------------------------ */
+
+    public function ordersShow(string $number): Response
+    {
+        $order = Demo::orderDetails($number);
+        abort_if(empty($order), 404);
+
+        return Inertia::render('Admin/Orders/Show', [
+            'order' => $order,
+            /*
+             * هل تُعرض «فاتورة ضريبية» على هذا الطلب — وإن لم تُعرض فلمَ.
+             *
+             * والحالتان تُفترقان لأنّ علاجَهما مختلف. متجرٌ غير مسجَّلٍ في
+             * الضريبة لا فاتورةَ ضريبيّةً له أصلًا: القالبُ يُسقط الرمزَ ولا
+             * يدّعي أنّها ضريبيّة، فزرٌّ بهذا الاسم يَعِد بورقةٍ لا تُنتَج.
+             * ومتجرٌ مسجَّلٌ لم يُسمَّ بعد سيُردّ عند الباب — فيُقال له ذلك
+             * على الزرّ لا بعد الضغط عليه.
+             */
+            'taxInvoice' => [
+                'registered' => Demo::vatSettings()['number'] !== '',
+                'ready' => ShopIdentity::confirmed(Business::find(Demo::bid())),
+            ],
+            /*
+             * طلبُ تقييم Google — ويُعرض حين يعمل وحدَه.
+             *
+             * الشرطان يُقاسان في الخادم لا في الشاشة: الحالةُ بعد التسليم،
+             * وفرعُ الطلب مربوطٌ بملفّه. وزرٌّ يُعرض ثمّ يردّ «اربط فرعك
+             * أوّلًا» بابٌ معروضٌ لا يُفتح.
+             */
+            'googleReview' => $this->googleReviewState($number),
+            /*
+             * إبلاغُ الزبون بحالة طلبه يدويًّا — طريقٌ لا يمرّ بميتا.
+             *
+             * ويبقى معروضًا ولو عمل المُرسِلُ الآليّ: الآليُّ يُوقَف بحظرٍ
+             * أو بقالبٍ لم يُعتمَد أو بحصّةٍ نفدت، وفي كلٍّ منها يبقى الزبون
+             * بلا خبر. واليدُ آخرُ ما يبقى حين تسقط الأتمتة.
+             */
+            'statusNotice' => OrderNotice::state(
+                Order::where('business_id', Demo::bid())
+                    ->where('is_held', false)->where('number', $number)->first()
+            ),
+            /*
+             * والورقةُ إلى جانب التفاصيل — HTML لا PDF.
+             *
+             * الشاشةُ قسمان: ما يقوله النظام عن الطلب، وما ستراه الجهةُ التي
+             * تستلم ورقتَه. ومن يراجع فاتورةً أمام زبونٍ يحتاج الاثنين في
+             * نظرةٍ واحدة لا في تبديلٍ بين نافذتين.
+             *
+             * ورسمُها HTML لا PDF عن قصد: لا شريطَ قارئٍ من المتصفّح فوقها،
+             * ولا محرّكَ طباعةٍ يُشغَّل لمن جاء يقرأ حالةَ طلب — والرسمُ
+             * نصًّا جزءٌ يسير من ثمن توليد ملفّ.
+             *
+             * ووصفتُها من `PdfController::saleHtml` نفسِها التي تُطبع، فلا
+             * تفترق المعروضةُ عن المطبوعة.
+             */
+            'paper' => $this->orderPaper($number),
+            /*
+             * أيُصحَّح **متنُ** الفاتورة من هنا — وإن لم يُصحَّح فلمَ.
+             *
+             * وشرطاه اللذان يقيسهما الخادم عند الكتابة نفسِهما: صلاحيةٌ باسمها
+             * (`order.edit`)، ويومُ البيع لم ينتهِ (`OrderCorrection::assertSameDay`).
+             * فما تقوله الشاشة قبل الضغط هو ما سيقوله الردُّ بعده.
+             *
+             * ويفترق جوابُ المانعين: من لا يملك الصلاحية لا يُعرض له الزرّ —
+             * بابٌ لا يُعرض خيرٌ من بابٍ يُعرض ثمّ يُقال لصاحبه «ليست لك». ومن
+             * يملكها وانتهى يومُ فاتورته يراه معطَّلًا بسببه مكتوبًا عليه: هذا
+             * حدٌّ زمنيّ يعرفه غدًا ويُقدّر له، لا رفضٌ لشخصه.
+             */
+            'invoiceEdit' => $this->invoiceEditState($number),
+            /*
+             * أهذا الطلب من الفرع الذي تقف عليه — وإن لم يكن، فمن أيّ فرع.
+             *
+             * الصفحةُ تُفتح لطلبات المتجر كلِّها عمدًا: يصلها التاجرُ من
+             * البحث العامّ، ومن التنبيهات، ومن صفحة العميل — وكلُّها لا
+             * تُرشِّح بالفرع. فإغلاقُها كان سيقطع تلك الطرق الأربعة.
+             *
+             * لكنّ **الأفعال** تتبع الفرع (`OrderDetailController::find`):
+             * فكانت الصفحة تُفتح كاملةً بأزرارها، ويضغط التاجرُ «جاهز» أو
+             * «إرسال» فتُردّ صفحةُ ٤٠٤ بلا كلمة. وهذا ما تقيسه الشاشةُ الآن
+             * لتقوله قبل الضغط بدل أن تُظهره بعده.
+             */
+            'otherBranch' => $this->orderOtherBranch($number),
+        ]);
+    }
+
+    /**
+     * فرعُ الطلب حين لا يكون فرعَك — و`null` حين يكون.
+     *
+     * @return array{id: int, name: string}|null
+     */
+    private function orderOtherBranch(string $number): ?array
+    {
+        $here = Demo::currentBranchId();
+
+        if (! $here) {
+            // «كل الفروع» يرى المتجر كلَّه ويتصرّف فيه — لا قفل
+            return null;
+        }
+
+        $order = Order::where('business_id', Demo::bid())
+            ->where('is_held', false)->where('number', $number)->first();
+
+        if (! $order || (int) $order->branch_id === (int) $here || ! $order->branch_id) {
+            return null;
+        }
+
+        $branch = Branch::where('business_id', Demo::bid())->find($order->branch_id);
+
+        return $branch ? ['id' => (int) $branch->id, 'name' => (string) $branch->name] : null;
+    }
+
+    /**
+     * حالُ تصحيح الفاتورة لهذا الطلب.
+     *
+     * @return array{can: bool, reason: ?string}
+     */
+    private function invoiceEditState(string $number): array
+    {
+        if (! auth()->user()?->may('order.edit')) {
+            return ['can' => false, 'reason' => null];
+        }
+
+        /*
+         * وبالفرع كما يقرؤه `OrderEditController::find`: طلبُ فرعٍ آخر لا
+         * يُصحَّح، فلا يُعرض له قلم. وسببُ المنع هنا ليس «انتهى اليوم» —
+         * هو الفرع، وتقوله لافتةُ الصفحة كلِّها لا هذا الزرّ وحده.
+         */
+        $order = Order::where('business_id', Demo::bid())
+            ->where('is_held', false)
+            ->when(Demo::currentBranchId(), fn ($w) => $w->where('branch_id', Demo::currentBranchId()))
+            ->where('number', $number)->first();
+
+        $soldOn = $order?->ordered_at ?? $order?->created_at;
+
+        // فاتورةٌ بلا تاريخٍ أصلًا لا يُقاس عليها يوم — ولا يُعرض لها زرّ
+        if (! $soldOn) {
+            return ['can' => false, 'reason' => null];
+        }
+
+        return Carbon::parse($soldOn)->isSameDay(now())
+            ? ['can' => true, 'reason' => null]
+            : ['can' => false, 'reason' => __('تعديل الفاتورة — انتهى يومها')];
+    }
+
+    /**
+     * ورقةُ الطلب للعرض — أو `null` لطلبٍ لا صفَّ له.
+     *
+     * @return array{html: string, size: string}|null
+     */
+    private function orderPaper(string $number): ?array
+    {
+        $order = Order::where('business_id', Demo::bid())
+            ->where('number', $number)->with('items')->first();
+
+        if (! $order) {
+            return null;
+        }
+
+        $paper = PdfController::saleHtml((int) Demo::bid(), $order);
+
+        return ['html' => $paper['html'], 'size' => $paper['paper']];
+    }
+
+    /**
+     * حالُ طلب التقييم لهذا الطلب — ولمَ لا يُعرض إن لم يُعرض.
+     *
+     * @return array{show:bool, reason:?string, requestedAt:?string}
+     */
+    private function googleReviewState(string $number): array
+    {
+        $order = Order::where('business_id', Demo::bid())
+            ->where('is_held', false)->where('number', $number)->first();
+
+        if (! $order) {
+            return ['show' => false, 'reason' => null, 'requestedAt' => null];
+        }
+
+        $delivered = in_array($order->status, [
+            OrderStatus::DELIVERED,
+            OrderStatus::PICKED_UP,
+            OrderStatus::COMPLETED,
+        ], true);
+
+        $branch = $order->branch_id
+            ? Branch::where('business_id', Demo::bid())->find($order->branch_id)
+            : null;
+
+        $linked = $branch !== null && BranchGoogle::for($branch) !== null;
+
+        return [
+            'show' => $delivered && $linked,
+            /* ولا يُقال «غير مربوط» قبل التسليم: سببٌ واحدٌ يكفي، وهو الأقرب */
+            'reason' => $delivered && ! $linked ? __('اربط فرع هذا الطلب بخرائط Google أوّلًا.') : null,
+            'requestedAt' => optional($order->review_request_sent_at)->toIso8601String(),
+        ];
+    }
+
+    /* ------------------------------ العملاء ------------------------------ */
+
+    public function customersShow(string $id): Response
+    {
+        $customer = Demo::customer($id);
+        abort_if(empty($customer), 404);
+
+        return Inertia::render('Admin/Customers/Show', [
+            'customer' => $customer,
+            'orders' => Demo::customerOrders($id),
+            // الافتراضي أولًا ثم الأقدم — ترتيب ثابت لا يقفز بين التحميلات
+            'addresses' => CustomerAddress::where('customer_id', $id)
+                ->orderByDesc('is_default')->orderBy('id')->get()
+                ->map(fn ($a) => [
+                    'id' => $a->id,
+                    'label' => $a->label,
+                    'city' => $a->city,
+                    'area' => $a->area,
+                    'street' => $a->street,
+                    'is_default' => $a->is_default,
+                ])->all(),
+            // للتعديل: الفرع يُختار من فروع هذا النشاط لا من قائمةٍ مفتوحة
+            'branches' => Demo::branches(),
+        ]);
+    }
+
+    /* ----------------------------- الموظفون ----------------------------- */
+
+    public function employeesIndex(): Response
+    {
+        return Inertia::render('Admin/Employees/Index', $this->employeesData());
+    }
+
+    /**
+     * بيانات قسم الموظفين — تُقرأ من موضعين: صفحتها المستقلّة، ولوحة
+     * الإعدادات حيث يُفتح القسم مكانها. وهي هنا مرّةً واحدة فلا تفترق النسختان.
+     *
+     * @return array<string, mixed>
+     */
+    private function employeesData(): array
+    {
+        $bid = Demo::bid();
+        // كم موظفًا يشغل كل مسمّى — عمود «الاستخدام» في تبويب الوظائف
+        $usage = User::where('business_id', $bid)
+            ->selectRaw('job_title, COUNT(*) as c')->groupBy('job_title')->pluck('c', 'job_title');
+
+        return [
+            'employees' => Demo::employees(),
+            'jobTitles' => JobTitle::where('business_id', $bid)->orderBy('name')->get()
+                ->map(fn ($t) => [
+                    'id' => $t->id,
+                    'name' => $t->name,
+                    'role' => $t->role,
+                    'roleLabel' => Roles::label($t->role),
+                    'description' => $t->description,
+                    'usage' => (int) ($usage[$t->name] ?? 0),
+                ])->all(),
+        ];
+    }
+
+    public function employeesCreate(): Response
+    {
+        return Inertia::render('Admin/Employees/Create', [
+            'branches' => Demo::branches(),
+            'branchOptions' => Branch::where('business_id', Demo::bid())
+                ->orderBy('id')->get(['id', 'name'])
+                ->map(fn ($b) => ['value' => $b->id, 'label' => $b->name])->values()->all(),
+            'jobTitles' => self::jobTitles(),
+            'currentBranchName' => Demo::currentBranchName(),
+            'sections' => Permissions::sectionLabels(),
+            'actions' => Permissions::actionLabels(),
+            /*
+             * وما يملك الفاعلُ منحَه — تُعطَّل سواه ولا تُرفع من الشاشة.
+             *
+             * إخفاؤها كان سيجعل بطاقةَ موظّفٍ قائم تُخفي صلاحيةً يملكها
+             * بالفعل؛ وعرضُها بلا تمييزٍ كان يَعِد بما يُردّ عند الحفظ
+             * بصفحة ٤٠٣ تمحو النموذج. فتُعرض معطَّلةً بسببها مكتوبًا.
+             */
+            'grantable' => Permissions::grantable(auth()->user()),
+            'blockedTitles' => self::blockedJobTitles(),
+            // ومن لا يقرأ الرواتب لا تُرسم له حقولُها — انظر EmployeeController
+            'may_read_payroll' => (bool) auth()->user()?->may(Permissions::PAYROLL_VIEW),
+        ]);
+    }
+
+    /**
+     * وظائفُ لا يُسندها هذا الفاعل — دورُها يحمل ما لا يملكه.
+     *
+     * والقائمةُ كانت تعرضها كلَّها: يختار المحاسبُ «بائعًا» ويملأ النموذج
+     * ويحفظ، فتُردّ صفحةُ ٤٠٣ — لأنّ دور البائع يفتح «المنتجات» و«لوحة
+     * التجهيز» وهو لا يملكهما. ولا شيء في الشاشة كان يقول ذلك قبل الضغط.
+     *
+     * @return list<string>
+     */
+    private static function blockedJobTitles(): array
+    {
+        $actor = auth()->user();
+
+        return JobTitle::where('business_id', Demo::bid())->orderBy('name')->get()
+            ->reject(fn ($t) => Permissions::mayAssignRole($actor, $t->role))
+            ->pluck('name')->values()->all();
+    }
+
+    public function employeesShow(string $id): Response
+    {
+        $employee = Demo::employee($id);
+        abort_if(empty($employee), 404);
+
+        // والصفُّ نفسُه لا بطاقتُه: `allows` و`may` تُسألان على النموذج
+        $user = User::where('business_id', Demo::bid())->find((int) $id);
+
+        return Inertia::render('Admin/Employees/Show', [
+            'employee' => $employee,
+            'orderCount' => Demo::employeeOrderCount($id),
+            'salesSeries' => Demo::employeeSalesSeries($id),
+            // سجل نشاط حقيقي من ActivityLog — القالب القديم كان يعرض قائمة
+            // مكتوبة يدويًا («أتمّ طلب بيع بقيمة 45.000») لا تخص أحدًا.
+            'activities' => Demo::userActivities((int) $id, 20),
+            /*
+             * ═══ صلاحياتُه هو — لا قائمةٌ مكتوبةٌ باليد ═══
+             *
+             * كانت هنا عشرةُ أسطرٍ ثابتة تُعرض لكلّ موظّفٍ على حدة: «فتح نقطة
+             * البيع: نعم»، «إلغاء طلب: لا»… لا تُقرأ من صفّه ولا تتغيّر
+             * بتغيّره. فيفتح صاحبُ النشاط بطاقةَ موظّفٍ يملك «الرواتب
+             * والموظفين» فيقرأ «إدارة الموظفين: لا» ويطمئنّ.
+             *
+             * وتقريرُ أمانٍ كاذب أسوأ من غياب التقرير: من لا يجد شاشةً يذهب
+             * ليتحقّق، ومن يجدها تكذب لا يذهب.
+             *
+             * ويُقرأ بـ`allows` و`may` أنفسِهما اللتين يسأل بهما الحارس —
+             * فلا تفترق الشاشةُ عن الباب.
+             */
+            'permissions' => collect(Permissions::sectionLabels())
+                ->filter(fn ($label, $key) => $user?->allows($key))
+                ->merge(
+                    collect(Permissions::actionLabels())
+                        ->filter(fn ($label, $key) => $user?->may($key))
+                )
+                ->values()->all(),
+            // و«يتبع وظيفته» أو «مخصَّصة بيد» — الفرقُ يُقال لا يُخمَّن
+            'permissions_are_manual' => is_array($user?->permissions),
+            /*
+             * وأزرارُ «تعطيل» و«إعادة تعيين كلمة المرور» و«تعديل» تُرسم على
+             * هذا لا على الأمنيات.
+             *
+             * الحارسُ يردّ من يمسّ حسابًا يفتح أكثر ممّا يفتح، والشاشةُ كانت
+             * ترسمها للجميع — فيضغطها الموظّف فيُردّ بـ٤٠٣ لا يقول شيئًا.
+             * وبابٌ معروضٌ لا يُفتح أسوأ من بابٍ لا يُعرض.
+             */
+            'may_touch' => $user !== null && Permissions::mayTouch(auth()->user(), $user),
+        ]);
+    }
+
+    /** مسمّيات الوظائف المعرّفة للنشاط */
+    private static function jobTitles(): array
+    {
+        return JobTitle::where('business_id', Demo::bid())->orderBy('name')->pluck('name')->all();
+    }
+
+    /* ------------------------------ المخزون ------------------------------ */
+
+    public function inventoryIndex(): Response
+    {
+        // الحالات المسموحة فقط — أي قيمة أخرى في الرابط تُهمَل بدل أن تُمرَّر
+        $stock = request('stock');
+        $allowed = ['متوفر', 'منخفض', 'نفد المخزون'];
+
+        return Inertia::render('Admin/Inventory/Index', [
+            'inventory' => Demo::inventory(),
+            'branches' => Demo::branches(),
+            'currentBranchId' => Demo::currentBranchId(),
+            'stockFilter' => in_array($stock, $allowed, true) ? $stock : null,
+        ]);
+    }
+
+    /* ----------------------- المورّدون وأوامر الشراء ----------------------- */
+
+    public function suppliersIndex(): Response
+    {
+        return Inertia::render('Admin/Suppliers/Index', [
+            'suppliers' => Demo::suppliers(),
+        ]);
+    }
+
+    /*
+     * أوامر الشراء انتقلت إلى PurchaseOrderController::index.
+     *
+     * صار للقسم ثلاث شاشات — القائمة والسندات والأوامر — ولكلٍّ منها كتابة،
+     * فلم تعد صفحةَ عرضٍ تُقدَّم من هنا.
+     */
+
+    /**
+     * شاشةُ أمر شراء جديد.
+     *
+     * وما يصلها من المتجر وحده: المورّدون والفروع والأصناف. ونسبةُ الضريبة
+     * من إعدادات المتجر لا رقمًا مكتوبًا في الشاشة — من أطفأها لا يرى
+     * ضريبةً تُضاف إلى أوامره.
+     */
+    public function purchasesCreate(Request $request): Response
+    {
+        $bid = auth()->user()->business_id ?? Demo::bid();
+
+        return Inertia::render('Admin/Purchases/Create', [
+            'suppliers' => Demo::suppliers(),
+            'products' => Demo::products(),
+            'reorderSuggestions' => Demo::reorderSuggestions(),
+            'branches' => Demo::branches(),
+            'currentBranchId' => Demo::currentBranchId(),
+            // القدوم من شاشة إعادة الطلب يملأ الأصناف المقترحة مسبقًا
+            'fromReorder' => $request->query('from') === 'reorder',
+            'today' => now()->toDateString(),
+            /*
+             * ونسبةُ الضريبة تُرسل ليحسب المتصفّح ما يحسبه الخادم — والخادمُ
+             * يعيد قراءتها من الإعدادات على كلّ حفظ، فما يُرسل لا يُصدَّق.
+             */
+            'taxRate' => PurchaseOrderTotals::taxRateFor($bid),
+            /*
+             * ومفتاحُ النموذج يُولَّد عند الخادم لا عند المتصفّح: صفحةٌ تُفتح
+             * مرّةً لها مفتاحٌ واحد، فضغطتان عليه أمرٌ واحد. ولو وُلّد في
+             * المتصفّح لأمكن تبديلُه بضغطة تحديث.
+             */
+            'formToken' => (string) Str::uuid(),
+            /*
+             * ووحداتُ الشراء تُقرأ ممّا اشترى به المتجر — انظر `PurchaseUnits`.
+             *
+             * ورأسُ القائمة هو ما يُفتح به الحقل، فلا يُرسل «الافتراضيُّ»
+             * حقلًا ثانيًا يقول ما تقوله القائمةُ نفسها.
+             */
+            'units' => PurchaseUnits::forBusiness($bid),
+            // ومورّدٌ أُضيف من هذه الشاشة نفسها — يُختار فور العودة إليها
+            'newSupplierId' => $request->session()->get('new_supplier_id'),
+            /*
+             * ═══ المورّدُ الافتراضيّ ═══
+             *
+             * أكثرُ المحلّات تشتري من مورّدٍ واحد أكثرَ من غيره — مزرعةٌ
+             * تُورّد الورد أسبوعيًّا. ويُتحقّق من صفّه عند كلّ قراءة، ومحلٌّ
+             * له مورّدٌ واحد يُختار له وحدَه: قائمةٌ ذاتُ خيارٍ واحد ليست
+             * خيارًا. انظر `PurchaseOrders::defaultSupplierId`.
+             */
+            'defaultSupplierId' => PurchaseOrders::defaultSupplierId($bid),
+            /*
+             * ووسائلُ السداد المنويّة من مالكها لا مكتوبةً في الشاشة.
+             *
+             * وهي **نيّةٌ لا حدث**: لا واحدةٌ منها تكتب قيدًا. والسدادُ
+             * الفعليّ يقبل الصندوقَ أو البنك وحدهما، وبابُه سندُ المورّد
+             * المعتمد — انظر `PurchaseOrders::METHODS`.
+             */
+            'methods' => PurchaseOrders::METHODS,
+            'terms' => PurchaseOrders::TERMS,
+            /*
+             * ولغةُ الورقة من قالبها لا من لغة اللوحة: موظّفٌ يقرأ اللوحة
+             * إنجليزيّةً يُرسل إلى مزرعةٍ محليّةٍ ورقةً عربيّة.
+             */
+            'documentLanguage' => InvoiceBranding::language($bid),
+            /*
+             * وهل يملك من يقرأ تبديلَ قالب الورقة؟ — يُقاس بقسم الإعدادات.
+             *
+             * ومن لا يملكه لا يُرسَم له زرُّ «تخصيص التصميم»: بابٌ معروضٌ
+             * يردّ بـ٤٠٣ يُقرأ عطبًا في النظام لا منعًا.
+             */
+            'mayBrand' => (bool) auth()->user()?->allows('settings'),
+        ]);
+    }
+
+    /* ------------------------- المالية والتقارير ------------------------- */
+
+    /*
+     * المالية انتقلت إلى App\Http\Controllers\Admin\Finance.
+     *
+     * صارت خمس شاشات على دفترٍ مزدوج لا شاشتين على جدول معاملات، ولكلٍّ منها
+     * كتابةٌ تمرّ بـ`Ledger::post` — فلم تعد صفحاتِ عرضٍ تُقدَّم من هنا.
+     */
+
+    /*
+     * التسويق انتقل إلى App\Http\Controllers\Admin\Marketing.
+     *
+     * صار ستّ أدوات تُفتح كلٌّ منها بعنوانها، لا صفحةً جامعة تُفتح فيها
+     * الكوبونات ويُبحث عن الباقي.
+     */
+
+    /* ----------------------------- الإعدادات ----------------------------- */
+
+    /**
+     * فهرس التقارير — بابٌ واحد لما كان مبعثرًا في اثنتي عشرة شاشة.
+     *
+     * ولا يعرض إلا ما يفتحه صاحبه: `Reports::forUser` يرشّح بالصلاحية، فلا
+     * يرى المحاسب بطاقةً تقوده إلى ٤٠٣. والقائمة الجانبية تُخفي ما لا يُملك
+     * منذ البداية، فلولا الترشيح لافترق البابان على الشيء نفسه.
+     *
+     * ولا أرقامَ في رأسه.
+     *
+     * جُرّبت: أربعُ بطاقاتٍ ومخطّطُ فترة فوق البطاقات. وعلى محلٍّ لم يبِعْ
+     * بعدُ هي أربعةُ أصفارٍ وخطٌّ مسطّح يملأ الشاشة قبل أن يصل صاحبُها إلى
+     * تقاريره — ضجيجٌ يُبعد الأبواب لا رأسٌ يُعين. والأرقام لها صفحتها:
+     * «ملخّص المبيعات» أوّلُ بطاقةٍ في الفهرس.
+     */
+    public function reportsIndex(): Response
+    {
+        return Inertia::render('Admin/Reports/Index', [
+            'reports' => Reports::forUser(auth()->user()),
+            'categories' => Reports::categoryLabels(),
+        ]);
+    }
+
+    /**
+     * ملخّص المبيعات — كلّه على فترةٍ واحدة يختارها التاجر.
+     *
+     * كانت البطاقات تجمع عمر المتجر كلّه والمخطّط يرسم السنة الجارية — رقمان
+     * لفترتين في شاشةٍ واحدة. والفترة في الرابط لا في الجلسة: رابطٌ يُرسَل
+     * أو يُحفَظ يفتح على ما فُتح عليه، ولا تتبدّل شاشة أحدٍ لأن آخر بدّلها.
+     */
+    public function reportsSales(Request $request): Response
+    {
+        // الحمولة من Support\Reports لا تُجمع هنا: الملفّات الثلاثة تقرأ
+        // المصدر نفسه، فلا يخرج ملفٌّ بغير ما على الشاشة
+        return Inertia::render('Admin/Reports/Sales', Reports::salesReport($request->query('range')));
+    }
+
+    public function settingsIndex(Request $request): Response
+    {
+        $b = Business::find(Demo::bid());
+        $section = $request->query('section');
+        $section = is_string($section) ? $section : null;
+
+        return Inertia::render('Admin/Settings/Index', [
+            'settings' => Demo::businessSettings(),
+            'business' => [
+                'name' => $b?->name ?? '',
+                'phone' => $b?->phone,
+                'email' => $b?->email,
+                'address' => $b?->address,
+                'logo' => \App\Http\Controllers\SuperAdmin\PageController::logoUrl($b?->logo),
+            ],
+            /*
+             * إعدادات الموقع والنطاق — انتقلت من «أدوات التسويق» إلى هنا.
+             *
+             * والنطاق إعدادُ متجرٍ لا أداةُ تسويق: يُكتب مرّةً عند التجهيز ثمّ
+             * تقرؤه شاشة السيو ورابط «الموقع» في الترويسة. وكان يُطلب من
+             * قسمٍ لا يفتحه إلا من يبحث عن الكوبونات.
+             *
+             * وتُرسل دائمًا لا عند طلب قسمها: ثمانية مفاتيح نصّية، وطلبُها
+             * برحلةٍ إلى الخادم أغلى من إرسالها.
+             */
+            'site' => MarketingSettings::group(Demo::bid(), 'website'),
+            /*
+             * أيصل البريدُ فعلًا؟ — الجوابُ فوق مفاتيحه لا بعد شهرٍ من صمتها.
+             *
+             * ثلاثةُ مفاتيح في «الإشعارات» تَعِد صراحةً: «يُرسل إلى بريد صاحب
+             * النشاط»، «يصل آخر اليوم». وكلُّها يمرّ بـ`Mail::to(...)->send()`
+             * — وهي تنجح بلا اعتراضٍ مهما كان المُرسِل. فمن كان `MAIL_MAILER`
+             * عنده `log` كُتبت رسائلُه في ملفٍّ على الخادم ولم تغادره قطّ،
+             * ولا خطأ، ولا سطرٌ في الشاشة: يظنّ التاجر أنّ ملخّصَه يصله كلّ
+             * ليلة وهو لا يصل أحدًا.
+             *
+             * ومتجرٌ بلا بريدٍ مسجَّل كذلك: لا مُرسَلَ إليه أصلًا.
+             *
+             * ولا يُطفأ المفتاح ولا يُخفى — الإعدادُ اختيارُ صاحبه ويبقى
+             * محفوظًا حتى يُضبط البريد. إنّما تُقال الحقيقةُ فوقه.
+             */
+            'mail' => [
+                'deliverable' => Mailer::deliverable($b),
+                'reason' => Mailer::reason($b),
+            ],
+            /*
+             * ما يلزم بانيَ المتجر: عنوانُه المحجوز، والنطاق الذي يُبنى عليه،
+             * والثيمات المتاحة. ولا يُخمَّن شيءٌ منها في الواجهة: النطاق
+             * يتغيّر بالبيئة، والثيمات تُزاد — ونسخةٌ ثانية في الشاشة تفترق.
+             */
+            'store' => [
+                // من `$b` نفسه لا من استعلامٍ ثانٍ: صفّان لمتجرٍ واحد يفترقان
+                'slug' => $b?->site_slug,
+                'domain' => Storefront::domain(),
+                'themes' => Storefront::themeOptions(),
+                'suggestion' => Storefront::suggest($b?->name ?? ''),
+                /*
+                 * العدّ يقول ما يُعرض فعلًا — لا كلَّ ما هو فعّال.
+                 *
+                 * كان يعدّ الفعّال وحده، وقد صار للعرض مفتاحُه. فتاجرٌ أخفى
+                 * أصنافه كلَّها يقرأ «عندك ٤٠ صنفًا» ثمّ يفتح متجره فيجده
+                 * خاليًا — والرقم الذي يطمئن أسوأ من رقمٍ لا يُعرض.
+                 */
+                'productCount' => Product::where('business_id', Demo::bid())
+                    ->where('active', true)->where('published', true)->count(),
+                'products' => Product::where('business_id', Demo::bid())
+                    ->orderByDesc('published')->orderBy('name')
+                    ->get(['id', 'name', 'image', 'active', 'published'])
+                    ->map(fn ($p) => [
+                        'id' => $p->id,
+                        'name' => $p->name,
+                        // الخام لا المقروء: الصورة البديلة من الإنترنت لا تُعرض بضاعةً
+                        'image' => ProductImages::hasRealMain($p) ? $p->image : null,
+                        'active' => (bool) $p->active,
+                        'published' => (bool) $p->published,
+                    ])->all(),
+                /*
+                 * الطريقُ المختار وأسعارُه — يُحسبان في الخادم لا في الشاشة.
+                 *
+                 * الاستنتاجُ لمن سبق الاختيار قاعدةٌ واحدة (انظر
+                 * `Storefront::path`)، والسعرُ مصدرُه `config/storefront`.
+                 * ونسخةٌ ثانية من أيّهما في الواجهة تفترق عند أوّل تبديل.
+                 */
+                'path' => $b ? Storefront::path($b) : '',
+                'pricing' => Storefront::pricing(),
+            ],
+            /*
+             * بطاقاتُ القوالب — من السجلّ لا مكتوبةً في الشاشة.
+             *
+             * يُضاف نوعٌ فيظهر في الإعدادات بلا لمس ملفّ الواجهة، وقائمةٌ
+             * تُكتب باليد في الطرفين تنسى التاليَ دائمًا.
+             */
+            'templates' => DocumentTemplates::all(),
+            /*
+             * بريد الاستعادة — حالُه وحده، بلا رمزٍ ولا بصمة.
+             *
+             * ويُرسَل دائمًا لا عند طلب قسمه: أربعة حقول، وهو أوّل ما يجب أن
+             * يراه صاحبُ حسابٍ لم يضبطه بعد.
+             */
+            'recovery' => RecoveryEmailController::view(auth()->user()),
+            // القائمة الكاملة — تبويب «التنبيهات المرسلة» يعرضها بلا اختصار
+            'notificationsAll' => Demo::allNotifications(),
+            'customAlerts' => CustomAlert::where('business_id', Demo::bid())
+                ->orderByDesc('id')->get()->map(fn ($a) => [
+                    'id' => $a->id,
+                    'type' => $a->type,
+                    'message' => $a->message,
+                    'section' => $a->section,
+                    'metric' => $a->metric,
+                    'operator' => $a->operator,
+                    'threshold' => $a->threshold === null ? null : (float) $a->threshold,
+                    'color' => $a->color,
+                    'due_at' => optional($a->due_at)->format('Y-m-d\\TH:i'),
+                    'active' => $a->active,
+                ])->all(),
+            'alertMetrics' => collect(CustomAlert::METRICS)
+                ->map(fn ($m, $k) => ['key' => $k, 'label' => __($m['label']), 'unit' => $m['unit'], 'section' => $m['section']])
+                ->values()->all(),
+            'alertSections' => Permissions::sectionLabels(),
+            // قسم «صلاحيات الموظفين»: الموظفون الفعليون وحالة صلاحية كلٍّ منهم
+            'staffPermissions' => User::where('business_id', Demo::bid())
+                ->where('role', '!=', 'super_admin')->orderBy('name')->get()
+                ->map(fn ($u) => [
+                    'id' => $u->id,
+                    'name' => $u->name,
+                    'job_title' => $u->job_title ?: $u->roleLabel(),
+                    'manual' => $u->hasManualPermissions(),
+                    'count' => count($u->permissions ?? []),
+                ])->all(),
+
+            /*
+             * أقسام «النظام» تُفتح داخل هذه الصفحة كبقيّة الأقسام.
+             *
+             * والقسم المطلوب يأتي في الرابط (?section=branches) لا في المرساة،
+             * لأن الخادم يحتاج أن يعرفه: بياناته تُحسب هنا. والمرساة لا تصل
+             * إلى الخادم أصلًا.
+             *
+             * ولا تُحسب إلا لقسمها: فتحُ الإعدادات لا يجرّ معه جدول الفروع
+             * ولا سجلّ النشاط، ولا يراهما إلا من قصدهما.
+             */
+            'section' => $section,
+            ...$this->settingsSection($section, $request),
+        ]);
+    }
+
+    /**
+     * بيانات قسمٍ من أقسام «النظام» — أو لا شيء.
+     *
+     * وهي في الرابط لا في الذاكرة عمدًا: بعد إضافة فرعٍ يعود المستخدم بـback()
+     * إلى العنوان نفسه بمعاملِه، فتُحسب البيانات ثانيةً ويبقى القسم مفتوحًا
+     * على أحدث حال. ولو كانت في المرساة لعاد إلى لوحةٍ فارغة بعد كل حفظ.
+     *
+     * @return array<string, mixed>
+     */
+    /**
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    private function renameKey(array $data, string $from, string $to): array
+    {
+        if (array_key_exists($from, $data)) {
+            $data[$to] = $data[$from];
+            unset($data[$from]);
+        }
+
+        return $data;
+    }
+
+    private function settingsSection(?string $section, Request $request): array
+    {
+        return match ($section) {
+            'branches' => ['branches' => Demo::branches()],
+            'employees' => $this->employeesData(),
+            /*
+             * الفروع تصل هنا بشكل خيارات (value/label) لا بشكل صفوف الجدول،
+             * فتُسمّى باسمٍ آخر. ولولا ذلك لتصادمت مع `branches` في قسم الفروع
+             * تصادمًا صامتًا: النوع واحد في TypeScript والحقول مختلفة، فيصير
+             * الجدول صفوفًا فارغة بلا خطأٍ يُنبّه.
+             */
+            'devices' => $this->renameKey(
+                DeviceController::panelData(),
+                'branches',
+                'branchOptions',
+            ),
+            'activity' => ActivityController::adminData($request),
+            'trash' => TrashController::panelData(),
+            /*
+             * الشجرة صلاحيتها «المالية» لا «الإعدادات».
+             *
+             * المسار هنا `admin.settings.index`، و`CheckAbility` يشتقّ القسم
+             * من اسم المسار — فلولا هذا الفحص لقرأ كلُّ من يملك الإعدادات
+             * أرصدةَ الدفتر وميزانَ المراجعة من بابٍ خلفيّ، وهو ما يُمنع منه
+             * في `‎/finance/chart‎` نفسه. والأزرار بعدها ترفض بـ403: شاشةٌ
+             * تُعرض ولا يعمل فيها شيء.
+             */
+            'chart' => $request->user()?->allows('finance')
+                ? ChartController::panelData(Demo::bid())
+                : [],
+            default => [],
+        };
+    }
+}

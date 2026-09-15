@@ -1,0 +1,343 @@
+<?php
+
+namespace App\Http\Controllers\SuperAdmin;
+
+use App\Http\Controllers\Controller;
+use App\Models\Business;
+use App\Models\WhatsAppConnection;
+use App\Support\Activity;
+use App\Support\WhatsAppConnections;
+use App\Support\WhatsAppMode;
+use App\Support\WhatsAppQuota;
+use App\Support\WhatsAppTemplates;
+use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
+
+/**
+ * ما يملكه مدير المنصّة وحده: الرقم المشترك، والحدود، والأذونات.
+ *
+ * ولا يصل إليه تاجر: الحارس هو `role:super_admin` على مجموعة المسارات، فلا
+ * فحصَ ثانٍ هنا يفترق عنه. ولو كُتب فحصٌ في الشاشة وحدها لَكفى أن يُكتب
+ * العنوان بيدٍ ليُرفع الحدّ.
+ */
+class WhatsAppController extends Controller
+{
+    /**
+     * ربط رقم افنت بلس المشترك.
+     *
+     * الرمز يصل هنا مرّةً ثمّ لا يُقرأ ثانية: يُشفَّر في العمود ولا يُعاد إلى
+     * شاشة، ولا يُكتب في سجلّ نشاط، ولا يُرَدّ في رسالة خطأ.
+     */
+    public function connectShared(Request $request)
+    {
+        $data = $request->validate([
+            'phone_number_id' => ['required', 'string', 'max:100'],
+            'waba_id' => ['nullable', 'string', 'max:100'],
+            'display_phone_number' => ['nullable', 'string', 'max:32'],
+            'access_token' => ['required', 'string', 'min:20', 'max:1000'],
+        ], [
+            'access_token.required' => __('الصق رمز الوصول الدائم من لوحة ميتا.'),
+        ]);
+
+        /*
+         * وصلةٌ مشتركة واحدة لا اثنتان.
+         *
+         * وصلتان نشطتان تعنيان أنّ الرسائل تخرج من رقمين بلا قاعدةٍ تحكم
+         * أيّهما — ويقرأ الزبون رقمًا في رسالة ورقمًا آخر في التالية.
+         */
+        $existing = WhatsAppConnection::query()->platform()
+            ->where('purpose', WhatsAppMode::PURPOSE_NOTIFICATIONS)
+            ->orderByDesc('id')->first();
+
+        $attributes = [
+            'owner_type' => WhatsAppMode::OWNER_PLATFORM,
+            /*
+             * وغرضُه يُكتب صراحةً: هذا رقمُ الإشعارات لا رقمُ المبيعات.
+             *
+             * و«واحدةٌ لا اثنتان» أعلاه صارت «واحدةٌ لكلّ غرض»: رقمُ مبيعات
+             * افنت بلس وصلةٌ ثانية مشروعة، ولولا الشرطُ لَسحبها هذا الباب
+             * وجعلها رقمَ الإشعارات — فتخرج إشعاراتُ كلّ المتاجر من رقمٍ
+             * لا يعرفه زبائنُهم.
+             */
+            'purpose' => WhatsAppMode::PURPOSE_NOTIFICATIONS,
+            'business_id' => null,
+            'provider' => 'meta_cloud',
+            'waba_id' => $data['waba_id'] ?? null,
+            'phone_number_id' => $data['phone_number_id'],
+            'display_phone_number' => $data['display_phone_number'] ?? null,
+            'access_token' => $data['access_token'],
+            'status' => WhatsAppConnection::ACTIVE,
+            'connected_at' => now(),
+            'disconnected_at' => null,
+        ];
+
+        // رقمٌ مربوطٌ بمتجرٍ آخر لا يُسحب منه هنا: الفهرس الفريد يرفض، ويُقال لماذا
+        $clash = WhatsAppConnection::where('phone_number_id', $data['phone_number_id'])
+            ->when($existing, fn ($q) => $q->where('id', '!=', $existing->id))->exists();
+
+        if ($clash) {
+            return back()->withErrors([
+                'phone_number_id' => __('هذا الرقم مربوطٌ بوصلةٍ أخرى في النظام.'),
+            ]);
+        }
+
+        $connection = $existing
+            ? tap($existing)->update($attributes)
+            : WhatsAppConnection::create($attributes);
+
+        // قوالب افنت بلس الأربعة تُهيَّأ مع الوصلة — وصلةٌ بلا قوالب لا تُرسل شيئًا
+        WhatsAppTemplates::seedPlatformDefaults((string) config('whatsapp.language', 'ar'));
+
+        Activity::log('settings', 'ربط رقم واتساب المشترك لافنت بلس ('.($data['display_phone_number'] ?? $data['phone_number_id']).')');
+
+        return back()->with('toast', [
+            'msg' => __('تم ربط رقم واتساب المشترك'),
+            'type' => 'success',
+        ]);
+    }
+
+    /**
+     * فصل الرقم المشترك — تعطيلٌ لا حذف.
+     *
+     * الحذف يُفقد تاريخ الرسائل صلتَه بوصلتها، ويجعل إشعارًا متأخّرًا من ميتا
+     * يصل إلى رقمٍ لا نعرفه. والتعطيل يوقف الإرسال ويُبقي الأثر.
+     */
+    public function disconnectShared()
+    {
+        $connection = WhatsAppConnection::query()->platform()
+            ->where('purpose', WhatsAppMode::PURPOSE_NOTIFICATIONS)
+            ->orderByDesc('id')->first();
+
+        if ($connection) {
+            $connection->update([
+                'status' => WhatsAppConnection::INACTIVE,
+                'disconnected_at' => now(),
+            ]);
+            Activity::log('settings', 'فصل رقم واتساب المشترك لافنت بلس');
+        }
+
+        return back()->with('toast', ['msg' => __('فُصل الرقم المشترك'), 'type' => 'success']);
+    }
+
+    /**
+     * ربطُ رقم مبيعات افنت بلس — وصلةٌ ثانيةٌ للمنصّة بغرضٍ آخر.
+     *
+     * ═══ ولمَ رقمٌ ثانٍ لا مقبضٌ على الأوّل ═══
+     *
+     * رقمُ الإشعارات يُرسل نيابةً عن المحلّات فيردّ عليه **زبائنُهم**، ولا
+     * يُخزَّن من وارده إلّا ما طابق مستخدمًا له متجر. ورقمُ المبيعات يحتاج
+     * عكسَ ذلك: أن يُقرأ الواردُ من **رقمٍ مجهول** — فالعميلُ المحتمَل ليس
+     * مستخدمًا عندنا بعد.
+     *
+     * والشرطان لا يجتمعان: مقبضٌ يفتح المجهولَ على رقم الإشعارات يجعل كلَّ
+     * زبونةِ محلِّ ورودٍ سألت عن هديّتها عميلًا محتملًا في دفتر مبيعاتنا،
+     * ونصَّ رسالتها مقروءًا في لوحة المنصّة.
+     *
+     * والوارد على هذا الرقم يُقرأ بلا مقبض: رقمٌ لا غرضَ له غيرُ هذا.
+     */
+    public function connectSales(Request $request)
+    {
+        $data = $request->validate([
+            'phone_number_id' => ['required', 'string', 'max:100'],
+            'waba_id' => ['nullable', 'string', 'max:100'],
+            'display_phone_number' => ['nullable', 'string', 'max:32'],
+            'access_token' => ['required', 'string', 'min:20', 'max:1000'],
+        ], [
+            'access_token.required' => __('الصق رمز الوصول الدائم من لوحة ميتا.'),
+        ]);
+
+        $existing = WhatsAppConnection::query()->platform()
+            ->where('purpose', WhatsAppMode::PURPOSE_CRM_SALES)
+            ->orderByDesc('id')->first();
+
+        /*
+         * ورقمُ المبيعات لا يكون رقمَ الإشعارات نفسَه.
+         *
+         * الفهرسُ الفريدُ على `phone_number_id` يردُّه أصلًا، لكنّ رسالةً
+         * تُقرأ خيرٌ من خطأِ قاعدةٍ يصير صفحةَ خمسمئة. والسببُ يُقال: رقمٌ
+         * واحدٌ لا يخدم الغرضين — لأنّه إمّا يقرأ المجهول أو لا يقرؤه.
+         */
+        $clash = WhatsAppConnection::where('phone_number_id', $data['phone_number_id'])
+            ->when($existing, fn ($q) => $q->where('id', '!=', $existing->id))->exists();
+
+        if ($clash) {
+            return back()->withErrors([
+                'phone_number_id' => __('هذا الرقم مربوطٌ بوصلةٍ أخرى — ورقمُ المبيعات لا يكون رقمَ الإشعارات نفسَه.'),
+            ]);
+        }
+
+        $attributes = [
+            'owner_type' => WhatsAppMode::OWNER_PLATFORM,
+            'purpose' => WhatsAppMode::PURPOSE_CRM_SALES,
+            'business_id' => null,
+            'provider' => 'meta_cloud',
+            'waba_id' => $data['waba_id'] ?? null,
+            'phone_number_id' => $data['phone_number_id'],
+            'display_phone_number' => $data['display_phone_number'] ?? null,
+            'access_token' => $data['access_token'],
+            /*
+             * ولا يُشعَل `supports_inbox` هنا.
+             *
+             * ذاك مقبضُ مركز المحادثات على رقم الإشعارات. والوارد على رقم
+             * المبيعات يُقرأ من غرضه لا من مقبضٍ ثانٍ — ومقبضان لبابٍ واحد
+             * يُنسى أحدهما فيُظنّ الرقمُ موصولًا ولا يصل شيء.
+             */
+            'status' => WhatsAppConnection::ACTIVE,
+            'connected_at' => now(),
+            'disconnected_at' => null,
+        ];
+
+        $existing ? $existing->update($attributes) : WhatsAppConnection::create($attributes);
+
+        Activity::log('settings', 'ربط رقم واتساب مبيعات افنت بلس ('.($data['display_phone_number'] ?? $data['phone_number_id']).')');
+
+        return back()->with('toast', ['msg' => __('تم ربط رقم المبيعات'), 'type' => 'success']);
+    }
+
+    /** فصلُ رقم المبيعات — تعطيلٌ لا حذف، فالخيوطُ تبقى مقروءة */
+    public function disconnectSales()
+    {
+        $connection = WhatsAppConnection::query()->platform()
+            ->where('purpose', WhatsAppMode::PURPOSE_CRM_SALES)
+            ->orderByDesc('id')->first();
+
+        if ($connection) {
+            $connection->update([
+                'status' => WhatsAppConnection::INACTIVE,
+                'disconnected_at' => now(),
+            ]);
+            Activity::log('settings', 'فصل رقم واتساب مبيعات افنت بلس');
+        }
+
+        return back()->with('toast', ['msg' => __('فُصل رقم المبيعات'), 'type' => 'success']);
+    }
+
+    /**
+     * فتحُ الوارد على الرقم المشترك — أو إغلاقُه.
+     *
+     * ═══ ولمَ هو مقبضٌ صريحٌ لا استنتاج ═══
+     *
+     * الرقمُ يُرسل إشعاراتِ الطلبات **نيابةً عن المحلّات**، فيردّ عليه
+     * زبائنُهم. وفتحُ الوارد بلا قرارٍ يعني أنّ ردودَ الزبائن تصير مادّةً
+     * تُقرأ — ولو أُسقط منها ما لا يُطابق مستخدمًا، فالقرارُ في فتح الباب
+     * لا في ما يُصفّى بعده.
+     *
+     * وما يُخزَّن بعد الفتح محدودٌ في `SupportWhatsApp::receive`: رقمٌ
+     * يُطابق مستخدمًا **واحدًا** له متجر، وما عداه يُسقَط ولا يُكتب.
+     */
+    public function supportInbox(Request $request)
+    {
+        $data = $request->validate(['supports_inbox' => ['required', 'boolean']]);
+
+        /* ورقمُ الإشعارات وحده: بابُ المبيعات يُفتح من شاشة CRM بغرضه */
+        $connection = WhatsAppConnection::query()->platform()
+            ->where('purpose', WhatsAppMode::PURPOSE_NOTIFICATIONS)
+            ->orderByDesc('id')->first();
+
+        // ولا يُفتح بابٌ على رقمٍ لا وجود له
+        if (! $connection) {
+            return back()->withErrors([
+                'supports_inbox' => __('اربط رقم افنت بلس المشترك أوّلًا.'),
+            ]);
+        }
+
+        $connection->update(['supports_inbox' => $data['supports_inbox']]);
+
+        Activity::log('settings', $data['supports_inbox']
+            ? 'فُتح استقبال رسائل الدعم على رقم افنت بلس المشترك'
+            : 'أُغلق استقبال رسائل الدعم على رقم افنت بلس المشترك');
+
+        return back()->with('toast', [
+            'msg' => $data['supports_inbox']
+                ? __('يُقرأ الواردُ الآن في مركز المحادثات')
+                : __('أُغلق الوارد — لا رسالةَ تُخزَّن'),
+            'type' => 'success',
+        ]);
+    }
+
+    /**
+     * ضبط واتساب لمتجرٍ بعينه — التفعيل والحدّ وإذن الرقم الخاص.
+     *
+     * والحقول تُكتب حين تُرسل وحدها: نموذجٌ يُرسل حقلًا واحدًا لا يمحو الثلاثة
+     * الأخرى.
+     */
+    public function updateBusiness(Request $request, int $id)
+    {
+        $business = Business::findOrFail($id);
+
+        $data = $request->validate([
+            'whatsapp_enabled' => ['sometimes', 'boolean'],
+            'whatsapp_own_allowed' => ['sometimes', 'boolean'],
+            /*
+             * الحدّ: فارغٌ يعني «افتراضيّ المنصّة»، و‎-1 بلا حدّ.
+             *
+             * ولا تُنسخ قيمة الافتراضيّ هنا: لو نُسخت لَما غيّرها تعديلُ
+             * الافتراضيّ في مئة متجر.
+             */
+            'whatsapp_monthly_limit' => ['sometimes', 'nullable', 'integer', 'min:-1', 'max:1000000'],
+            'whatsapp_mode' => ['sometimes', Rule::in(WhatsAppMode::ALL)],
+        ]);
+
+        $before = $business->only(['whatsapp_enabled', 'whatsapp_own_allowed', 'whatsapp_monthly_limit', 'whatsapp_mode']);
+
+        /*
+         * وضعٌ خاصٌّ بلا إذنٍ لا يُكتب.
+         *
+         * ولو كُتب لَبقي المتجر في وضعٍ لا يُرسل منه شيء ولا يقول أحدٌ لماذا.
+         */
+        if (($data['whatsapp_mode'] ?? null) === WhatsAppMode::BUSINESS_OWN
+            && ! ($data['whatsapp_own_allowed'] ?? $business->whatsapp_own_allowed)) {
+            return back()->withErrors([
+                'whatsapp_mode' => __('لا يمكن اختيار رقم المتجر قبل منحه صلاحية الرقم الخاص.'),
+            ]);
+        }
+
+        $business->update($data);
+
+        $this->logChanges($business, $before, $business->only(array_keys($before)));
+
+        return back()->with('toast', ['msg' => __('حُفظت إعدادات واتساب للمتجر'), 'type' => 'success']);
+    }
+
+    /** ما تغيّر يُقيَّد بقيمته القديمة والجديدة — والأذونات أوّل ما يُسأل عنه لاحقًا */
+    private function logChanges(Business $business, array $before, array $after): void
+    {
+        $labels = [
+            'whatsapp_enabled' => 'تفعيل واتساب',
+            'whatsapp_own_allowed' => 'صلاحية الرقم الخاص',
+            'whatsapp_monthly_limit' => 'حدّ الرسائل الشهري',
+            'whatsapp_mode' => 'وضع الإرسال',
+        ];
+
+        foreach ($labels as $field => $label) {
+            if (($before[$field] ?? null) == ($after[$field] ?? null)) {
+                continue;
+            }
+
+            $show = fn ($v) => $v === null ? __('افتراضي المنصّة') : (is_bool($v) ? ($v ? __('مفعّل') : __('مطفأ')) : (string) $v);
+
+            Activity::log('settings', 'واتساب — '.__($label).' للمتجر «'.$business->name.'»: '
+                .$show($before[$field] ?? null).' ← '.$show($after[$field] ?? null), [
+                    'subject_id' => $business->id,
+                    'subject_type' => 'business',
+                ]);
+        }
+    }
+
+    /** صورة استهلاك متجرٍ — تُقرأ في شاشة المتجر لدى المنصّة */
+    public static function businessView(Business $business): array
+    {
+        $own = WhatsAppConnections::forBusiness($business->id);
+
+        return [
+            'enabled' => (bool) $business->whatsapp_enabled,
+            'mode' => $business->whatsapp_mode,
+            'own_allowed' => (bool) $business->whatsapp_own_allowed,
+            'limit_override' => $business->whatsapp_monthly_limit,
+            'platform_default' => WhatsAppQuota::platformDefault(),
+            'usage' => WhatsAppQuota::snapshot($business),
+            // معرّفات الوصلة تُعرض لمدير المنصّة وحده — لا الرمز، هو لا يُقرأ أبدًا
+            'own_connection' => WhatsAppConnections::publicView($own, withIds: true),
+        ];
+    }
+}

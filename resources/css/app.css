@@ -1,0 +1,465 @@
+@import 'tailwindcss';
+
+@source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
+@source '../../storage/framework/views/*.php';
+@source '../views/**/*.blade.php';
+
+@theme {
+    /* الخطوط */
+    --font-sans: 'IBM Plex Sans Arabic', 'Tajawal', 'Cairo', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji';
+
+    /* اللون الأساسي — بنفسجي هادئ */
+    --color-primary-50: #f5f3ff;
+    --color-primary-100: #ede9fe;
+    --color-primary-200: #ddd6fe;
+    --color-primary-300: #c4b5fd;
+    --color-primary-400: #a78bfa;
+    --color-primary-500: #8b5cf6;
+    --color-primary-600: #7c3aed;
+    --color-primary-700: #6d28d9;
+    --color-primary-800: #5b21b6;
+    --color-primary-900: #4c1d95;
+    --color-primary-950: #2e1065;
+
+    /* اللون الثانوي — وردي لمحلات الورود */
+    --color-secondary-50: #fdf2f8;
+    --color-secondary-100: #fce7f3;
+    --color-secondary-200: #fbcfe8;
+    --color-secondary-300: #f9a8d4;
+    --color-secondary-400: #f472b6;
+    --color-secondary-500: #ec4899;
+    --color-secondary-600: #db2777;
+    --color-secondary-700: #be185d;
+    --color-secondary-800: #9d174d;
+    --color-secondary-900: #831843;
+
+    /* حالات */
+    --color-success-50: #ecfdf5;
+    --color-success-500: #10b981;
+    --color-success-600: #059669;
+    --color-success-700: #047857;
+    --color-warning-50: #fffbeb;
+    --color-warning-500: #f59e0b;
+    --color-warning-600: #d97706;
+    --color-danger-50: #fef2f2;
+    --color-danger-500: #ef4444;
+    --color-danger-600: #dc2626;
+    --color-danger-700: #b91c1c;
+    --color-info-50: #eff6ff;
+    --color-info-500: #3b82f6;
+    --color-info-600: #2563eb;
+}
+
+@layer base {
+    /*
+     * الاتجاه يأتي من سمة dir على <html> التي يضبطها قالب الجذر حسب اللغة،
+     * ولا يُفرض هنا. كان مثبّتًا على rtl فتبقى الواجهة الإنجليزية معكوسة
+     * وتنقلب معها كل الخصائص المنطقية (start/end وms/me).
+     */
+    html:not([dir]) {
+        direction: rtl;
+    }
+
+    /*
+     * scrollbar-gutter يحجز مكان الشريط دائمًا، فلا تنزلق الصفحة أفقيًا حين
+     * ينتقل المستخدم من صفحة طويلة (فيها شريط) إلى قصيرة (بلا شريط).
+     */
+    html {
+        scrollbar-gutter: stable;
+        /*
+         * لا ارتدادَ مطّاطيًّا عند طرفَي الصفحة. على الآيباد يسحب التمرير
+         * الصفحةَ كلّها بعد نهايتها، فتنزلق الترويسة المثبّتة مع ما تحتها
+         * ثم ترتدّ — فتبدو غيرَ مثبّتة وإن كانت.
+         */
+        overscroll-behavior-y: none;
+    }
+
+    body {
+        font-family: var(--font-sans);
+        background-color: #f4f5f7;
+        color: #1f2937;
+        -webkit-font-smoothing: antialiased;
+        /*
+         * لا تمرير أفقي غير مقصود مهما فاض عنصر داخلي.
+         *
+         * وclip لا hidden: hidden يجعل الجسم حاويةَ تمرير، فيصير هو مرجعَ كل
+         * عنصر sticky بداخله — وهو لا يتمرّر — فيسقط التثبيت في سفاري. وclip
+         * يقصّ الفائض بلا حاوية تمرير، فيبقى المرجع نافذةَ العرض.
+         */
+        overflow-x: clip;
+    }
+
+    /*
+     * حلقة تركيز موحّدة لكل عنصر تفاعلي لا يعرّف حلقته بنفسه — outline تُرسم
+     * خارج الصندوق فلا تُزيح شيئًا، بخلاف border الذي يغيّر الافنت بلس.
+     *
+     * مكوّن Button يضبط focus-visible:outline-none وحلقته الخاصة، وطبقة
+     * utilities تسبق base فتفوز عليها — فلا ازدواج.
+     */
+    button:focus-visible,
+    a:focus-visible,
+    [role='button']:focus-visible,
+    [tabindex]:focus-visible {
+        outline: 2px solid var(--ring, rgba(17, 17, 17, 0.35));
+        outline-offset: 2px;
+    }
+
+    ::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+    }
+    ::-webkit-scrollbar-track {
+        background: transparent;
+    }
+    ::-webkit-scrollbar-thumb {
+        background: #cbd5e1;
+        border-radius: 9999px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+        background: #94a3b8;
+    }
+}
+
+/* إخفاء العناصر حتى تحميل Alpine */
+[x-cloak] {
+    display: none !important;
+}
+
+/*
+ * أيقونات Lucide زخرفية: تمرّر النقر إلى الزر/الرابط الحاوي.
+ * السبب: مراقب DOM يعيد رسم الأيقونات (يستبدل عنصرها) عند أي تغيير في الصفحة،
+ * فلو بدأت النقرة على الأيقونة واستُبدلت قبل رفع الفأرة تضيع ضغطة الإغلاق.
+ * بتمرير النقر إلى الزر (وهو عنصر ثابت لا يُستبدل) تبقى الضغطة مضمونة دائمًا.
+ * ملاحظة: الاستثناء لأيقونات lucide وحدها — مخططات الواجهة SVG يدوية وتحتاج النقر لتلميحاتها.
+ */
+svg.lucide,
+i[data-lucide] {
+    pointer-events: none;
+}
+
+/* إخفاء شريط التمرير مع إبقاء إمكانية التمرير */
+.no-scrollbar::-webkit-scrollbar {
+    display: none;
+}
+.no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+}
+
+/* ===== ثيمة نقطة البيع (POS) بأسلوب Apple — بسيطة ومحايدة ===== */
+.pos-scope {
+    /* خلفية موحّدة مع بقية الصفحات */
+    background-color: #f7f8f9;
+    letter-spacing: -0.01em;
+}
+/* حلقة تركيز محايدة وناعمة بدل الألوان */
+.pos-scope input:not([type='checkbox']):not([type='radio']):focus,
+.pos-scope select:focus,
+.pos-scope textarea:focus {
+    border-color: #d1d5db !important;
+    box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.05) !important;
+    outline: none !important;
+}
+/* تحييد أي حلقة تركيز ملوّنة قادمة من المكوّنات المشتركة داخل POS */
+.pos-scope *:focus {
+    --tw-ring-color: rgba(0, 0, 0, 0.12) !important;
+}
+/* مربعات الاختيار باللون الأسود بدل البنفسجي */
+.pos-scope input[type='checkbox'],
+.pos-scope input[type='radio'] {
+    accent-color: #111827;
+}
+/* ظلال أنعم وحواف أهدأ للبطاقات داخل POS */
+.pos-scope .shadow-sm {
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04) !important;
+}
+.pos-scope .shadow-md {
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06) !important;
+}
+/* حدود رمادية فاتحة موحّدة */
+.pos-scope .border-gray-100 {
+    border-color: #ececed !important;
+}
+
+/* ===== الأجهزة اللوحية: الآيباد وما شابهه ===== */
+
+/*
+ * سفاري يُكبّر الصفحة عند التركيز على حقلٍ خطُّه أصغر من ١٦ بكسل — ولا
+ * يُرجعها. الحقول هنا `text-sm` (١٤)، فكلُّ ضغطةٍ على حقل بحثٍ أو سعر كانت
+ * تُكبّر الشاشة وتترك الكاشير يجرّها بإصبعه ليجد زرَّ الدفع. والعلاج أن
+ * يُرفع الخطُّ لا أن يُمنع التكبير: منعُه يقفل الطريق على من يحتاجه فعلًا.
+ *
+ * وعلى الأجهزة ذات المؤشّر الدقيق (فأرة) يبقى ١٤ كما صُمّم.
+ */
+@media (pointer: coarse) {
+    input:not([type='checkbox']):not([type='radio']),
+    select,
+    textarea {
+        font-size: 16px;
+    }
+
+    /*
+     * ولا وميضَ أزرقَ عند اللمس، ولا قائمةَ نسخٍ عند الضغط المطوّل على زرّ.
+     * الكاشير يضغط المنتجات بسرعة، والضغطةُ التي تطول قليلًا كانت تفتح
+     * قائمةَ النظام فوق الشبكة.
+     */
+    .pos-scope,
+    .admin-ui {
+        -webkit-tap-highlight-color: transparent;
+    }
+
+    .pos-scope button,
+    .pos-scope a,
+    .pos-scope [role='button'],
+    .admin-ui button,
+    .admin-ui [role='button'] {
+        -webkit-touch-callout: none;
+    }
+}
+
+/* ما تحت الشريط السفليّ للجهاز لا يُبنى عليه — يحتاج viewport-fit=cover */
+.pos-scope,
+.admin-ui {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* أنماط الطباعة الحرارية 80mm */
+@media print {
+    body * {
+        visibility: hidden;
+    }
+    .thermal-receipt,
+    .thermal-receipt * {
+        visibility: visible;
+    }
+    .thermal-receipt {
+        position: absolute;
+        top: 0;
+        right: 0;
+        width: 80mm;
+    }
+    .no-print {
+        display: none !important;
+    }
+
+    /*
+     * تقريرٌ يُطبع من نافذته — ورقةٌ لا شريط.
+     *
+     * القاعدة أعلاه تُخفي الصفحة كلّها إلا الإيصال الحراري، فزرّ «طباعة» في
+     * عارض التقارير كان يُخرج ورقةً بيضاء: زرٌّ يقول شيئًا ولا يفعله. والتقرير
+     * ليس إيصالًا فلا يُقصّ إلى ٨٠ ملم؛ يأخذ عرض الورقة كاملًا.
+     *
+     * وصارت للصفحة بعد أن صار لكلّ تقريرٍ صفحته: كانت تكشف نافذةً مطلقةَ
+     * الموضع فاحتاجت معها أدوات `print:` تُبطل توسيطها. والصفحة في مجرى
+     * المستند أصلًا، فيكفيها الكشف — ويبقى `.no-print` يطوي عنها الأدوات.
+     *
+     * وبقيت بعد رفع زرّ الطباعة من التقارير: التصدير هو الطريق المعتمد،
+     * لكنّ Ctrl+P يبقى بيد القارئ — وبلا هذه القاعدة يُخرج ورقةً بيضاء.
+     *
+     * والمُحدِّد بنسله (`*`) لأنّ الإخفاء أعلاه يطال النسل كلَّه، ولا تُعبّر
+     * عنه أدوات تيلويند.
+     */
+    .printable-report,
+    .printable-report * {
+        visibility: visible;
+    }
+}
+
+/* =====================================================================
+   Admin UI — نظام تصميم مستوحى من Apple (نظيف، هادئ، مصقول)
+   مُنطاق بالكامل داخل .admin-ui فلا يمسّ POS أو لوحة المنصة.
+   ===================================================================== */
+.admin-ui {
+    --ui-bg: #f7f8f9;
+    --ui-surface: #ffffff;
+    --ui-border: #e8e8e8;
+    --ui-border-strong: #dcdcdc;
+    --ui-text: #111111;
+    --ui-muted: #6b7280;
+    --ui-muted-2: #9ca3af;
+    --ui-accent: #111111;
+    --ui-radius: 16px;
+    background-color: var(--ui-bg);
+    color: var(--ui-text);
+    font-family: 'IBM Plex Sans Arabic', -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display',
+        'Segoe UI', system-ui, sans-serif;
+    letter-spacing: -0.011em;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+}
+.admin-ui h1, .admin-ui h2, .admin-ui h3 { letter-spacing: -0.021em; }
+/* طبقة إعادة تلوين primary/secondary القديمة حُذفت: لم يبقَ داخل .admin-ui
+   أي عنصر يستعمل تلك الصفوف بعد تحويل الواجهة إلى React. */
+/* --- تنعيم الأسطح: حدود أرقّ، ظلال أخفت، زوايا ألطف عبر كل صفحات اللوحة --- */
+.admin-ui .border-gray-100, .admin-ui .border-gray-200 { border-color: var(--ui-border) !important; }
+.admin-ui .shadow-sm { box-shadow: 0 1px 2px rgba(17,17,17,0.035) !important; }
+.admin-ui .shadow, .admin-ui .shadow-md { box-shadow: 0 6px 24px -8px rgba(17,17,17,0.10) !important; }
+.admin-ui .shadow-lg, .admin-ui .shadow-xl { box-shadow: 0 20px 48px -16px rgba(17,17,17,0.16) !important; }
+.admin-ui .rounded-2xl { border-radius: var(--ui-radius) !important; }
+.admin-ui .bg-gray-50 { background-color: #fafafa !important; }
+.admin-ui .text-gray-800, .admin-ui .text-gray-900 { color: var(--ui-text) !important; }
+.admin-ui .text-gray-500, .admin-ui .text-gray-400 { color: var(--ui-muted) !important; }
+
+/* --- بطاقة أساسية --- */
+.ui-card {
+    background: var(--ui-surface);
+    border: 1px solid var(--ui-border);
+    border-radius: var(--ui-radius);
+    box-shadow: 0 1px 2px rgba(17,17,17,0.035);
+}
+.ui-card-hover { transition: box-shadow .2s ease, transform .2s ease, border-color .2s ease; }
+.ui-card-hover:hover { box-shadow: 0 8px 30px -12px rgba(17,17,17,0.14); border-color: var(--ui-border-strong); }
+
+/* --- أزرار --- */
+.ui-btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem;
+    height: 40px; padding: 0 1rem; border-radius: 999px;
+    font-size: 0.875rem; font-weight: 550; line-height: 1;
+    border: 1px solid transparent; cursor: pointer; white-space: nowrap;
+    transition: background-color .18s ease, border-color .18s ease, transform .12s ease, box-shadow .18s ease;
+}
+.ui-btn:active { transform: scale(0.975); }
+.ui-btn-primary { background: #111; color: #fff; box-shadow: 0 1px 2px rgba(17,17,17,0.18); }
+.ui-btn-primary:hover { background: #000; }
+.ui-btn-secondary { background: #fff; color: #111; border-color: var(--ui-border-strong); }
+.ui-btn-secondary:hover { background: #f7f7f5; }
+.ui-btn-ghost { background: transparent; color: var(--ui-muted); }
+.ui-btn-ghost:hover { background: rgba(17,17,17,0.05); color: #111; }
+.ui-btn-sm { height: 34px; padding: 0 0.75rem; font-size: 0.8125rem; }
+
+/* --- مدخلات --- */
+.ui-input {
+    width: 100%; height: 42px; padding: 0 0.875rem;
+    background: #fff; border: 1px solid var(--ui-border-strong);
+    border-radius: 12px; font-size: 0.875rem; color: var(--ui-text);
+    transition: border-color .18s ease, box-shadow .18s ease;
+    -webkit-appearance: none; appearance: none;
+}
+.ui-input::placeholder { color: var(--ui-muted-2); }
+
+/*
+ * ١٦ بكسل في حقول الأجهزة اللمسية — ليست مسألة قياسٍ بل مسألة موضع.
+ *
+ * سفاري على الآيباد يُكبّر الصفحة تلقائيًّا عند دخول حقلٍ خطُّه أدنى من ١٦
+ * بكسل، وحقولنا كلّها ١٤. فيقفز العرض عند أوّل لمسة، ثم لا يعود إلى مقاسه
+ * حين تُغلق لوحة المفاتيح — يبقى مكبَّرًا وقد انتقل المشهد، فيجد المستخدم
+ * نفسه خارج القسم الذي كان يكتب فيه ويظنّ أن الحفظ نقله. ولا شيء نُقل.
+ *
+ * والعلاج الآخر — maximum-scale=1 في وسم viewport — يوقف التكبير بالإصبع
+ * على الصفحة كلّها، فيمنع ضعيفَ البصر من قراءة النظام. هذا يخصّ الحقول
+ * وحدها ولا يمسّ غيرها.
+ *
+ * و‎!important‎ لأن القياس يأتي من أدوات Tailwind على كل حقلٍ بعينه، وطبقتها
+ * أقوى من أي قاعدةٍ عامة هنا. ولا حقلَ في النظام أكبر من ١٦ فلا شيء يصغر.
+ */
+@media (hover: none) and (pointer: coarse) {
+    input:not([type='checkbox']):not([type='radio']):not([type='range']),
+    select,
+    textarea {
+        font-size: 16px !important;
+    }
+}
+.ui-input:focus {
+    outline: none; border-color: #111;
+    box-shadow: 0 0 0 4px rgba(17,17,17,0.08);
+}
+
+/* --- شارات --- */
+.ui-chip {
+    display: inline-flex; align-items: center; gap: 0.375rem;
+    padding: 0.25rem 0.625rem; border-radius: 9999px;
+    font-size: 0.75rem; font-weight: 550;
+    background: #f2f2f0; color: #444; border: 1px solid var(--ui-border);
+}
+
+/* --- جدول أنيق (Linear/Stripe) --- */
+.ui-table-wrap { background: #fff; border: 1px solid var(--ui-border); border-radius: var(--ui-radius); overflow: hidden; }
+.ui-table { width: 100%; border-collapse: separate; border-spacing: 0; }
+.ui-table thead th {
+    position: sticky; top: 0; z-index: 1;
+    background: #fbfbfa; text-align: right;
+    padding: 0.75rem 1.25rem; font-size: 0.75rem; font-weight: 600;
+    color: var(--ui-muted); letter-spacing: 0; border-bottom: 1px solid var(--ui-border);
+}
+.ui-table tbody td { padding: 0.9rem 1.25rem; font-size: 0.875rem; color: var(--ui-text); border-bottom: 1px solid #f2f2f0; }
+.ui-table tbody tr:last-child td { border-bottom: 0; }
+.ui-table tbody tr { transition: background-color .15s ease; }
+.ui-table tbody tr:hover { background: #fafafa; }
+
+/* --- حركات لطيفة (150–250ms) --- */
+@keyframes ui-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+.admin-ui [data-animate] { animation: ui-in .28s cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+/* --- شريط جانبي --- */
+.ui-nav-link {
+    position: relative; display: flex; align-items: center; gap: 0.75rem;
+    padding: 0.5rem 0.75rem; border-radius: 10px;
+    font-size: 0.875rem; font-weight: 500; color: #4b4b4b;
+    transition: background-color .15s ease, color .15s ease;
+}
+.ui-nav-link:hover { background: rgba(17,17,17,0.045); color: #111; }
+.ui-nav-link.is-active { background: #f2f2f0; color: #111; font-weight: 650; }
+.ui-nav-link.is-active::before {
+    content: ''; position: absolute; inset-inline-start: -0.75rem; top: 50%;
+    transform: translateY(-50%); width: 3px; height: 18px; border-radius: 9999px; background: #111;
+}
+.admin-ui ::-webkit-scrollbar-thumb { background: #d8d8d4; }
+
+/* =====================================================================
+   رموز shadcn/ui — مربوطة بلوحة .admin-ui القائمة
+   الهدف: مكوّنات React تبدو مطابقة تمامًا للتصميم الحالي بلا ثيمة موازية.
+   ===================================================================== */
+@theme {
+    --radius-ui: 16px;
+}
+
+:root,
+.admin-ui,
+.pos-scope {
+    --background: #f7f8f9;
+    --foreground: #111111;
+
+    --card: #ffffff;
+    --card-foreground: #111111;
+    --popover: #ffffff;
+    --popover-foreground: #111111;
+
+    /* اللكنة سوداء كما في التصميم الحالي، لا بنفسجية */
+    --primary: #111111;
+    --primary-foreground: #ffffff;
+
+    --secondary: #f2f2f0;
+    --secondary-foreground: #111111;
+
+    --muted: #f2f2f0;
+    --muted-foreground: #6b7280;
+
+    --accent: #f2f2f0;
+    --accent-foreground: #111111;
+
+    --destructive: #dc2626;
+    --destructive-foreground: #ffffff;
+
+    --border: #e8e8e8;
+    --input: #e8e8e8;
+    --ring: rgba(17, 17, 17, 0.12);
+
+    --radius: 12px;
+}
+
+@layer base {
+    * {
+        border-color: var(--border);
+    }
+}
+
+/* حركة Framer Motion تحترم تفضيل تقليل الحركة في النظام */
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
+}

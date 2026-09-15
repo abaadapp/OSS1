@@ -1,0 +1,645 @@
+<?php
+
+namespace App\Http\Controllers\Admin\Purchasing;
+
+use App\Http\Controllers\Controller;
+use App\Models\JournalEntry;
+use App\Models\PurchaseOrder;
+use App\Models\Supplier;
+use App\Models\SupplierInvoice;
+use App\Models\User;
+use App\Support\Activity;
+use App\Support\Demo;
+use App\Support\Document\PaperSize;
+use App\Support\DocumentPaper;
+use App\Support\DocumentRenderer;
+use App\Support\Ledger;
+use App\Support\Pagination;
+use App\Support\Permissions;
+use App\Support\Search;
+use App\Support\Sort;
+use App\Support\SupplierInvoices;
+use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\Rule;
+use Inertia\Inertia;
+use Inertia\Response;
+use RuntimeException;
+
+/**
+ * سندات المورّدين — ما لهم علينا، ومتى يُستحقّ.
+ *
+ * السند هو الباب الذي تدخل منه الذمّة إلى الدفتر: أمر الشراء يُحرّك المخزون
+ * ولا يُنشئ التزامًا (قد يُلغى قبل أن يُفوتر)، والسند يُنشئه. ولهذا يُرحَّل
+ * السند لا الأمر، وإلا ظهر على المتجر دَينٌ لمجرّد أنه طلب بضاعة.
+ *
+ * والسداد قيدٌ ثانٍ لا تعديلٌ للأول: الأوّل يقول «عليّ»، والثاني يقول «دفعتُ».
+ * ودمجُهما يُخفي متى نشأ الدَّين ومتى انتهى.
+ */
+class SupplierInvoiceController extends Controller
+{
+    /**
+     * ما يُرتَّب في سندات الموردين.
+     *
+     * و«المتبقّي» عمودٌ محسوب (الإجمالي ناقص المدفوع) لا عمودَ قاعدة، فيُرتَّب
+     * بالفرق نفسه لا باسمٍ لا وجود له.
+     */
+    private const SORTS = [
+        'reference' => 'supplier_ref',
+        'issued_at' => 'issued_at',
+        'due_at' => 'due_at',
+        'total' => 'total',
+        'status' => 'status',
+    ];
+
+    private function bid(): int
+    {
+        return auth()->user()->business_id ?? Demo::bid();
+    }
+
+    public function index(Request $request): Response
+    {
+        /*
+         * والقراءةُ فعلٌ يُمنح: هذه الشاشة تقول ما على المتجر لمورّديه وبكم
+         * اشترى منهم — وقسمُ «المشتريات» يُمنح لمن يطلب البضاعة.
+         */
+        if (! auth()->user()?->may(Permissions::INVOICE_VIEW)) {
+            abort(403);
+        }
+
+        $bid = $this->bid();
+        Ledger::ensureSystemAccounts($bid);
+
+        $q = SupplierInvoice::where('business_id', $bid)->with(['supplier', 'purchaseOrder']);
+
+        if ($s = Search::term($request)) {
+            $like = Search::like();
+            $q->where(fn ($w) => $w->where('supplier_ref', $like, "%{$s}%")
+                ->orWhere('notes', $like, "%{$s}%")
+                ->orWhereHas('supplier', fn ($sp) => $sp->where('name', $like, "%{$s}%")));
+        }
+        if ($status = $request->query('status')) {
+            $q->where('status', $status);
+        }
+        if ($approval = $request->query('approval')) {
+            $q->where('approval_status', $approval);
+        }
+        if ($supplier = $request->query('supplier')) {
+            $q->where('supplier_id', $supplier);
+        }
+
+        Sort::apply($q, $request, self::SORTS, fn ($w) => $w->orderByDesc('issued_at')->orderByDesc('id'));
+
+        $invoices = $q->paginate(Pagination::perPage($request, 20))->withQueryString();
+
+        $all = SupplierInvoice::where('business_id', $bid)->get();
+
+        /*
+         * ومن بلغ الدفترَ منها يُعرف باستعلامٍ واحد لا باستعلامٍ لكلّ صفّ.
+         *
+         * ويُقرأ لتُرسم المقابض على ما يقبله الخادم: زرُّ حذفٍ على سندٍ أُلغي
+         * — وقيدُه وعكسُه في الدفتر — يفتح حوارَ تأكيدٍ ثمّ يردّه الخادم.
+         */
+        $posted = JournalEntry::where('business_id', $bid)
+            ->where('sourceable_type', SupplierInvoice::class)
+            ->whereIn('sourceable_id', collect($invoices->items())->pluck('id'))
+            ->pluck('sourceable_id')->unique()->flip();
+
+        return Inertia::render('Admin/Purchases/Invoices', [
+            'invoices' => collect($invoices->items())->map(fn ($i) => [
+                'id' => $i->id,
+                'supplier' => $i->supplier?->name ?? '—',
+                'supplier_id' => $i->supplier_id,
+                'reference' => $i->supplier_ref,
+                'order' => $i->purchaseOrder?->number,
+                // ومفتاحُ الأمر معه: الرقمُ يُقرأ، والمفتاحُ يفتح صفحتَه
+                'order_id' => $i->purchase_order_id,
+                'issued_at' => optional($i->issued_at)->format('Y-m-d'),
+                'due_at' => optional($i->due_at)->format('Y-m-d'),
+                'subtotal' => (float) $i->subtotal,
+                'tax' => (float) $i->tax,
+                'total' => (float) $i->total,
+                'paid' => (float) $i->paid,
+                'outstanding' => $i->outstanding(),
+                'status' => $i->status,
+                'approval_status' => $i->approval_status,
+                'match_status' => $i->match_status,
+                'match_notes' => array_values(array_filter(explode("\n", (string) $i->match_notes))),
+                'override_reason' => $i->override_reason,
+                'rejection_reason' => $i->rejection_reason,
+                'attachment' => $i->attachment ? ($i->attachment_name ?: __('فاتورة المورّد')) : null,
+                // قيمةُ ما وصل فعلًا على أمره — الرقمُ الذي يُقابَل به السند
+                'received_value' => $i->purchase_order_id
+                    ? SupplierInvoices::receivedValue((int) $i->purchase_order_id)
+                    : null,
+                'order_total' => $i->purchaseOrder ? (float) $i->purchaseOrder->total : null,
+                'overdue' => $i->isOverdue(),
+                'notes' => $i->notes,
+                // ما يقبله `destroy` بحروفه — لا قاعدةً ثانيةً في الشاشة تفترق عنه
+                'can_delete' => $i->approval_status !== SupplierInvoices::APPROVED
+                    && (float) $i->paid <= 0
+                    && ! $posted->has($i->id),
+            ])->all(),
+            'pagination' => Pagination::meta($invoices),
+            'filters' => $request->only('q', 'status', 'supplier', 'approval')
+                + Sort::params($request, self::SORTS),
+            'sorts' => Sort::keys(self::SORTS),
+            'suppliers' => Supplier::where('business_id', $bid)->orderBy('name')
+                // بلغة الواجهة — القائمة تُقرأ، و`name` يبقى ما يُبحث به
+                ->get(['id', 'name', 'name_en'])
+                ->map(fn ($s) => ['value' => $s->id, 'label' => Demo::ln($s->name, $s->name_en)])->all(),
+            // أوامرُ لم تُفوتَر بعد — ربط السند بأمره يمنع عدّ الشراء مرّتين
+            'orders' => PurchaseOrder::where('business_id', $bid)
+                ->whereDoesntHave('invoices')->orderByDesc('id')->limit(100)
+                ->get(['id', 'number', 'supplier_id', 'total'])
+                ->map(fn ($o) => [
+                    'value' => $o->id,
+                    'label' => $o->number.' — '.number_format((float) $o->total, 3),
+                    'supplier_id' => $o->supplier_id,
+                    'total' => (float) $o->total,
+                ])->all(),
+            /*
+             * والبطاقةُ تقول ما على المتجر — من المعتمَد وحده.
+             *
+             * كانت تجمع كلَّ سندٍ في الجدول أيًّا كانت حالُه: المرفوضُ لا قيدَ
+             * له، والملغى عُكس قيدُه، والمعلَّقُ لم يوقّعه أحدٌ ولا يُسدَّد —
+             * وثلاثتُها كانت تُقرأ دَينًا. والتعريفُ في `SupplierInvoice::scopeOwed`.
+             *
+             * وما ينتظر التوقيع يُقال بعدده في شريطٍ فوق الجدول، لا يُخلط
+             * بالدَّين في رقمٍ واحد.
+             */
+            'summary' => [
+                'count' => $all->count(),
+                'outstanding' => round($all->filter(fn ($i) => $i->owed())->sum(fn ($i) => $i->outstanding()), 3),
+                'overdue' => $all->filter(fn ($i) => $i->isOverdue())->count(),
+                'overdue_value' => round($all->filter(fn ($i) => $i->isOverdue())->sum(fn ($i) => $i->outstanding()), 3),
+            ],
+            'today' => now()->format('Y-m-d'),
+            'pendingCount' => SupplierInvoice::where('business_id', $bid)
+                ->where('approval_status', SupplierInvoices::PENDING)->count(),
+            // ومن يرى الزرّ هو من يملك الفعل
+            'canApprove' => (bool) auth()->user()?->may(Permissions::INVOICE_APPROVE),
+            'canOverride' => (bool) auth()->user()?->may(Permissions::INVOICE_OVERRIDE),
+            'canReject' => (bool) auth()->user()?->may(Permissions::INVOICE_REJECT),
+            'canCreate' => (bool) auth()->user()?->may(Permissions::INVOICE_CREATE),
+            'canPay' => (bool) auth()->user()?->may(Permissions::INVOICE_PAY),
+            'canSeeAttachment' => (bool) auth()->user()?->may(Permissions::ATTACHMENT_VIEW),
+        ]);
+    }
+
+    /**
+     * صفحةُ السند — ما فيه، وما جرى له، وورقتُه.
+     *
+     * ═══ ولمَ لم تكن موجودة ═══
+     *
+     * كان السندُ صفًّا في جدولٍ لا يُفتح: رقمُ المورّد نصٌّ رماديّ، وكلُّ
+     * ما يُعرف عنه يُقرأ من الأعمدة الخمسة الظاهرة. ومن أراد أن يعرف من
+     * اعتمده أو لماذا رُفض أو متى سُدّد منه شيء — لا موضعَ يقوله.
+     *
+     * ═══ وورقةُ هذا السند ليست من صنعنا ═══
+     *
+     * السندُ **ورقةُ المورّد** يسجّلها التاجر عنده: رقمُها رقمُه، وشكلُها
+     * شكلُه. فلا تُولَّد لها ورقةٌ بهويّة افنت بلس — ذاك إصدارُ مستندٍ باسم
+     * غيرِنا. والمرفقُ هو ورقتُها، ويُفتح كما رُفع.
+     *
+     * والورقةُ التي **هي لنا** أمرُ الشراء المرتبط به: هو ما أصدرناه نحن
+     * إلى هذا المورّد بهذه البضاعة. فتُعرض إلى جانب التفاصيل حين يوجد
+     * ارتباط، ويُقال صراحةً إنّها ورقةُ الأمر لا ورقةُ السند.
+     */
+    public function show(int|string $id): Response
+    {
+        if (! auth()->user()?->may(Permissions::INVOICE_VIEW)) {
+            abort(403);
+        }
+
+        $bid = $this->bid();
+
+        $invoice = SupplierInvoice::where('business_id', $bid)
+            ->with(['supplier', 'purchaseOrder.items', 'purchaseOrder.supplier'])
+            ->findOrFail($id);
+
+        $mayAttachment = (bool) auth()->user()?->may(Permissions::ATTACHMENT_VIEW);
+
+        /* وأسماءُ من وقّعوا تُقرأ دفعةً واحدة — لا استعلامًا لكلّ اسم */
+        $actors = User::whereIn('id', array_filter([
+            $invoice->submitted_by, $invoice->approved_by, $invoice->rejected_by,
+        ]))->pluck('name', 'id');
+
+        /*
+         * والسداداتُ تُقرأ من الدفتر لا من عمود «المدفوع».
+         *
+         * العمودُ يقول كم دُفع، والدفترُ يقول **متى ومن أين**. وهو ما
+         * يُسأل عنه عند المراجعة: سُدّد ٣٠ من ١٠٠ — في أيّ يومٍ ومن الصندوق
+         * أم من البنك؟
+         */
+        $payments = JournalEntry::where('business_id', $bid)
+            ->where('sourceable_type', SupplierInvoice::class)
+            ->where('sourceable_id', $invoice->id)
+            ->where('source', 'سداد مورّد')
+            ->with('lines')
+            ->orderBy('entry_date')->orderBy('id')
+            ->get()
+            ->map(fn ($e) => [
+                'number' => $e->number,
+                'at' => optional($e->entry_date)->format('Y-m-d'),
+                'amount' => round((float) $e->lines->sum('debit'), 3),
+            ])->all();
+
+        $po = $invoice->purchaseOrder;
+
+        return Inertia::render('Admin/Purchases/InvoiceShow', [
+            'invoice' => [
+                'id' => $invoice->id,
+                'reference' => $invoice->supplier_ref,
+                'supplier' => $invoice->supplier?->name,
+                'supplier_id' => $invoice->supplier_id,
+                'issued_at' => optional($invoice->issued_at)->format('Y-m-d'),
+                'due_at' => optional($invoice->due_at)->format('Y-m-d'),
+                'subtotal' => (float) $invoice->subtotal,
+                'tax' => (float) $invoice->tax,
+                'total' => (float) $invoice->total,
+                'paid' => (float) $invoice->paid,
+                'outstanding' => $invoice->outstanding(),
+                'status' => $invoice->status,
+                'approval_status' => $invoice->approval_status,
+                'match_status' => $invoice->match_status,
+                'match_notes' => array_values(array_filter(explode("\n", (string) $invoice->match_notes))),
+                'override_reason' => $invoice->override_reason,
+                'rejection_reason' => $invoice->rejection_reason,
+                'overdue' => $invoice->isOverdue(),
+                'notes' => $invoice->notes,
+                'submitted_by' => $actors[$invoice->submitted_by] ?? null,
+                'approved_at' => optional($invoice->approved_at)->format('Y-m-d'),
+                'approved_by' => $actors[$invoice->approved_by] ?? null,
+                'rejected_at' => optional($invoice->rejected_at)->format('Y-m-d'),
+                'rejected_by' => $actors[$invoice->rejected_by] ?? null,
+                /*
+                 * ووجودُ المرفق سؤالٌ غيرُ «هل تقرؤه؟».
+                 *
+                 * من لا يملك فتحَ المرفقات لا يُبنى له رابط — وتقول له
+                 * الشاشة إنّ ثمّة ورقةً لا تُفتح، لا إنّه لا ورقة.
+                 */
+                'has_attachment' => $invoice->attachment !== null,
+                'attachment' => $invoice->attachment && $mayAttachment
+                    ? route('admin.purchases.invoices.attachment', $invoice->id) : null,
+                'attachment_name' => $invoice->attachment
+                    ? ($invoice->attachment_name ?: __('فاتورة المورّد')) : null,
+            ],
+            'payments' => $payments,
+            'order' => $po ? [
+                'id' => $po->id,
+                'number' => $po->number,
+                'total' => (float) $po->total,
+                'received_value' => SupplierInvoices::receivedValue((int) $po->id),
+            ] : null,
+            /*
+             * وورقةُ السند نفسِه — وكانت ورقةَ أمر الشراء.
+             *
+             * السندُ لم يكن له مستند، فوُضعت ورقةُ الأمر مكانها: قاربت
+             * الغرضَ ولم تكن هي. ومن يراجع سندًا بمئتين كان يرى أمامه
+             * أصنافَ أمرٍ إجماليُّه غيرُ إجماليّه — وهو الخلافُ الذي تقيسه
+             * المطابقةُ أصلًا.
+             *
+             * وورقةُ الأمر تبقى على بُعد نقرة: `order.id` يفتح صفحتَه.
+             */
+            'paper' => [
+                'html' => DocumentRenderer::generic($bid, 'supplier_invoice', DocumentPaper::forSupplierInvoice($invoice)),
+                'size' => PaperSize::A4,
+                'url' => route('admin.purchases.invoices.pdf', $invoice->id),
+            ],
+            'can' => [
+                'approve' => (bool) auth()->user()?->may(Permissions::INVOICE_APPROVE),
+                'reject' => (bool) auth()->user()?->may(Permissions::INVOICE_REJECT),
+                'pay' => (bool) auth()->user()?->may(Permissions::INVOICE_PAY),
+            ],
+            'today' => now()->format('Y-m-d'),
+        ]);
+    }
+
+    public function store(Request $request)
+    {
+        if (! auth()->user()?->may(Permissions::INVOICE_CREATE)) {
+            abort(403);
+        }
+
+        $bid = $this->bid();
+
+        $data = $request->validate([
+            'supplier_id' => ['required', Rule::exists('suppliers', 'id')->where('business_id', $bid)],
+            /*
+             * وأمرُ الشراء يكون لهذا المورّد، ولا يكون مفوتَرًا من قبل.
+             *
+             * القائمة في الشاشة تعرض غير المفوتَر وحده — والتحقّق كان يقبل أيّ
+             * رقم. فسندان على أمرٍ واحد يعدّان الشراء مرّتين: دَينٌ مضاعف على
+             * المتجر في حساب الموردين، وتكلفةٌ مضاعفة في المخزون بالدفتر.
+             * وأمرُ مورّدٍ آخر يُعلَّق على سند هذا فيختلط الحسابان.
+             */
+            'purchase_order_id' => [
+                'nullable',
+                Rule::exists('purchase_orders', 'id')->where('business_id', $bid)
+                    ->where(fn ($q) => $q->where('supplier_id', $request->input('supplier_id'))),
+                Rule::unique('supplier_invoices', 'purchase_order_id')->where('business_id', $bid),
+            ],
+            'supplier_ref' => ['required', 'string', 'max:60'],
+            'issued_at' => ['required', 'date'],
+            'due_at' => ['nullable', 'date', 'after_or_equal:issued_at'],
+            'subtotal' => ['required', 'numeric', 'min:0'],
+            'tax' => ['nullable', 'numeric', 'min:0'],
+            'notes' => ['nullable', 'string', 'max:1000'],
+            'attachment' => ['nullable', 'file', 'max:10240', 'extensions:jpg,jpeg,png,pdf,webp,heic'],
+            'approve_now' => ['nullable', 'boolean'],
+            'override_reason' => ['nullable', 'string', 'max:200'],
+        ], [
+            'purchase_order_id.exists' => __('أمر الشراء ليس لهذا المورّد'),
+            'purchase_order_id.unique' => __('هذا الأمر مفوتَرٌ بسندٍ سابق'),
+        ]);
+
+        /*
+         * السند الواحد لا يُدخَل مرّتين.
+         *
+         * القيد الفريد في القاعدة يمنعه، لكنّه يمنعه بخطأ ٥٠٠ لا برسالة —
+         * وهو أكثر أخطاء الإدخال شيوعًا: يُدخِله المحاسب ثم يُدخِله من بعده
+         * ظنًّا أنه لم يُسجَّل، فيتضاعف الدَّين على المتجر.
+         */
+        $exists = SupplierInvoice::where('business_id', $bid)
+            ->where('supplier_id', $data['supplier_id'])
+            ->where('supplier_ref', $data['supplier_ref'])->exists();
+
+        if ($exists) {
+            return back()->withInput()->withErrors([
+                'supplier_ref' => __('سندٌ بهذا الرقم مسجَّل لهذا المورّد أصلًا'),
+            ]);
+        }
+
+        $stored = null;
+        if ($request->hasFile('attachment')) {
+            $file = $request->file('attachment');
+            $data['attachment_name'] = $file->getClientOriginalName();
+            // القرصُ الخاصّ لا العامّ: ورقةُ مورّدٍ فيها أسعارُ شرائك
+            $stored = $data['attachment'] = $file->store("supplier-invoices/{$bid}", 'local');
+        }
+
+        try {
+            /*
+             * والكتابةُ لا تُرحّل.
+             *
+             * كان القيدُ يقع هنا: يُدخله المحاسب فيصير على المتجر دَينٌ في
+             * الدفتر قبل أن يراه أحد. والذمّةُ تنشأ بالاعتماد وحده — انظر
+             * `SupplierInvoices::approve`.
+             *
+             * و«اعتمِد الآن» لمن يملك الفعل: متجرٌ صاحبُه محاسبُه لا يُلزَم
+             * بضغطتين على ورقةٍ كتبها بيده.
+             */
+            $invoice = SupplierInvoices::create($bid, $data, auth()->user());
+
+            if ($request->boolean('approve_now') && auth()->user()?->may(Permissions::INVOICE_APPROVE)) {
+                SupplierInvoices::approve($invoice, auth()->user(), $request->input('override_reason'));
+            }
+        } catch (RuntimeException $e) {
+            if ($stored) {
+                Storage::disk('local')->delete($stored);
+            }
+
+            return back()->withInput()->withErrors(['subtotal' => $e->getMessage()]);
+        }
+
+        return back()->with('toast', [
+            'msg' => $invoice->fresh()->approval_status === SupplierInvoices::APPROVED
+                ? __('سُجّل السند واعتُمد')
+                : __('سُجّل السند — بانتظار الاعتماد'),
+            'type' => 'success',
+        ]);
+    }
+
+    /** اعتمادُ السند — وهنا وحدَه تنشأ الذمّة */
+    public function approve(Request $request, $id)
+    {
+        if (! auth()->user()?->may(Permissions::INVOICE_APPROVE)) {
+            abort(403);
+        }
+
+        $data = $request->validate(['override_reason' => ['nullable', 'string', 'max:200']]);
+        $invoice = SupplierInvoice::where('business_id', $this->bid())->findOrFail($id);
+
+        try {
+            SupplierInvoices::approve($invoice, auth()->user(), $data['override_reason'] ?? null);
+        } catch (RuntimeException $e) {
+            return back()->withErrors(['approve' => $e->getMessage()]);
+        }
+
+        return back()->with('toast', [
+            'msg' => __('اعتُمد السند :n', ['n' => $invoice->supplier_ref]), 'type' => 'success',
+        ]);
+    }
+
+    /**
+     * رفضُ السند — بسببٍ مكتوب، ولا قيدَ له.
+     *
+     * وصلاحيتُه غيرُ صلاحية الاعتماد: الرفضُ لا يُنشئ ذمّةً ولا يكتب قيدًا.
+     */
+    public function reject(Request $request, $id)
+    {
+        if (! auth()->user()?->may(Permissions::INVOICE_REJECT)) {
+            abort(403);
+        }
+
+        $data = $request->validate(['reason' => ['required', 'string', 'max:200']], [], [
+            'reason' => __('سبب الرفض'),
+        ]);
+
+        $invoice = SupplierInvoice::where('business_id', $this->bid())->findOrFail($id);
+
+        try {
+            SupplierInvoices::reject($invoice, $data['reason'], auth()->user());
+        } catch (RuntimeException $e) {
+            return back()->withErrors(['approve' => $e->getMessage()]);
+        }
+
+        return back()->with('toast', ['msg' => __('رُفض السند'), 'type' => 'warning']);
+    }
+
+    /** إلغاءُ سندٍ معتمَد — عكسُ قيده لا محوُه */
+    public function cancel(Request $request, $id)
+    {
+        if (! auth()->user()?->may(Permissions::INVOICE_APPROVE)) {
+            abort(403);
+        }
+
+        $data = $request->validate(['reason' => ['required', 'string', 'max:200']], [], [
+            'reason' => __('سبب الإلغاء'),
+        ]);
+
+        $invoice = SupplierInvoice::where('business_id', $this->bid())->findOrFail($id);
+
+        try {
+            SupplierInvoices::cancel($invoice, $data['reason'], auth()->user());
+        } catch (RuntimeException $e) {
+            return back()->withErrors(['approve' => $e->getMessage()]);
+        }
+
+        return back()->with('toast', ['msg' => __('أُلغي السند وعُكس قيده'), 'type' => 'warning']);
+    }
+
+    /**
+     * تسجيل دفعة على سند — كاملةً أو جزءًا.
+     *
+     * وهو فعلٌ ثالثٌ غيرُ الكتابة وغيرُ الاعتماد: مالٌ يخرج من الصندوق. وكان
+     * يُفتح لكلّ من يملك «المشتريات» — أي لأمين المخزن.
+     */
+    public function pay(Request $request, $id)
+    {
+        if (! auth()->user()?->may(Permissions::INVOICE_PAY)) {
+            abort(403);
+        }
+
+        $bid = $this->bid();
+        $invoice = SupplierInvoice::where('business_id', $bid)->findOrFail($id);
+
+        $data = $request->validate([
+            'amount' => ['required', 'numeric', 'min:0.001'],
+            'paid_at' => ['required', 'date'],
+            'from' => ['required', Rule::in(['cash', 'bank'])],
+        ]);
+
+        /*
+         * ولا يُدفع على سندٍ لم يُعتمد.
+         *
+         * الذمّةُ تنشأ بالاعتماد؛ فسدادٌ قبله يُخرج مالًا من الصندوق مقابل
+         * دَينٍ لا وجود له في الدفتر — يصير حسابُ الموردين مدينًا، وهو حسابٌ
+         * طبيعتُه دائنة، فيُقرأ كأنّ المورّدين يدينون للمتجر.
+         */
+        if ($invoice->approval_status !== SupplierInvoices::APPROVED) {
+            return back()->withErrors([
+                'amount' => __('لا يُسدَّد سندٌ لم يُعتمد — اعتمده أوّلًا.'),
+            ]);
+        }
+
+        $amount = round((float) $data['amount'], 3);
+
+        /*
+         * لا يُدفع أكثر ممّا عليه.
+         *
+         * الزيادة تجعل «المدفوع» يتجاوز «الإجمالي» فيصير المستحقّ سالبًا،
+         * ويُقرأ في مجموع الذمم كأنّ المورّد يدين لنا. وهو خطأ إدخالٍ لا
+         * حالةٌ واقعية: من دفع زيادةً فله سندٌ آخر أو إشعارٌ دائن.
+         */
+        if ($amount - $invoice->outstanding() > 0.0005) {
+            return back()->withErrors([
+                'amount' => __('المستحقّ على هذا السند :v فقط', ['v' => number_format($invoice->outstanding(), 3)]),
+            ]);
+        }
+
+        try {
+            DB::transaction(function () use ($bid, $invoice, $amount, $data) {
+                /*
+                 * والمستحقّ يُقرأ ثانيةً تحت قفل.
+                 *
+                 * الفحص أعلاه يقع على نسخةٍ قُرئت قبل المعاملة. فضغطتان على
+                 * «سداد» بالمبلغ نفسه — وهي أشيع ما يقع حين يبطؤ الردّ —
+                 * تمرّان كلتاهما: يخرج المال مرّتين من الصندوق، ويصير المدفوع
+                 * أكبر من الإجمالي، فيُقرأ المستحقّ سالبًا في مجموع الذمم
+                 * كأنّ المورّد يدين لنا.
+                 */
+                $locked = SupplierInvoice::where('business_id', $bid)
+                    ->lockForUpdate()->findOrFail($invoice->id);
+
+                if ($amount - $locked->outstanding() > 0.0005) {
+                    throw new RuntimeException(__('المستحقّ على هذا السند :v فقط', [
+                        'v' => number_format($locked->outstanding(), 3),
+                    ]));
+                }
+
+                Ledger::post(
+                    $bid,
+                    __('سداد سند مورّد: ').$invoice->supplier_ref,
+                    [
+                        ['account' => 'payable', 'debit' => $amount, 'memo' => $invoice->supplier?->name],
+                        ['account' => $data['from'], 'credit' => $amount],
+                    ],
+                    Carbon::parse($data['paid_at']),
+                    'سداد مورّد',
+                    null,
+                    auth()->id(),
+                    $invoice,
+                );
+
+                $locked->update(['paid' => round((float) $locked->paid + $amount, 3)]);
+                $locked->syncStatus();
+                $invoice->setAttribute('paid', $locked->paid);
+            });
+        } catch (RuntimeException $e) {
+            return back()->withErrors(['amount' => $e->getMessage()]);
+        }
+
+        Activity::log('updated', 'سدّد '.$amount.' على السند '.$invoice->supplier_ref, ['subject_id' => $invoice->id]);
+
+        return back()->with('toast', ['msg' => __('سُجّل السداد'), 'type' => 'success']);
+    }
+
+    public function destroy($id)
+    {
+        // ومن كتب الورقة يرفعها ما دامت لم تُعتمد — والمعتمَدُ محروسٌ أدناه
+        if (! auth()->user()?->may(Permissions::INVOICE_CREATE)) {
+            abort(403);
+        }
+
+        $bid = $this->bid();
+        $invoice = SupplierInvoice::where('business_id', $bid)->findOrFail($id);
+
+        /*
+         * سندٌ سُدّد منه شيء لا يُحذف.
+         *
+         * حذفُه يترك قيد السداد يتيمًا: مالٌ خرج من الصندوق مقابل ذمّةٍ لا
+         * وجود لها، فلا يتوازن حساب الموردين ولا يُعرف لمن دُفع.
+         */
+        /*
+         * وسندٌ اعتُمد لا يُحذف: قيدُه في الدفتر، ومحوُه يمحو الذمّة ويترك
+         * تكلفةَ المخزون مرحَّلةً بلا ما يقابلها. والملغى يُعكس لا يُمحى.
+         */
+        if ($invoice->approval_status === SupplierInvoices::APPROVED) {
+            return back()->with('toast', [
+                'msg' => __('سندٌ معتمَد لا يُحذف — أَلغِه فيُعكس قيدُه'),
+                'type' => 'warning',
+            ]);
+        }
+
+        if ((float) $invoice->paid > 0) {
+            return back()->with('toast', [
+                'msg' => __('سُدّد من هذا السند — لا يُحذف بعد أن خرج مقابله مال'),
+                'type' => 'warning',
+            ]);
+        }
+
+        /*
+         * ═══ وما بلغ الدفترَ مرّةً لا يُمحى منه ═══
+         *
+         * الحارسُ أعلاه يقرأ **الحالة**، وهي لا تكفي: سندٌ اعتُمد ثمّ أُلغي
+         * حالُه «ملغاة» لا «معتمد» — فكان يمرّ من هنا، وتحذف هذه المعاملةُ
+         * قيدَه الأصلَ وقيدَ عكسِه معًا. فيختفي من الدفتر أنّ ذمّةً نشأت يومًا
+         * وأنّها عُكست، وهو الأثرُ الذي بُني `cancel` كلُّه ليُبقيَه: «القيدُ
+         * الأصلُ يبقى مقروءًا بتاريخه، وقيدٌ ثانٍ يُلغيه». والميزانُ يبقى
+         * متّزنًا بعدها — ولذلك لا يشكو أحد.
+         *
+         * والسؤالُ عن **الواقعة** لا عن الاسم: أثمّة قيدٌ يشير إلى هذا السند؟
+         * فيحرس كذلك سنداتٍ قديمةً رُحّلت يوم كانت الكتابةُ ترحّل.
+         */
+        $posted = JournalEntry::where('business_id', $bid)
+            ->where('sourceable_type', SupplierInvoice::class)
+            ->where('sourceable_id', $invoice->id)->exists();
+
+        if ($posted) {
+            return back()->with('toast', [
+                'msg' => __('لهذا السند قيدٌ في الدفتر — لا يُمحى، ويبقى مقروءًا بتاريخه'),
+                'type' => 'warning',
+            ]);
+        }
+
+        $invoice->delete();
+
+        Activity::log('deleted', 'حذف السند: '.$invoice->supplier_ref, ['subject_id' => $invoice->id]);
+
+        return back()->with('toast', ['msg' => __('حُذف السند'), 'type' => 'warning']);
+    }
+}

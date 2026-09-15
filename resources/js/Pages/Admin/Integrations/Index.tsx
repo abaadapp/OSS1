@@ -1,0 +1,133 @@
+import { Link, usePage } from '@inertiajs/react';
+import { ExternalLink } from 'lucide-react';
+import AdminLayout from '@/Layouts/AdminLayout';
+import PageHeader from '@/Components/PageHeader';
+import { ToolMark } from '@/Components/BrandMarks';
+import StatusPill, { type SetupState } from '@/Components/StatusPill';
+import { Button } from '@/Components/ui/button';
+import { Card } from '@/Components/ui/card';
+import { useTranslate } from '@/lib/i18n';
+import type { PageProps } from '@/types';
+
+/** بطاقةُ أداةٍ كما يبنيها App\Support\Integrations::cards */
+interface App {
+    key: string;
+    name: string;
+    site: string;
+    line: string;
+    category: string;
+    tint: string;
+    /** بابُ الأداة — و`null` لأداةٍ في الدليل ولمّا تُبنَ */
+    route: string | null;
+    built: boolean;
+    licensed: boolean;
+    status: { state: string; label: string };
+}
+
+interface Props {
+    apps: App[];
+}
+
+/**
+ * والشعارُ يُختار في المتصفّح لا يُرسله الخادم.
+ *
+ * الخادم يرسل المفتاح واللون: اسمُ شعارٍ يعبر الشبكة يصير عقدًا بين PHP
+ * وطبقةِ رسمٍ في المتصفّح — تُبدَّل الطبقة فتنكسر أسماءٌ في ملفّ PHP لا
+ * يعرف أحدٌ لماذا هي فيه. انظر `Components/BrandMarks`.
+ */
+
+/**
+ * حالُ الأداة كما يرسله الخادم → حالٌ من `StatusPill`.
+ *
+ * والاسمُ يبقى من الخادم: `Integrations::state` يكتبه بجانب المفتاح عمدًا
+ * «فلا تخمّن الشاشة اسمًا من مفتاح». والمشترَكُ هنا ما دونه — الأيقونةُ
+ * والنغمةُ وأنّ الشارة تقول نصًّا لا لونًا وحده، فتُقرأ البطاقةُ هنا
+ * وشارةُ شاشةِ الأداة بعد النقرة على هيئةٍ واحدة.
+ */
+const TONE: Record<string, SetupState> = {
+    ready: 'ready',
+    partial: 'progress',
+    off: 'idle',
+    unbuilt: 'off',
+};
+
+function AppCard({ app }: { app: App }) {
+    const t = useTranslate();
+
+    return (
+        <Card className="flex flex-col p-5">
+            <div className="flex items-start gap-3">
+                {/* الشعارُ يحمل مربّعَه وألوانَه — فلا يُلفّ بخلفيّةٍ ثانية تحته */}
+                <ToolMark tool={app.key} name={app.name} tint={app.tint} size={48} className="shrink-0" />
+
+                <div className="min-w-0">
+                    <h3 className="truncate font-bold text-[#111]">{app.name}</h3>
+                    {/* العنوان لاتينيّ في صفحةٍ عربية: بلا dir ينقلب أوّلُه إلى آخره */}
+                    <p
+                        className="mt-0.5 flex items-center gap-1 text-[12px] text-[#9ca3af]"
+                        dir="ltr"
+                    >
+                        {app.site}
+                        <ExternalLink className="size-3" />
+                    </p>
+                </div>
+            </div>
+
+            <p className="mt-4 grow text-[13px] leading-relaxed text-[#6b7280]">{app.line}</p>
+
+            <div className="mt-5 flex items-center justify-between gap-3 border-t border-[var(--ui-border,#e8e8e8)] pt-4">
+                {/*
+                 * زرٌّ يفتح، أو لا زرّ.
+                 *
+                 * وما لم يُبنَ لا يُرسم له زرٌّ مطفأ يُضغط فلا يقع شيء: التاجر
+                 * يجرّبه مرّتين ثمّ يظنّ العطب في متصفّحه. فيُقال بالحرف إنّه
+                 * لم يُهيّأ بعد، ويُترك موضعُ الزرّ فارغًا.
+                 */}
+                {app.built && app.route ? (
+                    <Button asChild variant="outline" size="sm">
+                        <Link href={route(app.route)}>{t('عرض التكامل')}</Link>
+                    </Button>
+                ) : (
+                    <span className="text-[12px] text-[#9ca3af]">{t('يهيّئه افنت بلس قريبًا')}</span>
+                )}
+
+                {/*
+                 * والباقةُ تسبق الحال: أداةٌ خارج الباقة لا يُقال عنها «غير
+                 * مربوطة» — فيذهب صاحبها يربطها ويُردّ.
+                 */}
+                {app.licensed ? (
+                    <StatusPill state={TONE[app.status.state] ?? 'idle'} label={app.status.label} connected />
+                ) : (
+                    <StatusPill state="off" label="خارج باقتك" />
+                )}
+            </div>
+        </Card>
+    );
+}
+
+/**
+ * لوحةُ التطبيقات التكاملية — بمَ رُبط هذا المتجر، وبمَ يستطيع أن يُربط.
+ *
+ * وتُعرض الأدوات كلُّها لا المربوطةُ وحدها: لوحةٌ لا تعرض إلا ما رُبط تكون
+ * فارغةً عند كلّ متجرٍ جديد، فلا تقول لصاحبها ما الذي يستطيع ربطه — وهو
+ * السؤال الذي فُتحت من أجله.
+ */
+export default function Integrations() {
+    const { apps } = usePage<PageProps<Props>>().props;
+    const t = useTranslate();
+
+    return (
+        <AdminLayout title="التطبيقات التكاملية">
+            <PageHeader
+                title="التطبيقات التكاملية"
+                subtitle={t('اربط متجرك بالأدوات التي يعمل بها — والربطُ هنا، وما تفعله الأداةُ في قسمها')}
+            />
+
+            <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-3">
+                {apps.map((app) => (
+                    <AppCard key={app.key} app={app} />
+                ))}
+            </div>
+        </AdminLayout>
+    );
+}

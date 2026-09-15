@@ -1,0 +1,32 @@
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+
+/** أثر تعديلٍ وقع على فاتورة — يُكتب ولا يُعدَّل ولا يُحذف */
+class OrderEdit extends Model
+{
+    protected $guarded = [];
+
+    protected $casts = [
+        'order_total_before' => 'decimal:3',
+        'order_total_after' => 'decimal:3',
+    ];
+
+    public function order(): BelongsTo { return $this->belongsTo(Order::class); }
+
+    /** أنواع ما يُصحَّح — مرجعٌ واحد للكتابة والعرض */
+    public const LINE = 'بند';
+    public const PAYMENT = 'وسيلة دفع';
+
+    /** إلغاءُ الطلب كلّه — يردّ المخزون والنقاط والكوبون ويمحو قيد الدخل */
+    public const CANCEL = 'إلغاء';
+
+    /** تصحيح كميّة إضافةٍ على بند — «شوكولاتة ×٢» صارت واحدة */
+    public const ADDON = 'إضافة';
+
+    /** حُذف البند أم نقصت كميّته؟ — تُقرأ من الأرقام لا من عمودٍ ثالث يفترق عنها */
+    public function removed(): bool { return $this->kind === self::LINE && (int) $this->qty_after === 0; }
+}

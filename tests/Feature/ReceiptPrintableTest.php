@@ -1,0 +1,84 @@
+<?php
+
+namespace Tests\Feature;
+
+use App\Support\ReceiptTemplate;
+use Tests\TestCase;
+
+/**
+ * ما لا يطبعه خطّ الإيصال لا يُرسَل إليه.
+ *
+ * خطّ الـPDF عربيّ ولاتينيّ ولا يحمل الرموز التعبيرية، فكل إيموجي يخرج
+ * مربّعًا فارغًا على ورق الزبون. والتذييل الافتراضي نفسه كان يحمل وردةً —
+ * أي أن كل إيصالٍ طُبع بمربّعٍ فيه، ولم يظهر في اختبارٍ قطّ لأن الاختبارات
+ * تقيس بايتات الملفّ لا الحروف المرسومة. ولم يُكتشف إلا بالنظر إلى ورقة.
+ */
+class ReceiptPrintableTest extends TestCase
+{
+    public function test_it_removes_what_the_font_cannot_draw(): void
+    {
+        $this->assertSame('شكرًا لزيارتكم', ReceiptTemplate::printable('شكرًا لزيارتكم 🌹'));
+        $this->assertSame('تم', ReceiptTemplate::printable('✅ تم'));
+        $this->assertSame('اتصل بنا', ReceiptTemplate::printable('☎ اتصل بنا'));
+    }
+
+    public function test_it_keeps_every_letter_the_merchant_wrote(): void
+    {
+        /*
+         * الحذف يجب أن يكون ضيّقًا: تذييلُ التاجر كلامُه هو، وحذفُ حرفٍ منه
+         * أسوأ من مربّعٍ — المربّع يُرى ويُسأل عنه، والحرف الناقص يمرّ.
+         */
+        $text = 'متجر الورود — هاتف: +968 91234567 · العنوان: مسقط، الخوير';
+
+        $this->assertSame($text, ReceiptTemplate::printable($text));
+    }
+
+    public function test_a_line_that_was_only_an_emoji_becomes_empty_not_a_blank_gap(): void
+    {
+        // سطرٌ فارغ في وسط التذييل يُقرأ عطبًا في الطابعة
+        $this->assertSame('', ReceiptTemplate::printable('🌹🌸💐'));
+    }
+
+    public function test_it_does_not_leave_a_double_space_behind(): void
+    {
+        $this->assertSame('شكرًا لك', ReceiptTemplate::printable('شكرًا 🌹 لك'));
+    }
+
+    public function test_a_handle_keeps_its_at_sign_where_it_belongs(): void
+    {
+        /*
+         * سطرٌ عربيّ فيه «@eventplus» كان يُطبع «eventplus@»: الرمز محايد الاتجاه
+         * فيتبع السطر لا الكلمة. ولا يلاحظه التاجر لأنه يعرف ما كتب ويقرؤه
+         * صحيحًا في رأسه — من يقرؤه غلطًا هو الزبون.
+         */
+        $html = ReceiptTemplate::printableHtml('تابعنا @eventplus');
+
+        $this->assertStringContainsString('<span dir="ltr">eventplus</span>', $html);
+        $this->assertStringContainsString('تابعنا @', $html);
+    }
+
+    public function test_it_escapes_what_the_merchant_typed(): void
+    {
+        // التذييل نصّ التاجر ويُطبع بلا هروب (‎{!! !!}‎)، فالهروب مسؤولية هذه الدالة
+        $html = ReceiptTemplate::printableHtml('<script>alert(1)</script>');
+
+        $this->assertStringNotContainsString('<script>', $html);
+        $this->assertStringContainsString('&lt;', $html);
+    }
+
+    public function test_escaping_does_not_leak_amp_into_the_paper(): void
+    {
+        // «&» تصير «&amp;» عند الهروب، وفيها حروفٌ لاتينية كان التعبير يلتقطها
+        $html = ReceiptTemplate::printableHtml('ورود & هدايا');
+
+        $this->assertStringNotContainsString('amp;</span>', $html);
+        $this->assertStringContainsString('&amp;', $html);
+    }
+
+    public function test_arabic_diacritics_and_tatweel_survive(): void
+    {
+        // علاماتٌ في نطاقاتٍ قريبة من المحذوف — الحدّ يجب أن يقف دونها
+        $this->assertSame('شُكرًا جزيلاً', ReceiptTemplate::printable('شُكرًا جزيلاً'));
+        $this->assertSame('مرحبـــا', ReceiptTemplate::printable('مرحبـــا'));
+    }
+}

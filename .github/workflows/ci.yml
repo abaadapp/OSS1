@@ -1,0 +1,167 @@
+name: CI
+
+# البوابة كانت تعيش في خطّاف Claude على جهاز واحد: أي تعديل من جهاز آخر
+# أو من واجهة GitHub كان يمرّ بلا فحص. هنا تُفرض على كل دفعة وكل PR.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  # دفعة جديدة تُلغي فحص الدفعة السابقة لنفس الفرع — لا داعي لانتظار القديم
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ---------------------------------------------------------------------
+  # الاختبارات على SQLite — سريعة، وهي محرّك التطوير الحالي
+  # ---------------------------------------------------------------------
+  tests-sqlite:
+    name: الاختبارات (SQLite)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # 8.4 لا 8.3: مكوّنات Symfony 8.1 في composer.lock تتطلّب php >= 8.4.1،
+      # فكان `composer install` ينهار قبل أن يبدأ أي اختبار — ففشلت كل دفعة
+      # منذ إنشاء الوظيفة، ولم يُشغَّل اختبارٌ واحد ولا فحصُ أنواعٍ واحد.
+      # بوابةٌ حمراء دائمًا لا تختلف عن بوابةٍ غير موجودة، بل أسوأ: تُشعر
+      # بالأمان. وحين تُرفع الأقفال إلى إصدارٍ أعلى يُرفع هذا معها.
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: pdo_sqlite, mbstring, intl, bcmath, gd, zip
+          coverage: none
+
+      - name: تثبيت اعتماديات PHP
+        run: composer install --prefer-dist --no-interaction --no-progress
+
+      - name: تجهيز البيئة
+        run: |
+          cp .env.example .env
+          php artisan key:generate
+
+      # اختباراتٌ تفتح صفحات Inertia تُصيّر app.blade.php، و@vite يرمي
+      # ViteManifestNotFoundException بلا public/build/manifest.json —
+      # وهو مجلّد متجاهَل في git فلا يصل الخادم أبدًا. البناء هنا شرطُ
+      # تشغيلها، لا تحسينٌ اختياري.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: بناء الواجهة (لازم لبيان Vite)
+        run: |
+          npm ci
+          npx vite build
+
+      - name: الاختبارات
+        run: php artisan test
+
+  # ---------------------------------------------------------------------
+  # الاختبارات على PostgreSQL — محرّك الإنتاج المقصود.
+  #
+  # SQLite يقفل القاعدة كاملة عند كل كتابة، وهذا لا يصلح لصناديق بيع
+  # متزامنة. والانتقال يكسر SQL خاصًّا بـSQLite (strftime، النصوص بعلامات
+  # مزدوجة) بصمت — فيُكتشف عند التاجر لا عندنا. هذه الوظيفة تمنع ذلك.
+  # ---------------------------------------------------------------------
+  tests-postgres:
+    name: الاختبارات (PostgreSQL)
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: testing
+          POSTGRES_USER: eventplus
+          POSTGRES_PASSWORD: secret
+        ports: ['5432:5432']
+        # لا نبدأ الاختبارات قبل أن تجهز القاعدة فعلًا
+        options: >-
+          --health-cmd="pg_isready -U eventplus"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
+    env:
+      DB_CONNECTION: pgsql
+      DB_HOST: 127.0.0.1
+      DB_PORT: 5432
+      DB_DATABASE: testing
+      DB_USERNAME: eventplus
+      DB_PASSWORD: secret
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4' # كما في وظيفة SQLite أعلاه
+          extensions: pdo_pgsql, mbstring, intl, bcmath, gd, zip
+          coverage: none
+
+      - name: تثبيت اعتماديات PHP
+        run: composer install --prefer-dist --no-interaction --no-progress
+
+      - name: تجهيز البيئة
+        run: |
+          cp .env.example .env
+          php artisan key:generate
+
+      # phpunit.xml يثبّت DB_CONNECTION=sqlite، وقيمُ <env> فيه تسبق متغيّرات
+      # الوظيفة — فكانت هذه الوظيفة تُشغّل على SQLite وتُسمّى «PostgreSQL».
+      # تظهر خضراء يومًا فيُظنّ المحرّك مبرهَنًا وهو لم يُلمس. تُنزع القيمتان
+      # هنا فقط، ويبقى الملف كما هو للتشغيل المحلي.
+      - name: توجيه الاختبارات إلى PostgreSQL فعلًا
+        run: |
+          php -r '$f="phpunit.xml"; $s=file_get_contents($f);
+                  $s=preg_replace("/^\s*<env name=\"DB_(CONNECTION|DATABASE|URL)\".*\R/m", "", $s);
+                  file_put_contents($f, $s);'
+          grep -q 'DB_CONNECTION' phpunit.xml && { echo "لم تُنزع القيمة"; exit 1; } || true
+
+      - name: الهجرات تعمل على PostgreSQL
+        run: php artisan migrate --force
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: بناء الواجهة (لازم لبيان Vite)
+        run: |
+          npm ci
+          npx vite build
+
+      - name: الاختبارات
+        run: php artisan test
+
+  # ---------------------------------------------------------------------
+  # الواجهة: أنواع TypeScript، وسلوكُ المكوّنات، والبناء
+  #
+  # واختباراتُ الواجهة هنا لا في وظيفتَي PHP: لا تمسّ قاعدةً ولا تحتاج
+  # composer، فتشغيلُها مرّتين على محرّكين إهدارُ دقائق على كلّ دفعة.
+  # ---------------------------------------------------------------------
+  frontend:
+    name: الواجهة (أنواع + اختبارات + بناء)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - run: npm ci
+
+      - name: فحص الأنواع
+        run: npx tsc --noEmit
+
+      # ما لا يُشغّله إلّا متصفّح: السهم ينقل المؤشّر، والنافذة تبقى مفتوحة،
+      # وزرُّ حذفٍ لا يُرسم على سندٍ يردّه الخادم. انظر DEC-002.
+      - name: اختبارات الواجهة
+        run: npm test
+
+      - name: البناء
+        run: npx vite build
