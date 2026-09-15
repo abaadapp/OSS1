@@ -24,13 +24,6 @@ class ActivityController extends Controller
 
         return $q->latest('id')->paginate(15)->withQueryString()->through(fn ($l) => [
             'user' => $l->user_name, 'action' => $l->action, 'description' => $l->description,
-            /*
-             * من فعلها حقًّا — يظهر شارةً في السطر.
-             *
-             * بلا هذا يقرأ التاجر اسمه على عمليةٍ فعلها الدعم، فيتّهم موظفيه
-             * أو يتّهمك. وهو حقّه أن يعرف: لوحته وبياناته.
-             */
-            'via' => $l->impersonator_name,
             'icon' => $l->icon, 'color' => $l->color, 'ip' => $l->ip,
             'time' => optional($l->created_at)->format('Y-m-d H:i'),
             'ago' => optional($l->created_at)?->diffForHumans(),
@@ -53,24 +46,16 @@ class ActivityController extends Controller
         $bid = auth()->user()->business_id ?? Demo::bid();
 
         /*
-         * سجلّ التاجر يتتبّع موظفيه وحدهم.
+         * السجلّ يتتبّع الموظفين وحدهم.
          *
-         * كان يفتحه فيقرأ أفعاله هو — «سجّل الدخول»، «عدّل منتجًا» — تدفع
-         * أفعالَ من يجب أن يُراقَبوا خارج الصفحة الأولى. والغرض من الشاشة أن
-         * يعرف ما جرى على الصندوق والمخزون في غيابه، فيُستثنى صاحب النشاط
-         * ويُستثنى معه مدير المنصة: كلاهما ليس ممّن جاءت الشاشة لمتابعتهم.
-         *
-         * وما يفعله الدعم داخل الحساب لا يختفي، بل ينتقل إلى موضعه: سجلّ
-         * المنصة يحتفظ بكل شيء بلا استثناء، والدليل هناك.
+         * كان صاحبُ العمل يفتحه فيقرأ أفعاله هو — «سجّل الدخول»، «عدّل
+         * منتجًا» — تدفع أفعالَ من يجب أن يُراقَبوا خارج الصفحة الأولى.
+         * والغرض من الشاشة أن يعرف ما جرى في غيابه، فيُستثنى هو.
          */
-        $notStaff = User::whereIn('role', ['admin', 'super_admin'])->select('id');
+        $notStaff = User::where('role', 'admin')->select('id');
 
         $logs = self::shape(
-            ActivityLog::where('business_id', $bid)
-                ->whereNotIn('user_id', $notStaff)
-                // فعلٌ جرى عبر انتحال الدعم: صاحبه الدعم لا الموظّف الذي
-                // يحمل السجلُّ اسمه، فلا يُحسب على الفريق
-                ->whereNull('impersonator_id'),
+            ActivityLog::where('business_id', $bid)->whereNotIn('user_id', $notStaff),
             $request,
         );
 

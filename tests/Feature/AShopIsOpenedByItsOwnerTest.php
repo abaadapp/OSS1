@@ -55,19 +55,7 @@ class AShopIsOpenedByItsOwnerTest extends TestCase
     }
 
     /* ═══════════════ الثلاثةُ معًا ═══════════════ */
-    /** والتجربةُ تبدأ وتنتهي: متجرٌ بلا تاريخٍ يعمل إلى الأبد */
-    public function test_a_new_shop_starts_a_trial_that_ends(): void
-    {
-        Setting::create(['business_id' => null, 'key' => 'trial_days', 'value' => '14']);
-
-        $this->post(route('register.store'), $this->form());
-
-        $business = Business::firstOrFail();
-
-        $this->assertNotNull($business->starts_at);
-        $this->assertNotNull($business->ends_at, 'متجرٌ بلا تاريخ انتهاء — لا تجربةَ تنتهي ولا مطالبةَ تحلّ');
-        $this->assertSame(14, (int) $business->starts_at->diffInDays($business->ends_at));
-    }
+    
 
     /* ═══════════════ ولا متجرَ يُفتح مرّتين ═══════════════ */
 

@@ -5,7 +5,6 @@ namespace App\Support;
 use App\Models\Business;
 use App\Models\Setting;
 use App\Models\User;
-use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -91,7 +90,7 @@ class Signup
                 'email' => mb_strtolower(trim($data['email'])),
                 'address' => filled($data['address'] ?? null) ? trim((string) $data['address']) : null,
                 'status' => 'نشط',
-            ] + self::subscription());
+            ]);
 
             $owner = MerchantAccount::provision(
                 $business,
@@ -132,22 +131,5 @@ class Signup
         });
     }
 
-
-    /**
-     * مدّةُ النشاط أوّلَ فتحه — تاريخُ بدءٍ ونهايةُ تجربة.
-     *
-     * و`trial_days = 0` تعني بلا نهاية: `ends_at` تبقى فارغةً فلا يُقفل الباب
-     * على من لم يُوضع له موعد.
-     */
-    private static function subscription(): array
-    {
-        $out = ['starts_at' => ($starts = Carbon::now())->toDateString()];
-
-        if (($days = (int) Tenancy::platform('trial_days', 14)) > 0) {
-            $out['ends_at'] = $starts->copy()->addDays($days)->toDateString();
-        }
-
-        return $out;
-    }
 
 }

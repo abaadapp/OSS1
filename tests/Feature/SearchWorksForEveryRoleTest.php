@@ -64,8 +64,8 @@ class SearchWorksForEveryRoleTest extends TestCase
         ]);
 
         $this->platform = User::create([
-            'business_id' => null, 'name' => 'مدير المنصّة', 'email' => 'super@eventplusapp.om',
-            'password' => bcrypt('x'), 'role' => 'super_admin', 'status' => 'نشط',
+            'business_id' => null, 'name' => 'حسابٌ بلا شركة', 'email' => 'nobody@eventplusapp.om',
+            'password' => bcrypt('x'), 'role' => 'admin', 'status' => 'نشط',
         ]);
 
         Product::create([

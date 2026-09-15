@@ -15,18 +15,12 @@ use Symfony\Component\HttpFoundation\Response;
  * برسالةٍ تقول السبب. وإنهاء الجلسة مقصود — إبقاؤها مفتوحة يعني أن الإيقاف
  * لا يسري إلا بعد أن يخرج المستخدم بنفسه، وهو ما لن يفعله.
  *
- * ويُستثنى انتحالُ المنصة: مدير المنصة يدخل حساب تاجرٍ معطَّل ليرى ما يشكو
- * منه — ومنعُه هناك يمنع الإصلاح نفسه.
  */
 class CheckTenantStatus
 {
     public function handle(Request $request, Closure $next): Response
     {
         $user = $request->user();
-
-        if ($request->session()->has('impersonator_id')) {
-            return $next($request);
-        }
 
         /*
          * الصيانة تسبق كلّ فحص: هي حالة النظام لا حالة الحساب.
@@ -35,7 +29,7 @@ class CheckTenantStatus
          * يعود ليكتب كلمة سرّه بعد ترقيةٍ استغرقت دقيقتين. و503 مقصود:
          * يقول للمتصفّح وللمراقبة «موقوف مؤقّتًا» لا «تعطّل».
          */
-        if ($user && ! $user->isSuperAdmin() && Tenancy::maintenance()) {
+        if ($user && Tenancy::maintenance()) {
             $message = __('النظام في وضع الصيانة مؤقّتًا. سنعود بعد قليل.');
 
             if ($request->expectsJson()) {

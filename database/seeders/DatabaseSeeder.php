@@ -9,25 +9,20 @@ use App\Models\ExpenseType;
 use App\Models\JobTitle;
 use App\Models\Setting;
 use App\Models\User;
-use App\Support\SeedData;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
 
 /**
  * بذرة نظيفة — نظام خالٍ من بيانات العرض.
  *
- * تُنشئ الحدّ الأدنى الذي يحتاجه النظام ليعمل ويُسجَّل الدخول إليه فقط:
- * الباقات، حساب مدير منصة، متجر واحد فارغ بمالكه، وافتراضيات المتجر.
+ * تُنشئ الحدّ الأدنى الذي يحتاجه النظام ليعمل ويُسجَّل الدخول إليه: شركةٌ
+ * واحدة بمالكها، وفرعٌ رئيسيّ، وعملةٌ أساسيّة، والمسمّيات الوظيفيّة،
+ * وأنواعُ المصروفات.
  *
  * لا منتجات ولا طلبات ولا عملاء ولا معاملات ولا موردين — تُدخلها بنفسك.
  *
- * لاستعادة بيانات العرض الكاملة (12 متجرًا ومنتجات وطلبات):
- *   php artisan migrate:fresh --force
- *   php artisan db:seed --class=DemoSeeder --force
- *
- * لاحظ `migrate:fresh` أولًا: البذرتان تُنشئان كلتاهما super@eventpluspos.com
- * و users.email فريد، فتشغيل DemoSeeder فوق هذه البذرة يفشل. كان الأمر
- * الموثّق هنا سطرًا واحدًا بلا التفريغ، فلم يكن ينجح أبدًا.
+ * ولبيانات عرضٍ ممتلئة: `App\Support\DemoStore::create()` — وهي لا تكتب
+ * إلا في شركةٍ موسومةٍ `is_demo`، انظر `Support\DemoGuard`.
  */
 class DatabaseSeeder extends Seeder
 {
@@ -39,38 +34,25 @@ class DatabaseSeeder extends Seeder
 
     public function run(): void
     {
-        /* ---------------- متجر واحد فارغ ---------------- */
-        $ownerName = $this->cfg('SEED_OWNER_NAME', 'مالك النشاط');
+        /* ---------------- شركة واحدة فارغة ---------------- */
+        $ownerName = $this->cfg('SEED_OWNER_NAME', 'مالك الشركة');
         $business = Business::create([
-            'name' => $this->cfg('SEED_BUSINESS_NAME', 'متجري'),
-            'type' => 'عام',
+            'name' => $this->cfg('SEED_BUSINESS_NAME', 'Event Plus'),
+            'type' => 'شركة تقنية',
             'owner_name' => $ownerName,
             'phone' => '',
-            'email' => $this->cfg('SEED_ADMIN_EMAIL', 'admin@eventpluspos.com'),
+            'email' => $this->cfg('SEED_ADMIN_EMAIL', 'admin@eventplus.local'),
             'country' => 'عُمان',
             'city' => '',
             'address' => '',
             'status' => 'نشط',
-            'branches_count' => 1,
-            'starts_at' => now(),
-            'ends_at' => now()->addYear(),
         ]);
 
-        /* ---------------- مدير النظام ---------------- */
-        User::create([
-            'business_id' => $business->id,
-            'name' => 'مدير النظام',
-            'email' => $this->cfg('SEED_SUPER_EMAIL', 'super@eventpluspos.com'),
-            'role' => 'super_admin',
-            'password' => Hash::make($this->cfg('SEED_SUPER_PASSWORD', 'password')),
-            'status' => 'نشط',
-            'last_login_at' => now(),
-        ]);
-
+        /* ---------------- مالك الشركة ---------------- */
         User::create([
             'business_id' => $business->id,
             'name' => $ownerName,
-            'email' => $this->cfg('SEED_ADMIN_EMAIL', 'admin@eventpluspos.com'),
+            'email' => $this->cfg('SEED_ADMIN_EMAIL', 'admin@eventplus.local'),
             'role' => 'admin',
             'password' => Hash::make($this->cfg('SEED_ADMIN_PASSWORD', 'password')),
             'status' => 'نشط',
@@ -79,8 +61,8 @@ class DatabaseSeeder extends Seeder
             'last_login_at' => now(),
         ]);
 
-        /* ---------------- افتراضيات المتجر ---------------- */
-        // فرع رئيسي — نقطة البيع وحركات المخزون تحتاج فرعًا واحدًا على الأقل
+        /* ---------------- الافتراضيات ---------------- */
+        // فرع رئيسي — حركات المخزون تحتاج فرعًا واحدًا على الأقل
         Branch::create([
             'business_id' => $business->id,
             'name' => 'الفرع الرئيسي',

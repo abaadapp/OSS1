@@ -36,8 +36,6 @@ class ExportIntegrityTest extends TestCase
 
     private User $owner;
 
-    private User $platform;
-
     private Order $order;
 
     private Customer $customer;
@@ -49,7 +47,6 @@ class ExportIntegrityTest extends TestCase
         $business = Business::create([
             'name' => 'متجر الورود', 'type' => 'محل ورود', 'status' => 'نشط',
             'email' => 'shop@eventplusapp.om', 'phone' => '+968 90000000',
-            'ends_at' => now()->addYear(),
         ]);
         $branch = Branch::create(['business_id' => $business->id, 'name' => 'الخوير']);
         JobTitle::create(['business_id' => $business->id, 'name' => 'مدير', 'role' => 'admin']);
@@ -65,11 +62,6 @@ class ExportIntegrityTest extends TestCase
         $this->owner = User::create([
             'business_id' => $business->id, 'name' => 'المالك', 'email' => 'owner@eventplusapp.om',
             'password' => bcrypt('password'), 'role' => 'admin', 'status' => 'نشط',
-        ]);
-
-        $this->platform = User::create([
-            'name' => 'مدير المنصة', 'email' => 'admin@eventplusapp.om',
-            'password' => bcrypt('password'), 'role' => 'super_admin', 'status' => 'نشط',
         ]);
 
         $category = Category::create(['business_id' => $business->id, 'name' => 'باقات']);
@@ -192,10 +184,8 @@ class ExportIntegrityTest extends TestCase
         $broken = [];
 
         foreach ($this->plainExportRoutes() as $uri) {
-            $as = str_starts_with($uri, 'super-admin') ? $this->platform : $this->owner;
-
             try {
-                $this->assertRealFile($this->actingAs($as)->get('/'.$uri), $uri);
+                $this->assertRealFile($this->actingAs($this->owner)->get('/'.$uri), $uri);
             } catch (\Throwable $e) {
                 $broken[] = $e->getMessage();
             }

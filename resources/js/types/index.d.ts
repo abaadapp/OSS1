@@ -79,8 +79,6 @@ export interface SharedProps {
          * نفسه الذي يحرس المسار — انظر `User::isEmployee`.
          */
         isEmployee: boolean;
-        /** جلسة انتحالٍ من لوحة المنصة — تُعلَن في كل صفحة */
-        impersonating: boolean;
     } | null;
     context: {
         businessName: string;
@@ -100,8 +98,6 @@ export interface SharedProps {
         branches: Branch[];
         currency: Currency;
         currencies: Currency[];
-        /** اشتراك المتجر — null لمن لا مدّة محدَّدة له */
-        subscription: { endsAt: string; daysLeft: number; graceLeft: number | null } | null;
         /** تهيئة المتجر — null حين أقرّ التاجر هويّته، فلا يبقى شريط بعد إتمامه */
         setup: { done: number; total: number; missing: string[] } | null;
     } | null;

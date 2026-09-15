@@ -45,8 +45,8 @@ class ImportBackupMailTest extends TestCase
             'password' => bcrypt('password'), 'role' => 'admin', 'status' => 'نشط',
         ]);
         $this->super = User::create([
-            'business_id' => null, 'name' => 'مدير المنصة', 'email' => 's@eventplus.om',
-            'password' => bcrypt('password'), 'role' => 'super_admin', 'status' => 'نشط',
+            'business_id' => null, 'name' => 'حسابٌ بلا شركة', 'email' => 's@eventplus.om',
+            'password' => bcrypt('password'), 'role' => 'admin', 'status' => 'نشط',
         ]);
     }
 

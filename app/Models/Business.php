@@ -10,8 +10,6 @@ class Business extends Model
 {
     protected $guarded = [];
     protected $casts = [
-        'starts_at' => 'date',
-        'ends_at' => 'date',
         'is_demo' => 'boolean',
         // ختمُ التاجر على هويّة متجره — انظر `Support\ShopIdentity`
         'identity_confirmed_at' => 'datetime',
@@ -25,13 +23,11 @@ class Business extends Model
     protected $attributes = ['is_demo' => false];
 
     /**
-     * ما يُنسخ من ملفّ المتجر ويُستعاد — ولا شيء سواه.
+     * ما يُنسخ من ملفّ الشركة ويُستعاد — ولا شيء سواه.
      *
-     * الباقةُ والاشتراكُ وحالُ الحساب تخصّ المنصّة لا التاجر: استعادةُ ملفٍّ
-     * قديم كانت ستُرجع باقةً أعلى أو تاريخَ انتهاءٍ مضى.
-     *
-     * وموضعٌ واحد يقرؤه بناءُ النسخة والاستعادة معًا: قائمتان تفترقان يومًا،
-     * فيُنسخ حقلٌ ولا يُستعاد.
+     * حالُ الحساب ليست منها: استعادةُ ملفٍّ قديم كانت ستُعيد تشغيل حسابٍ
+     * أُوقف. وموضعٌ واحد يقرؤه بناءُ النسخة والاستعادة معًا: قائمتان
+     * تفترقان يومًا، فيُنسخ حقلٌ ولا يُستعاد.
      */
     public const BACKUP_FIELDS = [
         'name', 'type', 'owner_name', 'phone', 'email',
@@ -40,64 +36,16 @@ class Business extends Model
         'identity_confirmed_at',
     ];
 
-    /** متاجر التجّار وحدها — ما تُبنى عليه إحصاءات المنصّة وتقاريرها */
+    /** الشركات الحقيقيّة وحدها — دون ما وُسم بيانَ عرض */
     public function scopeReal($query)
     {
         return $query->where('is_demo', false);
     }
 
-    /** المتاجر التجريبيّة وحدها */
+    /** الشركات التجريبيّة وحدها */
     public function scopeDemo($query)
     {
         return $query->where('is_demo', true);
-    }
-
-    /**
-     * ما يُعدّ اشتراكًا ساريًا — من صفّ المتجر نفسه لا من جدولٍ آخر.
-     *
-     * «هل هذا التاجر مشترك؟» كان جوابها مكتوبًا في مكانين: `status` و
-     * `ends_at` هنا — وهما ما يُقرّر فعلًا دخوله ومنعه — وجدول
-     * `subscriptions` وهو ما تقرؤه لوحة المنصّة. والثاني لا يُكتب إلا
-     * بضغطة «تجديد» يتذكّرها إنسان.
-     *
-     * فمن أُضيف ودفع ولم يُضغط له الزرّ كان يظهر في اللوحة صفرًا: تاجرٌ
-     * يعمل ويدفع، والرقم يقول لا أحد. والنظام يعرف الحقيقة ويمنع بها،
-     * واللوحة تقرأ من دفترٍ لا يمسكه أحد.
-     *
-     * فصار المصدر واحدًا: من كان نشطًا ولم تنتهِ مدّته فهو ساري — يُحسب
-     * من نفسه، اليوم وبعد مئة تاجر.
-     */
-    public function scopeLive($query)
-    {
-        return $query->real()
-            ->whereNotIn('status', ['معطل', 'معطّل'])
-            ->where(fn ($q) => $q->whereNull('ends_at')->orWhere('ends_at', '>=', now()->startOfDay()));
-    }
-
-    /**
-     * من يدفع فعلًا: ساري، وله فاتورةٌ مدفوعة واحدة على الأقل.
-     *
-     * والتجربة ليست اشتراكًا: من دخل بأربعة عشر يومًا مجّانًا لا هو إيراد
-     * ولا هو مدين، وخلطُه بالمشتركين يجعلك تقرأ خمسةً وأنت تعرف أن اثنين
-     * لم يدفعا ريالًا.
-     */
-    public function scopeSubscribed($query)
-    {
-        return $query->live()->whereExists(
-            fn ($q) => $q->selectRaw('1')->from('invoices')
-                ->whereColumn('invoices.business_id', 'businesses.id')
-                ->where('invoices.status', 'مدفوعة'),
-        );
-    }
-
-    /** في التجربة: ساري ولم يدفع بعد */
-    public function scopeTrialing($query)
-    {
-        return $query->live()->whereNotExists(
-            fn ($q) => $q->selectRaw('1')->from('invoices')
-                ->whereColumn('invoices.business_id', 'businesses.id')
-                ->where('invoices.status', 'مدفوعة'),
-        );
     }
 
     /**

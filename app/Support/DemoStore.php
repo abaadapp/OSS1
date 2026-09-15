@@ -136,10 +136,6 @@ class DemoStore
             'city' => 'مسقط',
             'address' => 'مسقط — عُمان',
             'status' => 'نشط',
-            // يُصحَّح بعد البذر إلى عدد الصفوف فعلًا — انظر أسفل `create`
-            'branches_count' => count(self::branchNames()),
-            'starts_at' => $registered,
-            'ends_at' => self::renewsAt($registered),
         ]);
 
         $business->update(['email' => self::ownerEmail($business->id)]);
@@ -159,44 +155,9 @@ class DemoStore
 
         $registered = now()->startOfMonth()->subMonths($spec['months'])->addDays(8);
 
-        /*
-         * وتاريخ المتجر يُبنى مع بياناته.
-         *
-         * كانت إعادة البناء تُغيّر عمق التاريخ — من ستّة أشهر إلى ثمانية عشر —
-         * وتترك `starts_at` و`ends_at` كما كانا، فيصير متجرٌ فواتيرُه أقدم من
-         * تسجيله.
-         */
-        $business->update([
-            'starts_at' => $registered,
-            'ends_at' => self::renewsAt($registered),
-        ]);
-
         (new self($business, $spec))->fill($registered);
 
         return $business->refresh();
-    }
-
-    /**
-     * موعد التجديد القادم — ذكرى تسجيلٍ سنويّة تتقدّم حتّى تتجاوز اليوم.
-     *
-     * كان `ends_at` سنةً واحدة بعد التسجيل، والتسجيلُ يُحسب بعُمق التاريخ
-     * المطلوب. فمتجرٌ بتاريخ اثني عشر شهرًا ينتهي اشتراكه يوم يُنشأ، وبثمانية
-     * عشر ينتهي قبل إنشائه بستّة أشهر — ويُفتح العرض على شريطٍ أحمر يقول
-     * «انتهى اشتراك المتجر»، وهو أوّل ما يقرؤه من يُعرض عليه النظام.
-     *
-     * والتقدّم سنةً سنةً لا ضبطُ التاريخ إلى «اليوم + سنة»: المتجر عمرُه سنة
-     * ونصف، فتجديدُه وقع مرّةً من قبل — وذاك ما تقوله فواتير المنصّة عنه.
-     * وشهران هامشٌ فوق نافذة التحذير (أسبوع) فلا يُفتح العرض على تنبيهٍ أصفر.
-     */
-    private static function renewsAt(Carbon $registered): Carbon
-    {
-        $date = $registered->copy();
-
-        while ($date->lessThan(now()->addMonths(2))) {
-            $date->addYear();
-        }
-
-        return $date;
     }
 
     /** يحذف المتجر التجريبيّ وكلّ صفٍّ يخصّه */

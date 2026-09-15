@@ -89,21 +89,7 @@ class AccountRecoverySecurityTest extends TestCase
         $this->assertTrue(Hash::check('old-password', $user->fresh()->password));
     }
 
-    /**
-     * والاشتراك المنتهي **لا** يمنع الاستعادة.
-     *
-     * هي ما يحتاجه ليدخل ويجدّد؛ ومنعُها يعني تاجرًا لا يستطيع أن يدفع لنا.
-     */
-    public function test_an_expired_subscription_does_not_block_recovery(): void
-    {
-        [$business, $user] = $this->shop('منتهٍ', 'expired@eventplusapp.om');
-        $business->update(['ends_at' => now()->subMonth()]);
-
-        $this->post(route('recovery.start'), ['email' => 'expired@eventplusapp.om'])->assertRedirect();
-
-        Mail::assertSent(RecoveryOtpMail::class, fn ($m) => $m->hasTo('owner@gmail.com'));
-        $this->assertSame(1, PasswordRecoveryChallenge::where('user_id', $user->id)->count());
-    }
+    
 
     /* ------------------------------ حدّ المحاولات ------------------------------ */
 

@@ -17,7 +17,7 @@ return new class extends Migration
             $table->string('name');
             $table->string('email')->unique();
             $table->string('phone')->nullable();
-            $table->string('role')->default('admin'); // super_admin | admin | manager | cashier | sales | accountant | inventory | delivery
+            $table->string('role')->default('admin'); // انظر App\Support\Roles::LABELS
             $table->string('avatar')->nullable();
             $table->string('branch')->nullable();
             $table->decimal('sales_total', 12, 3)->default(0);

@@ -27,8 +27,6 @@ class EveryPageAnswersTest extends TestCase
 
     private User $owner;
 
-    private User $platform;
-
     protected function setUp(): void
     {
         parent::setUp();
@@ -42,10 +40,6 @@ class EveryPageAnswersTest extends TestCase
             'password' => bcrypt('password'), 'role' => 'admin', 'status' => 'نشط',
         ]);
 
-        $this->platform = User::create([
-            'name' => 'مدير المنصة', 'email' => 'admin@eventplusapp.om',
-            'password' => bcrypt('password'), 'role' => 'super_admin', 'status' => 'نشط',
-        ]);
     }
 
     /** مسارات GET بلا معاملات — ما يمكن طلبه بلا اختراع معرّفات */
@@ -76,7 +70,7 @@ class EveryPageAnswersTest extends TestCase
         $broken = [];
 
         foreach ($this->plainGetRoutes() as $uri) {
-            $as = str_starts_with($uri, 'super-admin') ? $this->platform : $this->owner;
+            $as = $this->owner;
 
             try {
                 $res = $this->actingAs($as)->get('/'.$uri);
@@ -112,11 +106,10 @@ class EveryPageAnswersTest extends TestCase
          * الإنجليزية وحده. وهم موظفو المتجر الذين لا يقرأون العربية.
          */
         $this->owner->update(['locale' => 'en']);
-        $this->platform->update(['locale' => 'en']);
-        $broken = [];
+                $broken = [];
 
         foreach ($this->plainGetRoutes() as $uri) {
-            $as = str_starts_with($uri, 'super-admin') ? $this->platform : $this->owner;
+            $as = $this->owner;
 
             try {
                 $res = $this->actingAs($as)->get('/'.$uri);

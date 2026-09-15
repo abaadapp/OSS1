@@ -28,20 +28,12 @@ class EveryScreenOpensTest extends TestCase
         $business = DemoStore::create('متجر الفحص', 'صغير');
         $this->owner = $business->users()->where('role', 'admin')->firstOrFail();
 
-        $platform = Business::create(['name' => 'المنصّة', 'type' => 'عام', 'status' => 'نشط']);
-        Branch::create(['business_id' => $platform->id, 'name' => 'الرئيسي']);
-        JobTitle::create(['business_id' => $platform->id, 'name' => 'مدير', 'role' => 'admin']);
-        $this->super = User::create([
-            'business_id' => $platform->id, 'name' => 'مدير المنصة', 'email' => 'root@eventplusapp.om',
-            'password' => bcrypt('password'), 'role' => 'super_admin', 'status' => 'نشط',
-        ]);
         }
 
     use RefreshDatabase;
 
     private User $owner;
 
-    private User $super;
     /** @return list<array{string, string}> */
     private function screens(string $prefix): array
     {
@@ -81,16 +73,6 @@ class EveryScreenOpensTest extends TestCase
     public function test_every_merchant_screen_opens(): void
     {
         $this->sweep($this->owner, 'admin.');
-    }
-
-    public function test_every_platform_screen_opens(): void
-    {
-        $this->sweep($this->super, 'super-admin.');
-    }
-
-    public function test_every_pos_screen_opens(): void
-    {
-        $this->sweep($this->owner, 'pos.');
     }
 
     /**

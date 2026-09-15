@@ -46,27 +46,10 @@ class Activity
          * ومحاولاتُ الدخول الفاشلة تبقى كذلك: إشارةُ أمنٍ لا ضجيجَ إدارة،
          * وإخفاؤها يُعمي عن مَن يطرق الباب.
          */
-        if (($opts['self'] ?? false) && $u?->isSuperAdmin()) {
-            return;
-        }
-
-        /*
-         * من فعلها حقًّا.
-         *
-         * «الدخول كتاجر» كان يجعل كل عملية تُقيَّد باسم التاجر وحده، فيقول
-         * السجلّ إن صاحب المحل حذف فاتورةً حذفها الدعم. الاسم يُنسخ مع
-         * المعرّف: حساب موظف دعمٍ يُحذف بعد سنة، ولا يجوز أن يُمحى معه من
-         * السجلّ أنّ أحدًا كان هناك.
-         */
-        $impersonatorId = session('impersonator_id');
-        $impersonator = $impersonatorId ? User::find($impersonatorId) : null;
-
         ActivityLog::create([
             'business_id' => $opts['business_id'] ?? $u?->business_id,
             'user_id' => $u?->id,
             'user_name' => $u?->name ?? 'زائر',
-            'impersonator_id' => $impersonator?->id,
-            'impersonator_name' => $impersonator?->name,
             'action' => $action,
             'subject_type' => $opts['subject_type'] ?? null,
             'subject_id' => $opts['subject_id'] ?? null,

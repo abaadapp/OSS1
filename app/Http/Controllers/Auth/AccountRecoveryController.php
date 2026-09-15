@@ -363,12 +363,10 @@ class AccountRecoveryController extends Controller
             ->first();
     }
 
-    /** موقوفٌ أو معطَّل — والاشتراك المنتهي ليس منها */
+    /** موقوفٌ أو معطَّل */
     private function blocked(User $user): bool
     {
-        $reason = Tenancy::blockReason($user);
-
-        return $reason !== null && Tenancy::isHard($reason);
+        return Tenancy::blockReason($user) !== null;
     }
 
     /**

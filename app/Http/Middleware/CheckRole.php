@@ -8,17 +8,14 @@ use Symfony\Component\HttpFoundation\Response;
 
 class CheckRole
 {
-    /**
-     * التحقق من دور المستخدم. الاستخدام: ->middleware('role:super_admin')
-     * أو role:admin,manager. مدير المنصة (super_admin) يُسمح له بكل شيء.
-     */
+    /** التحقق من دور المستخدم. الاستخدام: ->middleware('role:admin,manager') */
     public function handle(Request $request, Closure $next, string ...$roles): Response
     {
         $user = $request->user();
         if (! $user) {
             return redirect()->route('login');
         }
-        if ($user->role === 'super_admin' || in_array($user->role, $roles, true)) {
+        if (in_array($user->role, $roles, true)) {
             return $next($request);
         }
         abort(403, __('ليس لديك صلاحية الوصول إلى هذه الصفحة.'));

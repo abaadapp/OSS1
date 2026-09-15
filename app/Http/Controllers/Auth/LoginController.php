@@ -19,7 +19,7 @@ class LoginController extends Controller
 {
     /** حسابات الدخول التجريبي السريع */
     private array $demoAccounts = [
-        'admin' => 'admin@eventpluspos.com',
+        'admin' => 'admin@eventplus.local',
     ];
 
     /** محاولة تسجيل الدخول العادية */
@@ -94,15 +94,6 @@ class LoginController extends Controller
     {
         $reason = Tenancy::blockReason($user);
         if (! $reason) {
-            return;
-        }
-
-        /*
-         * منتهي الاشتراك يدخل: حارسُ الطلب يسوقه إلى صفحة التجديد ولا يدعه
-         * يتجاوزها. وردُّه هنا برسالةٍ في حقل البريد كان يجعله يعيد كتابة
-         * كلمة المرور ظنًّا أنه أخطأها.
-         */
-        if (! Tenancy::isHard($reason)) {
             return;
         }
 

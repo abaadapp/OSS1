@@ -2,17 +2,14 @@
 
 namespace App\Support;
 
-use App\Models\Business;
 use App\Models\Setting;
 use App\Models\User;
-use Illuminate\Support\Carbon;
 
 /**
  * حالة المستأجر: هل يُسمح لهذا الحساب بالعمل الآن؟
  *
- * كانت «موقوف» و«معطل» و«منتهي» كلماتٍ تُكتب في أعمدة لا يقرؤها أحد: موظفٌ
- * موقوفٌ في شركةٍ معطّلة انتهى اشتراكها منذ ستة أشهر كان يسجّل الدخول ويبيع.
- * فوسيلةُ المنصّة الوحيدة على عميلٍ لا يدفع لم تكن تفعل شيئًا.
+ * كانت «موقوف» و«معطل» كلمتين تُكتبان في عمودين لا يقرؤهما أحد: موظفٌ
+ * موقوفٌ في شركةٍ معطّلة كان يسجّل الدخول ويعمل.
  *
  * مصدرٌ واحد يقرأه حارس الطلب وشاشة الدخول معًا — لئلا يُمنع عند الباب من
  * يمرّ من نافذة.
@@ -25,21 +22,15 @@ class Tenancy
 
     public const BUSINESS_DISABLED = 'business_disabled';
 
-    public const SUBSCRIPTION_EXPIRED = 'subscription_expired';
-
     /** حالات الحساب التي تعني «موقوف» — الواجهة تكتبها بأكثر من لفظ */
     private const BLOCKED_USER = ['موقوف', 'معطل', 'معطّل'];
 
     private const BLOCKED_BUSINESS = ['معطل', 'معطّل'];
 
-    /**
-     * سبب المنع إن وُجد، وإلا null.
-     *
-     * مدير المنصة لا مستأجر له، فلا يُفحص: هو من يوقف لا من يُوقَف.
-     */
+    /** سبب المنع إن وُجد، وإلا null */
     public static function blockReason(?User $user): ?string
     {
-        if ($user === null || $user->isSuperAdmin()) {
+        if ($user === null) {
             return null;
         }
 
@@ -74,40 +65,10 @@ class Tenancy
             return self::BUSINESS_DISABLED;
         }
 
-        // بعد المهلة لا عندها: المهلة موجودة كي لا يقف متجرٌ لتأخّر حوالةٍ يومًا
-        if (self::locked($business)) {
-            return self::SUBSCRIPTION_EXPIRED;
-        }
-
         return null;
     }
 
-    /**
-     * منعٌ يُخرج من الباب، أم حجزٌ داخل الصفحة؟
-     *
-     * الموقوف والمعطَّل تُنهى جلستهما ويُردّان إلى شاشة الدخول: أمرهما بيد
-     * غيرهما ولا شيء يفعلانه في النظام. ومنتهي الاشتراك يدخل ويقف عند صفحةٍ
-     * واحدة تقول له كم عليه وبمن يتّصل — لأن طردَه عند الباب يجعله يتّصل
-     * ليسأل «لماذا لا أدخل؟» قبل أن يسأل «كيف أجدّد؟».
-     */
-    public static function isHard(string $reason): bool
-    {
-        return $reason !== self::SUBSCRIPTION_EXPIRED;
-    }
-
-    /**
-     * مهلة السماح بالأيّام — من إعدادات المنصة.
-     *
-     * المفتاح `grace_days` كان في شاشة إعدادات المنصة منذ البداية ولا يقرؤه
-     * أحد: مقبضٌ يديره المشغّل ولا يوصَّل بشيء، وهو أسوأ من غيابه لأنه
-     * يُطمئن. وصفرٌ يعني الإقفال لحظة الانتهاء — وهو خيارٌ مشروع.
-     */
-    public static function graceDays(): int
-    {
-        return max(0, (int) self::platform('grace_days', 7));
-    }
-
-    /** إعدادٌ من إعدادات المنصة (business_id = null) */
+    /** إعدادٌ عامٌّ لا يخصّ شركةً بعينها (business_id = null) */
     public static function platform(string $key, $default = null)
     {
         $value = Setting::whereNull('business_id')->where('key', $key)->value('value');
@@ -116,76 +77,14 @@ class Tenancy
     }
 
     /**
-     * وضع الصيانة: النظام موقوفٌ على التجّار دون مدير المنصة.
+     * وضع الصيانة: النظام موقوفٌ مؤقّتًا على الجميع.
      *
-     * المفتاح كان معروضًا في إعدادات المنصة ولا يقرؤه شيء — يُشغّله المشغّل
-     * قبل ترقيةٍ ويظنّ أنه أغلق الأبواب، والتجّار يبيعون على قاعدةٍ تُهاجَر
-     * تحتهم. مقبضُ أمانٍ لا يُمسك أخطرُ من غيابه.
+     * مقبضٌ يُرفع قبل ترقيةٍ فلا يعمل أحدٌ على قاعدةٍ تُهاجَر تحته. ويُضبط
+     * من القاعدة مباشرةً (`settings` بـ`business_id = null`) — لا شاشةَ له.
      */
     public static function maintenance(): bool
     {
         return (string) self::platform('maintenance_mode', '0') === '1';
-    }
-
-    /** آخر لحظةٍ يعمل فيها المتجر — نهاية الاشتراك زائدَ المهلة */
-    public static function locksAt(?Business $business): ?Carbon
-    {
-        return $business?->ends_at?->endOfDay()->addDays(self::graceDays());
-    }
-
-    /**
-     * أُقفل فعلًا؟ — وهو غير «انتهى».
-     *
-     * الفرق ليس لفظيًّا: بينهما أيّامٌ يعمل فيها المتجر كاملًا ويرى صاحبه
-     * شريطًا أحمر يعدّ ما بقي. وخلطُهما يعني أن تأخّر حوالةٍ ساعةً يوقف
-     * صندوقًا في يوم عيد.
-     */
-    public static function locked(?Business $business): bool
-    {
-        /*
-         * الإقفال التلقائي مقبضٌ للمشغّل.
-         *
-         * كان «تعطيل الحساب تلقائيًا عند انتهاء المهلة» مربّعًا في إعدادات
-         * المنصة لا يقرؤه شيء — والنظام يقفل دائمًا. وإطفاؤه يعني متابعةً
-         * يدوية: تنبيهاتٌ تُرسل ومتاجر تعمل حتى يُقفلها المشغّل بنفسه.
-         */
-        if ((string) self::platform('auto_suspend', '1') === '0') {
-            return false;
-        }
-
-        return self::locksAt($business)?->isPast() ?? false;
-    }
-
-    /** كم يومًا بقي من المهلة بعد الانتهاء؟ null إن لم ينتهِ بعد */
-    public static function graceLeft(?Business $business): ?int
-    {
-        if (! self::expired($business)) {
-            return null;
-        }
-
-        return max(0, (int) now()->startOfDay()->diffInDays(self::locksAt($business), false));
-    }
-
-    /**
-     * انتهى الاشتراك؟
-     *
-     * يوم الانتهاء نفسه يبقى مسموحًا: من دفع حتى ٣١ يناير يعمل يوم ٣١ كاملًا.
-     * ولا تاريخ = لا مدّة محدَّدة، فلا يُمنع — الحسابات القديمة قبل الاشتراكات
-     * لا يجوز أن تُقفل لأن حقلًا فيها فارغ.
-     */
-    public static function expired(?Business $business): bool
-    {
-        return $business?->ends_at !== null && $business->ends_at->endOfDay()->isPast();
-    }
-
-    /** كم يومًا بقي؟ null إن لا تاريخ له */
-    public static function daysLeft(?Business $business): ?int
-    {
-        if (! $business?->ends_at) {
-            return null;
-        }
-
-        return (int) now()->startOfDay()->diffInDays($business->ends_at->startOfDay(), false);
     }
 
     /** الرسالة كما تُقال للمستخدم — لا رمز الحالة */
@@ -194,8 +93,7 @@ class Tenancy
         return match ($reason) {
             self::USER_SUSPENDED => __('حسابك موقوف. راجع صاحب النشاط.'),
             self::USER_REMOVED => __('لم يعد هذا الحساب موجودًا. راجع صاحب النشاط.'),
-            self::BUSINESS_DISABLED => __('حساب المتجر معطَّل. تواصل مع الدعم.'),
-            self::SUBSCRIPTION_EXPIRED => __('انتهى اشتراك المتجر. جدّده لمتابعة العمل.'),
+            self::BUSINESS_DISABLED => __('حساب الشركة معطَّل. راجع مدير النظام.'),
             default => __('لا يمكن الدخول الآن.'),
         };
     }

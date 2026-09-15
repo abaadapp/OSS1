@@ -7,7 +7,6 @@ use App\Support\Permissions;
 use App\Support\Reports;
 use App\Support\ShopIdentity;
 use App\Support\Support;
-use App\Support\Tenancy;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
 
@@ -64,7 +63,6 @@ class HandleInertiaRequests extends Middleware
                  * تُعلَن في كل صفحة لا في صفحةٍ واحدة: من ينسى أنه في حساب
                  * غيره يعدّل بيانات تاجرٍ ظنًّا أنها بياناته.
                  */
-                'impersonating' => $request->session()->has('impersonator_id'),
                 // الأقسام المسموح بها — الواجهة تخفي ما لا يُسمح به بدل تخمينه
                 'abilities' => collect(Permissions::sections())
                     ->filter(fn ($section) => $user->allows($section))
@@ -95,26 +93,6 @@ class HandleInertiaRequests extends Middleware
 
                 'currency' => Demo::displayCurrency(),
                 'currencies' => collect(Demo::currencies())->where('active', true)->values()->all(),
-                /*
-                 * الاشتراك: كم بقي من أيامه.
-                 *
-                 * الانتهاء كان يقع بلا سابق إنذار — يفتح التاجر لوحته صباحًا
-                 * فيجدها مقفلة. والتجديد يحدث حين يُذكَّر به قبل الموعد، لا
-                 * حين تُقفل الأبواب.
-                 */
-                'subscription' => ($ends = $user->business?->ends_at)
-                    ? [
-                        'endsAt' => $ends->format('Y-m-d'),
-                        'daysLeft' => Tenancy::daysLeft($user->business),
-                        /*
-                         * أيّام المهلة الباقية بعد الانتهاء — الرقم الذي يدفع
-                         * إلى الدفع. «انتهى اشتراكك» وحدها لا تقول متى يقف
-                         * الصندوق، ومن لا يعرف الموعد يؤجّل إلى أن يفاجئه.
-                         */
-                        'graceLeft' => Tenancy::graceLeft($user->business),
-                    ]
-                    : null,
-
                 /*
                  * تهيئةُ المتجر: ما لم يُكتب بعد من هويّته.
                  *

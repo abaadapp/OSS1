@@ -4,7 +4,6 @@ namespace App\Console\Commands;
 
 use App\Models\Business;
 use App\Models\User;
-use App\Rules\PlatformEmailDomain;
 use App\Support\Mailer;
 use Illuminate\Console\Command;
 use Illuminate\Support\Carbon;
@@ -85,7 +84,7 @@ class Preflight extends Command
         );
 
         $this->section('الحسابات');
-        $weak = User::whereIn('role', ['super_admin', 'admin'])->get()
+        $weak = User::where('role', 'admin')->get()
             ->filter(fn ($u) => Hash::check('password', $u->password) || Hash::check('test1234', $u->password))
             ->pluck('email');
         $this->check(
@@ -94,25 +93,9 @@ class Preflight extends Command
             'حسابات بكلمة مرور معروفة: '.$weak->implode('، ')
         );
         $this->check(
-            'يوجد مدير منصة واحد على الأقل',
-            User::where('role', 'super_admin')->exists(),
-            'لا يمكن الدخول إلى لوحة المنصة — أنشئ حسابًا عبر البذرة أو tinker'
-        );
-
-        /*
-         * القاعدة تُفرض عند الكتابة لا عند الدخول، فحسابٌ أُنشئ قبلها يبقى
-         * عاملًا — ولو مُنع الدخول لأُغلقت اللوحة في وجه صاحبها لحظة النشر.
-         * فيُبلَّغ عنه هنا: يُرى ولا يُطرد.
-         */
-        $outside = User::where('role', 'super_admin')->pluck('email')
-            ->reject(fn ($e) => PlatformEmailDomain::matches($e));
-        $this->check(
-            'بريد مدراء المنصة على نطاق '.PlatformEmailDomain::DOMAIN,
-            $outside->isEmpty(),
-            'حسابات مدير منصة على بريد خارجي: '.$outside->implode('، ')
-                .' — مفتاح المنصّة كلّها معلَّقٌ على حسابٍ لا تملكه',
-            // تنبيه لا مانع: قرارٌ يخصّ المالك، ولا يُوقف نشرةً بسببه
-            warnOnly: true
+            'يوجد حساب مالكٍ واحد على الأقل',
+            User::where('role', 'admin')->exists(),
+            'لا يمكن الدخول إلى اللوحة — أنشئ حسابًا عبر البذرة أو tinker'
         );
 
         $this->section('البيانات');

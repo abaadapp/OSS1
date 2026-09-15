@@ -87,22 +87,6 @@ class ActivityStaffOnlyTest extends TestCase
         $this->assertSame([], $this->logsSeenByOwner());
     }
 
-    public function test_the_platform_admin_does_not_appear_there_either(): void
-    {
-        $platform = User::create([
-            'name' => 'مدير المنصة',
-            'email' => 'admin@eventplusapp.om',
-            'password' => bcrypt('password'),
-            'role' => 'super_admin',
-            'status' => 'نشط',
-        ]);
-
-        $this->actingAs($platform);
-        Activity::log('updated', 'عدّل إعدادًا', ['business_id' => $this->business->id]);
-
-        $this->assertSame([], $this->logsSeenByOwner());
-    }
-
     public function test_a_neighbours_employee_never_appears(): void
     {
         // الاستثناء لا يفتح بابًا: الحدّ بين المتاجر يبقى قائمًا كما كان

@@ -234,7 +234,7 @@ class NoFaceIsInventedForAPersonTest extends TestCase
     public function test_a_platform_admin_is_cleaned_too(): void
     {
         Business::create(['name' => 'متجر تجريبي', 'type' => 'محل ورود', 'status' => 'نشط', 'is_demo' => true]);
-        $super = $this->invent(['business_id' => null, 'role' => 'super_admin', 'email' => 'sa@eventplusapp.om']);
+        $super = $this->invent(['business_id' => null, 'role' => 'admin', 'email' => 'sa@eventplusapp.om']);
 
         (require base_path(self::MIGRATION))->up();
 

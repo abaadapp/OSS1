@@ -380,10 +380,7 @@ class Demo
             'owner' => $b->owner_name,
             'phone' => $b->phone,
             'email' => $b->email,
-            'plan' => $b->plan?->name ?? '—',
             'status' => $b->status,
-            'registered' => optional($b->starts_at)->format('Y-m-d') ?? '—',
-            'branches' => $b->branches_count,
             'logo' => $b->logo,
             'city' => $b->city,
             'country' => $b->country,
@@ -392,43 +389,34 @@ class Demo
 
     
 
-    /** أحدث الأنشطة من سجل النشاط (حسب الدور) */
+    /** أحدث الأنشطة من سجل النشاط */
     public static function activities(int $limit = 8): array
     {
         $u = auth()->user();
-        $q = ActivityLog::query()->latest('id');
-        if ($u && ! $u->isSuperAdmin()) {
-            $q->where('business_id', self::bid());
-        }
+        $q = ActivityLog::query()->latest('id')->where('business_id', self::bid());
 
         /*
          * بطاقة «أحدث الأنشطة» مراقبةٌ لا مرآة.
          *
-         * كانت تعرض صاحبَ الشاشة نفسه: يفتح مدير المنصة لوحته فيقرأ «مدير
-         * المنصة — سجّل الدخول»، ويفتح التاجر لوحته فيقرأ فعلَه هو قبل قليل.
-         * ثمانية أسطر تُدفع فيها أفعالُ من يجب أن يُراقَبوا خارج الشاشة.
+         * كانت تعرض صاحبَ الشاشة نفسه: يفتح صاحبُ العمل لوحته فيقرأ فعلَه
+         * هو قبل قليل — ثمانية أسطر تُدفع فيها أفعالُ من يجب أن يُراقَبوا
+         * خارج الشاشة.
          *
          * والسجلّ الكامل (صفحة «سجل النشاط») لا يُمسّ: هو الدليل، ولا يجوز
          * أن يُنقّى — ما يُخفى من بطاقةٍ يبقى في السجلّ.
          */
-        $q->whereNotIn('user_id', User::where('role', 'super_admin')->select('id'));
-
-        if ($u && ! $u->isSuperAdmin()) {
+        if ($u) {
             /*
-             * ولوحة التاجر تعرض موظفيه وحدهم: لا أفعاله هو، ولا ما جرى عبر
-             * انتحال الدعم. والبطاقة تتبع صفحة «سجل النشاط» في الحكم نفسه،
-             * فلا يقرأ التاجر في اللوحة سطرًا لا يجده في السجلّ فيحتار.
+             * ولوحة صاحب العمل تعرض موظفيه وحدهم لا أفعاله هو. والبطاقة
+             * تتبع صفحة «سجل النشاط» في الحكم نفسه، فلا يقرأ في اللوحة
+             * سطرًا لا يجده في السجلّ فيحتار.
              */
             $q->whereNotIn('user_id', User::where('business_id', self::bid())
-                ->where('role', 'admin')->select('id'))
-                ->whereNull('impersonator_id');
+                ->where('role', 'admin')->select('id'));
         }
 
         return $q->limit($limit)->get()->map(fn ($a) => [
-            // «عبر الدعم» تُلحق بالاسم: السطر الواحد لا يتّسع لشارة
-            'text' => $a->user_name
-                .($a->impersonator_name ? ' ('.__('عبر الدعم').')' : '')
-                .' — '.$a->description,
+            'text' => $a->user_name.' — '.$a->description,
             'time' => optional($a->created_at)?->diffForHumans() ?? '—',
             'icon' => $a->icon,
             'color' => $a->color,
@@ -1075,8 +1063,7 @@ class Demo
             ->whereNotNull('user_id'))
             ->selectRaw('user_id, SUM(total) as s')->groupBy('user_id')->pluck('s', 'user_id');
 
-        return User::where('business_id', $bid)->where('role', '!=', 'super_admin')
-            ->orderBy('id')->get()->map(function ($u) use ($monthly, $lifetime) {
+        return User::where('business_id', $bid)->orderBy('id')->get()->map(function ($u) use ($monthly, $lifetime) {
                 $achieved = (float) ($monthly[$u->id] ?? 0);
                 $target = (float) $u->monthly_target;
 
@@ -1162,8 +1149,7 @@ class Demo
             ->selectRaw('user_id, SUM(total) as s, COUNT(*) as c')
             ->groupBy('user_id')->get()->keyBy('user_id');
 
-        return User::where('business_id', $bid)->where('role', '!=', 'super_admin')
-            ->orderBy('id')->get()->map(function ($u) use ($sold) {
+        return User::where('business_id', $bid)->orderBy('id')->get()->map(function ($u) use ($sold) {
                 $row = $sold->get($u->id);
 
                 return [
@@ -2275,7 +2261,7 @@ class Demo
             'tax' => $tax,
             'products' => Product::where('business_id', $bid)->count(),
             'inventory_alerts' => Product::where('business_id', $bid)->whereColumn('quantity', '<', 'alert_qty')->count(),
-            'employees' => User::where('business_id', $bid)->where('role', '!=', 'super_admin')->count(),
+            'employees' => User::where('business_id', $bid)->count(),
             'customers' => Customer::where('business_id', $bid)->count(),
             'payment_methods' => (int) (clone $ordersQ)->distinct('payment_method')->count('payment_method'),
         ];

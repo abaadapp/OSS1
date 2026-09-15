@@ -115,8 +115,8 @@ class LiveSettingsTest extends TestCase
     private function superAdmin(): User
     {
         return User::create([
-            'business_id' => null, 'name' => 'المشغّل', 'email' => 'super@eventplus.om',
-            'password' => bcrypt('password'), 'role' => 'super_admin', 'status' => 'نشط',
+            'business_id' => null, 'name' => 'حسابٌ بلا شركة', 'email' => 'nobody@eventplus.om',
+            'password' => bcrypt('password'), 'role' => 'admin', 'status' => 'نشط',
         ]);
     }
 }

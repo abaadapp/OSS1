@@ -57,18 +57,6 @@ class ProfileController extends Controller
                 'required',
                 'email',
                 Rule::unique('users', 'email')->ignore($user->id),
-                /*
-                 * النطاق يُفرض على العنوان الجديد وحده.
-                 *
-                 * لو فُرض على كل حفظ لصار مدير المنصة القائم — وبريده خارج
-                 * النطاق — عاجزًا عن تعديل اسمه أو صورته أو كلمة مروره: يضغط
-                 * «حفظ» فيُرفض بسبب حقلٍ لم يلمسه. القاعدة تمنع الانتقال إلى
-                 * الخارج، لا تعاقب من كان هناك قبلها.
-                 */
-                Rule::when(
-                    $user->isSuperAdmin() && $request->input('email') !== $user->email,
-                    [new \App\Rules\PlatformEmailDomain],
-                ),
             ],
             'phone' => ['nullable', 'string', 'max:50'],
             'avatar' => ['nullable', 'image', 'max:2048'],

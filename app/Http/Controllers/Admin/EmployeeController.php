@@ -286,10 +286,10 @@ class EmployeeController extends Controller
         return JobTitle::where('business_id', $this->bid())->where('name', $name)->first();
     }
 
-    /** موظف تابع للمستأجر الحالي (باستثناء مدير المنصة) */
+    /** موظف تابع للمستأجر الحالي */
     private function findEmployee($id): User
     {
-        return User::where('business_id', $this->bid())->where('role', '!=', 'super_admin')->findOrFail($id);
+        return User::where('business_id', $this->bid())->findOrFail($id);
     }
 
     /**

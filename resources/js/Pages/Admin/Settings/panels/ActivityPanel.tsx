@@ -30,7 +30,6 @@ export interface Log {
     action: string;
     description: string;
     /** اسم من دخل «كتاجر» وفعلها — null إن فعلها صاحب الحساب */
-    via?: string | null;
     icon: string;
     color: string;
     ago: string;
@@ -206,16 +205,6 @@ export default function ActivityPanel({
                                         >
                                             {t(ACTION_LABEL[log.action] ?? log.action)}
                                         </Badge>
-                                        {/*
-                                            من فعلها حقًّا. بلا هذه الشارة يقرأ
-                                            التاجر اسمه على عمليةٍ فعلها الدعم،
-                                            فيتّهم موظفيه أو يتّهم المنصة.
-                                        */}
-                                        {log.via && (
-                                            <span className="rounded-full bg-[#eef2ff] px-2 py-0.5 text-[11px] font-medium text-[#4338ca]">
-                                                {t('عبر الدعم')} · {log.via}
-                                            </span>
-                                        )}
                                     </div>
                                     <p className="mt-0.5 text-sm text-[#4b4b4b]">{log.description}</p>
                                     <p className="mt-1 text-[12px] text-[#9ca3af]">

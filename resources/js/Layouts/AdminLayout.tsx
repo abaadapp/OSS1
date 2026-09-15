@@ -3,7 +3,6 @@ import { Head, router, usePage } from '@inertiajs/react';
 import { motion } from 'framer-motion';
 import { Toaster, toast } from 'sonner';
 import Sidebar from '@/Components/Sidebar';
-import SubscriptionBanner from '@/Components/SubscriptionBanner';
 import SetupBanner from '@/Components/SetupBanner';
 import Topbar from '@/Components/Topbar';
 import { useOnScreenKeyboard } from '@/lib/keyboard';
@@ -118,7 +117,6 @@ export default function AdminLayout({ title, children, nav, sidebarSubtitle }: A
                     transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
                     className="mx-auto w-full max-w-[1600px] p-4 lg:p-6"
                 >
-                    <SubscriptionBanner />
                     <SetupBanner />
                     {children}
                 </motion.main>

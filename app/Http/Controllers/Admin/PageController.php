@@ -717,7 +717,7 @@ class PageController extends Controller
             'alertSections' => Permissions::sectionLabels(),
             // قسم «صلاحيات الموظفين»: الموظفون الفعليون وحالة صلاحية كلٍّ منهم
             'staffPermissions' => User::where('business_id', Demo::bid())
-                ->where('role', '!=', 'super_admin')->orderBy('name')->get()
+                ->orderBy('name')->get()
                 ->map(fn ($u) => [
                     'id' => $u->id,
                     'name' => $u->name,

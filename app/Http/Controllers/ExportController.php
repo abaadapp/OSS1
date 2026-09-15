@@ -149,7 +149,7 @@ class ExportController extends Controller
 
     private function stream(string $name, array $headers, array $rows): StreamedResponse
     {
-        $filename = "eventpluspos-{$name}-".now()->format('Y-m-d').'.csv';
+        $filename = "eventplus-{$name}-".now()->format('Y-m-d').'.csv';
 
         return response()->streamDownload(function () use ($headers, $rows) {
             $out = fopen('php://output', 'w');

@@ -48,8 +48,8 @@ class ThePanelKeepsOneWayInTest extends TestCase
     private function operator(string $email = 'p@eventplusapp.om', string $status = 'نشط'): User
     {
         return User::create([
-            'business_id' => null, 'name' => 'مدير المنصة', 'email' => $email,
-            'password' => bcrypt('password'), 'role' => 'super_admin', 'status' => $status,
+            'business_id' => null, 'name' => 'حسابٌ بلا شركة', 'email' => $email,
+            'password' => bcrypt('password'), 'role' => 'admin', 'status' => $status,
         ]);
     }
 

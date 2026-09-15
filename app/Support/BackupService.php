@@ -79,6 +79,6 @@ class BackupService
 
     public static function filename(int $bid): string
     {
-        return 'eventpluspos-backup-'.$bid.'-'.now()->format('Y-m-d-His').'.json';
+        return 'eventplus-backup-'.$bid.'-'.now()->format('Y-m-d-His').'.json';
     }
 }

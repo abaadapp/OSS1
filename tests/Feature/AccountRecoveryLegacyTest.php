@@ -47,8 +47,8 @@ class AccountRecoveryLegacyTest extends TestCase
         ]);
 
         $this->super = User::create([
-            'business_id' => null, 'name' => 'مدير المنصة', 'email' => 'root@eventplus.om',
-            'password' => bcrypt('password'), 'role' => 'super_admin', 'status' => 'نشط',
+            'business_id' => null, 'name' => 'حسابٌ بلا شركة', 'email' => 'root@eventplus.om',
+            'password' => bcrypt('password'), 'role' => 'admin', 'status' => 'نشط',
         ]);
     }
 

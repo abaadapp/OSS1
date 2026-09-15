@@ -503,7 +503,7 @@ class Permissions
             return false;
         }
 
-        if ($user->isSuperAdmin() || in_array($user->role, self::PANEL_ROLES, true)) {
+        if (in_array($user->role, self::PANEL_ROLES, true)) {
             return true;
         }
 
@@ -636,9 +636,6 @@ class Permissions
 
     public static function allows(?string $role, string $section): bool
     {
-        if ($role === 'super_admin') {
-            return true;
-        }
         $abilities = self::abilities($role);
         if (in_array('*', $abilities, true)) {
             return true;

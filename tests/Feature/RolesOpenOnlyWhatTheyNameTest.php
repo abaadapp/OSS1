@@ -7,22 +7,17 @@ use App\Models\User;
 use App\Support\Permissions;
 use App\Support\Roles;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Facades\Hash;
-use Inertia\Testing\AssertableInertia as Assert;
 use Tests\TestCase;
 
 /**
- * «المستخدمون» في لوحة المنصّة — الشاشة التي تُقرأ منها الحسابات ويُوثق بها.
+ * الدورُ يفتح ما يسمّيه ولا شيء سواه.
  *
- * ما تحرسه هذه الاختبارات ليس الأزرار بل ما تقوله الشاشة: أن تبويب
- * الصلاحيات يعرض ما يُفرض فعلًا، وأن دورًا مجهولًا لا يفتح شيئًا، وأن
- * الحساب المعطوب لا يُعرض سليمًا، وأن الحذف قابل للتراجع.
+ * ما يُحرَس هنا ليس الأزرار بل ما يقوله النظام عن الحساب: أن دورًا مجهولًا
+ * لا يفتح شيئًا، وأن صاحب العمل ومدير الفرع يُفرَّق بينهما في التسمية.
  */
-class PlatformUsersTest extends TestCase
+class RolesOpenOnlyWhatTheyNameTest extends TestCase
 {
     use RefreshDatabase;
-
-    private User $super;
 
     private Business $business;
 
@@ -30,11 +25,7 @@ class PlatformUsersTest extends TestCase
     {
         parent::setUp();
 
-        $this->business = Business::create(['name' => 'متجري', 'status' => 'نشط']);
-        $this->super = User::create([
-            'business_id' => null, 'name' => 'مدير المنصة', 'email' => 'boss@eventplusapp.om',
-            'password' => bcrypt('secret12345'), 'role' => 'super_admin', 'status' => 'نشط',
-        ]);
+        $this->business = Business::create(['name' => 'Event Plus', 'status' => 'نشط']);
     }
 
     private function staff(array $attrs = []): User
@@ -42,10 +33,9 @@ class PlatformUsersTest extends TestCase
         return User::create(array_merge([
             'business_id' => $this->business->id, 'name' => 'موظف',
             'email' => 'staff@eventplusapp.om', 'password' => bcrypt('secret12345'),
-            'role' => 'cashier', 'status' => 'نشط',
+            'role' => 'sales', 'status' => 'نشط',
         ], $attrs));
     }
-    /* --------------------------- الدور المجهول --------------------------- */
 
     public function test_an_unknown_role_opens_nothing_rather_than_everything(): void
     {
@@ -54,6 +44,7 @@ class PlatformUsersTest extends TestCase
         $this->assertFalse(Permissions::allows('ghost', 'orders'));
         $this->assertFalse(Permissions::allows('ghost', 'settings'));
     }
+
     public function test_the_owner_and_the_branch_manager_are_told_apart(): void
     {
         // كانت `roleLabel()` تكتب «مدير» لكليهما، والمرشّح فوقهما يكتب غير ذلك

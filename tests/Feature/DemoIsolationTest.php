@@ -26,16 +26,10 @@ class DemoIsolationTest extends TestCase
 {
     use RefreshDatabase;
 
-    private User $superAdmin;
-
     protected function setUp(): void
     {
         parent::setUp();
 
-        $this->superAdmin = User::create([
-            'name' => 'مدير المنصة', 'email' => 'root@eventplusapp.om',
-            'password' => bcrypt('password'), 'role' => 'super_admin', 'status' => 'نشط',
-        ]);
     }
 
     private function merchant(string $name = 'متجر تاجر'): Business
