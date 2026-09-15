@@ -323,4 +323,84 @@ class ARestoreReturnsTheShopTest extends TestCase
             ->assertRedirect()
             ->assertSessionHasNoErrors();
     }
+
+    private function shop(string $name = 'ورود مسقط', string $email = 'o@eventplusapp.om'): array
+    {
+        $business = Business::create(['name' => $name, 'type' => 'عام', 'status' => 'نشط']);
+        $bid = $business->id;
+
+        $owner = User::create([
+            'business_id' => $bid, 'name' => 'المالك', 'email' => $email,
+            'password' => bcrypt('secret12345'), 'role' => 'admin', 'status' => 'نشط',
+        ]);
+
+        $branch = DB::table('branches')->insertGetId(['business_id' => $bid, 'name' => 'الرئيسي', 'created_at' => now(), 'updated_at' => now()]);
+        $category = DB::table('categories')->insertGetId(['business_id' => $bid, 'name' => 'عام', 'created_at' => now(), 'updated_at' => now()]);
+
+        $product = DB::table('products')->insertGetId([
+            'business_id' => $bid, 'category_id' => $category, 'name' => 'قميص', 'sku' => 'SH-'.$bid,
+            'price' => 10, 'cost' => 6, 'quantity' => 20, 'alert_qty' => 2, 'active' => true,
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        DB::table('branch_stocks')->insert([
+            'business_id' => $bid, 'branch_id' => $branch, 'product_id' => $product,
+            'quantity' => 20, 'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        DB::table('pos_devices')->insert([
+            'business_id' => $bid, 'branch_id' => $branch, 'name' => 'الصندوق الأول',
+            'token_hash' => hash('sha256', 'device-'.$bid), 'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        $customer = DB::table('customers')->insertGetId([
+            'business_id' => $bid, 'name' => 'زبون', 'phone' => '9000000'.$bid,
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        $order = DB::table('orders')->insertGetId([
+            'business_id' => $bid, 'branch_id' => $branch, 'customer_id' => $customer,
+            'number' => 'INV-'.$bid.'-1', 'subtotal' => 10, 'tax' => 0.5, 'total' => 10.5,
+            'payment_method' => 'نقدي', 'status' => 'مكتمل', 'is_held' => false,
+            'ordered_at' => now(), 'created_at' => now(), 'updated_at' => now(),
+        ]);
+        DB::table('order_items')->insert([
+            'order_id' => $order, 'product_id' => $product, 'name' => 'قميص',
+            'price' => 10, 'cost' => 6, 'quantity' => 1, 'total' => 10,
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        $supplier = DB::table('suppliers')->insertGetId(['business_id' => $bid, 'name' => 'مورّد', 'created_at' => now(), 'updated_at' => now()]);
+        DB::table('supplier_invoices')->insert([
+            'business_id' => $bid, 'supplier_id' => $supplier, 'supplier_ref' => 'SI-1',
+            'total' => 100, 'paid' => 0, 'issued_at' => now()->toDateString(),
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        $account = DB::table('accounts')->insertGetId([
+            'business_id' => $bid, 'code' => '1100', 'name' => 'الصندوق',
+            'type' => 'أصل', 'normal_side' => 'debit', 'system_key' => 'cash',
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+        $entry = DB::table('journal_entries')->insertGetId([
+            'business_id' => $bid, 'number' => 'JE-1', 'description' => 'قيد',
+            'entry_date' => now()->toDateString(), 'source' => 'يدوي',
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+        DB::table('journal_lines')->insert([
+            ['journal_entry_id' => $entry, 'account_id' => $account, 'debit' => 10, 'credit' => 0, 'created_at' => now(), 'updated_at' => now()],
+            ['journal_entry_id' => $entry, 'account_id' => $account, 'debit' => 0, 'credit' => 10, 'created_at' => now(), 'updated_at' => now()],
+        ]);
+
+        DB::table('settings')->insert(['business_id' => $bid, 'key' => 'vat_rate', 'value' => '5', 'created_at' => now(), 'updated_at' => now()]);
+
+        // ورمزان سرّيّان: بلا سطرٍ يحملهما لا يحرس حارسُ التسريب شيئًا
+        DB::table('whatsapp_connections')->insert([
+            'business_id' => $bid, 'owner_type' => 'business', 'provider' => 'meta',
+            'access_token' => 'EAAG-سرّ-'.$bid, 'status' => 'connected',
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        return [$business, $owner];
+        }
 }

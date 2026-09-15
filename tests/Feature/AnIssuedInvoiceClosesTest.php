@@ -185,4 +185,8 @@ class AnIssuedInvoiceClosesTest extends TestCase
 
         $this->assertFalse(Permissions::entersPanel($this->cashier->fresh()));
     }
+
+    private function correct(Order $order, int $qty = 1)
+    {
+        }
 }
