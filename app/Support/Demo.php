@@ -10,7 +10,6 @@ use App\Models\Branch;
 use App\Models\BranchStock;
 use App\Models\Business;
 use App\Models\Category;
-use App\Models\Coupon;
 use App\Models\Currency;
 use App\Models\CustomAlert;
 use App\Models\Customer;
@@ -18,9 +17,7 @@ use App\Models\DismissedNotification;
 use App\Models\Expense;
 use App\Models\ExpenseType;
 use App\Models\GoodsReceiptNote;
-use App\Models\GoogleBusinessReview;
 use App\Models\InventoryMovement;
-use App\Models\Invoice;
 use App\Models\Order;
 use App\Models\OrderEdit;
 use App\Models\OrderItem;
@@ -31,9 +28,7 @@ use App\Models\ProductVariant;
 use App\Models\PurchaseOrder;
 use App\Models\RecipeItem;
 use App\Models\Setting;
-use App\Models\Subscription;
 use App\Models\Supplier;
-use App\Models\SupportConversation;
 use App\Models\Transaction;
 use App\Models\User;
 use Carbon\Carbon;
@@ -351,68 +346,6 @@ class Demo
             ->all();
     }
 
-    /**
-     * موقع النشاط الإلكتروني كرابط صالح للفتح، أو null إن لم يُضبط.
-     *
-     * التاجر يكتب «eventplus.om» بلا بروتوكول عادةً، والمتصفح يقرأ ذلك مسارًا
-     * نسبيًا داخل اللوحة فيهبط على صفحة 404 بدل موقعه. وما عدا http/https
-     * يُرفض: القيمة تصل من نموذج الإعدادات، وزرٌّ يفتح «javascript:» ثغرة
-     * لا ميزة.
-     */
-    public static function websiteUrl(): ?string
-    {
-        /*
-         * النطاق مصدره شاشة «الموقع الإلكتروني» في أدوات التسويق — وحدها.
-         *
-         * كان مفتاحان لشيءٍ واحد: حقلٌ في بيانات النشاط ونطاقٌ في شاشة
-         * التسويق. فيضبط التاجر نطاقه في أحدهما ويبقى الآخر فارغًا، ولا
-         * يعرف أيّهما يقرأ الزرّ — وهو ما كان يجعل الزرّ يقود إلى نطاقٍ
-         * قديمٍ نُسي أو إلى لا شيء وقد ضُبط.
-         *
-         * فبقي واحد: ما يُكتب في شاشة الموقع هو ما يفتحه الزرّ. والقديم
-         * نُقل إليه بهجرة، فلم يضع نطاقٌ ضُبط قبل هذه النسخة.
-         */
-        /*
-         * والمُطفأ لا يُفتح — ولو بقي نطاقُه محفوظًا.
-         *
-         * التفعيل يُقرأ من مصدره الواحد لا من عمود القاعدة مباشرةً، فما
-         * تقوله الشاشةُ هو ما يفعله الزرّ (انظر `MarketingSettings`).
-         */
-        $business = Business::find(self::bid());
-
-        /*
-         * ومتجرُ افنت بلس يسبق الرابط الخارجيّ.
-         *
-         * من نشر متجره عندنا فذاك موقعُه: زرٌّ يفتح صفحةً قديمة بينما متجره
-         * الحيّ في مكانٍ آخر يُرسل زبونَه إلى الخطأ. والخارجيّ يبقى لمن لم
-         * ينشر — أو لمن له موقعٌ آخر ولم يفتح متجرًا هنا.
-         */
-        if ($business && Storefront::published($business)) {
-            return Storefront::url($business->site_slug);
-        }
-
-        $site = MarketingSettings::group(self::bid(), 'website');
-
-        if (($site['site_on'] ?? '1') !== '1') {
-            return null;
-        }
-
-        $raw = trim((string) ($site['site_domain'] ?? ''));
-
-        if ($raw === '') {
-            return null;
-        }
-
-        if (! preg_match('#^https?://#i', $raw)) {
-            if (str_contains($raw, ':')) {
-                return null;
-            }
-            $raw = 'https://'.$raw;
-        }
-
-        return filter_var($raw, FILTER_VALIDATE_URL) ? $raw : null;
-    }
-
     /** فروع النشاط الحالي */
     /**
      * فروع المتجر — ومعها ما يتعلّق بكل فرع.
@@ -434,170 +367,6 @@ class Demo
                 'orders' => (int) $b->orders_count,
                 'devices' => (int) $b->devices_count,
             ])->all();
-    }
-
-    /* ============================ Super Admin ============================ */
-
-    public static function superStats(): array
-    {
-        $mStart = now()->startOfMonth();
-        $lmStart = now()->subMonthNoOverflow()->startOfMonth();
-        $yStart = now()->startOfYear();
-        $lyStart = now()->subYear()->startOfYear();
-
-        // القيم (إجمالي)
-        $total = Business::real()->count();
-        $active = Business::real()->where('status', 'نشط')->count();
-        /*
-         * المستخدمون: كما تعدّهم شاشتهم لا كما يعدّهم الجدول.
-         *
-         * كان `User::count()` يجمع موظّفي المتجر التجريبيّ الثمانية إلى
-         * الحقيقيّين — وقائمةُ «المستخدمون» تستثنيهم. فالبطاقة تقول أحد عشر
-         * والقائمة تعرض ثلاثة، والرقمان لشيءٍ واحد.
-         */
-        $realUsers = fn () => User::whereDoesntHave('business', fn ($w) => $w->where('is_demo', true));
-        $users = $realUsers()->count();
-        /*
-         * المشتركون من صفوف المتاجر لا من جدول الاشتراكات — انظر
-         * Business::scopeSubscribed. والجدول يبقى للمال لا للعدّ.
-         */
-        $subscribed = Business::subscribed()->count();
-        $trialing = Business::trialing()->count();
-
-        // اتجاهات حقيقية = نمو التسجيلات (هذا الشهر مقابل الشهر السابق)
-        $bizNew = Business::real()->where('starts_at', '>=', $mStart)->count();
-        $bizNewLast = Business::real()->where('starts_at', '>=', $lmStart)
-            ->where('starts_at', '<', $mStart)->count();
-        $activeNew = Business::real()->where('status', 'نشط')->where('starts_at', '>=', $mStart)->count();
-        $activeNewLast = Business::real()->where('status', 'نشط')
-            ->where('starts_at', '>=', $lmStart)->where('starts_at', '<', $mStart)->count();
-        $usersNew = $realUsers()->where('created_at', '>=', $mStart)->count();
-        $usersNewLast = $realUsers()->where('created_at', '>=', $lmStart)
-            ->where('created_at', '<', $mStart)->count();
-        $subsNew = Business::subscribed()->where('starts_at', '>=', $mStart)->count();
-        $subsNewLast = Business::subscribed()->where('starts_at', '>=', $lmStart)
-            ->where('starts_at', '<', $mStart)->count();
-
-        /*
-         * الإيراد الشهري المتكرّر: الاشتراكات السارية منسوبةً إلى الشهر.
-         *
-         * لا مجموع الفواتير: فاتورةٌ سنوية تُدفع مرّةً واحدة تجعل شهرًا يبدو
-         * عظيمًا وأحد عشر شهرًا تبدو خرابًا. والمتكرّر يقيس ما يتكرّر — وهو ما
-         * يُبنى عليه قرارٌ في هذا العمل.
-         *
-         * والقسمة على عدد أشهر الدورة: اشتراك سنوي بـ١٢٠ يساوي ١٠ في الشهر.
-         */
-        $mrrAt = function ($moment) {
-            return (float) Subscription::where('status', 'نشط')
-                ->where('starts_at', '<=', $moment)
-                ->where(fn ($q) => $q->whereNull('ends_at')->orWhere('ends_at', '>=', $moment))
-                ->get()
-                ->sum(function ($sub) {
-                    $months = $sub->starts_at && $sub->ends_at
-                        ? max(1, round($sub->starts_at->diffInDays($sub->ends_at) / 30))
-                        : 1;
-
-                    return (float) $sub->amount / $months;
-                });
-        };
-        $mrr = $mrrAt(now());
-        $mrrLast = $mrrAt($lmStart);
-
-        /*
-         * الفاقد: من كان معك أول الشهر وليس معك الآن.
-         *
-         * يُحسب من الحالة الفعلية لا من عدّاد «الاشتراكات المنتهية» — ذاك يعدّ
-         * دوراتٍ قديمة لعملاء جدّدوا، فيقول إنك تخسر وأنت تكسب.
-         */
-        $churned = Business::real()->where('starts_at', '<', $mStart)
-            ->where(fn ($q) => $q->whereIn('status', ['معطل', 'معطّل'])->orWhere('ends_at', '<', now()))
-            ->where('updated_at', '>=', $mStart)
-            ->count();
-        $activeAtStart = max(1, Business::real()->where('starts_at', '<', $mStart)->count());
-        $churnRate = round($churned / $activeAtStart * 100);
-
-        /*
-         * كم كان في التجربة أوّل الشهر — ليُقاس عليه ما فيها الآن.
-         *
-         * والفحص «كما كان يومَها» لا كما هو اليوم: من دفع بعد أوّل الشهر كان
-         * في التجربة حينها، فعدُّه اليوم خارجَها يجعل الرقم القديم أصغر ممّا
-         * كان — فتقول البطاقة إنّ التجربة تنمو وهي تنكمش.
-         */
-        $trialingAt = fn ($moment) => Business::real()
-            ->where('starts_at', '<=', $moment)
-            ->where(fn ($q) => $q->whereNull('ends_at')->orWhere('ends_at', '>=', $moment))
-            ->whereNotIn('status', ['معطل', 'معطّل'])
-            ->whereNotExists(
-                fn ($q) => $q->selectRaw('1')->from('invoices')
-                    ->whereColumn('invoices.business_id', 'businesses.id')
-                    ->where('invoices.status', 'مدفوعة')
-                    ->where('invoices.issued_at', '<=', $moment),
-            )
-            ->count();
-        $trialingLast = $trialingAt($mStart);
-
-        // الإيرادات: الشهر مقابل السابق، والسنة مقابل السابقة (فواتير مدفوعة فعليًا)
-        $paid = fn () => Invoice::where('status', 'مدفوعة');
-        $monthly = (float) $paid()->where('issued_at', '>=', $mStart)->sum('amount');
-        // والحدُّ الأعلى مفتوح كما في لوحة التاجر — `issued_at` تاريخٌ بلا ساعة
-        $monthlyLast = (float) $paid()->where('issued_at', '>=', $lmStart)
-            ->where('issued_at', '<', $mStart)->sum('amount');
-        $yearly = (float) $paid()->where('issued_at', '>=', $yStart)->sum('amount');
-        $yearlyLast = (float) $paid()->whereBetween('issued_at', [$lyStart, $yStart])->sum('amount');
-
-        return [
-            array_merge(['label' => __('إجمالي الشركات'), 'value' => (string) $total, 'icon' => 'building-2', 'color' => 'primary'], self::trend($bizNew, $bizNewLast)),
-            array_merge(['label' => __('الشركات النشطة'), 'value' => (string) $active, 'icon' => 'circle-check', 'color' => 'success'], self::trend($activeNew, $activeNewLast)),
-            /*
-             * الإيراد الشهري المتكرّر والفاقد — لا عدد المستخدمين.
-             *
-             * «إجمالي الشركات» و«المستخدمون» أرقامٌ ترتفع ولا تُدار: تصعد وأنت
-             * تخسر، ولا تقول متى. والمنصّة تُدار برقمين — كم يدخل شهريًّا، وكم
-             * خرج ومن.
-             */
-            array_merge(['label' => __('الإيراد الشهري المتكرّر'), 'value' => self::money($mrr), 'icon' => 'repeat', 'color' => 'primary'], self::trend($mrr, $mrrLast)),
-            /*
-             * وشكلُها شكلُ أخواتها: رقمٌ واحد في الوسط ونسبةٌ تحته.
-             *
-             * كانت وحدها تكتب رقمين في خانة القيمة («٢ · ١٥٪»)، ورقمًا ثالثًا
-             * في خانة الاتجاه هو عددٌ لا نسبة — بينما كلُّ بطاقةٍ في الشبكة
-             * تقول نسبةً. فتُقرأ الشبكةُ صفًّا واحدًا إلّا هي.
-             *
-             * والنسبة هي نسبةُ الفاقد لا تغيّرَه: هي ما يُدار به، وهي التي
-             * كانت محشورةً في القيمة. والسهم أحمرُ نازل ما دام أحدٌ خرج، وأخضرُ
-             * حين لا يخرج أحد — ارتفاع الفاقد ليس نموًّا.
-             */
-            [
-                'label' => __('الفاقد هذا الشهر'), 'value' => (string) $churned, 'icon' => 'user-minus',
-                'trend' => ($churned > 0 ? '−' : '').$churnRate.'%',
-                'up' => $churned === 0,
-                'color' => $churned > 0 ? 'danger' : 'success',
-            ],
-            array_merge(['label' => __('المشتركون'), 'value' => (string) $subscribed, 'icon' => 'badge-check', 'color' => 'success'], self::trend($subsNew, $subsNewLast)),
-            /*
-             * التجربة بطاقةٌ مستقلّة لا رقمٌ مخلوطٌ بالمشتركين.
-             *
-             * من دخل بأربعة عشر يومًا مجّانًا ليس إيرادًا ولا مدينًا — وخلطه
-             * بمن يدفع يجعلك تقرأ خمسةً وأنت تعرف أن اثنين لم يدفعا ريالًا.
-             */
-            /*
-             * وهذه كانت البطاقة الوحيدة بلا اتجاه: سطرٌ ناقصٌ تحتها يجعلها
-             * أقصر من جاراتها في الشبكة، ورقمًا لا يُقاس عليه شيء.
-             *
-             * والمقياس: كم كان فيها أوّل الشهر. ونموُّ التجربة خيرٌ — فالسهم
-             * أخضرُ صاعد حين يزيدون.
-             */
-            array_merge(
-                [
-                    'label' => __('في التجربة'), 'value' => (string) $trialing, 'icon' => 'hourglass',
-                    'color' => $trialing > 0 ? 'warning' : 'secondary',
-                ],
-                self::trend($trialing, $trialingLast),
-            ),
-            array_merge(['label' => __('المستخدمون'), 'value' => (string) $users, 'icon' => 'users', 'color' => 'info'], self::trend($usersNew, $usersNewLast)),
-            array_merge(['label' => __('الإيرادات الشهرية'), 'value' => self::money($monthly), 'icon' => 'wallet', 'color' => 'warning'], self::trend($monthly, $monthlyLast)),
-            array_merge(['label' => __('الإيرادات السنوية'), 'value' => self::money($yearly), 'icon' => 'trending-up', 'color' => 'primary'], self::trend($yearly, $yearlyLast)),
-        ];
     }
 
     /**
@@ -664,47 +433,6 @@ class Demo
                 'plan' => $b->plan?->name ?? '—',
                 'sales' => (float) Order::where('business_id', $b->id)->sold()->sum('total'),
             ])->all();
-    }
-
-    public static function plans(): array
-    {
-        return Plan::orderBy('id')->get()->map(fn ($p) => [
-            'name' => $p->name,
-            'monthly' => (float) $p->monthly_price,
-            'yearly' => (float) $p->yearly_price,
-            'color' => $p->color,
-            'popular' => (bool) $p->is_popular,
-            'features' => $p->features ?? [],
-        ])->all();
-    }
-
-    public static function subscriptions(): array
-    {
-        return Subscription::with('business', 'plan')->orderByDesc('id')->get()->map(fn ($s) => [
-            'id' => $s->id,
-            'business_id' => $s->business_id,
-            'plan_id' => $s->plan_id,
-            'business' => $s->business?->name ?? '—',
-            'plan' => $s->plan?->name ?? '—',
-            'start' => optional($s->starts_at)->format('Y-m-d') ?? '—',
-            'end' => optional($s->ends_at)->format('Y-m-d') ?? '—',
-            'amount' => (float) $s->amount,
-            'payment' => $s->payment_status,
-            'status' => $s->status,
-        ])->all();
-    }
-
-    public static function invoices(): array
-    {
-        return Invoice::with('business', 'plan')->orderByDesc('id')->get()->map(fn ($i) => [
-            'id' => $i->id,
-            'number' => $i->number,
-            'business' => $i->business?->name ?? '—',
-            'plan' => $i->plan?->name ?? '—',
-            'amount' => (float) $i->amount,
-            'date' => optional($i->issued_at)->format('Y-m-d') ?? '—',
-            'status' => $i->status,
-        ])->all();
     }
 
     /** أحدث الأنشطة من سجل النشاط (حسب الدور) */
@@ -1602,61 +1330,6 @@ class Demo
                 'suggested' => max(1, (int) $p->alert_qty * 2 - (int) $p->quantity),
                 'cost' => (float) $p->cost,
             ])->all();
-    }
-
-    /* ============================ التسويق والكوبونات ============================ */
-
-    public static function coupons(): array
-    {
-        return Coupon::where('business_id', self::bid())->orderByDesc('id')->get()->map(fn ($c) => [
-            'id' => $c->id,
-            'code' => $c->code,
-            'type' => $c->type,
-            'value' => (float) $c->value,
-            'min_order' => (float) $c->min_order,
-            'max_uses' => $c->max_uses,
-            'used_count' => (int) $c->used_count,
-            'expires' => optional($c->expires_at)->format('Y-m-d'),
-            // نهاية اليوم لا أوّله — انظر Coupon::endsAt
-            'expired' => $c->isExpired(),
-            'exhausted' => $c->isExhausted(),
-            'active' => (bool) $c->active,
-            /*
-             * وحُكمٌ واحد يقرؤه الصندوق والشارة.
-             *
-             * الشاشة كانت تجمعه من `expired` و`active` فتُسقط الشرط الثالث:
-             * كودٌ حدُّه خمسون استُخدم خمسين يُقرأ «فعّالًا» ويُردّ عند الدفع.
-             */
-            'usable' => $c->isValid(),
-            'display' => $c->type === 'نسبة' ? rtrim(rtrim(number_format($c->value, 2, '.', ''), '0'), '.').'%' : self::money($c->value),
-        ])->all();
-    }
-
-    /** الكوبونات الصالحة للاستخدام الآن (مفعّلة، غير منتهية، لم تُستنفد) — لعرضها في نقطة البيع */
-    public static function activeCoupons(): array
-    {
-        return Coupon::where('business_id', self::bid())
-            // الشروط الثلاثة في موضعٍ واحد تقرؤه البطاقة معه — انظر scopeUsable
-            ->usable()
-            ->orderByDesc('id')->get()->map(fn ($c) => [
-                'code' => $c->code,
-                'min_order' => (float) $c->min_order,
-                'display' => $c->type === 'نسبة'
-                    ? rtrim(rtrim(number_format($c->value, 2, '.', ''), '0'), '.').'%'
-                    : self::money($c->value),
-            ])->all();
-    }
-
-    public static function couponStats(): array
-    {
-        $bid = self::bid();
-
-        return [
-            'total' => Coupon::where('business_id', $bid)->count(),
-            // «فعّالة» تعني «يقبلها الصندوق» — لا «عمودُها مرفوع»
-            'active' => Coupon::where('business_id', $bid)->usable()->count(),
-            'redemptions' => (int) Coupon::where('business_id', $bid)->sum('used_count'),
-        ];
     }
 
     /* ============================ ضريبة القيمة المضافة ============================ */
@@ -2705,40 +2378,6 @@ class Demo
             ])->all();
     }
 
-    /**
-     * أرقام بطاقات الاشتراكات — من صفوف المتاجر لا من جدول الاشتراكات.
-     *
-     * الجدول يعدّ دوراتٍ لا تجّارًا: من جدّد ثلاث مرّات كان يُحسب اشتراكًا
-     * نشطًا وثلاثة منتهية، فتقول الشاشة إنك تخسر وأنت تكسب. والمتجر واحدٌ
-     * لا أربعة.
-     */
-    public static function subscriptionStats(): array
-    {
-        $subscribed = Business::subscribed()->count();
-        $trialing = Business::trialing()->count();
-        // المنتهي: تاجرٌ حقيقيّ لم يعد ساريًا — لا دورةٌ قديمة لمن جدّد
-        $expired = Business::real()->count() - Business::live()->count();
-
-        // الإيراد المتكرّر من آخر اشتراكٍ لكل متجرٍ مشترك، لا من كل دوراته
-        $monthly = (float) Subscription::whereIn('business_id', Business::subscribed()->select('id'))
-            ->whereIn('id', Subscription::selectRaw('MAX(id)')->groupBy('business_id'))
-            ->sum('amount');
-
-        return [
-            'active' => $subscribed, 'trialing' => $trialing, 'expired' => $expired,
-            'monthly_revenue' => $monthly, 'yearly_revenue' => $monthly * 12,
-        ];
-    }
-
-    /** أرقام بطاقات فواتير الاشتراكات (حقيقية) */
-    public static function invoiceStats(): array
-    {
-        $paid = (float) Invoice::where('status', 'مدفوعة')->sum('amount');
-        $unpaid = (float) Invoice::where('status', '!=', 'مدفوعة')->sum('amount');
-
-        return ['paid' => $paid, 'unpaid' => $unpaid, 'count' => Invoice::count()];
-    }
-
     /** ملخّص أرقام بطاقات التقارير — كلها محسوبة فعليًا من قاعدة البيانات (صفر عند فراغها) */
     public static function reportSummary(string $range = 'month'): array
     {
@@ -3050,19 +2689,6 @@ class Demo
         return ['labels' => $rows->pluck('cat')->all(), 'series' => $rows->pluck('s')->map(fn ($v) => round((float) $v, 3))->all()];
     }
 
-    /** إيرادات المنصة (فواتير) في السنة الجارية — يناير … ديسمبر */
-    public static function revenueSeries(): array
-    {
-        $labels = [];
-        $data = [];
-        foreach (self::yearMonths() as $m) {
-            $labels[] = self::monthLabel($m);
-            $data[] = round((float) Invoice::whereYear('issued_at', $m->year)->whereMonth('issued_at', $m->month)->sum('amount'), 3);
-        }
-
-        return ['labels' => $labels, 'data' => $data];
-    }
-
     /** نمو الشركات (عدد التسجيلات) في السنة الجارية — يناير … ديسمبر */
     public static function businessesGrowthSeries(): array
     {
@@ -3291,123 +2917,7 @@ class Demo
             }
         };
 
-        if ($u && $u->isSuperAdmin()) {
-            /*
-             * محادثاتُ الدعم التي تنتظر — قبل الاشتراكات.
-             *
-             * تاجرٌ ينتظر جوابًا أعجلُ من اشتراكٍ ينتهي بعد ثلاثين يومًا.
-             * والمعيّنةُ لهذا القارئ أوّلًا: من عُيّنت إليه محادثةٌ يُنبَّه
-             * إليها هو، ولا تُدفَع نسخةٌ منها إلى كلّ مدير في المنصّة.
-             */
-            $waiting = SupportConversation::with('business')
-                ->whereIn('status', Support::LIVE)
-                ->where(fn ($q) => $q->where('assigned_to', $u->id)->orWhereNull('assigned_to'))
-                ->orderByRaw('case when assigned_to is null then 1 else 0 end')
-                ->orderByDesc('last_message_at')
-                ->limit($limit)->get();
-
-            foreach ($waiting as $c) {
-                if (Support::unreadFor($c, $u) === 0) {
-                    continue;
-                }
-
-                $add('support-'.$c->id.'-'.$c->last_message_at?->timestamp, [
-                    'text' => __('رسالة جديدة من :name', ['name' => $c->business?->name ?? '—']),
-                    'time' => optional($c->last_message_at)->diffForHumans(),
-                    'icon' => 'message-square', 'color' => 'info',
-                    /* والرابطُ يفتح المحادثةَ بعينها لا القائمة */
-                    'url' => route('super-admin.conversations.index', ['conversation' => $c->id]),
-                ]);
-            }
-
-            $subs = Subscription::with('business')
-                ->whereNotNull('ends_at')->whereDate('ends_at', '>=', now())
-                ->whereDate('ends_at', '<=', now()->addDays(30))
-                ->orderBy('ends_at')->limit($limit)->get();
-            foreach ($subs as $s) {
-                $add('sub-'.$s->id, [
-                    'text' => __('اشتراك «:name» ينتهي قريبًا', ['name' => $s->business?->name ?? '—']),
-                    'time' => optional($s->ends_at)->format('Y-m-d'),
-                    'icon' => 'badge-x', 'color' => 'warning',
-                    'url' => route('super-admin.subscriptions.index'),
-                ]);
-            }
-
-            return $items;
-        }
-
         $bid = self::bid();
-
-        /*
-         * وردُّ افنت بلسٍ لم يُقرأ — أعلى ما يعني التاجر في جرسه.
-         *
-         * والملاحظاتُ الداخليّة لا تُعدّ ولا تُذكر: `businessBadge` تُرشّحها،
-         * ومن ينبّه بها يُخرج كلامَ الفريق إلى صاحب المتجر بلا أن يفتحه أحد.
-         */
-        if ($u) {
-            $replies = SupportConversation::where('business_id', $bid)
-                ->orderByDesc('last_message_at')->limit($limit)->get();
-
-            foreach ($replies as $c) {
-                if (Support::unreadFor($c, $u) === 0) {
-                    continue;
-                }
-
-                $add('support-reply-'.$c->id.'-'.$c->last_message_at?->timestamp, [
-                    'text' => __('لديك رد جديد من دعم افنت بلس'),
-                    'time' => optional($c->last_message_at)->diffForHumans(),
-                    'icon' => 'message-square', 'color' => 'info',
-                    'url' => route('admin.help.show', $c->id),
-                ]);
-            }
-        }
-
-        /*
-         * تقييماتُ Google — الجديدُ منها والمنخفض.
-         *
-         * ═══ ولمَ «الجديد» يُقاس بأوّل مرّةٍ وصلنا فيها ═══
-         *
-         * لو قِيس بتاريخ Google لَانهال على التاجر مئةُ إشعارٍ يومَ يربط
-         * ملفَّه أوّلَ مرّة — تقييماتُ سنتين تصير كلُّها «جديدة».
-         *
-         * ═══ والمنخفضُ يُقال منخفضًا ═══
-         *
-         * تقييمٌ بنجمةٍ يُترك يومين يقرؤه كلُّ من يفتح ملفَّ المحلّ. وردٌّ في
-         * ساعته يقلب أثرَه.
-         *
-         * ولا يُنبَّه مديرُ المنصّة بتقييمِ متجرٍ: شأنُ صاحبه لا شأنُنا.
-         */
-        $googleSettings = MarketingSettings::group($bid, 'google');
-
-        if (($googleSettings['gbp_alerts_enabled'] ?? '1') === '1') {
-            $threshold = (int) ($googleSettings['gbp_low_rating'] ?? 2);
-
-            $fresh = GoogleBusinessReview::live()
-                ->whereIn('branch_id', Branch::where('business_id', $bid)->pluck('id'))
-                ->where('first_seen_at', '>=', now()->subDays(14))
-                ->with('branch:id,name')
-                ->orderByDesc('reviewed_at')
-                ->limit($limit)->get();
-
-            foreach ($fresh as $review) {
-                $low = $review->rating > 0 && $review->rating <= $threshold;
-
-                $add('gbp-review-'.$review->id, [
-                    'text' => $low
-                        ? __('تقييم منخفض ⭐:n على :branch', [
-                            'n' => $review->rating, 'branch' => $review->branch?->name ?? '—',
-                        ])
-                        : __('تقييم Google جديد ⭐:n على :branch', [
-                            'n' => $review->rating, 'branch' => $review->branch?->name ?? '—',
-                        ]),
-                    'time' => optional($review->reviewed_at)->diffForHumans(),
-                    'icon' => 'star',
-                    /* واللونُ يفرّق: المنخفضُ يُقرأ قبل أن يُقرأ نصُّه */
-                    'color' => $low ? 'danger' : 'info',
-                    'url' => route('admin.integrations.googleBusiness'),
-                ]);
-            }
-        }
 
         /*
          * ═══ رسائلُ واتساب لم تصل ═══
@@ -3420,29 +2930,6 @@ class Demo
          * في اليوم يعرف.
          *
          * والنصُّ يفرّق بين ما يُصلحه وما ننتظره نحن: «راجع أرقام زبائنك»
-         * لتاجرٍ تطبيقُنا محجوب لومٌ في غير محلّه، ويجعله يلاحق ما لا يملك.
-         */
-        $waAlert = WhatsAppHealth::alert($bid);
-
-        if ($waAlert !== null) {
-            $add('wa-delivery', [
-                'text' => $waAlert['ours']
-                    ? __('لم تصل :n رسالة واتساب إلى زبائنك — العطب عندنا ونعالجه', ['n' => $waAlert['count']])
-                    : __('لم تصل :n رسالة واتساب إلى زبائنك — راجع أرقامهم', ['n' => $waAlert['count']]),
-                'time' => __('آخر يوم'),
-                'icon' => 'message-circle',
-                'color' => 'danger',
-                /*
-                 * ويقود إلى الصفوف نفسِها لا إلى شاشة الربط.
-                 *
-                 * كان يقود إلى «التطبيقات التكاملية ‹ واتساب» — وهي شاشةٌ
-                 * تقول إنّ الرقم مربوطٌ وحصّتَك باقية، ولا تعرف أيَّ الثلاث
-                 * فشلت ولا لمن ولا لماذا. فيُقال للتاجر إنّ شيئًا انكسر ولا
-                 * يُقال ماذا، وبابٌ معروضٌ لا يُفتح أسوأ من بابٍ لا يُعرض.
-                 */
-                'url' => route('admin.marketing.whatsapp.log', ['filter' => 'failed']),
-            ]);
-        }
 
         // ملخّص اليوم (بطاقة في الجرس) — يظهر فقط إذا كان مفعّلًا في الإعدادات وهناك نشاط اليوم
         $dailyPref = Setting::where('business_id', $bid)->where('key', 'notify_daily_summary')->value('value');

@@ -33,7 +33,6 @@ use App\Support\Permissions;
 use App\Support\Receivables;
 use App\Support\Search;
 use App\Support\Vat;
-use App\Support\WhatsAppPhone;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
@@ -1320,60 +1319,6 @@ class CustomerInvoiceController extends Controller
                 .($spread !== '' ? ' — '.$spread : '')
                 .($left > 0 ? ' — '.__('وبقي :n رصيدًا للعميل', ['n' => $left]) : ''),
             'type' => 'success',
-        ]);
-    }
-
-    /**
-     * تذكيرٌ بالسداد عبر واتساب.
-     *
-     * ولا يُبنى موصلٌ ثانٍ للمزوّد: بنيةُ الإرسال التلقائيّ القائمة مبنيّةٌ
-     * على الطلبات وأحداثِ حالتها، وحشرُ الفاتورة فيها يعني تعديلَ مسارٍ حيٍّ
-     * يرسل إلى زبائن اليوم.
-     *
-     * فالتذكيرُ يدويٌّ صريح: النصُّ يُكتب في الخادم — الاسمُ والرقمُ والباقي
-     * وتاريخُ الاستحقاق — ويُفتح على واتساب التاجر ليرسله بنفسه. وهذا يعمل
-     * اليوم بلا وعدٍ بأتمتةٍ غير مبنيّة.
-     */
-    public function remind(int|string $id)
-    {
-        $invoice = $this->find($id);
-
-        /*
-         * ورسالتا الردّ تُرسمان: `withErrors` تكتب في `errors`، والشاشةُ لا
-         * ترسم حقلًا اسمه `remind` — فكان الزرُّ يُضغط ولا يقع شيءٌ ولا يُقال
-         * لماذا. بابٌ يُفتح على صمتٍ أسوأ من بابٍ لا يُفتح.
-         */
-        if ($invoice->outstanding() <= 0) {
-            return back()->with('toast', [
-                'msg' => __('لا مبلغ مستحقًّا على هذه الفاتورة.'), 'type' => 'danger',
-            ]);
-        }
-
-        $phone = WhatsAppPhone::normalize(
-            $invoice->customer?->contact_phone ?: $invoice->customer?->phone
-        );
-
-        if (! $phone) {
-            return back()->with('toast', [
-                'msg' => __('لا رقم واتساب لهذا العميل — أضِفه في صفحته.'), 'type' => 'danger',
-            ]);
-        }
-
-        $text = __(':shop — تذكير بفاتورة :number. المبلغ المستحق :amount:due', [
-            'shop' => Demo::businessName(),
-            'number' => $invoice->number,
-            'amount' => number_format($invoice->outstanding(), 3),
-            'due' => $invoice->due_at ? '، '.__('تاريخ الاستحقاق ').$invoice->due_at->format('Y-m-d') : '',
-        ]);
-
-        Activity::log('updated', 'أعدّ تذكير سداد للفاتورة '.$invoice->number, [
-            'subject_id' => $invoice->id, 'subject_type' => 'customer_invoice',
-        ]);
-
-        return back()->with('toast', [
-            'msg' => __('جُهِّز التذكير — افتح واتساب واضغط «إرسال» فيه.'),
-            'type' => 'info',
-            'link' => ['url' => 'https://wa.me/'.$phone.'?text='.rawurlencode($text), 'label' => __('فتح واتساب')],
         ]);
     }
 

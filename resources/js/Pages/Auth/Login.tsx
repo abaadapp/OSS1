@@ -1,31 +1,17 @@
-import { type FormEvent, useState } from 'react';
-import { Link, router, useForm, usePage } from '@inertiajs/react';
+import { type FormEvent } from 'react';
+import { Link, useForm, usePage } from '@inertiajs/react';
 import { Lock, Mail, TriangleAlert } from 'lucide-react';
 
 import AuthLayout from '@/Layouts/AuthLayout';
 import AuthShowcase from '@/Components/auth/AuthShowcase';
 import Field from '@/Components/Field';
 import { Button } from '@/Components/ui/button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/Components/ui/dialog';
 import { Input } from '@/Components/ui/input';
 import { PasswordInput } from '@/Components/ui/password-input';
 import { useTranslate } from '@/lib/i18n';
 import type { PageProps } from '@/types';
 
 interface Props {
-    /**
-     * هوية هذا الجهاز — تصل فقط إن سبق أن دخل منه أحد.
-     *
-     * وجودها هو الإذن بعرض اسم المتجر فوق النموذج وبابِ نسيانه: على متصفّحٍ
-     * لم يُعرف بعد لا شيء من ذلك — انظر LoginController::showLogin.
-     */
-    device: {
-        business: string | null;
-        branch: string | null;
-        device: string | null;
-        /** جهازٌ مفعَّل (يحتاج مديرًا لإعادة تفعيله) أم متجرٌ متذكَّر وحسب؟ */
-        activated: boolean;
-    } | null;
     year: number;
     /** هل يستطيع النظام إرسال بريدٍ فعلًا — انظر App\Support\Mailer */
     canRecover: boolean;
@@ -46,9 +32,8 @@ interface Props {
  * الاستعادة الذي يظهر بحسب وجود مُرسِل بريد.
  */
 export default function Login() {
-    const { device, year, canRecover, canRegister, errors } = usePage<PageProps<Props>>().props;
+    const { year, canRecover, canRegister, errors } = usePage<PageProps<Props>>().props;
     const t = useTranslate();
-    const [forgetting, setForgetting] = useState(false);
 
     const form = useForm({ email: '', password: '', remember: false });
 
@@ -74,19 +59,6 @@ export default function Login() {
                 صامتًا حتى يقف أحدهم أمام شاشةٍ ترفض بياناته الصحيحة ولا يفهم
                 لماذا.
             */}
-            {device?.business && (
-                <div className="mb-6">
-                    <p className="text-[13px] text-[#9ca3af]">{t('تدخل إلى')}</p>
-                    <p className="mt-0.5 text-[15px] font-semibold text-[#111]">{device.business}</p>
-                    {device.branch && (
-                        <p className="mt-0.5 text-[13px] text-[#6b7280]">
-                            {device.branch}
-                            {device.device ? ` • ${device.device}` : ''}
-                        </p>
-                    )}
-                </div>
-            )}
-
             <h1 className="text-[26px] font-bold leading-tight text-[#111]">
                 {t('مرحبًا بك مجددًا')} <span aria-hidden>👋</span>
             </h1>
@@ -201,60 +173,6 @@ export default function Login() {
                     </Link>
                 </p>
             )}
-
-            {/*
-                المخرج من شاشةٍ صارت مقفلة على متجرٍ واحد.
-                جهازٌ بيع، أو نُقل إلى محلٍّ آخر، أو رُبط يوم التركيب بالمتجر
-                الخطأ — وبلا هذا لا حيلة إلا مسح كوكي المتصفّح يدويًّا، وهو ما
-                لا يعرفه صاحب المحل.
-            */}
-            {device && (
-                <div className="mt-6 text-center">
-                    <button
-                        type="button"
-                        onClick={() => setForgetting(true)}
-                        className="text-[13px] text-[#9ca3af] underline-offset-4 transition-colors hover:text-[#4b4b4b] hover:underline"
-                    >
-                        {t('ليس هذا متجرك؟')}
-                    </button>
-                </div>
-            )}
-
-            {/*
-                تأكيدٌ لا زرٌّ مباشر — والنصّ يفترق بحسب ما يُنسى.
-                الجهاز المفعَّل يحتاج مديرًا يعيد تفعيله، فضغطةٌ عابرة عليه
-                توقف الصندوق حتى يحضر أحد. أما المتجر المتذكَّر فيُكتب من جديد
-                عند أي دخولٍ بالبريد، ونسيانه لا يكلّف شيئًا.
-            */}
-            <Dialog open={forgetting} onOpenChange={setForgetting}>
-                <DialogContent className="max-w-md">
-                    <DialogHeader>
-                        <DialogTitle>{t('نسيان هذا الجهاز')}</DialogTitle>
-                    </DialogHeader>
-
-                    <div className="px-5 pb-5">
-                        {/* نداءان لا نداءٌ بعاملٍ ثلاثي: الفاحص يقرأ ما يلي t( مباشرةً */}
-                        <p className="text-[13px] leading-6 text-[#4b4b4b]">
-                            {device?.activated
-                                ? t('سينسى هذا الجهاز فرعَه، ويحتاج مديرًا لإعادة تفعيله من «فتح نقطة البيع». المبيعات والفواتير لا تتأثر.')
-                                : t('سيُنسى المتجر المرتبط بهذا الجهاز. يعود الربط تلقائيًا عند أول دخول بالبريد وكلمة المرور.')}
-                        </p>
-
-                        <div className="mt-5 flex justify-end gap-2">
-                            <Button type="button" variant="outline" onClick={() => setForgetting(false)}>
-                                {t('إلغاء')}
-                            </Button>
-                            <Button
-                                type="button"
-                                variant="danger"
-                                onClick={() => router.post(route('device.forget'))}
-                            >
-                                {t('نسيان الجهاز')}
-                            </Button>
-                        </div>
-                    </div>
-                </DialogContent>
-            </Dialog>
         </AuthLayout>
     );
 }

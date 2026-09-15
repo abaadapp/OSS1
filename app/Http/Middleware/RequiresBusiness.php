@@ -30,13 +30,6 @@ class RequiresBusiness
         }
 
         if (! $user->business_id) {
-            if ($user->role === 'super_admin') {
-                return redirect()->route('super-admin.dashboard')->with('toast', [
-                    'msg' => __('لوحة النشاط تخصّ متجرًا بعينه — ادخل إليه من صفحة الشركات.'),
-                    'type' => 'info',
-                ]);
-            }
-
             abort(403, __('حسابك غير مرتبط بأي متجر.'));
         }
 

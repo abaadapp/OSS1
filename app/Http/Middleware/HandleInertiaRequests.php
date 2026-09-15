@@ -2,12 +2,8 @@
 
 namespace App\Http\Middleware;
 
-use App\Support\CrmWhatsApp;
 use App\Support\Demo;
 use App\Support\Permissions;
-use App\Support\PlanFeatures;
-use App\Support\PosCashier;
-use App\Support\PosTerminal;
 use App\Support\Reports;
 use App\Support\ShopIdentity;
 use App\Support\Support;
@@ -86,46 +82,17 @@ class HandleInertiaRequests extends Middleware
                     ->filter(fn ($action) => $user->may($action))
                     ->values()
                     ->all(),
-                /*
-                 * وما تفتحه الباقة — سؤالٌ آخر غير `abilities`.
-                 *
-                 * ذاك يسأل «هل يملك هذا الموظّف هذا القسم؟» وهذا «هل اشترى
-                 * صاحبُ المتجر هذه القدرة؟». والاثنان يقعان على البند الواحد:
-                 * مالكٌ يملك كلّ الأقسام في متجرٍ على الباقة الأساسية.
-                 *
-                 * وتُرسل ليُخفى ما لا يُفتح: بابٌ يُعرض ويردّ بـ403 يجعل صاحبه
-                 * يظنّ العطب في النظام ويعيد المحاولة — انظر `Permissions::panelEntry`.
-                 */
-                'planFeatures' => PlanFeatures::map($user->business),
+
             ] : null,
 
             // سياق المتجر: الفرع الحالي والعملة المعروضة ومنازل الكسر
             'context' => fn () => $user?->business_id ? [
                 'businessName' => Demo::businessName(),
-                // رابط موقع التاجر — يستعمله زرّ «الموقع الإلكتروني» في الهيدر،
-                // فصار مشتركًا لا خاصًّا باللوحة. null حين لم يُضبط بعد.
-                'website' => Demo::websiteUrl(),
+
                 'branchId' => Demo::currentBranchId(),
                 'branchName' => Demo::currentBranchName(),
                 'branches' => Demo::branches(),
-                // اسم الصندوق الذي يقف عليه — يُعرض في ترويسة نقطة البيع
-                'deviceName' => PosTerminal::current()?->name,
-                /*
-                 * ملحقات هذا الصندوق وحده — لا ملحقات المتجر كلّه.
-                 *
-                 * الطابعة تُقرأ لتحديد عرض الورق والطباعة التلقائية بعد البيع،
-                 * والماسح ليُوجَّه التركيز إلى حقل الباركود من أول الشاشة.
-                 * وتُرسل النشطة فقط: ملحقٌ عُطِّل من الإعدادات لأنه معطوب يجب
-                 * ألّا يُطبع عليه.
-                 */
-                'peripherals' => PosTerminal::current()
-                    ?->peripherals()->where('active', true)->get()
-                    ->map(fn ($p) => [
-                        'type' => $p->type,
-                        'name' => $p->name,
-                        'paperWidth' => $p->paper_width,
-                        'autoPrint' => $p->auto_print,
-                    ])->values()->all() ?? [],
+
                 'currency' => Demo::displayCurrency(),
                 'currencies' => collect(Demo::currencies())->where('active', true)->values()->all(),
                 /*
@@ -162,12 +129,6 @@ class HandleInertiaRequests extends Middleware
                 'setup' => $user->allows('settings') ? ShopIdentity::context($user->business) : null,
             ] : null,
 
-            // الموظف الواقف على الصندوق — تعرضه ترويسة نقطة البيع، وهو غير
-            // الحساب المسجَّل دخوله (انظر App\Support\PosCashier)
-            'posCashier' => fn () => $user?->business_id
-                ? (PosCashier::current()?->only(['id', 'name']))
-                : null,
-
             /*
              * فهرس التقارير — عنوانًا ووجهةً لا أكثر.
              *
@@ -189,35 +150,6 @@ class HandleInertiaRequests extends Middleware
                 'items' => Demo::notifications(),
                 'count' => Demo::notificationsCount(),
             ] : null,
-
-            /*
-             * شارةُ الدعم — محسوبةٌ في كلّ طلب لا مكتوبةٌ في الشاشة.
-             *
-             * لمدير المنصّة: محادثاتٌ حيّةٌ فيها كلامٌ من متجرٍ لم يقرأه.
-             * وللتاجر: ردودٌ من افنت بلسٍ لم يقرأها. ورقمٌ ثابتٌ يقول «٨» أبدًا
-             * يصير جزءًا من الأثاث فلا تقع عليه عين.
-             *
-             * وصفرٌ لا يُرسم: شارةٌ بصفرٍ تشغل موضعَ شارةٍ تعني شيئًا.
-             */
-            'supportBadge' => fn () => $user
-                ? ($user->isSuperAdmin()
-                    ? Support::platformBadge($user)
-                    : Support::businessBadge($user))
-                : 0,
-
-            /*
-             * وشارةُ المبيعات — أخو شارة الدعم لا هي.
-             *
-             * تاجرٌ يكتب إلينا كان يُضيء الشريط، وعميلٌ محتمَلٌ يكتب إلى
-             * الرقم نفسِه لا يُضيء شيئًا: تُكتب رسالتُه وتنتظر حتّى يفتح
-             * أحدُهم الشاشةَ بالصدفة. ومن جاء ليشتري وانتظر يومًا يذهب
-             * إلى غيرنا.
-             *
-             * ولمدير المنصّة وحدَه: لا تاجرَ يقرأ دفترَ مبيعاتنا.
-             */
-            'crmBadge' => fn () => $user && $user->isSuperAdmin()
-                ? CrmWhatsApp::badge($user)
-                : 0,
 
             // رسائل الجلسة — الواجهة تعرضها كـtoast
             'flash' => fn () => [

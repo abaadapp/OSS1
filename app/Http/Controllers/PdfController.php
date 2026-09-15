@@ -7,9 +7,7 @@ use App\Models\BankAccount;
 use App\Models\Business as BusinessModel;
 use App\Models\Customer;
 use App\Models\CustomerInvoice;
-use App\Models\Invoice;
 use App\Models\Order;
-use App\Models\PosPeripheral;
 use App\Models\Setting;
 use App\Support\Activity;
 use App\Support\Demo;
@@ -17,12 +15,10 @@ use App\Support\Document\PaperSize;
 use App\Support\DocumentRenderer;
 use App\Support\DocumentTemplates;
 use App\Support\EInvoice;
-use App\Support\GoogleReviews;
 use App\Support\InvoiceBranding;
 use App\Support\OrderStatus;
 use App\Support\Paper;
 use App\Support\Pdf;
-use App\Support\PosTerminal;
 use App\Support\PublicDocument;
 use App\Support\Receivables;
 use App\Support\Reports;
@@ -170,13 +166,6 @@ class PdfController extends Controller
             'customerTax' => $order->customer_id
                 ? optional(Customer::find($order->customer_id))->tax_number
                 : null,
-            /*
-             * رمزُ تقييم Google — أو null فلا يُطبع شيء.
-             *
-             * والشرطان في `onReceipt` معًا: مقبضٌ مُشغَّل ومعرّفٌ مقروء.
-             * فمقبضٌ يعمل بلا معرّف يطبع مربّعًا أسود يمسحه الزبون فلا يجد.
-             */
-            'googleReview' => GoogleReviews::onReceipt($bid, $order->branch_id),
         ];
 
         return [
@@ -190,21 +179,11 @@ class PdfController extends Controller
     /**
      * عرضُ ورق هذه الطابعة بالمليمتر.
      *
-     * وطابعةُ هذا الصندوق تغلب قالب المتجر: القالب إعدادٌ واحد للمتجر كلّه،
-     * والصناديق تختلف — صندوق المدخل بورق ٨٠ وصندوق التغليف بورق ٥٨. فمن
-     * يطبع من صندوقٍ يطبع بمقاس ورقه هو، وورقٌ لا يطابق الطابعة يخرج
-     * مقصوصًا من الحافة، ويُكتشف بعد أن يأخذه الزبون.
-     *
      * ولا تُسأل إلّا عن شريط: الفاتورةُ المقصوصة بابٌ آخر.
      */
     private static function stripWidth(string $paper): int
     {
-        $terminal = PosTerminal::current()
-            ?->peripherals()->where('active', true)
-            ->where('type', PosPeripheral::PRINTER)
-            ->value('paper_width');
-
-        return (int) ($terminal ?: ($paper === '58mm' ? 58 : 80));
+        return $paper === '58mm' ? 58 : 80;
     }
 
     /** تقرير أداء المنصة (سوبر أدمن) */
@@ -512,33 +491,4 @@ class PdfController extends Controller
         return Pdf::a4($html, $name);
     }
 
-    /** فاتورة اشتراك المنصة (سوبر أدمن) */
-    public function platformInvoice($number)
-    {
-        $invoice = Invoice::where('number', $number)->with('business', 'plan')->firstOrFail();
-
-        /*
-         * ورقةُ المنصّة لها قالبها — لا قالب فاتورة المبيعات.
-         *
-         * كان القالب يُقرأ بـ`$order` (أصناف، فرع، زبون، طريقة دفع) ويُمرَّر
-         * له `$invoice`، فكانت كل ضغطةٍ على «عرض» أو «تحميل» في شاشة الفواتير
-         * ٥٠٠ صامتة.
-         */
-        $settings = Setting::whereNull('business_id')
-            ->whereIn('key', ['app_name', 'company', 'official_email', 'phone', 'website'])
-            ->pluck('value', 'key');
-
-        $html = view('pdf.platform-invoice', [
-            'invoice' => $invoice,
-            'platform' => [
-                'app_name' => trim((string) $settings->get('app_name')) ?: __('افنت بلس'),
-                'company' => trim((string) $settings->get('company')),
-                'email' => trim((string) $settings->get('official_email')),
-                'phone' => trim((string) $settings->get('phone')),
-                'website' => trim((string) $settings->get('website')),
-            ],
-        ])->render();
-
-        return Pdf::a4($html, 'invoice-'.$invoice->number);
-    }
 }

@@ -7,7 +7,6 @@ use App\Models\User;
 use App\Support\Activity;
 use App\Support\Mailer;
 use App\Support\Permissions;
-use App\Support\PosTerminal;
 use App\Support\Tenancy;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -80,8 +79,6 @@ class LoginController extends Controller
         $this->markLogin(Auth::user());
 
         // يوم التركيب يدخل صاحب المتجر ببريده على جهاز الصندوق، فيتذكّره
-        // الجهاز ويعرف فرعَه بعدها — انظر PosTerminal
-        PosTerminal::rememberBusiness(Auth::user()->business_id);
 
         return redirect()->intended($this->homeFor(Auth::user()));
     }
@@ -127,31 +124,10 @@ class LoginController extends Controller
      * ليس حسابًا. من كان يدخل برمزه يدخل الآن ببريده وكلمة مروره.
      *
      * وهوية الجهاز تبقى: هي مصدر الفرع في نقطة البيع، واسم المتجر فوق
-     * البطاقة يقول للواقف أمامها أين هو — انظر PosTerminal.
      */
     public function showLogin(): Response
     {
-        $device = PosTerminal::current();
-
         return Inertia::render('Auth/Login', [
-            /*
-             * كتلةٌ واحدة لا حقول متفرّقة: وجودها هو الإذن بعرض اسم المتجر
-             * وبابِ نسيانه، فلا تعرض الواجهة اسمًا بلا متجرٍ خلفه.
-             */
-            'device' => PosTerminal::remembered() ? [
-                'business' => PosTerminal::businessName(),
-                'branch' => $device?->branch?->name,
-                'device' => $device?->name,
-                /*
-                 * جهازٌ مفعَّل أم متجرٌ متذكَّر وحسب؟
-                 *
-                 * الفرق ثمن النسيان: كوكي المتجر تُكتب من جديد عند أي دخولٍ
-                 * بالبريد، أما الجهاز المفعَّل فيحمل فرعَه — ونسيانه يحتاج
-                 * مديرًا يعيد تفعيله من «فتح نقطة البيع». والواجهة تُحذّر
-                 * بحسب ذلك بدل أن تُسوّي بينهما.
-                 */
-                'activated' => $device !== null,
-            ] : null,
             'year' => (int) now()->format('Y'),
             // بابٌ لا يفتح يُخفى: بلا بريدٍ مضبوط تقول شاشة الاستعادة
             // «أرسلنا الرابط» ولا تُرسل، فينتظر المستخدم رسالةً لن تأتي
@@ -163,28 +139,6 @@ class LoginController extends Controller
              * معطوبًا لا البابَ مقفلًا — انظر Support\Signup::open.
              */
             'canRegister' => \App\Support\Signup::open(),
-        ]);
-    }
-
-    /**
-     * ينسى هذا المتصفّح متجرَه — المخرج من شاشةٍ مقفلة على متجرٍ واحد.
-     *
-     * صارت شاشة الدخول تتذكّر المتجر وتعرض اسمه، فلزمها بابُ خروج: جهازٌ
-     * بيع، أو نُقل إلى محلٍّ آخر، أو رُبط يوم التركيب بالمتجر الخطأ. وبلا هذا
-     * لا حيلة إلا مسح كوكي المتصفّح يدويًّا — وهو ما لا يعرفه صاحب المحل.
-     *
-     * ولا حارس عليه عمدًا: لا يمسّ إلا كوكي الطالب نفسه، ولا يُلغي تفعيل
-     * الجهاز في السجلّ. من يستطيع مسح كوكيّاته من المتصفّح يستطيع هذا.
-     * والإلغاء الحقيقي (إبطال الجهاز في القاعدة) يبقى في الإعدادات خلف
-     * صلاحيته.
-     */
-    public function forgetDevice(Request $request)
-    {
-        PosTerminal::forget();
-
-        return redirect()->route('login')->with('toast', [
-            'msg' => __('نُسي هذا الجهاز. سجّل الدخول بالبريد لربطه من جديد.'),
-            'type' => 'info',
         ]);
     }
 
@@ -207,7 +161,6 @@ class LoginController extends Controller
         Auth::login($user);
         $request->session()->regenerate();
         $this->markLogin($user);
-        PosTerminal::rememberBusiness($user->business_id);
 
         return redirect($this->homeFor($user));
     }

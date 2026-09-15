@@ -5,10 +5,8 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Branch;
 use App\Models\BranchStock;
-use App\Models\PosDevice;
 use App\Support\Activity;
 use App\Support\Demo;
-use App\Support\PosTerminal;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 
@@ -108,14 +106,6 @@ class BranchController extends Controller
                 'في «:branch» ما زال :qty قطعة. اصرفها من المخزون ← سجل المخزون وأضِفها في فرعٍ آخر، ثم احذفه.',
                 ['branch' => $branch->name, 'qty' => rtrim(rtrim(number_format($left, 3, '.', ''), '0'), '.')]
             )]);
-        }
-
-        $devices = PosDevice::where('business_id', $this->bid())
-            ->where('branch_id', $branch->id)
-            ->where('status', PosDevice::ACTIVE)->get();
-
-        foreach ($devices as $device) {
-            PosTerminal::revoke($device);
         }
 
         Activity::log('deleted', 'حذف الفرع: '.$branch->name, ['subject_id' => $branch->id, 'subject_type' => 'branch']);

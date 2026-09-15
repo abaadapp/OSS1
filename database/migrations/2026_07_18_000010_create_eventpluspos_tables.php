@@ -12,21 +12,6 @@ return new class extends Migration
 {
     public function up(): void
     {
-        // الباقات
-        Schema::create('plans', function (Blueprint $table) {
-            $table->id();
-            $table->string('name');
-            $table->decimal('monthly_price', 10, 3)->default(0);
-            $table->decimal('yearly_price', 10, 3)->default(0);
-            $table->unsignedInteger('max_branches')->default(1);
-            $table->unsignedInteger('max_employees')->default(3);
-            $table->unsignedInteger('max_products')->default(100);
-            $table->json('features')->nullable();
-            $table->string('color')->default('primary');
-            $table->boolean('is_popular')->default(false);
-            $table->timestamps();
-        });
-
         // الشركات (المستأجرون)
         Schema::create('businesses', function (Blueprint $table) {
             $table->id();
@@ -38,7 +23,6 @@ return new class extends Migration
             $table->string('country')->default('عُمان');
             $table->string('city')->nullable();
             $table->string('address')->nullable();
-            $table->foreignId('plan_id')->nullable()->constrained('plans')->nullOnDelete();
             $table->string('logo')->nullable();
             $table->string('status')->default('نشط'); // نشط | منتهي | معطل
             $table->unsignedInteger('branches_count')->default(1);
@@ -138,31 +122,6 @@ return new class extends Migration
             $table->timestamps();
         });
 
-        // الاشتراكات
-        Schema::create('subscriptions', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('business_id')->constrained('businesses')->cascadeOnDelete();
-            $table->foreignId('plan_id')->nullable()->constrained('plans')->nullOnDelete();
-            $table->date('starts_at')->nullable();
-            $table->date('ends_at')->nullable();
-            $table->decimal('amount', 10, 3)->default(0);
-            $table->string('payment_status')->default('مدفوع');
-            $table->string('status')->default('نشط');
-            $table->timestamps();
-        });
-
-        // فواتير المنصة
-        Schema::create('invoices', function (Blueprint $table) {
-            $table->id();
-            $table->string('number')->index();
-            $table->foreignId('business_id')->constrained('businesses')->cascadeOnDelete();
-            $table->foreignId('plan_id')->nullable()->constrained('plans')->nullOnDelete();
-            $table->decimal('amount', 10, 3)->default(0);
-            $table->date('issued_at')->nullable();
-            $table->string('status')->default('مدفوعة');
-            $table->timestamps();
-        });
-
         // حركات المخزون
         Schema::create('inventory_movements', function (Blueprint $table) {
             $table->id();
@@ -237,8 +196,8 @@ return new class extends Migration
     {
         foreach ([
             'settings', 'shifts', 'transactions', 'expenses', 'inventory_movements',
-            'invoices', 'subscriptions', 'order_items', 'orders', 'customers',
-            'products', 'categories', 'branches', 'businesses', 'plans',
+            'order_items', 'orders', 'customers',
+            'products', 'categories', 'branches', 'businesses',
         ] as $table) {
             Schema::dropIfExists($table);
         }

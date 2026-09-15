@@ -5,7 +5,6 @@ namespace App\Http\Controllers\Auth;
 use App\Http\Controllers\Controller;
 use App\Support\Activity;
 use App\Support\BusinessTypes;
-use App\Support\PosTerminal;
 use App\Support\Signup;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -121,7 +120,6 @@ class RegisterController extends Controller
          */
         Auth::login($owner);
         $request->session()->regenerate();
-        PosTerminal::rememberBusiness($owner->business_id);
 
         Activity::log('login', 'دخل بعد التسجيل: '.$owner->email, ['business_id' => $owner->business_id]);
 

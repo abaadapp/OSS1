@@ -538,10 +538,6 @@ class Permissions
             return null;
         }
 
-        if ($user->isSuperAdmin()) {
-            return route('super-admin.dashboard');
-        }
-
         return collect(self::SECTIONS)
             ->reject(fn ($s) => in_array($s, self::OUTSIDE_PANEL, true))
             ->filter(fn ($s) => $user->allows($s))
@@ -589,10 +585,6 @@ class Permissions
      */
     public static function homeFor(User $user): string
     {
-        if ($user->isSuperAdmin()) {
-            return route('super-admin.dashboard');
-        }
-
         $panel = self::entersPanel($user);
 
         if ($panel && $user->allows('dashboard')) {

@@ -65,55 +65,7 @@ use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\PublicDocumentController;
 use App\Http\Controllers\SearchController;
 use App\Support\Permissions;
-use App\Support\Storefront;
 use Illuminate\Support\Facades\Route;
-
-/*
-|--------------------------------------------------------------------------
-| مسارات Event Plus OSS
-|--------------------------------------------------------------------------
-| صفحات العرض تُقدّم عبر Route::view وتقرأ بياناتها الحقيقية من قاعدة البيانات
-| عبر App\Support\Demo (حسب المستأجر). أفعال الحفظ/التعديل/الحذف عبر Controllers.
-*/
-
-/*
- * كل {id} في هذا الملف مفتاحٌ أساسيٌّ صحيح. بلا هذا القيد يصل نصٌّ مثل
- * "HOLD-JAR-1" إلى findOrFail، فيبتلعه SQLite صامتًا (يحوّله إلى 0 فيرجع 404)
- * بينما PostgreSQL يرمي 22P02 فيصير 500 — أي أن عنوانًا معطوبًا واحدًا يُظهر
- * صفحة خطأ للتاجر في الإنتاج بدل «غير موجود». القيد يجعل السلوك واحدًا على
- * المحرّكين: المسار لا يُطابَق أصلًا، فيرجع 404 كما ينبغي.
- * ونتيجةً جانبية: /products/export ونظائرها لم تعد تُبتلع كمعرّفات.
- */
-Route::pattern('id', '[0-9]+');
-Route::pattern('addressId', '[0-9]+');
-
-/* ----------------------------- المصادقة ----------------------------- */
-Route::get('/', [LoginController::class, 'showLogin'])->name('login');
-Route::get('/login', [LoginController::class, 'showLogin'])->name('login.form');
-Route::post('/login', [LoginController::class, 'attempt'])->name('login.attempt');
-
-/*
- * فتحُ متجرٍ جديد — تسجيلٌ ذاتيّ.
- *
- * و`guest` عليهما: من دخل بحسابه لا يفتح معالجَ تسجيلٍ ثانٍ فيخرج بمتجرٍ
- * ثانٍ لا يقصده. والخنقُ في المتحكّم لا هنا: مفتاحُه العنوانُ وحده، وهو
- * ما لا يبلغه `throttle` بصيغته الافتراضيّة على الجلسة.
- *
- * والبابُ يُقفل من إعدادات المنصّة (`self_signup = 0`) فيردّ 404 —
- * انظر Support\Signup::open.
- */
-Route::middleware('guest')->group(function () {
-    Route::get('/register', [RegisterController::class, 'show'])->name('register');
-    Route::post('/register', [RegisterController::class, 'store'])->name('register.store');
-});
-
-/*
- * نسيان الجهاز — المخرج من شاشةٍ صارت مقفلة على متجرٍ واحد.
- *
- * بلا حارس عمدًا: لا يمسّ إلا كوكي الطالب نفسه، والإلغاء الحقيقي في
- * الإعدادات خلف صلاحيته. انظر LoginController::forgetDevice.
- */
-Route::post('/forget-device', [LoginController::class, 'forgetDevice'])->name('device.forget');
 
 /*
  * نقطة صحّة لمراقبٍ خارجي — بلا مصادقة.
@@ -303,13 +255,10 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'tenant', 'business'
     Route::post('/orders/{number}/status', [OrderDetailController::class, 'status'])->name('orders.status');
 
     // إرسالُ الفاتورة إلى الزبون — نصٌّ يُكتب في الخادم ويُفتح على واتساب التاجر
-    Route::post('/orders/{number}/send', [OrderDetailController::class, 'send'])->name('orders.send');
     /* إبلاغُ الزبون بحالة طلبه يدويًّا — لا يمرّ بميتا، فيعمل والحظرُ قائم */
     Route::post('/orders/{number}/status-notice', [OrderDetailController::class, 'statusNotice'])
         ->name('orders.statusNotice');
     /* طلبُ تقييمٍ على Google — بملفّ فرع الطلب، وبعد التسليم وحده */
-    Route::post('/orders/{number}/review-request', [OrderDetailController::class, 'reviewRequest'])
-        ->name('orders.reviewRequest');
     /*
      * ورقتا البيع — فاتورةٌ مقصوصة وإيصالُ صندوق.
      *
@@ -611,7 +560,6 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'tenant', 'business'
         ->name('customerInvoices.attachment');
     Route::delete('/customer-invoices/{id}/attachments/{attachment}', [CustomerInvoiceController::class, 'detach'])
         ->name('customerInvoices.detach');
-    Route::post('/customer-invoices/{id}/remind', [CustomerInvoiceController::class, 'remind'])->name('customerInvoices.remind');
     Route::post('/customer-payments', [CustomerInvoiceController::class, 'pay'])->name('customerPayments.store');
     Route::post('/customer-payments/{id}/cancel', [CustomerInvoiceController::class, 'cancelPayment'])->name('customerPayments.cancel');
     /*

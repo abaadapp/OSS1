@@ -6,7 +6,6 @@ use App\Http\Controllers\ActivityController;
 use App\Http\Controllers\Admin\Finance\ChartController;
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\PdfController;
-use App\Http\Controllers\Pos\DeviceController;
 use App\Models\Branch;
 use App\Models\Business;
 use App\Models\CustomAlert;
@@ -15,13 +14,11 @@ use App\Models\JobTitle;
 use App\Models\Order;
 use App\Models\Product;
 use App\Models\User;
-use App\Support\BranchGoogle;
 use App\Support\Demo;
 use App\Support\DocumentTemplates;
 use App\Support\Emojis;
 use App\Support\InvoiceBranding;
 use App\Support\Mailer;
-use App\Support\MarketingSettings;
 use App\Support\OrderNotice;
 use App\Support\OrderStatus;
 use App\Support\Permissions;
@@ -32,7 +29,6 @@ use App\Support\PurchaseUnits;
 use App\Support\Reports;
 use App\Support\Roles;
 use App\Support\ShopIdentity;
-use App\Support\Storefront;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
@@ -191,7 +187,6 @@ class PageController extends Controller
              * وفرعُ الطلب مربوطٌ بملفّه. وزرٌّ يُعرض ثمّ يردّ «اربط فرعك
              * أوّلًا» بابٌ معروضٌ لا يُفتح.
              */
-            'googleReview' => $this->googleReviewState($number),
             /*
              * إبلاغُ الزبون بحالة طلبه يدويًّا — طريقٌ لا يمرّ بميتا.
              *
@@ -323,40 +318,6 @@ class PageController extends Controller
         $paper = PdfController::saleHtml((int) Demo::bid(), $order);
 
         return ['html' => $paper['html'], 'size' => $paper['paper']];
-    }
-
-    /**
-     * حالُ طلب التقييم لهذا الطلب — ولمَ لا يُعرض إن لم يُعرض.
-     *
-     * @return array{show:bool, reason:?string, requestedAt:?string}
-     */
-    private function googleReviewState(string $number): array
-    {
-        $order = Order::where('business_id', Demo::bid())
-            ->where('is_held', false)->where('number', $number)->first();
-
-        if (! $order) {
-            return ['show' => false, 'reason' => null, 'requestedAt' => null];
-        }
-
-        $delivered = in_array($order->status, [
-            OrderStatus::DELIVERED,
-            OrderStatus::PICKED_UP,
-            OrderStatus::COMPLETED,
-        ], true);
-
-        $branch = $order->branch_id
-            ? Branch::where('business_id', Demo::bid())->find($order->branch_id)
-            : null;
-
-        $linked = $branch !== null && BranchGoogle::for($branch) !== null;
-
-        return [
-            'show' => $delivered && $linked,
-            /* ولا يُقال «غير مربوط» قبل التسليم: سببٌ واحدٌ يكفي، وهو الأقرب */
-            'reason' => $delivered && ! $linked ? __('اربط فرع هذا الطلب بخرائط Google أوّلًا.') : null,
-            'requestedAt' => optional($order->review_request_sent_at)->toIso8601String(),
-        ];
     }
 
     /* ------------------------------ العملاء ------------------------------ */
@@ -702,7 +663,6 @@ class PageController extends Controller
              * وتُرسل دائمًا لا عند طلب قسمها: ثمانية مفاتيح نصّية، وطلبُها
              * برحلةٍ إلى الخادم أغلى من إرسالها.
              */
-            'site' => MarketingSettings::group(Demo::bid(), 'website'),
             /*
              * أيصل البريدُ فعلًا؟ — الجوابُ فوق مفاتيحه لا بعد شهرٍ من صمتها.
              *
@@ -727,42 +687,6 @@ class PageController extends Controller
              * والثيمات المتاحة. ولا يُخمَّن شيءٌ منها في الواجهة: النطاق
              * يتغيّر بالبيئة، والثيمات تُزاد — ونسخةٌ ثانية في الشاشة تفترق.
              */
-            'store' => [
-                // من `$b` نفسه لا من استعلامٍ ثانٍ: صفّان لمتجرٍ واحد يفترقان
-                'slug' => $b?->site_slug,
-                'domain' => Storefront::domain(),
-                'themes' => Storefront::themeOptions(),
-                'suggestion' => Storefront::suggest($b?->name ?? ''),
-                /*
-                 * العدّ يقول ما يُعرض فعلًا — لا كلَّ ما هو فعّال.
-                 *
-                 * كان يعدّ الفعّال وحده، وقد صار للعرض مفتاحُه. فتاجرٌ أخفى
-                 * أصنافه كلَّها يقرأ «عندك ٤٠ صنفًا» ثمّ يفتح متجره فيجده
-                 * خاليًا — والرقم الذي يطمئن أسوأ من رقمٍ لا يُعرض.
-                 */
-                'productCount' => Product::where('business_id', Demo::bid())
-                    ->where('active', true)->where('published', true)->count(),
-                'products' => Product::where('business_id', Demo::bid())
-                    ->orderByDesc('published')->orderBy('name')
-                    ->get(['id', 'name', 'image', 'active', 'published'])
-                    ->map(fn ($p) => [
-                        'id' => $p->id,
-                        'name' => $p->name,
-                        // الخام لا المقروء: الصورة البديلة من الإنترنت لا تُعرض بضاعةً
-                        'image' => ProductImages::hasRealMain($p) ? $p->image : null,
-                        'active' => (bool) $p->active,
-                        'published' => (bool) $p->published,
-                    ])->all(),
-                /*
-                 * الطريقُ المختار وأسعارُه — يُحسبان في الخادم لا في الشاشة.
-                 *
-                 * الاستنتاجُ لمن سبق الاختيار قاعدةٌ واحدة (انظر
-                 * `Storefront::path`)، والسعرُ مصدرُه `config/storefront`.
-                 * ونسخةٌ ثانية من أيّهما في الواجهة تفترق عند أوّل تبديل.
-                 */
-                'path' => $b ? Storefront::path($b) : '',
-                'pricing' => Storefront::pricing(),
-            ],
             /*
              * بطاقاتُ القوالب — من السجلّ لا مكتوبةً في الشاشة.
              *
@@ -831,36 +755,12 @@ class PageController extends Controller
      *
      * @return array<string, mixed>
      */
-    /**
-     * @param  array<string, mixed>  $data
-     * @return array<string, mixed>
-     */
-    private function renameKey(array $data, string $from, string $to): array
-    {
-        if (array_key_exists($from, $data)) {
-            $data[$to] = $data[$from];
-            unset($data[$from]);
-        }
-
-        return $data;
-    }
 
     private function settingsSection(?string $section, Request $request): array
     {
         return match ($section) {
             'branches' => ['branches' => Demo::branches()],
             'employees' => $this->employeesData(),
-            /*
-             * الفروع تصل هنا بشكل خيارات (value/label) لا بشكل صفوف الجدول،
-             * فتُسمّى باسمٍ آخر. ولولا ذلك لتصادمت مع `branches` في قسم الفروع
-             * تصادمًا صامتًا: النوع واحد في TypeScript والحقول مختلفة، فيصير
-             * الجدول صفوفًا فارغة بلا خطأٍ يُنبّه.
-             */
-            'devices' => $this->renameKey(
-                DeviceController::panelData(),
-                'branches',
-                'branchOptions',
-            ),
             'activity' => ActivityController::adminData($request),
             'trash' => TrashController::panelData(),
             /*

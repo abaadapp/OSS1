@@ -7,7 +7,6 @@ use App\Models\Business;
 use App\Models\Currency;
 use App\Models\ExpenseType;
 use App\Models\JobTitle;
-use App\Models\Plan;
 use App\Models\Setting;
 use App\Models\User;
 use App\Support\SeedData;
@@ -40,42 +39,6 @@ class DatabaseSeeder extends Seeder
 
     public function run(): void
     {
-        /* ---------------- الباقات (يحتاجها إنشاء المتاجر والاشتراكات) ---------------- */
-        $limits = [
-            'الباقة الأساسية' => [1, 3, 100],
-            'الباقة الاحترافية' => [3, 15, 100000],
-            'باقة المؤسسات' => [999, 999, 1000000],
-        ];
-        $planId = null;
-        foreach (SeedData::plans() as $p) {
-            [$branches, $employees, $products] = $limits[$p['name']] ?? [1, 3, 100];
-            $plan = Plan::create([
-                'name' => $p['name'],
-                'monthly_price' => $p['monthly'],
-                'yearly_price' => $p['yearly'],
-                'max_branches' => $branches,
-                'max_employees' => $employees,
-                'max_products' => $products,
-                'features' => $p['features'],
-                // ما يُعرض سطرًا، وما يُفرض مفتاحًا — انظر PlanFeatures
-                'capabilities' => $p['capabilities'],
-                'color' => $p['color'],
-                'is_popular' => $p['popular'],
-            ]);
-            $planId ??= $plan->id;
-        }
-
-        /* ---------------- مدير المنصة ---------------- */
-        User::create([
-            'business_id' => null,
-            'name' => 'مدير المنصة',
-            'email' => $this->cfg('SEED_SUPER_EMAIL', 'super@eventpluspos.com'),
-            'role' => 'super_admin',
-            'password' => Hash::make($this->cfg('SEED_SUPER_PASSWORD', 'password')),
-            'status' => 'نشط',
-            'last_login_at' => now(),
-        ]);
-
         /* ---------------- متجر واحد فارغ ---------------- */
         $ownerName = $this->cfg('SEED_OWNER_NAME', 'مالك النشاط');
         $business = Business::create([
@@ -87,11 +50,21 @@ class DatabaseSeeder extends Seeder
             'country' => 'عُمان',
             'city' => '',
             'address' => '',
-            'plan_id' => $planId,
             'status' => 'نشط',
             'branches_count' => 1,
             'starts_at' => now(),
             'ends_at' => now()->addYear(),
+        ]);
+
+        /* ---------------- مدير النظام ---------------- */
+        User::create([
+            'business_id' => $business->id,
+            'name' => 'مدير النظام',
+            'email' => $this->cfg('SEED_SUPER_EMAIL', 'super@eventpluspos.com'),
+            'role' => 'super_admin',
+            'password' => Hash::make($this->cfg('SEED_SUPER_PASSWORD', 'password')),
+            'status' => 'نشط',
+            'last_login_at' => now(),
         ]);
 
         User::create([

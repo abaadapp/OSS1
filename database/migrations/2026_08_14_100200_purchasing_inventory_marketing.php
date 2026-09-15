@@ -85,27 +85,10 @@ return new class extends Migration
             $table->index('product_id');
         });
 
-        Schema::create('reviews', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('business_id')->constrained('businesses')->cascadeOnDelete();
-            $table->foreignId('customer_id')->nullable()->constrained('customers')->nullOnDelete();
-            $table->foreignId('product_id')->nullable()->constrained('products')->nullOnDelete();
-            $table->foreignId('order_id')->nullable()->constrained('orders')->nullOnDelete();
-            $table->string('author_name')->nullable();
-            $table->unsignedTinyInteger('rating');   // ١..٥
-            $table->text('comment')->nullable();
-            $table->string('status', 20)->default('معلّق'); // معلّق | منشور | مرفوض
-            $table->text('reply')->nullable();
-            $table->timestamp('replied_at')->nullable();
-            $table->timestamps();
-
-            $table->index(['business_id', 'status']);
-        });
     }
 
     public function down(): void
     {
-        Schema::dropIfExists('reviews');
         Schema::dropIfExists('stock_adjustments');
         Schema::dropIfExists('delivery_note_items');
         Schema::dropIfExists('delivery_notes');
