@@ -23,8 +23,6 @@ export interface PageEntry {
     group: string;
     /** قسم الصلاحية — يُخفى ما لا يملكه المستخدم، كما تفعل القائمة الجانبية */
     section?: string;
-    /** قدرة الباقة — يُخفى ما لم يشمله اشتراك المتجر */
-    feature?: string;
 }
 
 /** تقريرٌ كما يرسله الخادم في المشترَك — انظر HandleInertiaRequests */
@@ -133,7 +131,6 @@ export function adminPages(reports: ReportLink[] = []): PageEntry[] {
             href: route(item.route),
             group: 'أقسام النظام',
             section: item.section,
-            feature: item.feature,
         });
     }
 
@@ -154,7 +151,6 @@ export function adminPages(reports: ReportLink[] = []): PageEntry[] {
             href: route(tab.routeName, tab.args as never),
             group: 'أقسام النظام',
             section: tab.section ?? owner?.section,
-            feature: owner?.feature,
         });
     }
 
@@ -182,11 +178,10 @@ export function adminPages(reports: ReportLink[] = []): PageEntry[] {
     /*
      * والتقارير تصل من الخادم مُصفّاةً.
      *
-     * فهرسُها `App\Support\Reports::ALL` — وفيه عنوانُ كلّ تقرير وقسمُه
-     * وقدرةُ باقته. ونسخُه إلى الواجهة يعني فهرسين يفترقان، فيُرسَل مبنيًّا
-     * في المشترَك: `Reports::forUser` تُسقط ما لا يملكه المستخدم وما لا
-     * تفتحه باقته قبل أن يصل. ولذلك لا `section` لها هنا — صُفّيت قبل أن
-     * تُكتب.
+     * فهرسُها `App\Support\Reports::ALL` — وفيه عنوانُ كلّ تقرير وقسمُه.
+     * ونسخُه إلى الواجهة يعني فهرسين يفترقان، فيُرسَل مبنيًّا في المشترَك:
+     * `Reports::forUser` تُسقط ما لا يملكه المستخدم قبل أن يصل. ولذلك لا
+     * `section` لها هنا — صُفّيت قبل أن تُكتب.
      */
     for (const report of reports) {
         add({ label: report.title, icon: BarChart3, href: report.href, group: 'التقارير' });
@@ -200,17 +195,10 @@ export function adminPages(reports: ReportLink[] = []): PageEntry[] {
 /**
  * ما يراه هذا المستخدم من الدليل.
  *
- * القاعدةُ قاعدةُ القائمة الجانبية نفسها: الصلاحية تُخفي القسم، والباقة
- * تُخفي ما لم يُشترَ. ودليلٌ يعرض ما لا يُفتح يقود إلى ٤٠٣ — ويجعل صاحبه
- * يظنّ العطب في النظام فيعيد المحاولة.
- *
- * والغائب مفتوح: صفحةٌ قديمة في المتصفّح لا تحمل خريطة الباقة يجب ألّا
- * تُخفي على صاحبها ما اشتراه، والخادم هو الحارس على كل حال.
+ * القاعدةُ قاعدةُ القائمة الجانبية نفسها: الصلاحية تُخفي القسم. ودليلٌ
+ * يعرض ما لا يُفتح يقود إلى ٤٠٣ — ويجعل صاحبه يظنّ العطب في النظام فيعيد
+ * المحاولة.
  */
 export function visibleTo(pages: PageEntry[], auth: SharedProps['auth']): PageEntry[] {
-    return pages.filter(
-        (p) =>
-            (!p.section || (auth?.abilities.includes(p.section) ?? false)) &&
-            (!p.feature || (auth?.planFeatures?.[p.feature] ?? true)),
-    );
+    return pages.filter((p) => !p.section || (auth?.abilities.includes(p.section) ?? false));
 }

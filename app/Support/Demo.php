@@ -390,12 +390,7 @@ class Demo
         ];
     }
 
-    /** قائمة المتاجر في لوحة المنصّة — الحقيقيّة وحدها */
-    public static function businesses(): array
-    {
-        return Business::real()->orderByDesc('id')->get()
-            ->map(fn ($b) => self::businessRow($b))->all();
-    }
+    
 
     /** أحدث الأنشطة من سجل النشاط (حسب الدور) */
     public static function activities(int $limit = 8): array
@@ -1183,18 +1178,7 @@ class Demo
             })->sortByDesc('sales')->values()->all();
     }
 
-    /** ترتيب الموظفين حسب مبيعات الشهر (لوحة الأداء) */
-    public static function employeeLeaderboard(): array
-    {
-        $rows = collect(self::employees())
-            ->sortByDesc('achieved')->values();
-
-        return $rows->map(function ($e, $i) {
-            $e['rank'] = $i + 1;
-
-            return $e;
-        })->all();
-    }
+    
 
     /* ============================ المورّدون والمشتريات ============================ */
 
@@ -2214,15 +2198,7 @@ class Demo
         return (int) Order::where('user_id', $userId)->sold()->count();
     }
 
-    /** أعداد نشاط معيّن للوحة المشرف (حقيقية) */
-    public static function businessCounts(int $businessId): array
-    {
-        return [
-            'employees' => User::where('business_id', $businessId)->where('role', '!=', 'super_admin')->count(),
-            'products' => Product::where('business_id', $businessId)->count(),
-            'orders' => Order::where('business_id', $businessId)->sold()->count(),
-        ];
-    }
+    
 
     /* ------------------- بيانات شركة بعينها في لوحة المنصة -------------------
      |
@@ -2231,102 +2207,17 @@ class Demo
      | الشركة المفتوحة. هذه الدوال تأخذ المعرّف صراحةً فلا تخمّنه.
      */
 
-    /**
-     * فروع الشركة الحقيقية — القالب كان يولّدها بحلقة وهمية بأسماء مديرين
-     * ثابتة وعدد موظفين من rand().
-     *
-     * users.branch اسم نصّي لا مفتاح أجنبي، فالعدّ بالاسم؛ ويُجمع في استعلام
-     * واحد لا واحد لكل فرع.
-     */
-    public static function businessBranches(int $businessId): array
-    {
-        $staff = User::where('business_id', $businessId)->where('role', '!=', 'super_admin')
-            ->whereNotNull('branch')
-            ->selectRaw('branch, COUNT(*) as c')->groupBy('branch')->pluck('c', 'branch');
+    
 
-        return Branch::where('business_id', $businessId)->orderBy('id')->get()
-            ->map(fn ($b) => [
-                'id' => $b->id,
-                'name' => $b->name,
-                'phone' => $b->phone,
-                'address' => $b->address,
-                'employees' => (int) ($staff[$b->name] ?? 0),
-            ])->all();
-    }
+    
 
-    /** موظفو الشركة */
-    public static function businessEmployees(int $businessId): array
-    {
-        return User::where('business_id', $businessId)->where('role', '!=', 'super_admin')
-            ->orderBy('id')->get()
-            ->map(fn ($u) => [
-                'id' => $u->id,
-                'name' => $u->name,
-                'role' => $u->roleLabel(),
-                'branch' => $u->branch,
-                'phone' => $u->phone,
-                'status' => $u->status,
-            ])->all();
-    }
+    
 
-    /** منتجات الشركة */
-    public static function businessProducts(int $businessId, int $limit = 12): array
-    {
-        return Product::where('business_id', $businessId)->with('category')
-            ->orderBy('id')->limit($limit)->get()
-            ->map(fn ($p) => [
-                'id' => $p->id,
-                'name' => $p->name,
-                'category' => $p->category?->name ?? '—',
-                'price' => (float) $p->price,
-                'qty' => (int) $p->quantity,
-                'image' => $p->image,
-            ])->all();
-    }
+    
 
-    /** آخر طلبات الشركة */
-    public static function businessOrders(int $businessId, int $limit = 8): array
-    {
-        return Order::where('business_id', $businessId)->sold()
-            ->withCount('items')->orderByDesc('ordered_at')->limit($limit)->get()
-            ->map(fn ($o) => [
-                'id' => $o->number,
-                'customer' => self::customerLabel($o->customer_name, $o->customer_name_en),
-                'items_count' => (int) $o->items_count,
-                'total' => (float) $o->total,
-                'payment' => $o->payment_method,
-                'status' => $o->status,
-                'date' => optional($o->ordered_at)->format('Y-m-d H:i') ?? '—',
-            ])->all();
-    }
+    
 
-    /** أرقام «نظرة عامة» للشركة — كانت ثلاثة أرقام مكتوبة يدويًا في القالب */
-    public static function businessOverview(int $businessId): array
-    {
-        $q = Order::where('business_id', $businessId)->sold();
-        $count = (clone $q)->count();
-        $sales = (float) (clone $q)->sum('total');
-
-        return [
-            'sales' => $sales,
-            'orders' => $count,
-            'average' => $count > 0 ? round($sales / $count, 3) : 0.0,
-        ];
-    }
-
-    /** مبيعات الشركة في السنة الجارية — كانت سلسلة أرقام ثابتة في القالب */
-    public static function businessSalesSeries(int $businessId): array
-    {
-        $labels = [];
-        $data = [];
-        foreach (self::yearMonths() as $m) {
-            $labels[] = self::monthLabel($m);
-            $data[] = round((float) Order::where('business_id', $businessId)->sold()
-                ->whereYear('ordered_at', $m->year)->whereMonth('ordered_at', $m->month)->sum('total'), 3);
-        }
-
-        return ['labels' => $labels, 'data' => $data];
-    }
+    
 
     /** نشاط مستخدم بعينه — صفحة المستخدم كانت تعرض نشاط المنصة كله */
     public static function userActivities(int $userId, int $limit = 10): array
@@ -2723,20 +2614,7 @@ class Demo
         return ($label === '' || $label === 'عميل نقدي') ? __('عميل نقدي') : $label;
     }
 
-    /**
-     * أقسام نقطة البيع: القيمة تبقى الاسم العربي (لمطابقة الفلترة)،
-     * والتسمية المعروضة تُترجَم حسب اللغة.
-     */
-    public static function posCategories(): array
-    {
-        $cats = Category::where('business_id', self::bid())->orderBy('id')->get(['name', 'name_en']);
-        $list = [['value' => 'الكل', 'label' => __('الكل')]];
-        foreach ($cats as $c) {
-            $list[] = ['value' => $c->name, 'label' => self::ln($c->name, $c->name_en)];
-        }
-
-        return $list;
-    }
+    
 
     /**
      * الطلبات المعلّقة والمحفوظة — للفرع لا للشخص.
@@ -2768,66 +2646,7 @@ class Demo
             ])->all();
     }
 
-    /**
-     * فواتير المتجر. بلا بحث: أحدث $limit فاتورة. مع $search: يبحث في كل الفواتير
-     * (بلا حدّ الأحدث) برقم الفاتورة أو اسم العميل أو رقم هاتفه.
-     */
-    public static function receipts(?string $search = null, int $limit = 30, bool $today = false): array
-    {
-        $bid = self::bid();
-        // خريطة الاسم → الهاتف لعملاء النشاط (لعرض الهاتف والبحث به)
-        $phones = Customer::where('business_id', $bid)
-            ->whereNotNull('phone')->pluck('phone', 'name');
-
-        $query = Order::where('business_id', $bid)->sold()
-            ->when(self::currentBranchId(), fn ($q) => $q->where('branch_id', self::currentBranchId()))
-            // يومٌ بعينه: شاشة المقبوضات تسأل «ماذا قُبض اليوم؟» لا «ما آخر ٣٠ بيعة؟»
-            ->when($today, fn ($q) => $q->whereDate('ordered_at', today()))
-            ->with('items.addons');
-
-        $term = $search !== null ? trim($search) : '';
-        if ($term !== '') {
-            $op = Search::like();
-            // أسماء العملاء الذين يطابق هاتفهم كلمة البحث (للبحث برقم الهاتف)
-            $namesByPhone = Customer::where('business_id', $bid)
-                ->where('phone', $op, "%{$term}%")->pluck('name')->all();
-            $query->where(function ($w) use ($term, $namesByPhone, $op) {
-                $w->where('number', $op, "%{$term}%")
-                    ->orWhere('customer_name', $op, "%{$term}%");
-                if ($namesByPhone) {
-                    $w->orWhereIn('customer_name', $namesByPhone);
-                }
-            });
-        }
-
-        return $query->orderByDesc('ordered_at')->limit($limit)->get()->map(fn ($o) => [
-            'number' => $o->number,
-            'customer' => self::customerLabel($o->customer_name, $o->customer_name_en),
-            'phone' => $phones[$o->customer_name] ?? '',
-            'total' => (float) $o->total,
-            'subtotal' => (float) $o->subtotal,
-            'discount' => (float) $o->discount,
-            'tax' => (float) $o->tax,
-            'delivery_fee' => (float) $o->delivery_fee,
-            'payment' => $o->payment_method,
-            'time' => optional($o->ordered_at)->format('Y-m-d H:i') ?? '—',
-            'employee' => $o->employee_name ?? '—',
-            'lines' => $o->items->map(fn ($it) => [
-                // الاسم بمقاسه من لقطة البند لا من علاقةٍ حيّة: مقاسٌ
-                // أُعيد تسميته لا يُغيّر فاتورةً طُبعت — انظر OrderItem::displayName
-                'name' => $it->displayName(),
-                'qty' => $it->quantity,
-                'price' => (float) $it->price,
-                'total' => $it->lineTotal(),
-                'note' => $it->note,
-                'addons' => $it->addons->map(fn ($a) => [
-                    'name' => $a->name,
-                    'qty' => (int) $a->quantity,
-                    'total' => (float) $a->total,
-                ])->all(),
-            ])->all(),
-        ])->all();
-    }
+    
 
     /* ============================ الإشعارات والوردية ============================ */
 

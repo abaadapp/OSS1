@@ -19,31 +19,20 @@ interface SidebarProps {
 }
 
 export default function Sidebar({ open, onClose, nav = NAV, subtitle }: SidebarProps) {
-    const { auth, supportBadge, crmBadge } = usePage<PageProps>().props;
+    const { auth } = usePage<PageProps>().props;
     const t = useTranslate();
     const current = route().current();
 
     // بلا قسم صلاحية يظهر العنصر دائمًا — انظر NavItem.section
     const can = (section?: string) => !section || (auth?.abilities.includes(section) ?? false);
 
-    /*
-     * والباقة سؤالٌ ثانٍ فوق الصلاحية.
-     *
-     * المالك يملك كلّ الأقسام، وباقتُه قد لا تفتح كلّ الأدوات. والغائب يُعدّ
-     * مفتوحًا: صفحةٌ قديمة في المتصفّح لا تحمل الخريطة يجب ألّا تُخفي على
-     * صاحبها ما اشتراه — والخادم هو الحارس على كل حال.
-     */
-    const licensed = (feature?: string) =>
-        !feature || (auth?.planFeatures?.[feature] ?? true);
-
-    const shown = (item: NavItem) => can(item.section) && licensed(item.feature);
+    const shown = (item: NavItem) => can(item.section);
 
     /*
      * والأب يقود إلى أوّل ما بقي من بنيه.
      *
-     * «أدوات التسويق» تفتح «برنامج ولاء» — فإن لم تشمله الباقة قاد الأبُ إلى
-     * 403 وأبناؤه المفتوحون تحته. فيتبع الأب أوّل ابنٍ باقٍ، ويسقط هو إن لم
-     * يبقَ منهم أحد.
+     * أبٌ لا وجهةَ له يفتح ما تحته؛ فإن حُجب كلُّ بنيه بالصلاحية سقط هو
+     * معهم بدل أن يبقى مقبضًا لا يفتح شيئًا.
      */
     const visible = (items: NavItem[]): NavItem[] =>
         items
@@ -104,27 +93,6 @@ export default function Sidebar({ open, onClose, nav = NAV, subtitle }: SidebarP
             >
                 <Icon className={cn('shrink-0', depth ? 'size-4' : 'size-[18px]')} />
                 <span className="truncate">{t(item.label)}</span>
-                {/*
-                    وصفرٌ لا يُرسم: شارةٌ بصفرٍ تشغل موضعَ شارةٍ تعني شيئًا،
-                    فتُدرَّب العينُ على تجاهل الموضع كلِّه.
-                */}
-                {(() => {
-                    /*
-                        والعددُ يُقرأ من المشترك بحسب نوع الشارة — لا شرطان
-                        متجاوران يُنسى أحدُهما يومَ تُضاف شارةٌ ثالثة.
-                    */
-                    const count = item.badge === 'support'
-                        ? (supportBadge ?? 0)
-                        : item.badge === 'crm'
-                          ? (crmBadge ?? 0)
-                          : 0;
-
-                    return count > 0 ? (
-                        <span className="ms-auto flex min-w-[18px] items-center justify-center rounded-full bg-[#dc2626] px-1 text-[10px] font-bold tabular-nums text-white">
-                            {count}
-                        </span>
-                    ) : null;
-                })()}
             </SmartLink>
         );
     };

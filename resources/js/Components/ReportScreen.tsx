@@ -40,13 +40,6 @@ interface Props {
     /** مفتاح التقرير — تُبنى منه روابط التنزيل الثلاثة */
     reportKey: string;
     subtitle: string;
-    /**
-     * القدرةُ التي يحتاجها التنزيل — أو null لتقريرٍ ملفُّه مفتوحٌ للجميع.
-     *
-     * وتُطابق `CheckPlanFeature::OPEN_EXPORTS`: قائمةٌ تُعرض على بابٍ مقفل
-     * تصطدم بـ٤٠٣، وقائمةٌ تُخفى عن بابٍ مفتوح تمنع ما بيع.
-     */
-    exportFeature?: string | null;
     /** الفترة، أو null لتقريرٍ لا معنى للفترة فيه (رصيدُ اليوم لا مدّته) */
     range: ReportRange | null;
     rangeLabel: string;
@@ -71,7 +64,6 @@ interface Props {
 export default function ReportScreen({
     title, subtitle, reportKey, range, rangeLabel,
     filters, controls, stats, truncated, children,
-    exportFeature = 'reports_advanced',
 }: Props) {
     const t = useTranslate();
 
@@ -111,14 +103,7 @@ export default function ReportScreen({
                     title={title}
                     subtitle={t(subtitle)}
                     actions={
-                        /*
-                            والقدرة تُقال هنا كما تُقال في «ملخّص المبيعات».
-                            الخادمُ يردّ ٤٠٣ لمن لا تفتحه باقتُه، فقائمةٌ
-                            تُفتح وتُختار منها صيغةٌ ثمّ تصطدم بصفحة منعٍ
-                            تجعل صاحبها يظنّ العطب في النظام.
-                        */
                         <ExportMenu
-                            feature={exportFeature ?? undefined}
                             xlsx={route('admin.reports.export.xlsx', reportKey)}
                             pdf={route('admin.reports.export.pdf', reportKey)}
                             csv={route('admin.reports.export.csv', reportKey)}

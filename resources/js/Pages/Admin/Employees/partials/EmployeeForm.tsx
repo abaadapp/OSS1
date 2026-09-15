@@ -19,7 +19,6 @@ import { UsernameInput, usernameOf } from '@/Components/ui/username-input';
 import { initials } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import { useTranslate } from '@/lib/i18n';
-import { usePlanFeature } from '@/lib/plan';
 import type { Branch } from '@/types/models';
 
 export interface EmployeeFormValues {
@@ -140,7 +139,6 @@ export default function EmployeeForm({
      * المالك ويحفظ فيُردّ — بابٌ معروضٌ لا يُفتح. والخادم يبقى الحارس، وهذا
      * ليقول قبل المحاولة لا بعدها.
      */
-    const canCustomize = usePlanFeature('custom_permissions');
     const editing = !!employee;
 
     /*
@@ -545,13 +543,6 @@ export default function EmployeeForm({
                         </p>
                     ) : (
                         <div className="space-y-4">
-                            {/* ما لا تفتحه الباقة يُقال قبل المحاولة لا بعد الحفظ */}
-                            {! canCustomize && (
-                                <p className="rounded-[10px] border border-[#fed7aa] bg-[#fff7ed] px-3 py-2 text-[12px] text-[#9a3412]">
-                                    {t('الصلاحيات المخصّصة ليست في باقتك الحالية — تُتبع صلاحيات الوظيفة. وما مُنح سابقًا يبقى كما هو.')}
-                                </p>
-                            )}
-
                             <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
                                 {Object.entries(sections).map(([key, label]) => (
                                     <label
@@ -559,7 +550,7 @@ export default function EmployeeForm({
                                         title={mayGrant(key) ? undefined : t('لا تملك هذه الصلاحية — ولا تُمنح ما لا تملك.')}
                                         className={cn(
                                             'flex items-center gap-2.5',
-                                            canCustomize && mayGrant(key)
+                                            mayGrant(key)
                                                 ? 'cursor-pointer'
                                                 : 'cursor-not-allowed opacity-60',
                                         )}
@@ -568,7 +559,7 @@ export default function EmployeeForm({
                                             type="checkbox"
                                             checked={form.data.permissions.includes(key)}
                                             onChange={() => togglePermission(key)}
-                                            disabled={! canCustomize || ! mayGrant(key)}
+                                            disabled={! mayGrant(key)}
                                             className="size-4 rounded border-[#d1d5db] accent-[#111]"
                                         />
                                         <span className="text-sm text-[#374151]">{label}</span>
@@ -596,7 +587,7 @@ export default function EmployeeForm({
                                             title={mayGrant(key) ? undefined : t('لا تملك هذه الصلاحية — ولا تُمنح ما لا تملك.')}
                                             className={cn(
                                                 'flex items-center gap-2.5',
-                                                canCustomize && mayGrant(key)
+                                                mayGrant(key)
                                                     ? 'cursor-pointer'
                                                     : 'cursor-not-allowed opacity-60',
                                             )}
@@ -605,7 +596,7 @@ export default function EmployeeForm({
                                                 type="checkbox"
                                                 checked={form.data.permissions.includes(key)}
                                                 onChange={() => togglePermission(key)}
-                                                disabled={! canCustomize || ! mayGrant(key)}
+                                                disabled={! mayGrant(key)}
                                                 className="size-4 rounded border-[#d1d5db] accent-[#111]"
                                             />
                                             <span className="text-sm text-[#374151]">{label}</span>

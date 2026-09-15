@@ -77,7 +77,6 @@ export default function ReportsPayments() {
                     subtitle={t('توزيع التحصيل على النقد والبطاقة وبقية الوسائل')}
                     actions={
                         <ExportMenu
-                            feature="reports_advanced"
                             xlsx={route('admin.reports.export.xlsx', 'payments')}
                             pdf={route('admin.reports.export.pdf', 'payments')}
                             csv={route('admin.reports.export.csv', 'payments')}

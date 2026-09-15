@@ -68,13 +68,6 @@ export interface SharedProps {
         abilities: string[];
         /** الأفعالُ التي يملكها — غيرُ الأقسام، انظر Permissions::ACTIONS */
         mayActions: string[];
-        /**
-         * ما تفتحه باقة المتجر — سؤالٌ آخر غير `abilities`.
-         *
-         * ذاك عن صلاحية الموظّف، وهذا عن المشترَك. والاثنان يقعان على البند
-         * الواحد: مالكٌ يملك كلّ الأقسام في متجرٍ على الباقة الأساسية.
-         */
-        planFeatures: Record<string, boolean>;
         /** إلى أين يدخل اللوحة — أوّل قسمٍ يملكه، أو null فلا يُعرض الزرّ */
         panelUrl?: string | null;
         /** هل يدخل هذا المستخدم لوحة النشاط؟ الكاشير لا يدخلها */
@@ -128,10 +121,6 @@ export interface SharedProps {
         items: Notification[];
         count: number;
     } | null;
-    /** عددُ محادثات الدعم التي تنتظر هذا المستخدم — محسوبٌ في كلّ طلب */
-    supportBadge: number;
-    /** وعددُ محادثات المبيعات التي تنتظر ردًّا — لمدير المنصّة وحدَه */
-    crmBadge: number;
     flash: {
         toast: Toast | null;
         status: string | null;
