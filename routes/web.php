@@ -5,7 +5,6 @@ use App\Http\Controllers\Admin\BankStatementController;
 use App\Http\Controllers\Admin\BranchController;
 use App\Http\Controllers\Admin\CatalogQuickAddController;
 use App\Http\Controllers\Admin\ChequeController;
-use App\Http\Controllers\Admin\CouponController;
 use App\Http\Controllers\Admin\CurrencyController;
 use App\Http\Controllers\Admin\CustomAlertController;
 use App\Http\Controllers\Admin\CustomerController;
@@ -23,22 +22,16 @@ use App\Http\Controllers\Admin\Finance\OverviewController;
 use App\Http\Controllers\Admin\FinanceController;
 use App\Http\Controllers\Admin\FinancialAttachmentController;
 use App\Http\Controllers\Admin\GoalController;
-use App\Http\Controllers\Admin\GoogleBusinessController;
-use App\Http\Controllers\Admin\HelpController;
-use App\Http\Controllers\Admin\IntegrationsController;
 use App\Http\Controllers\Admin\Inventory\GoodsReceiptNoteController;
 use App\Http\Controllers\Admin\Inventory\StockAdjustmentController;
 use App\Http\Controllers\Admin\InventoryController;
 use App\Http\Controllers\Admin\JobTitleController;
 use App\Http\Controllers\Admin\LanguageController;
-use App\Http\Controllers\Admin\Marketing\MarketingController;
-use App\Http\Controllers\Admin\Marketing\ReviewController;
 use App\Http\Controllers\Admin\OrderController;
 use App\Http\Controllers\Admin\OrderDetailController;
 use App\Http\Controllers\Admin\PageController;
 use App\Http\Controllers\Admin\Payroll\PayrollPaymentController;
 use App\Http\Controllers\Admin\Payroll\PayrollRunController;
-use App\Http\Controllers\Admin\PreparationController;
 use App\Http\Controllers\Admin\ProductCompositionController;
 use App\Http\Controllers\Admin\ProductController;
 use App\Http\Controllers\Admin\ProductImageController;
@@ -58,12 +51,6 @@ use App\Http\Controllers\Admin\SupplierExportController;
 use App\Http\Controllers\Admin\TemplateController;
 use App\Http\Controllers\Admin\TrashController;
 use App\Http\Controllers\Admin\WasteAnalyticsController;
-use App\Http\Controllers\Admin\Website\BuilderController;
-use App\Http\Controllers\Admin\Website\DesignController;
-use App\Http\Controllers\Admin\Website\DomainController;
-use App\Http\Controllers\Admin\Website\EditorController;
-use App\Http\Controllers\Admin\Website\MediaController;
-use App\Http\Controllers\Admin\Website\SettingsController;
 use App\Http\Controllers\Auth\AccountRecoveryController;
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\PasswordResetController;
@@ -74,35 +61,9 @@ use App\Http\Controllers\ExportController;
 use App\Http\Controllers\HealthController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\PdfController;
-use App\Http\Controllers\Pos\CashierController;
-use App\Http\Controllers\Pos\DeviceController;
-use App\Http\Controllers\Pos\MeController;
-use App\Http\Controllers\Pos\OrderEditController;
-use App\Http\Controllers\Pos\PeripheralController;
-use App\Http\Controllers\Pos\PosController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\PublicDocumentController;
-use App\Http\Controllers\PublishedSiteController;
 use App\Http\Controllers\SearchController;
-use App\Http\Controllers\Store\StorefrontController;
-use App\Http\Controllers\SubscriptionExpiredController;
-use App\Http\Controllers\SuperAdmin\BillingController;
-use App\Http\Controllers\SuperAdmin\BusinessController;
-use App\Http\Controllers\SuperAdmin\ConversationController;
-use App\Http\Controllers\SuperAdmin\CrmAttachmentController;
-use App\Http\Controllers\SuperAdmin\CrmController;
-use App\Http\Controllers\SuperAdmin\CrmConversationController;
-use App\Http\Controllers\SuperAdmin\DemoController;
-use App\Http\Controllers\SuperAdmin\ImpersonationController;
-use App\Http\Controllers\SuperAdmin\PageController as SuperAdminPageController;
-use App\Http\Controllers\SuperAdmin\PlanController;
-use App\Http\Controllers\SuperAdmin\RecoveryController;
-use App\Http\Controllers\SuperAdmin\SettingController;
-use App\Http\Controllers\SuperAdmin\SubscriptionController;
-use App\Http\Controllers\SuperAdmin\UserController;
-use App\Http\Controllers\SuperAdmin\WhatsAppController;
-use App\Http\Controllers\SupportAttachmentController;
-use App\Http\Controllers\WhatsApp\WebhookController;
 use App\Support\Permissions;
 use App\Support\Storefront;
 use Illuminate\Support\Facades\Route;
@@ -164,21 +125,6 @@ Route::post('/forget-device', [LoginController::class, 'forgetDevice'])->name('d
 Route::get('/health', HealthController::class)->name('health');
 
 /*
- * الموقع المنشور لعارضٍ خارجيّ — بلا مصادقة.
- *
- * افنت بلس تبني الموقع ولا تعرضه (انظر PublishedSiteController): العرض في
- * مستودعٍ مستقلّ يقرأ هذا المستند. ومن يقرؤه لا حساب له ولا يمكن أن يكون له
- * — هو خادمٌ يخدم زوّار متجر التاجر.
- *
- * وما يردّه علنيٌّ بطبعه: هو نفسُه ما سيُعرض لكلّ زائر. والحدُّ على الطلبات
- * يمنع أن يصير البابُ المفتوح استنزافًا.
- */
-Route::get('/site/{host}', PublishedSiteController::class)
-    ->where('host', '[A-Za-z0-9.\-]{3,255}')
-    ->middleware('throttle:120,1')
-    ->name('site.published');
-
-/*
  * استعادة كلمة المرور — الباب الذي لا يمرّ بالدعم.
  *
  * الرمز في المسار لا في الاستعلام: الرابط يُنسخ من الرسالة كاملًا، وحصرُه
@@ -218,229 +164,10 @@ Route::post('/language', [LanguageController::class, 'guest'])->name('language.g
 
 Route::match(['get', 'post'], '/logout', [LoginController::class, 'logout'])->name('logout');
 
-/*
- * الخروج من انتحال التاجر — خارج حارس role:super_admin عمدًا.
- *
- * المنتحِل يحمل أثناء الانتحال دور التاجر لا دور المنصة، فوضعُ هذا المسار
- * داخل مجموعة المنصة كان يعني بابًا لا يُفتح من الداخل: يدخل ولا يخرج إلا
- * بتسجيل خروجٍ كامل. والحارس هنا مفتاح الجلسة نفسه.
- */
-Route::post('/stop-impersonating', [ImpersonationController::class, 'stop'])
-    ->middleware('auth')->name('impersonate.stop');
-
-/*
- * صفحة انتهاء الاشتراك — خارج حارس المستأجر عمدًا.
- *
- * هي وجهةُ الحارس نفسه، فلو وقعت تحته لدارت الإحالة على نفسها إلى الأبد.
- * وحارسها الخاصّ في المتحكّم: من لم ينتهِ اشتراكه يُعاد إلى لوحته.
- */
-Route::get('/subscription-expired', SubscriptionExpiredController::class)
-    ->middleware('auth')->name('subscription.expired');
-
 /* ------------------------- الملف الشخصي (كل الأدوار) ------------------------- */
 Route::middleware('auth')->group(function () {
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::put('/profile', [ProfileController::class, 'update'])->name('profile.update');
-});
-
-/* --------------------------- Super Admin --------------------------- */
-Route::prefix('super-admin')->name('super-admin.')->middleware(['auth', 'role:super_admin'])->group(function () {
-    Route::get('/dashboard', [SuperAdminPageController::class, 'dashboard'])->name('dashboard');
-    Route::get('/dashboard/stats', [DashboardController::class, 'superStats'])->name('dashboard.stats');
-
-    /*
-     * الديمو — بناء المتاجر التجريبيّة ومحوُها.
-     *
-     * الحذف هنا يمحو متجرًا بكلّ صفوفه بضغطة، ولذلك لا يُقبل إلا معرّفُ
-     * متجرٍ موسوم: الحارس في المتحكّم لا في الشاشة (انظر DemoGuard).
-     */
-    Route::get('/demo', [DemoController::class, 'index'])->name('demo.index');
-    Route::post('/demo', [DemoController::class, 'store'])->name('demo.store');
-    Route::post('/demo/{id}/reseed', [DemoController::class, 'reseed'])->name('demo.reseed');
-    Route::delete('/demo/{id}', [DemoController::class, 'destroy'])->name('demo.destroy');
-
-    // الشركات
-    Route::get('/businesses', [BusinessController::class, 'index'])->name('businesses.index');
-    // تصدير الشركات (قبل businesses/{id} حتى لا يبتلعها نمط المعرّف)
-    Route::get('/businesses/xlsx', [ReportExportController::class, 'businessesXlsx'])->name('businesses.xlsx');
-    Route::get('/businesses/export-pdf', [PdfController::class, 'businessesReport'])->name('businesses.exportPdf');
-    Route::get('/businesses/create', [SuperAdminPageController::class, 'businessesCreate'])->name('businesses.create');
-    Route::post('/businesses', [BusinessController::class, 'store'])->name('businesses.store');
-    Route::get('/businesses/{id}', [SuperAdminPageController::class, 'businessesShow'])->name('businesses.show');
-    Route::get('/businesses/{id}/edit', [SuperAdminPageController::class, 'businessesEdit'])->name('businesses.edit');
-    Route::put('/businesses/{id}', [BusinessController::class, 'update'])->name('businesses.update');
-    Route::delete('/businesses/{id}', [BusinessController::class, 'destroy'])->name('businesses.destroy');
-    // الطرف الآخر من التعطيل — بلا هذا المسار كان الباب يُغلق ولا يُفتح
-    Route::post('/businesses/{id}/activate', [BusinessController::class, 'activate'])->name('businesses.activate');
-
-    // دخول كتاجر — الخروج منه خارج هذه المجموعة (انظر أسفل الملف)
-    Route::post('/businesses/{id}/impersonate', [ImpersonationController::class, 'start'])->name('businesses.impersonate');
-    // حساب دخول التاجر وحده — لا يمرّ بنموذج الشركة كاملًا
-    Route::post('/businesses/{id}/account', [BusinessController::class, 'account'])->name('businesses.account');
-
-    /*
-     * محلات الورود = شركات نوعها «محل ورود».
-     *
-     * الشاشات حُذفت — كانت تكرّر شاشات الشركات على الجدول نفسه. والمسارات
-     * تبقى تحويلات لا حذفًا: روابط محفوظة ومرجعيّات قديمة تصل إلى وجهتها
-     * الجديدة بدل 404. أربعة أسطر ثمنُها صفر، وحذفُها يكسر إشارةً محفوظة عند
-     * أحدهم لا نعرف بها.
-     */
-    Route::get('/flower-shops', fn () => redirect()->route('super-admin.businesses.index', ['type' => 'محل ورود']))->name('flower-shops.index');
-    Route::get('/flower-shops/create', fn () => redirect()->route('super-admin.businesses.create'))->name('flower-shops.create');
-    Route::get('/flower-shops/{id}', fn ($id) => redirect()->route('super-admin.businesses.show', $id))->name('flower-shops.show');
-    Route::get('/flower-shops/{id}/edit', fn ($id) => redirect()->route('super-admin.businesses.edit', $id))->name('flower-shops.edit');
-
-    // الاشتراكات والباقات
-    Route::get('/subscriptions', [SuperAdminPageController::class, 'subscriptionsIndex'])->name('subscriptions.index');
-    Route::get('/subscriptions/plans', [SuperAdminPageController::class, 'plans'])->name('subscriptions.plans');
-    Route::get('/subscriptions/invoices', [SuperAdminPageController::class, 'invoices'])->name('subscriptions.invoices');
-    Route::get('/invoices/{number}/pdf', [PdfController::class, 'platformInvoice'])->name('invoices.pdf');
-    Route::get('/subscriptions/invoices/xlsx', [ReportExportController::class, 'invoicesXlsx'])->name('invoices.xlsx');
-    Route::get('/subscriptions/invoices/pdf', [PdfController::class, 'invoicesReport'])->name('invoices.exportPdf');
-    // التجديد وتسجيل السداد — الجدولان كانا يُقرآن ولا يُكتب فيهما
-    Route::post('/businesses/{id}/renew', [BillingController::class, 'renew'])->name('businesses.renew');
-    Route::post('/invoices/{id}/pay', [BillingController::class, 'pay'])->name('invoices.pay');
-    Route::put('/subscriptions/{id}', [SubscriptionController::class, 'update'])->name('subscriptions.update');
-    Route::delete('/subscriptions/{id}', [SubscriptionController::class, 'destroy'])->name('subscriptions.destroy');
-
-    // تصدير CSV
-    Route::get('/export/businesses', [ExportController::class, 'businesses'])->name('export.businesses');
-    Route::get('/export/invoices', [ExportController::class, 'invoices'])->name('export.invoices');
-
-    // البحث الموحّد
-    Route::get('/search', [SearchController::class, 'super'])->name('search');
-
-    // المستخدمون
-    Route::get('/users', [UserController::class, 'index'])->name('users.index');
-    Route::post('/users', [UserController::class, 'store'])->name('users.store');
-    Route::put('/users/{id}', [UserController::class, 'update'])->name('users.update');
-    Route::post('/users/{id}/toggle', [UserController::class, 'toggleStatus'])->name('users.toggle');
-    Route::delete('/users/{id}', [UserController::class, 'destroy'])->name('users.destroy');
-    Route::post('/users/{id}/restore', [UserController::class, 'restore'])->name('users.restore');
-    Route::get('/users/{id}', [SuperAdminPageController::class, 'usersShow'])->name('users.show');
-
-    // الباقات
-    Route::post('/plans', [PlanController::class, 'store'])->name('plans.store');
-    Route::put('/plans/{id}', [PlanController::class, 'update'])->name('plans.update');
-
-    // اللغة — مسار المنصة، فمسار لوحة التاجر يحرسه middleware أدوار لا يشمل مدير المنصة
-    Route::post('/language', [LanguageController::class, 'update'])->name('language.update');
-
-    // التقارير والإعدادات وسجل النشاط
-    Route::get('/reports', [SuperAdminPageController::class, 'reports'])->name('reports.index');
-    Route::get('/reports/pdf', [PdfController::class, 'platformReport'])->name('reports.pdf');
-    /*
-     * مركزُ المحادثات — دعمُ افنت بلس لأصحاب المتاجر.
-     *
-     * داخل `role:super_admin` لا خارجه: ما يُقرأ هنا محادثاتُ المتاجر كلِّها،
-     * وبابٌ يحرسه إخفاءُ زرٍّ ليس بابًا محروسًا.
-     *
-     * وليست محادثاتِ التاجر مع زبائنه — تلك لا يبلغها هذا الباب بحال.
-     */
-    Route::get('/conversations', [ConversationController::class, 'index'])->name('conversations.index');
-    Route::post('/conversations/{id}/reply', [ConversationController::class, 'reply'])->name('conversations.reply');
-    Route::post('/conversations/{id}/assign', [ConversationController::class, 'assign'])->name('conversations.assign');
-    Route::post('/conversations/{id}/status', [ConversationController::class, 'status'])->name('conversations.status');
-    Route::post('/conversations/{id}/priority', [ConversationController::class, 'priority'])->name('conversations.priority');
-    /*
-     * ونقلُ خيطٍ إلى دفتر المبيعات — تصحيحُ إنسانٍ لا قاعدةٌ في الموزِّع.
-     *
-     * الموزِّعُ يقرأ من كتب لا ما كتب، وهو الفاصلُ الذي يمنع أن تصير زبونةُ
-     * محلٍّ صفًّا في دفترنا. وهو لا يقرأ النيّة — فتُصحَّح الحالةُ النادرة بيد.
-     */
-    Route::post('/conversations/{id}/to-crm', [ConversationController::class, 'toCrm'])->name('conversations.toCrm');
-    Route::get('/conversations/{id}/files/{attachment}', SupportAttachmentController::class)
-        ->name('conversations.attachment');
-
-    /*
-     * CRM — دفترُ مبيعات افنت بلسٍ نفسِها.
-     *
-     * داخل `role:super_admin` لا خارجه: ما يُقرأ هنا عملاءُ المنصّة المحتملون
-     * وملاحظاتُ فريقها الداخليّة، وبابٌ يحرسه إخفاءُ بندٍ في القائمة ليس بابًا.
-     *
-     * وليس دفترَ زبائنِ التجّار: لا مسارَ في هذه المجموعة يبلغ `customers`
-     * ولا `orders` ولا `whatsapp_messages` — انظر `CrmStaysOutOfTenantDataTest`.
-     */
-    Route::prefix('crm')->name('crm.')->group(function () {
-        Route::get('/', [CrmController::class, 'dashboard'])->name('dashboard');
-        Route::get('/pipeline', [CrmController::class, 'pipeline'])->name('pipeline');
-        Route::get('/tasks', [CrmController::class, 'tasks'])->name('tasks');
-        Route::get('/reports', [CrmController::class, 'reports'])->name('reports');
-
-        Route::get('/leads', [CrmController::class, 'index'])->name('leads.index');
-        Route::post('/leads', [CrmController::class, 'store'])->name('leads.store');
-        Route::get('/leads/{id}', [CrmController::class, 'show'])->name('leads.show');
-        Route::put('/leads/{id}', [CrmController::class, 'update'])->name('leads.update');
-
-        Route::post('/leads/{id}/stage', [CrmController::class, 'stage'])->name('leads.stage');
-        Route::post('/leads/{id}/lose', [CrmController::class, 'lose'])->name('leads.lose');
-        Route::post('/leads/{id}/reopen', [CrmController::class, 'reopen'])->name('leads.reopen');
-        Route::post('/leads/{id}/assign', [CrmController::class, 'assign'])->name('leads.assign');
-        Route::post('/leads/{id}/notes', [CrmController::class, 'note'])->name('leads.note');
-        Route::post('/leads/{id}/convert', [CrmController::class, 'convert'])->name('leads.convert');
-        Route::post('/leads/{id}/tasks', [CrmController::class, 'storeTask'])->name('leads.tasks.store');
-        Route::post('/tasks/{task}', [CrmController::class, 'updateTask'])->name('tasks.update');
-
-        /*
-         * المحادثات — واتسابُ مبيعات افنت بلس.
-         *
-         * وليست مركزَ المحادثات: ذاك دفترُ الدعم مع تاجرٍ قائم، وهذا دفترُ
-         * البيع مع من يريد أن يشتري. ولا مسارَ هنا يبلغ `support_conversations`.
-         */
-        Route::get('/conversations', [CrmConversationController::class, 'index'])->name('conversations');
-        Route::post('/conversations/start', [CrmConversationController::class, 'start'])->name('conversations.start');
-        Route::post('/conversations/{id}/reply', [CrmConversationController::class, 'reply'])->name('conversations.reply');
-        /*
-         * وبابُ المرفق قبل `/{id}` المفتوحة — وإلّا التقطتها هي.
-         *
-         * ولا يُقرأ إلّا من فريق افنت بلس: المسارُ تحت `role:super_admin`،
-         * والمتحكّمُ يسأل ثانيةً — انظر `CrmAttachmentController`.
-         */
-        Route::get('/conversations/{id}/files/{attachment}', CrmAttachmentController::class)
-            ->name('conversations.attachment');
-        /*
-         * المساعدُ يقترح — ولا يُرسل.
-         *
-         * بابان لا باب: `suggest` يُولّد نصًّا يعود إلى الشاشة، و`reply`
-         * يُخرجه. ودمجُهما يجعل ضغطةً واحدةً ترسل ما لم يقرأه أحد.
-         */
-        Route::post('/conversations/{id}/suggest', [CrmConversationController::class, 'suggest'])->name('conversations.suggest');
-        Route::post('/conversations/{id}/feedback', [CrmConversationController::class, 'feedback'])->name('conversations.feedback');
-    });
-
-    Route::get('/activity', [ActivityController::class, 'superIndex'])->name('activity.index');
-    Route::get('/settings', [SuperAdminPageController::class, 'settings'])->name('settings.index');
-    Route::post('/settings', [SettingController::class, 'update'])->name('settings.update');
-    Route::post('/settings/test-email', [SettingController::class, 'testEmail'])->name('settings.testEmail');
-    /* مفتاح خرائط Google — مسارُه مستقلٌّ لأنّه سرٌّ لا يمرّ مع بقيّة الإعدادات */
-    Route::post('/settings/google-key', [SettingController::class, 'googleKey'])->name('settings.googleKey');
-    Route::delete('/settings/google-key', [SettingController::class, 'forgetGoogleKey'])->name('settings.googleKey.forget');
-    /* وحالُ الفوترة — مسارٌ مستقلٌّ لأنّها تُحفظ وحدها بلا لمس المفتاح */
-    Route::post('/settings/google-billing', [SettingController::class, 'googleBilling'])->name('settings.googleBilling');
-
-    /*
-     * واتساب — الرقم المشترك وأذونات المتاجر.
-     *
-     * داخل حارس `role:super_admin` لا خارجه: من يرفع حدّ متجرٍ أو يمنحه رقمًا
-     * خاصًّا هو مدير المنصّة وحده، والحارس على المجموعة لا في شاشةٍ تُخفي زرًّا.
-     */
-    /*
-     * وسيلة الاستعادة للمتاجر القديمة — المرّة الواحدة التي يمرّ فيها المتجر
-     * بإنسان. ومدير المنصّة يكتب العنوان ولا يختمه: الختم لا يضعه إلا رمزٌ
-     * عاد من الصندوق.
-     */
-    Route::post('/businesses/{id}/recovery-email', [RecoveryController::class, 'setEmail'])->name('businesses.recovery.set');
-    Route::post('/businesses/{id}/recovery-email/resend', [RecoveryController::class, 'resend'])->name('businesses.recovery.resend');
-    Route::delete('/businesses/{id}/recovery-email', [RecoveryController::class, 'clear'])->name('businesses.recovery.clear');
-
-    Route::post('/whatsapp/shared', [WhatsAppController::class, 'connectShared'])->name('whatsapp.shared.connect');
-    Route::delete('/whatsapp/shared', [WhatsAppController::class, 'disconnectShared'])->name('whatsapp.shared.disconnect');
-    Route::post('/whatsapp/support-inbox', [WhatsAppController::class, 'supportInbox'])->name('whatsapp.support-inbox');
-    /* رقمُ مبيعات افنت بلس — وصلةٌ ثانيةٌ للمنصّة بغرضٍ آخر، وبابُها مستقلّ */
-    Route::post('/whatsapp/sales', [WhatsAppController::class, 'connectSales'])->name('whatsapp.sales.connect');
-    Route::delete('/whatsapp/sales', [WhatsAppController::class, 'disconnectSales'])->name('whatsapp.sales.disconnect');
-    Route::put('/businesses/{id}/whatsapp', [WhatsAppController::class, 'updateBusiness'])->name('businesses.whatsapp.update');
 });
 
 /* ------------------------------- Admin ----------------------------- */
@@ -458,29 +185,16 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'tenant', 'business'
     Route::post('/setup/confirm', [SetupController::class, 'confirm'])->name('setup.confirm');
     Route::get('/dashboard/stats', [DashboardController::class, 'adminStats'])->name('dashboard.stats');
 
-    /*
-     * لوحة التجهيز — قسمُها `preparation` يُشتقّ من اسم المسار.
-     *
-     * شاشةُ من يصنع الباقة لا من يحاسب عليها، فلا تتبع «المبيعات».
-     */
-    Route::get('/preparation', [PreparationController::class, 'index'])->name('preparation.index');
-    Route::post('/preparation/{number}/move', [PreparationController::class, 'move'])->name('preparation.move');
-
     // الفروع
     Route::get('/branches', [PageController::class, 'branchesIndex'])->name('branches.index');
     Route::get('/branch/{branch}/switch', [BranchController::class, 'switch'])->name('branch.switch');
     Route::post('/branches', [BranchController::class, 'store'])->name('branches.store');
 
     // أجهزة نقطة البيع — تسقط على صلاحية الإعدادات (انظر Permissions::ALIASES)
-    Route::get('/devices', [DeviceController::class, 'index'])->name('devices.index');
-    Route::put('/devices/{id}', [DeviceController::class, 'update'])->name('devices.update');
-    Route::delete('/devices/{id}', [DeviceController::class, 'revoke'])->name('devices.revoke');
 
     // الأجهزة الملحقة بكل صندوق: طابعة، ماسح، درج… — تحت صلاحية الإعدادات
     // نفسها: من يبدّل طابعة صندوق يوجّه إيصالات فرعٍ إلى ورق فرعٍ آخر
-    Route::post('/devices/{device}/peripherals', [PeripheralController::class, 'store'])->name('devices.peripherals.store');
-    Route::put('/devices/{device}/peripherals/{id}', [PeripheralController::class, 'update'])->name('devices.peripherals.update');
-    Route::delete('/devices/{device}/peripherals/{id}', [PeripheralController::class, 'destroy'])->name('devices.peripherals.destroy');
+
     Route::delete('/branches/{id}', [BranchController::class, 'destroy'])->name('branches.destroy');
     /*
      * التراجع تحت صلاحية القسم الذي حُذف منه، لا تحت «الإعدادات».
@@ -587,19 +301,7 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'tenant', 'business'
      */
     Route::put('/orders/{number}/details', [OrderDetailController::class, 'update'])->name('orders.details.update');
     Route::post('/orders/{number}/status', [OrderDetailController::class, 'status'])->name('orders.status');
-    /*
-     * تصحيح الفاتورة من شاشة المبيعات — الكتابةُ نفسُها التي يُصحّح بها الكاشير.
-     *
-     * وبابٌ ثانٍ لا فعلٌ ثانٍ: `OrderEditController` هو هو، و`OrderCorrection`
-     * تحته. وإنّما افترق المسار لأنّ الإذن يُقرأ من اسمه: `pos.*` يتبع صلاحية
-     * نقطة البيع، وهذا يتبع «المبيعات» — فالمحاسبُ يُصحّح فاتورةً من شاشته
-     * ولا يُطالَب بصلاحية صندوقٍ لا يقف عليه. وصلاحيةُ `order.edit` فوقهما
-     * كليهما: الفتحُ من الشاشة، والحكمُ في الخادم.
-     */
-    Route::put('/orders/{number}/items/{item}', [OrderEditController::class, 'update'])->name('orders.items.update');
-    Route::put('/orders/{number}/items/{item}/addons/{addon}', [OrderEditController::class, 'addon'])
-        ->name('orders.items.addons.update');
-    Route::put('/orders/{number}/payment', [OrderEditController::class, 'payment'])->name('orders.payment.update');
+
     // إرسالُ الفاتورة إلى الزبون — نصٌّ يُكتب في الخادم ويُفتح على واتساب التاجر
     Route::post('/orders/{number}/send', [OrderDetailController::class, 'send'])->name('orders.send');
     /* إبلاغُ الزبون بحالة طلبه يدويًّا — لا يمرّ بميتا، فيعمل والحظرُ قائم */
@@ -822,227 +524,14 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'tenant', 'business'
 
     // تحليلات الربحية
 
-    /*
-     * أدوات التسويق — ستّ أدوات تُفتح من قائمةٍ منسدلة لا من صفحةٍ جامعة.
-     *
-     * لكلٍّ منها عنوانها: من يريد إعدادات الموقع لا يمرّ بالكوبونات، ورابطُ
-     * كلٍّ منها يُحفظ ويُشارَك وحده.
-     */
-    Route::get('/marketing', fn () => redirect()->route('admin.marketing.loyalty'))->name('marketing.index');
-    /*
-     * الموقع انتقل إلى الإعدادات ‹ المتجر — والمسار يبقى موجِّهًا لا شاشة.
-     *
-     * ما زال في العالم روابط محفوظة وإشاراتٌ مرجعيّة إليه، و404 على تاجرٍ
-     * حفظ رابط نطاقه ليس نقلًا بل فقدان. والحفظ يبقى هنا لأن مخزنه مجموعة
-     * `website` في `MarketingSettings` — الاسم يصف البيانات لا الشاشة.
-     */
-    Route::get('/marketing/website', fn () => redirect()->route('admin.settings.index', ['section' => 'website']))->name('marketing.website');
-    Route::post('/marketing/website', [MarketingController::class, 'saveWebsite'])->name('marketing.website.save');
     // إنشاء متجر التاجر على الإنترنت — من صفحة الإعدادات نفسها
-    Route::post('/marketing/store', [MarketingController::class, 'saveStore'])->name('marketing.store.save');
-    Route::post('/marketing/store/products', [MarketingController::class, 'publishProducts'])->name('marketing.store.products');
-    /*
-     * معاينةُ المتجر — خلف الحارس، وبلا معرّفٍ في الرابط.
-     *
-     * تفتح القالب العامّ نفسه بحمولته نفسها لصاحب المتجر وحده، منشورًا كان
-     * أو لم يُنشر. ولو قبِل معرّفًا لَعاين كلُّ تاجرٍ متجر جاره غير المنشور.
-     */
-    Route::get('/store/preview', [StorefrontController::class, 'preview'])
-        ->name('store.preview');
-    Route::post('/marketing/domain-path', [MarketingController::class, 'saveDomainPath'])->name('marketing.domain.path');
-    Route::get('/marketing/seo', [MarketingController::class, 'seo'])->name('marketing.seo');
-    Route::post('/marketing/seo', [MarketingController::class, 'saveSeo'])->name('marketing.seo.save');
-    Route::post('/marketing/seo/refresh', [MarketingController::class, 'refreshSeo'])->name('marketing.seo.refresh');
-    /*
-     * الموقع الإلكتروني — يُبنى هنا ويُعرض في مستودعٍ آخر.
-     *
-     * أقسامٌ تُركّب وتُرتَّب ثمّ تُنشر لقطةً واحدة (`website_versions`)،
-     * ويقرؤها العارض من `/site/{host}`. والمسوّدة تبقى مسوّدةً حتى يُضغط
-     * «انشر»: تبديلُ لونٍ لا يصل زائرًا قبل أن يرضى عنه صاحبُه.
-     */
-    Route::prefix('website')->name('website.')->group(function () {
-        /*
-         * ═══ التشغيلُ اليوميّ — وهو ما يفتحه الموظّف ═══
-         *
-         * لوحةُ تشغيل الموقع: أمنشورٌ هو، وكم صنفًا يراه الزبون، وأيُّها نفد.
-         * ولا ضبطَ فيها — وقسمُ `website` وحده يكفي لفتحها.
-         */
-        Route::get('/', [BuilderController::class, 'index'])->name('index');
 
-        /*
-         * ═══ والضبطُ خلف فعله ═══
-         *
-         * ما تحت هذا الحارس يُضبط مرّةً ثمّ يُترك: التصميمُ والصفحاتُ والنطاقُ
-         * والنشر. ومن مُنح «الموقع» ليتفقّد منتجاتِه كلَّ صباح لم يُمنح تحويلَ
-         * نطاق متجره — انظر `Permissions::WEBSITE_CONFIGURE`.
-         *
-         * والحراسةُ على المجموعة لا في أوّل كلّ دالّة: مسارٌ يُضاف غدًا يرثها
-         * بلا أن يتذكّر كاتبُه سطرًا.
-         */
-        Route::middleware('may:'.Permissions::WEBSITE_CONFIGURE)->group(function () {
-            Route::post('/', [BuilderController::class, 'store'])->name('create');
-            Route::post('/publish', [BuilderController::class, 'publish'])->name('publish');
-            Route::post('/versions/{id}/restore', [BuilderController::class, 'restore'])->name('restore');
-            Route::post('/maintenance', [BuilderController::class, 'maintenance'])->name('maintenance');
-
-            /*
-             * وبابُ الضبط الواحد: «الإعدادات ‹ الموقع الإلكتروني».
-             *
-             * ستُّ شاشاتٍ كانت عائلةً في الشريط الجانبيّ، وهي إعداداتٌ لا تشغيل.
-             * فصار لها مدخلٌ واحد بقائمةٍ جانبية، وبقيت مساراتُها كما هي — روابطُ
-             * محفوظةٌ وإشاراتٌ مرجعية إليها، و404 عليها فقدانٌ لا نقل.
-             */
-            Route::get('/settings', [SettingsController::class, 'general'])->name('site');
-
-            Route::get('/pages', [App\Http\Controllers\Admin\Website\PageController::class, 'index'])->name('pages');
-            Route::post('/pages', [App\Http\Controllers\Admin\Website\PageController::class, 'store'])->name('pages.store');
-            Route::post('/pages/reorder', [App\Http\Controllers\Admin\Website\PageController::class, 'reorder'])->name('pages.reorder');
-            Route::put('/pages/{id}', [App\Http\Controllers\Admin\Website\PageController::class, 'update'])->name('pages.update');
-            Route::delete('/pages/{id}', [App\Http\Controllers\Admin\Website\PageController::class, 'destroy'])->name('pages.destroy');
-
-            // المحرّر يفتح على صفحةٍ بعينها — وبلا رقمٍ يفتح على الرئيسية
-            Route::get('/editor/{id?}', [EditorController::class, 'show'])->name('editor');
-            Route::post('/editor/{id}/sections', [EditorController::class, 'addSection'])->name('sections.add');
-            Route::post('/editor/{id}/reorder', [EditorController::class, 'reorderSections'])->name('sections.reorder');
-            Route::put('/sections/{id}', [EditorController::class, 'updateSection'])->name('sections.update');
-            Route::post('/sections/{id}/toggle', [EditorController::class, 'toggleSection'])->name('sections.toggle');
-            Route::post('/sections/{id}/duplicate', [EditorController::class, 'duplicateSection'])->name('sections.duplicate');
-            Route::delete('/sections/{id}', [EditorController::class, 'destroySection'])->name('sections.destroy');
-
-            // رفعُ صورةٍ يردّ رابطًا — وحقل الصورة يحمل رابطًا أيًّا كان مصدره
-            Route::post('/media', [MediaController::class, 'upload'])->name('media');
-
-            Route::get('/design', [DesignController::class, 'index'])->name('design');
-            Route::put('/design', [DesignController::class, 'update'])->name('design.update');
-            Route::put('/design/palette', [DesignController::class, 'palette'])->name('design.palette');
-        Route::put('/design/layout', [DesignController::class, 'structure'])->name('design.layout');
-
-            Route::get('/shop', [SettingsController::class, 'store'])->name('shop');
-            Route::put('/shop', [SettingsController::class, 'saveStore'])->name('shop.save');
-            Route::get('/seo', [SettingsController::class, 'seo'])->name('seo');
-            Route::put('/seo', [SettingsController::class, 'saveSeo'])->name('seo.save');
-            Route::put('/settings', [SettingsController::class, 'saveSite'])->name('settings.save');
-
-            /*
-             * الدومين — بابٌ قائمٌ بذاته لا حقلٌ في شاشة السيو.
-             *
-             * وهو الشاشةُ الوحيدة التي قد يُطلب فيها من التاجر عملٌ خارج افنت بلس
-             * (سجلٌّ في لوحة مسجّله)، فيستحقّ عنوانًا يُحفظ ويُرسَل: «افتح هذا
-             * الرابط وأضف السجلّ» أقصرُ من شرحٍ في رسالة.
-             */
-            Route::get('/domain', [DomainController::class, 'index'])->name('domain');
-            Route::put('/domain', [DomainController::class, 'save'])->name('domain.save');
-            Route::post('/domain/check', [DomainController::class, 'check'])->name('domain.check');
-
-            // مُنتقي المنتجات يبحث ولا يُحمَّل كاملًا — انظر EditorController::products
-            Route::get('/products', [EditorController::class, 'products'])->name('products');
-        });
-    });
-
-    /*
-     * التطبيقات التكاملية — الربطُ وحده، وما يُفعَل بالأداة في قسمه.
-     *
-     * وأسماءُ المسارات تحمل القسم: `admin.integrations.*` — منها يشتقّ
-     * `CheckAbility` الصلاحيةَ المطلوبة. فلو بقيت تحت `marketing` لَحرسها
-     * قسمُ التسويق، ولَكان منحُ الكوبونات منحًا لمفتاح Places معه.
-     */
-    Route::prefix('integrations')->name('integrations.')->group(function () {
-        Route::get('/', [IntegrationsController::class, 'index'])->name('index');
-
-        /*
-         * «ربط مع افنت بلس» — بابُ كلّ أداةٍ تُربط.
-         *
-         * وهو POST لا رابط: يكتب علامةَ البدء في القاعدة، ورابطٌ يكتب يُنفَّذ
-         * بجلبٍ مسبقٍ من المتصفّح أو بزيارةٍ من زاحف.
-         */
-        Route::post('/connect/{tool}', [IntegrationsController::class, 'connect'])
-            ->whereIn('tool', ['whatsapp', 'google'])->name('connect');
-
-        /*
-         * ربط خرائط Google — صفحةٌ في النظام لا رابطٌ يخرج منه.
-         *
-         * كان زرًّا يفتح `business.google.com` في تبويبٍ خارجيّ: اسمُه «ربط» ولا
-         * يربط شيئًا — يُخرج التاجر من لوحته ولا يعود بمعرّفٍ ولا يُحفظ شيء.
-         */
-        Route::get('/google', [IntegrationsController::class, 'google'])->name('google');
-        Route::post('/google', [IntegrationsController::class, 'saveGoogle'])->name('google.save');
-        Route::post('/google/key', [IntegrationsController::class, 'saveGoogleKey'])->name('google.key');
-        Route::delete('/google/key', [IntegrationsController::class, 'forgetGoogleKey'])->name('google.key.forget');
-        Route::post('/google/refresh', [IntegrationsController::class, 'refreshGoogle'])->name('google.refresh');
-
-        /*
-         * البحثُ عن المحلّ — محدودُ المعدّل لأنّه نداءٌ مدفوع.
-         *
-         * والتمهّلُ في الشاشة لا يكفي: من يكتب العنوان بيده يتجاوزه، ومئةُ
-         * نداءٍ في الدقيقة فاتورةٌ يدفعها من يملك المفتاح — افنت بلسُ غالبًا.
-         * عشرون في الدقيقة تكفي بحثًا بشريًّا وتقف دون الآليّ.
-         */
-        Route::post('/google/search', [IntegrationsController::class, 'searchPlaces'])
-            ->middleware('throttle:20,1')->name('google.search');
-
-        /* ولكلّ فرعٍ مكانُه — لا للمتجر كلِّه مكانٌ واحد */
-        Route::post('/google/branches/{branch}', [IntegrationsController::class, 'linkBranch'])->name('google.branch.link');
-        Route::delete('/google/branches/{branch}', [IntegrationsController::class, 'unlinkBranch'])->name('google.branch.unlink');
-        Route::post('/google/branches/{branch}/refresh', [IntegrationsController::class, 'refreshBranch'])->name('google.branch.refresh');
-
-        /*
-         * ملفُّ الأعمال — بابٌ آخرُ غيرُ الخرائط.
-         *
-         * الخرائطُ تقرأ الملفَّ العامّ بمفتاح؛ وهذا يفتح ملفَّ التاجر بإذنه
-         * فيقرأ تقييماته كلَّها ويردّ عليها باسمه.
-         */
-        Route::get('/google-business', [GoogleBusinessController::class, 'index'])->name('googleBusiness');
-        Route::get('/google-business/connect', [GoogleBusinessController::class, 'connect'])->name('googleBusiness.connect');
-        /* عنوانُ العودة من Google — يُطابق `GOOGLE_BUSINESS_REDIRECT` حرفًا بحرف */
-        Route::get('/google-business/callback', [GoogleBusinessController::class, 'callback'])->name('googleBusiness.callback');
-        Route::delete('/google-business', [GoogleBusinessController::class, 'disconnect'])->name('googleBusiness.disconnect');
-        Route::post('/google-business/locations', [GoogleBusinessController::class, 'locations'])
-            ->middleware('throttle:20,1')->name('googleBusiness.locations');
-        Route::post('/google-business/branches/{branch}', [GoogleBusinessController::class, 'linkLocation'])->name('googleBusiness.branch.link');
-        Route::post('/google-business/branches/{branch}/sync', [GoogleBusinessController::class, 'sync'])
-            ->middleware('throttle:20,1')->name('googleBusiness.branch.sync');
-        Route::post('/google-business/reviews/{review}/reply', [GoogleBusinessController::class, 'reply'])->name('googleBusiness.reply');
-        Route::post('/google-business/alerts', [GoogleBusinessController::class, 'alerts'])->name('googleBusiness.alerts');
-
-        /*
-         * واتساب — ما يملكه التاجر: وضع الإرسال وربط رقمه.
-         *
-         * ومعرّف متجره يُقرأ من جلسته في المتحكّم لا ممّا يصل في الطلب — انظر
-         * `Admin\WhatsAppController::bid`.
-         */
-        Route::get('/whatsapp', [IntegrationsController::class, 'whatsapp'])->name('whatsapp');
-        Route::post('/whatsapp/mode', [App\Http\Controllers\Admin\WhatsAppController::class, 'mode'])->name('whatsapp.mode');
-        Route::post('/whatsapp/connect', [App\Http\Controllers\Admin\WhatsAppController::class, 'connect'])->name('whatsapp.connect');
-        Route::delete('/whatsapp/connect', [App\Http\Controllers\Admin\WhatsAppController::class, 'disconnect'])->name('whatsapp.disconnect');
-    });
-
-    Route::get('/marketing/loyalty', [MarketingController::class, 'loyalty'])->name('marketing.loyalty');
-    Route::post('/marketing/loyalty', [MarketingController::class, 'saveLoyalty'])->name('marketing.loyalty.save');
     /*
      * بريد الاستعادة — يضبطه صاحب الحساب وهو داخل، قبل أن يحتاج إليه.
      * ويُشترط معه كلمةُ المرور الحالية: جلسةٌ مفتوحة وحدها لا تكفي.
      */
     Route::post('/settings/recovery-email', [RecoveryEmailController::class, 'start'])->name('settings.recovery.start');
     Route::post('/settings/recovery-email/confirm', [RecoveryEmailController::class, 'confirm'])->name('settings.recovery.confirm');
-    Route::get('/marketing/reviews', [ReviewController::class, 'index'])->name('marketing.reviews');
-    Route::post('/marketing/reviews', [ReviewController::class, 'store'])->name('marketing.reviews.store');
-    Route::post('/marketing/reviews/{id}/status', [ReviewController::class, 'status'])->name('marketing.reviews.status');
-    Route::post('/marketing/reviews/{id}/reply', [ReviewController::class, 'reply'])->name('marketing.reviews.reply');
-    Route::delete('/marketing/reviews/{id}', [ReviewController::class, 'destroy'])->name('marketing.reviews.destroy');
-    Route::get('/marketing/coupons', [MarketingController::class, 'coupons'])->name('marketing.coupons');
-    Route::get('/marketing/whatsapp', [MarketingController::class, 'whatsapp'])->name('marketing.whatsapp');
-    Route::post('/marketing/whatsapp', [MarketingController::class, 'saveWhatsapp'])->name('marketing.whatsapp.save');
-    /*
-     * سجلُّ ما خرج فعلًا — الجدولُ الذي لم تكن تفتحه شاشة.
-     *
-     * وهو قراءةٌ محضة: لا إعادةَ إرسالٍ ولا حذف. وصفوفُه صفوفُ المتجر وحدَه،
-     * ومعرّفُه يُقرأ من الجلسة في المتحكّم لا من العنوان.
-     */
-    Route::get('/marketing/whatsapp/log', [App\Http\Controllers\Admin\WhatsAppController::class, 'log'])->name('marketing.whatsapp.log');
-
-    Route::post('/coupons', [CouponController::class, 'store'])->name('coupons.store');
-    Route::post('/coupons/{id}/toggle', [CouponController::class, 'toggle'])->name('coupons.toggle');
-    Route::delete('/coupons/{id}', [CouponController::class, 'destroy'])->name('coupons.destroy');
 
     // ضريبة القيمة المضافة
     Route::get('/orders/{number}/tax-invoice', [PdfController::class, 'taxInvoice'])->name('orders.taxInvoice');
@@ -1295,7 +784,7 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'tenant', 'business'
     Route::get('/reports/purchases', [ReportPageController::class, 'purchases'])->name('reports.purchases');
     Route::get('/reports/suppliers', [ReportPageController::class, 'suppliers'])->name('reports.suppliers');
     Route::get('/reports/activity', [ReportPageController::class, 'activity'])->name('reports.activity');
-    Route::get('/reports/marketing', [ReportPageController::class, 'marketing'])->name('reports.marketing');
+
     // عمليات جرد المخزون — أين فارق الدفترُ الواقع، وبكم
     Route::get('/reports/stocktake', [ReportPageController::class, 'stocktake'])->name('reports.stocktake');
 
@@ -1350,22 +839,6 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'tenant', 'business'
     Route::post('/settings/documents/brand', [TemplateController::class, 'brand'])->name('settings.documents.brand');
     Route::post('/settings/documents/cover', [TemplateController::class, 'cover'])->name('settings.documents.cover');
 
-    /*
-     * «المساعدة والدعم» — بابُ التاجر إلى افنت بلس.
-     *
-     * بلا حارسِ قسمٍ ولا قدرةِ باقة: من يدخل اللوحة يستطيع أن يسأل. وبابُ
-     * دعمٍ يُغلق أمام موظّفٍ يرى العطبَ بعينه يعني أن يمرّ البلاغُ بصاحب
-     * المتجر أو لا يمرّ.
-     *
-     * وكلُّ ما هنا محصورٌ بمتجر صاحب الجلسة — انظر `HelpController::mine`.
-     */
-    Route::get('/help', [HelpController::class, 'index'])->name('help.index');
-    Route::post('/help', [HelpController::class, 'store'])->name('help.store');
-    Route::get('/help/{id}', [HelpController::class, 'show'])->name('help.show');
-    Route::post('/help/{id}/reply', [HelpController::class, 'reply'])->name('help.reply');
-    Route::get('/help/{id}/files/{attachment}', SupportAttachmentController::class)
-        ->name('help.attachment');
-
     Route::get('/settings/trash', [TrashController::class, 'index'])->name('settings.trash');
 
     // تنبيهات يعرّفها صاحب النشاط — قواعد على مقاييس النظام، وتذكيرات بموعد
@@ -1373,172 +846,6 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'tenant', 'business'
     Route::put('/alerts/{id}', [CustomAlertController::class, 'update'])->name('alerts.update');
     Route::delete('/alerts/{id}', [CustomAlertController::class, 'destroy'])->name('alerts.destroy');
 });
-
-/* -------------------------------- POS ------------------------------ */
-/*
- * «ability» على المجموعة كلها.
- *
- * كانت على شاشة المدفوعات وحدها، لأن نقطة البيع كانت مفتوحة للجميع. وحين
- * صارت صلاحيةً تُمنح، بقي المربّع بلا حارس: يرفع صاحب النشاط علامة «نقطة
- * البيع» عن موظف فلا يتغيّر شيء — يكتب العنوان فتُفتح له.
- */
-Route::prefix('pos')->name('pos.')->middleware(['auth', 'tenant', 'business', 'ability', 'pos.branch'])->group(function () {
-    Route::get('/', [App\Http\Controllers\Pos\PageController::class, 'index'])->name('index');
-
-    /*
-     * إعداد الجهاز: يقع مرّةً واحدة يوم التركيب، بيد مديرٍ يملك الإعدادات.
-     * بعده لا يرى الكاشير هذه الشاشة أبدًا — يفتح فيجد لوحة الأرقام.
-     */
-    Route::get('/setup', [DeviceController::class, 'setup'])->name('setup');
-    Route::post('/setup', [DeviceController::class, 'activate'])->name('setup.activate');
-
-    /*
-     * قفل الشاشة: يُنهي جلسة الموظف ويُبقي تفعيل الجهاز.
-     * تبديل الكاشير عشر ثوانٍ، لا دخول مديرٍ من جديد.
-     */
-    Route::post('/lock', [App\Http\Controllers\Pos\PageController::class, 'lock'])->name('lock');
-
-    // اختيار الموظف الواقف على الصندوق. ليس دخولًا ولا خروجًا — الصلاحيات
-    // تبقى للمستخدم المسجَّل، وهذا يحدّد من تُنسب إليه البيعة فقط.
-    Route::get('/cashier', [CashierController::class, 'choose'])->name('cashier');
-    Route::post('/cashier', [CashierController::class, 'select'])->name('cashier.select');
-    Route::post('/cashier/leave', [CashierController::class, 'leave'])->name('cashier.leave');
-    Route::get('/currency/{code}/switch', [CurrencyController::class, 'switch'])->name('currency.switch');
-
-    Route::post('/checkout', [PosController::class, 'checkout'])->name('checkout');
-    Route::post('/coupon', [PosController::class, 'applyCoupon'])->name('coupon.apply');
-    Route::post('/hold', [PosController::class, 'hold'])->name('hold');
-    Route::get('/stock-feed', [PosController::class, 'stockFeed'])->name('stock-feed');
-    Route::get('/orders', [App\Http\Controllers\Pos\PageController::class, 'orders'])->name('orders');
-    Route::get('/orders/{id}/resume', [PosController::class, 'resume'])->name('orders.resume');
-    Route::delete('/orders/{id}', [PosController::class, 'discard'])->name('orders.discard');
-    /*
-     * تصحيح بندٍ في فاتورة — لا إلغاء لها.
-     *
-     * الكاشير يُخطئ أمام الزبون فيُصلح، والأثر يبقى: ما كان وما صار ومن
-     * غيّره ولماذا. والكتابة كلّها في `App\Support\OrderCorrection`.
-     * ويسبق مسارَ العرض: «orders/{number}» يبتلع ما بعده لو تأخّر.
-     */
-    Route::put('/orders/{number}/items/{item}', [OrderEditController::class, 'update'])->name('orders.items.update');
-    Route::put('/orders/{number}/items/{item}/addons/{addon}', [OrderEditController::class, 'addon'])->name('orders.items.addons.update');
-    Route::put('/orders/{number}/payment', [OrderEditController::class, 'payment'])->name('orders.payment.update');
-    Route::get('/orders/{number}', [App\Http\Controllers\Pos\PageController::class, 'orderDetails'])->name('order-details');
-    // المدفوعات تسقط على صلاحية finance لا pos (انظر sectionFromRoute):
-    // شاشةٌ مالية تعرض حصيلة الصندوق، فيراها صاحب النشاط والمدير والمحاسب
-    // ويُمنع منها الكاشير — وإن كان يملك نقطة البيع.
-    Route::get('/payments', [App\Http\Controllers\Pos\PageController::class, 'payments'])->name('payments');
-    Route::get('/receipts', [App\Http\Controllers\Pos\PageController::class, 'receipts'])->name('receipts');
-    Route::get('/receipts/search', [PosController::class, 'searchReceipts'])->name('receipts.search');
-    // تفصيل فاتورة واحدة — تُطلب عند النقر، فلا تُرسَل مبالغ الثلاثين دفعةً
-    Route::get('/receipts/{number}', [PosController::class, 'showReceipt'])->name('receipts.show');
-    /*
-     * وصندوقُ البيع يطبع شريطَه — لا فاتورةَ A4 على طابعةٍ حراريّة.
-     *
-     * والفاتورةُ بابُها شاشةُ الطلب (`admin.orders.pdf`): من أراد ورقةً
-     * تُرسَل إلى شركةٍ لا يطلبها من درج النقد.
-     */
-    Route::get('/receipt/{number}/pdf', [PdfController::class, 'orderThermal'])->name('receipt.pdf');
-    Route::get('/customers', [App\Http\Controllers\Pos\PageController::class, 'customers'])->name('customers');
-    Route::post('/customers', [PosController::class, 'storeCustomer'])->name('customers.store');
-    // مناسبةٌ جديدة تُضاف من نافذة الدفع نفسها — تُحفظ للمتجر وتظهر في قائمته
-    Route::post('/occasions', [PosController::class, 'storeOccasion'])->name('occasions.store');
-    /*
-     * «حسابي» — بيانات الموظّف وراتبه ومبيعاته هو.
-     *
-     * تحت `pos` لأنّ صاحبها لا يدخل لوحة النشاط: الكاشير كان زرُّ اللوحة
-     * يغيب عنه فلا يجد بابًا إلى شيءٍ يخصّه. والحارس نفسه — صلاحية «نقطة
-     * البيع» — لأنّ كلّ ما فيها بياناتُ من يفتحها (انظر MeController).
-     */
-    Route::get('/me', [MeController::class, 'show'])->name('me');
-    Route::get('/settings', [App\Http\Controllers\Pos\PageController::class, 'settings'])->name('settings');
-    Route::post('/language', [LanguageController::class, 'update'])->name('language.update');
-});
-
-/*
- * متجرُ التاجر — صفحةٌ عامّة يفتحها زبون.
- *
- * خارج حرّاس النظام كلّها: من يفتحها لا حساب له ولا متجرَ في جلسته. والمتجر
- * يُعرف من عنوانه، وحارسُه أن يكون منشورًا (انظر `Storefront::find`).
- *
- * وعنوانان لصفحةٍ واحدة، والأوّل هو الأصل:
- *
- *  1. `متجري.eventplusapp.om` — النطاق الفرعيّ، وهو ما يُعطى للزبون ويُكتب في
- *     `canonical`. يلزمه على الخادم سجلّ DNS بالحرف البدل وشهادة SSL مثله.
- *  2. `/s/متجري` — بابٌ بديل يعمل قبل ضبطهما، وفي التطوير والاختبارات حيث
- *     لا نطاقات فرعية. ولا يُعطى للزبون: صفحته تُصرّح أنّ الأصل غيرُه، فلا
- *     يقرأ محرّكُ البحث نسختين لصفحةٍ واحدة.
- *
- * ويقع في آخر الملفّ عمدًا: مسارُ النطاق الفرعيّ يلتقط كلّ عنوانٍ تحت أيّ
- * نطاقٍ فرعيّ، فلو سبق مسارات اللوحة لَابتلع `app.eventplusapp.om` نفسها.
- */
-Route::domain('{slug}.'.config('storefront.domain'))
-    /*
-     * والمحجوز يُستثنى في النمط لا في المتحكّم.
-     *
-     * `app.eventplusapp.om` يطابق `{slug}.eventplusapp.om`، ولاراڤيل تُقدّم المسار
-     * المقيَّد بنطاق على المطلق — فابتلع هذا المسارُ الصفحةَ الرئيسية للنظام
-     * وردّها «غير موجود». والاستثناء هنا يجعلها لا تطابق أصلًا، فتعود إلى
-     * صاحبها. انظر `Storefront::pattern`.
-     */
-    ->group(function () {
-        Route::get('/', [StorefrontController::class, 'show'])
-            ->where('slug', Storefront::pattern())
-            ->name('store.home');
-
-        /*
-         * وصفحاتُ الموقع الداخليّة — «المتجر» و«من نحن» و«تواصل معنا».
-         *
-         * كان المسارُ الأوّلُ وحدَه: يبني النظامُ للتاجر موقعًا بأربع صفحات،
-         * ويكتب في ترويسته وتذييله قائمةً تُشير إليها كلِّها (`Nav`)، ثمّ
-         * لا يخدم منها إلّا الرئيسية. فكلُّ رابطٍ في قائمة الموقع يردّ ٤٠٤،
-         * و«الرئيسية» على المسار البديل تُخرج الزبونَ إلى صفحة دخول افنت بلس.
-         * وطبقةُ الرسم تقبل الصفحةَ منذ بُنيت (`Site` لها خاصّية `page`) —
-         * الناقصُ كان العنوانَ وحده.
-         */
-        Route::get('/{path}', [StorefrontController::class, 'show'])
-            ->where('slug', Storefront::pattern())
-            ->where('path', Storefront::PATH)
-            ->name('store.page');
-    });
-
-Route::get('/s/{slug}', [StorefrontController::class, 'show'])->name('store.show');
-Route::get('/s/{slug}/{path}', [StorefrontController::class, 'show'])
-    ->where('path', Storefront::PATH)->name('store.show.page');
-
-/*
- * ونطاقُ التاجر نفسه — `myshop.om` يفتح موقعه.
- *
- * ويقع بعد مسار النطاق الفرعيّ عمدًا: ذاك أخصُّ، فيلتقط `متجري.eventplusapp.om`
- * قبل أن يصل هذا.
- *
- * وخدمتُه خلف علَمٍ مطفأ افتراضيًّا (`storefront.custom_domains`) — والعلَمُ
- * يُقرأ في المتحكّم لا هنا. والسبب أنّ الفرق بين مضيفٍ مجهولٍ يُردّ «غير
- * موجود» ومضيفٍ مجهولٍ يُردّ صفحةَ دخول افنت بلس ليس فرقًا في التسجيل بل في
- * الجواب: من وجّه نطاقه إلينا قبل أن نجهز يجب أن يُقال له «لا شيء هنا» لا
- * أن يُعرض عليه بابُ نظامٍ لا يخصّه.
- */
-Route::domain('{host}')
-    /*
-     * والنمطُ يستثني مضيفاتِ افنت بلس كلَّها.
-     *
-     * هذا المسار يلتقط كلَّ مضيفٍ ليس لنا، ولاراڤيل تُقدّم المسار المقيَّد
-     * بنطاق على المطلق. فلولا الاستثناء لَابتلع `app.eventplusapp.om` نفسها
-     * وردّها «غير موجود» — وهو عطبٌ وقع مرّةً في هذا الملفّ ولا يُترك بابُه.
-     *
-     * و«لاحقةٌ من حرفين فأكثر» تُخرج `localhost` وعناوينَ الأرقام وفحوصَ
-     * الصحّة من المطابقة أصلًا. والنمطُ في `Storefront::foreignHost` — وفيه
-     * لمَ يُكتب الحدُّ «شرطةٌ أو نهاية» لا «نهاية» وحدها.
-     */
-    ->group(function () {
-        Route::get('/', [StorefrontController::class, 'byHost'])
-            ->where('host', Storefront::foreignHost())
-            ->name('store.custom');
-
-        // وصفحاتُه الداخليّة معه — القائمةُ واحدةٌ على الطرق الثلاث
-        Route::get('/{path}', [StorefrontController::class, 'byHost'])
-            ->where(['host' => Storefront::foreignHost(), 'path' => Storefront::PATH])
-            ->name('store.custom.page');
-    });
 
 /*
  * الورقةُ أونلاين — ما يفتحه من مسح الرمز أسفل إيصاله.
@@ -1553,12 +860,3 @@ Route::get('/i/{token}', [PublicDocumentController::class, 'show'])
     ->where('token', '[A-Za-z0-9]{22}')
     ->name('paper.show');
 
-/*
- * إشعارات ميتا — بابٌ عامّ بلا جلسة، وحارسه توقيعٌ لا كلمة سرّ.
- *
- * خارج مجموعات الحماية كلّها لأنّ من يُنادينا خادمُ ميتا لا متصفّح مستخدم:
- * لا جلسة له ولا رمز CSRF. والتحقّق في المتحكّم — توقيع HMAC بسرّ التطبيق —
- * ولا يُقبل شيءٌ بدونه.
- */
-Route::get('/webhooks/whatsapp', [WebhookController::class, 'verify'])->name('webhooks.whatsapp.verify');
-Route::post('/webhooks/whatsapp', [WebhookController::class, 'handle'])->name('webhooks.whatsapp');
