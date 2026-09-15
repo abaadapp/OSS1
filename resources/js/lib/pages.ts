@@ -10,7 +10,7 @@ import {
     type SectionTab,
 } from '@/Components/SectionTabs';
 import { SETTINGS_NAV } from '@/Pages/Admin/Settings/partials/SettingsNav';
-import { NAV, PLATFORM_NAV, type NavGroup, type NavItem } from '@/lib/nav';
+import { NAV, type NavGroup, type NavItem } from '@/lib/nav';
 import type { SharedProps } from '@/types';
 
 /** صفحةٌ في الدليل — ما يكفي لعرضها في القائمة وفتحها */
@@ -196,16 +196,6 @@ export function adminPages(reports: ReportLink[] = []): PageEntry[] {
     add({ label: 'إدارة حسابك', icon: UserCircle, href: route('profile.edit'), group: 'حسابك' });
 
     return pages;
-}
-
-/** دليلُ صفحات لوحة المنصة — قائمتُها وحدها، فلا تبويبات لها ولا إعدادات أقسام */
-export function platformPages(): PageEntry[] {
-    return leaves(PLATFORM_NAV).map((item) => ({
-        label: item.label,
-        icon: item.icon,
-        href: route(item.route),
-        group: 'أقسام النظام',
-    }));
 }
 
 /**

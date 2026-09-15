@@ -3,11 +3,9 @@ import {
     BellRing,
     DatabaseBackup,
     GitBranch,
-    Globe,
     History,
     LayoutTemplate,
     ListTree,
-    MonitorSmartphone,
     Percent,
     ShieldCheck,
     Store,
@@ -33,32 +31,7 @@ export const SETTINGS_NAV = [
         items: [
             /* اللغة هنا لا في بطاقةٍ وحدها: مفتاحٌ واحد بين خيارين لا يملأ شاشة */
             { key: 'business', label: 'بيانات النشاط', desc: 'اسم المتجر ورقم التواصل والعنوان ولغة النظام', icon: Store },
-            /*
-             * بطاقةٌ واحدة للموقع، ووصفٌ يقول ما وراءه.
-             *
-             * كانتا بطاقتين تَعِدان بما لا يقع: «إعدادات الدومين» توعد
-             * بـ«نشره للزوّار» ولا نشرَ في النظام، و«إعدادات الموقع» توعد
-             * بـ«ما يراه زائر موقعك» وتفتح على رافع شعار. فيبحث التاجر عن
-             * تفعيل موقعه بينهما ولا يجده — وليس بينهما ما يُفعَّل.
-             *
-             * والموقع في «افنت بلس» شيئان لا ثالث لهما: زرٌّ في الشريط يفتحه،
-             * وفحصٌ يقرأ صفحته. فبطاقةٌ واحدة تقولهما، ومفتاحٌ يُشغّلهما.
-             */
-            {
-                key: 'website',
-                label: 'الموقع الإلكتروني',
-                desc: 'حالة موقعك وتصميمه وصفحاته ومتجره ونطاقه',
-                icon: Globe,
-                /*
-                 * وبابُها شاشةُ الموقع لا لوحةُ الإعدادات.
-                 *
-                 * كانت تفتح لوحًا في «الإعدادات» يضبط **الصفحة البسيطة**
-                 * القديمة، بينما بانِي المواقع له ستُّ شاشاتٍ في مكانٍ آخر.
-                 * فكان في النظام بابان لمتجرٍ واحد على العنوان نفسه، لكلٍّ
-                 * منهما مفتاحُ «إظهار الأسعار» الخاصُّ به.
-                 */
-                route: 'admin.website.site',
-            },
+
         ],
     },
     {
@@ -101,7 +74,7 @@ export const SETTINGS_NAV = [
         items: [
             { key: 'branches', label: 'الفروع', desc: 'إدارة فروع النشاط', icon: GitBranch, route: 'admin.branches.index' },
             { key: 'employees', label: 'الموظفون', desc: 'حسابات الموظفين وأدوارهم', icon: UserCog, route: 'admin.employees.index' },
-            { key: 'devices', label: 'أجهزة نقاط البيع', desc: 'الأجهزة المرتبطة بالنظام', icon: MonitorSmartphone, route: 'admin.devices.index' },
+
             { key: 'activity', label: 'سجل النشاط', desc: 'سجل العمليات على النظام', icon: History, route: 'admin.activity.index' },
             { key: 'trash', label: 'المحذوفات', desc: 'استعادة ما حُذف', icon: Trash2, route: 'admin.settings.trash' },
             { key: 'backup', label: 'النسخ الاحتياطي', desc: 'تنزيل نسخة من بياناتك واستعادتها', icon: DatabaseBackup },

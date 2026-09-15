@@ -25,7 +25,7 @@ import {
 import { initials } from '@/lib/format';
 import { useTranslate } from '@/lib/i18n';
 import { logout } from '@/lib/logout';
-import { adminPages, platformPages, visibleTo } from '@/lib/pages';
+import { adminPages, visibleTo } from '@/lib/pages';
 import type { PageProps } from '@/types';
 
 export default function Topbar({ onMenuClick }: { onMenuClick: () => void }) {
@@ -98,16 +98,8 @@ export default function Topbar({ onMenuClick }: { onMenuClick: () => void }) {
         void post('/admin/notifications/clear');
     };
 
-    const isPlatform = auth?.user.role === 'super_admin';
-
-    /**
-     * البحث الموحّد — لكل لوحة مسارها. مدير المنصة لا يملك business_id،
-     * فربط الزر به وحده كان يخفي بحث المنصة رغم وجود مساره.
-     */
-    const searchUrl =
-        isPlatform ? route('super-admin.search')
-        : auth?.user.businessId ? route('admin.search')
-        : null;
+    /** البحث الموحّد — بابُه `business_id`: من لا نشاط له لا شيء يبحث فيه. */
+    const searchUrl = auth?.user.businessId ? route('admin.search') : null;
 
     /*
      * دليلُ الصفحات يُبنى مرّةً لا مع كل رسم.
@@ -116,8 +108,8 @@ export default function Topbar({ onMenuClick }: { onMenuClick: () => void }) {
      * والشريط العلوي يُعاد رسمه مع كل استطلاعٍ للجرس، أي مرّتين في الدقيقة.
      */
     const pages = useMemo(
-        () => visibleTo(isPlatform ? platformPages() : adminPages(reportPages ?? []), auth),
-        [isPlatform, reportPages, auth],
+        () => visibleTo(adminPages(reportPages ?? []), auth),
+        [reportPages, auth],
     );
 
     /**
@@ -367,7 +359,7 @@ export default function Topbar({ onMenuClick }: { onMenuClick: () => void }) {
                                 onSelect={() => {
                                     if (code === locale) return;
                                     router.post(
-                                        route(isPlatform ? 'super-admin.language.update' : 'admin.language.update'),
+                                        route('admin.language.update'),
                                         { locale: code },
                                         { preserveScroll: true },
                                     );

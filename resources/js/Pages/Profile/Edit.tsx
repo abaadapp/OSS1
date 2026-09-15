@@ -1,9 +1,7 @@
-import { type FormEvent, type ReactNode, useState } from 'react';
+import { type FormEvent, useState } from 'react';
 import { useForm, usePage } from '@inertiajs/react';
 import { Camera, Check, Lock } from 'lucide-react';
 import AdminLayout from '@/Layouts/AdminLayout';
-import PlatformLayout from '@/Layouts/PlatformLayout';
-import PosLayout from '@/Layouts/PosLayout';
 import PageHeader from '@/Components/PageHeader';
 import Field from '@/Components/Field';
 import { Button } from '@/Components/ui/button';
@@ -23,13 +21,12 @@ interface Props {
         roleLabel: string;
     };
     /** أي قشرة تُلبس الصفحة — يحدّدها الخادم من دور المستخدم */
-    shell: 'platform' | 'pos' | 'admin';
     /** الكاشير يعدّل صورته وهاتفه فقط */
     limited: boolean;
 }
 
 export default function ProfileEdit() {
-    const { profile, shell, limited } = usePage<PageProps<Props>>().props;
+    const { profile, limited } = usePage<PageProps<Props>>().props;
     const t = useTranslate();
     const [preview, setPreview] = useState<string | null>(profile.avatar);
 
@@ -217,12 +214,5 @@ export default function ProfileEdit() {
         </>
     );
 
-    /** لكل دور قشرته: قائمة المنصة لمديرها، وقائمة المتجر لصاحبه، وشريط نقطة البيع للكاشير */
-    const shells: Record<Props['shell'], (children: ReactNode) => ReactNode> = {
-        platform: (c) => <PlatformLayout title="الملف الشخصي">{c}</PlatformLayout>,
-        pos: (c) => <PosLayout title="الملف الشخصي">{c}</PosLayout>,
-        admin: (c) => <AdminLayout title="الملف الشخصي">{c}</AdminLayout>,
-    };
-
-    return <>{shells[shell](body)}</>;
+    return <AdminLayout title="الملف الشخصي">{body}</AdminLayout>;
 }

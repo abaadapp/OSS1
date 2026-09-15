@@ -6,15 +6,11 @@ import {
     BellRing,
     ChevronLeft,
     Download,
-    ExternalLink,
     FileText,
-    Globe,
     Image as ImageIcon,
     Languages,
-    RefreshCw,
     Save,
     Percent,
-    Search,
     ShieldCheck,
     Store,
     Trash2,
@@ -24,7 +20,6 @@ import {
 import AdminLayout from '@/Layouts/AdminLayout';
 import PageHeader from '@/Components/PageHeader';
 import Field, { Select } from '@/Components/Field';
-import StatusPill from '@/Components/StatusPill';
 import Toggle from '@/Components/Toggle';
 import {
     PageActions,
@@ -41,15 +36,8 @@ import CustomAlerts, {
 } from './partials/CustomAlerts';
 import { SETTINGS_NAV } from './partials/SettingsNav';
 import BackToSettings from './partials/BackToSettings';
-import DomainChooser, {
-    DomainPathStrip,
-    NewDomainCard,
-    type DomainPath,
-    type DomainPricing,
-} from './partials/DomainChooser';
 import BranchesPanel from './panels/BranchesPanel';
 import EmployeesPanel, { type JobTitle } from './panels/EmployeesPanel';
-import DevicesPanel, { type DevicesData } from './panels/DevicesPanel';
 import ActivityPanel, { type ActivityData } from './panels/ActivityPanel';
 import TrashPanel, { type TrashData } from './panels/TrashPanel';
 import ChartPanel, { type ChartData } from './panels/ChartPanel';
@@ -77,22 +65,8 @@ interface Props {
     recovery: Recovery;
     /** أيصل البريد فعلًا — وسببُ التعذّر إن لم يصل (انظر App\Support\Mailer) */
     mail: { deliverable: boolean; reason: string | null };
-    /** نطاق موقع التاجر — مجموعة `website` في MarketingSettings */
-    site: Record<string, string>;
     /** بطاقاتُ القوالب — تُبنى من `DocumentTemplates` لا تُكتب في الشاشة */
     templates?: { key: string; label: string; desc: string; section: string }[];
-    store: {
-        slug: string | null;
-        domain: string;
-        themes: { value: string; label: string; accent: string }[];
-        suggestion: string | null;
-        /** كم صنفًا يظهر فعلًا — الفعّال المنشور، لا كلّ الفعّال */
-        productCount: number;
-        products: { id: number; name: string; image: string | null; active: boolean; published: boolean }[];
-        /** الطريق المختار إلى العنوان — '' يعني أنّ التاجر لم يُسأل بعد */
-        path: DomainPath;
-        pricing: DomainPricing;
-    };
     notificationsAll: NotificationRow[];
     customAlerts: CustomAlertRow[];
     staffPermissions: { id: number; name: string; job_title: string; manual: boolean; count: number }[];
@@ -103,11 +77,6 @@ interface Props {
     branches?: Branch[];
     employees?: Employee[];
     jobTitles?: JobTitle[];
-    devices?: DevicesData['devices'];
-    branchOptions?: DevicesData['branches'];
-    peripheralTypes?: string[];
-    drivableTypes?: string[];
-    paperWidths?: number[];
     logs?: ActivityData['logs'];
     pagination?: ActivityData['pagination'];
     filters?: ActivityData['filters'];
@@ -155,8 +124,6 @@ const SECTION_WIDTH: Partial<Record<TabKey, SettingsWidth>> = {
     notifications: 'form',
     'notifications-log': 'form',
     backup: 'form',
-    // الموقع أوسع: فيه معاينةٌ بإطارٍ وقائمةُ أصناف لا تُقرآن في عمودٍ ضيّق
-    website: 'wide',
 };
 
 /**
@@ -174,7 +141,7 @@ const EMPTY_PAGINATION: ActivityData['pagination'] = {
     next_page_url: null,
 };
 
-const SERVER_TABS = ['branches', 'employees', 'devices', 'activity', 'trash', 'chart'] as const;
+const SERVER_TABS = ['branches', 'employees', 'activity', 'trash', 'chart'] as const;
 
 /** مفاتيح كل الأقسام التي تُفتح داخل هذه الصفحة — وهي اليوم كلّها. */
 const TAB_KEYS = NAV.flatMap((g) => g.items.map((i) => i.key)) as readonly TabKey[];
@@ -205,7 +172,6 @@ const PAYMENT_METHODS = [
     { key: 'pay_transfer', label: 'تحويل بنكي', hint: 'التحويل المباشر للحساب البنكي' },
 ] as const;
 
-
 /** صفحات مستقلة يصل إليها المستخدم من الإعدادات */
 
 const NOTIF_COLORS: Record<string, string> = {
@@ -216,9 +182,9 @@ const NOTIF_COLORS: Record<string, string> = {
 };
 
 export default function SettingsIndex() {
-    const { settings, business, recovery, mail, site, store, templates, notificationsAll, customAlerts, alertMetrics, alertSections, staffPermissions, locale, branches, employees, jobTitles, devices, branchOptions, peripheralTypes, drivableTypes, paperWidths,
-        logs, pagination, filters, products, expenses, customers: trashedCustomers, trashedBranches, windowDays,
-        accounts, trial, types } =
+    const { settings, business, recovery, mail, templates, notificationsAll, customAlerts, alertMetrics,
+        alertSections, staffPermissions, locale, branches, employees, jobTitles, logs, pagination, filters, products,
+        expenses, customers: trashedCustomers, trashedBranches, windowDays, accounts, trial, types } =
         usePage<PageProps<Props>>().props;
     const { auth } = usePage<PageProps>().props;
     const t = useTranslate();
@@ -390,118 +356,6 @@ export default function SettingsIndex() {
     };
 
     /*
-     * الموقع نموذجٌ ثانٍ لا حقولٌ في الأوّل.
-     *
-     * مفاتيحه تُخزَّن في مجموعة `website` عبر `MarketingSettings` لا في جدول
-     * إعدادات المتجر، ومساره غير مسار الحفظ هنا. وجمعُهما في نموذجٍ واحد كان
-     * يوجب على كل حفظِ اسمٍ أن يمرّ بمصادقة النطاق.
-     *
-     * وحقلٌ واحد بقي: السبعة الأخرى كانت تصف واجهة متجرٍ لا وجود لها.
-     */
-    const siteForm = useForm({
-        // '1' هو الافتراضيّ في `MarketingSettings`، فمن ضبط نطاقه قبل المفتاح يبقى زرُّه يعمل
-        site_on: (site?.site_on ?? '1') === '1',
-        site_domain: site?.site_domain ?? '',
-    });
-
-    /*
-     * متجرُ افنت بلس نموذجٌ ثالث لا حقولٌ في نموذج الرابط الخارجيّ.
-     *
-     * العنوان يُحفظ في عمودٍ على المتجر (تفرّدُه يُفرَض في القاعدة)، وبقيّتُه
-     * في مجموعة `website`. ومسارُه غير مسار الرابط الخارجيّ: جمعُهما كان
-     * يوجب على كلّ حفظِ نطاقٍ خارجيّ أن يمرّ بمصادقة عنوان المتجر.
-     */
-    const storeForm = useForm({
-        site_slug: store?.slug ?? '',
-        store_on: (site?.store_on ?? '0') === '1',
-        store_theme: site?.store_theme ?? 'rose',
-        store_headline: site?.store_headline ?? '',
-        store_about: site?.store_about ?? '',
-        store_show_prices: (site?.store_show_prices ?? '1') === '1',
-        store_whatsapp: site?.store_whatsapp ?? '',
-        store_pay_cod: (site?.store_pay_cod ?? '1') === '1',
-        store_pay_transfer: (site?.store_pay_transfer ?? '0') === '1',
-        store_bank: site?.store_bank ?? '',
-    });
-
-    const saveStore = (e: React.FormEvent) => {
-        e.preventDefault();
-        storeForm.post(route('admin.marketing.store.save'), { preserveScroll: true, onSuccess: reloadPreview });
-    };
-
-    /** العنوان كما سيقرؤه الزبون — يُبنى بقاعدة الخادم نفسها */
-    const storeSlug = storeForm.data.site_slug
-        .toLowerCase()
-        .replace(/[\s_]+/g, '-')
-        .replace(/[^a-z0-9-]/g, '')
-        .replace(/-{2,}/g, '-')
-        .replace(/^-|-$/g, '');
-
-    const saveSite = (e: React.FormEvent) => {
-        e.preventDefault();
-        siteForm.post(route('admin.marketing.website.save'), { preserveScroll: true });
-    };
-
-    /*
-     * السؤالُ الأوّل يُطرح مرّةً — ثمّ يُفتح بزرّ «تغيير» لا يبقى معروضًا.
-     *
-     * وحالتُه محلّية لا في الرابط: من فتح الاختيار ثمّ عدل عنه لا يترك أثرًا
-     * في عنوانٍ يُشارَك أو يُعاد تحميله.
-     */
-    const [choosing, setChoosing] = useState(store.path === '');
-    const [pathBusy, setPathBusy] = useState(false);
-
-    const pickPath = (path: Exclude<DomainPath, ''>) => {
-        setPathBusy(true);
-        router.post(
-            route('admin.marketing.domain.path'),
-            { site_path: path },
-            {
-                preserveScroll: true,
-                onSuccess: () => setChoosing(false),
-                onFinish: () => setPathBusy(false),
-            },
-        );
-    };
-
-    /*
-     * وما هو حيٌّ يبقى مقبضُه ظاهرًا مهما كان الطريق المختار.
-     *
-     * متجرٌ منشور تُخفيه الشاشة لأنّ صاحبه اختار «عندي نطاق» يبقى مفتوحًا
-     * لزبائنه بلا بطاقةٍ تُطفئه — وبابٌ لا يُغلق أسوأ من بابٍ لا يُعرض.
-     */
-    /*
-        اختيارُ ما يُعرض مسارٌ آخر — لا حقلٌ في نموذج المتجر.
-
-        تبديلُ صنفٍ لا ينتظر «حفظ ونشر»: من يُخفي ورقَ التغليف يريد أن يختفي
-        الآن، ولا يُعقل أن يُعاد التحقّق من العنوان والنطاق لأجل ضغطةٍ عليه.
-    */
-    /*
-        المعاينة إطارٌ يفتح المتجر نفسه — لا رسمًا يشبهه.
-
-        ورسمٌ يشبهه هو ما يفترق عنه: حقلٌ يُضاف في القالب ولا يُضاف في الرسم
-        فيرى التاجر غير ما يرى زبونه. والمفتاح يُبدَّل بعد كلّ حفظةٍ ليُعاد
-        تحميل الإطار — وإلّا بقي يعرض ما قبلها.
-    */
-    const [previewKey, setPreviewKey] = useState(0);
-    const reloadPreview = () => setPreviewKey((n) => n + 1);
-
-    const [pickQuery, setPickQuery] = useState('');
-
-    const setShown = (published: boolean, id: number | null) => {
-        router.post(
-            route('admin.marketing.store.products'),
-            id === null ? { all: true, published } : { ids: [id], published },
-            { preserveScroll: true, preserveState: true, onSuccess: reloadPreview },
-        );
-    };
-
-    const storeLive = (site?.store_on ?? '0') === '1';
-    const showStoreCard = store.path === 'sub' || storeLive;
-    const showOwnCard = store.path === 'own' || (site?.site_domain ?? '') !== '';
-
-    /*
-    /*
      * الشعار مسارٌ آخر، فحالتُه هنا لا في `siteForm`.
      *
      * والمعاينة فوريّة من الملفّ المختار لا بعد الحفظ: من يرفع شعارًا يريد
@@ -597,448 +451,6 @@ export default function SettingsIndex() {
                     <SettingsPage width={SECTION_WIDTH[tab] ?? 'full'}>
             {tab === 'chart' ? (
                 <ChartPanel accounts={accounts ?? []} trial={trial ?? { total_debit: 0, total_credit: 0, balanced: true }} types={types ?? []} />
-            ) : tab === 'website' ? (
-                <div className="space-y-6">
-                {choosing ? (
-                    <DomainChooser
-                        pricing={store.pricing}
-                        domain={store.domain}
-                        current={store.path}
-                        onPick={pickPath}
-                        onCancel={store.path === '' ? undefined : () => setChoosing(false)}
-                        busy={pathBusy}
-                    />
-                ) : (
-                <>
-                <DomainPathStrip
-                    path={store.path as Exclude<DomainPath, ''>}
-                    pricing={store.pricing}
-                    onChange={() => setChoosing(true)}
-                />
-
-                {store.path === 'new' && (
-                    <NewDomainCard
-                        pricing={store.pricing}
-                        domain={store.domain}
-                        onPick={pickPath}
-                        busy={pathBusy}
-                    />
-                )}
-
-                {showStoreCard && (
-                <>
-                {/*
-                    إنشاء المتجر — أربعُ مجموعاتٍ في قسمٍ واحد، ثمّ ما يُحفظ وحده.
-
-                    و«أسهل طريقة ممكنة» تعني ألّا يُطلب من صاحب المحلّ ما لا
-                    يملكه: لا نطاقًا يشتريه، ولا استضافةً يضبطها، ولا صورًا
-                    يرفعها من جديد. عنوانٌ يكتبه، ولونٌ يختاره، وسطرٌ يعرّف به
-                    — ومنتجاتُه التي في النظام أصلًا تصير صفحةً يفتحها زبونه.
-
-                    وكانت البطاقة الواحدة تحمل ستّة أشياء: العنوانَ والشكلَ
-                    والدفعَ والنشرَ وقائمةَ الأصناف والمعاينة — وثلاثةُ
-                    الأخيرة لا يحفظها زرُّ «حفظ ونشر»: الأصنافُ تُحفظ بالضغطة،
-                    والمعاينةُ لا تُحفظ أصلًا. فزرُّ حفظٍ واحدٌ في ذيل صندوقٍ
-                    فيه ما لا يحفظه يَعِد بما لا يفعل.
-                */}
-                <form onSubmit={saveStore}>
-                    <SettingsSection
-                        title="متجرك الإلكتروني"
-                        description="صفحةٌ يستضيفها افنت بلس: منتجاتك بصورها وأسعارها، ويطلب منها الزبون عبر واتساب."
-                        icon={Globe}
-                        status={
-                            storeForm.data.store_on
-                                ? <StatusPill state="ready" label="منشور" />
-                                : <StatusPill state="off" label="غير منشور" />
-                        }
-                        action={
-                            store.slug && storeForm.data.store_on && (
-                                <Button variant="outline" size="sm" asChild>
-                                    <a
-                                        href={`https://${store.slug}.${store.domain}`}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                    >
-                                        <ExternalLink />
-                                        {t('افتح متجري')}
-                                    </a>
-                                </Button>
-                            )
-                        }
-                        divided
-                    >
-                        <SettingsGroup title="عنوان متجرك">
-                        {/* ١ — العنوان */}
-                        <Field
-                            label="عنوان متجرك"
-                            hint="حروفٌ إنجليزية صغيرة وأرقام وشرطة — يُكتب مرّةً ويصعب تغييره بعد أن يوزّعه زبائنك"
-                            error={storeForm.errors.site_slug}
-                        >
-                            <div className="flex items-center gap-2">
-                                <Input
-                                    dir="ltr"
-                                    value={storeForm.data.site_slug}
-                                    onChange={(e) => storeForm.setData('site_slug', e.target.value)}
-                                    placeholder={store.suggestion ?? 'my-store'}
-                                    className="max-w-[16rem]"
-                                />
-                                <span dir="ltr" className="shrink-0 text-[13px] text-[#9ca3af]">
-                                    .{store.domain}
-                                </span>
-                            </div>
-                        </Field>
-
-                        {storeSlug && (
-                            <p dir="ltr" className="mt-2 text-[13px] font-medium text-[#111]">
-                                https://{storeSlug}.{store.domain}
-                            </p>
-                        )}
-
-                        </SettingsGroup>
-
-                        {/* ٢ — الشكل */}
-                        <SettingsGroup title="شكل الصفحة">
-                        <div>
-                            <p className="mb-2 text-sm font-medium text-[#111]">{t('اللون')}</p>
-                            {/*
-                                ثيماتٌ معدودة لا منتقي ألوانٍ حرّ: صاحبُ محلٍّ
-                                ليس مصمّمًا، والحرّيةُ الكاملة تُخرج صفحةً بلونٍ
-                                فاقعٍ لا تُقرأ. وكلُّها مضبوطةُ التباين.
-                            */}
-                            <div className="flex flex-wrap gap-2">
-                                {store.themes.map((th) => (
-                                    <button
-                                        key={th.value}
-                                        type="button"
-                                        onClick={() => storeForm.setData('store_theme', th.value)}
-                                        className={cn(
-                                            'flex items-center gap-2 rounded-full border px-4 py-2.5 text-[13px] font-medium transition',
-                                            storeForm.data.store_theme === th.value
-                                                ? 'border-[#111] bg-[#fafafa] text-[#111]'
-                                                : 'border-[var(--ui-border,#e8e8e8)] text-[#6b7280] hover:bg-[#fafafa]',
-                                        )}
-                                    >
-                                        <span
-                                            className="size-4 rounded-full"
-                                            style={{ backgroundColor: th.accent }}
-                                        />
-                                        {th.label}
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-
-                        <div className="mt-6 grid grid-cols-1 gap-4">
-                            <Field label="العنوان الرئيسي" hint="يظهر أعلى الصفحة — واسم متجرك إن تركته فارغًا" error={storeForm.errors.store_headline}>
-                                <Input
-                                    value={storeForm.data.store_headline}
-                                    onChange={(e) => storeForm.setData('store_headline', e.target.value)}
-                                    placeholder={business.name}
-                                />
-                            </Field>
-                            <Field label="نبذة قصيرة" hint="سطران يقرؤهما الزائر قبل المنتجات — وتُقرأ في نتائج البحث" error={storeForm.errors.store_about}>
-                                <Textarea
-                                    rows={2}
-                                    value={storeForm.data.store_about}
-                                    onChange={(e) => storeForm.setData('store_about', e.target.value)}
-                                />
-                            </Field>
-                        </div>
-
-                        </SettingsGroup>
-
-                        {/* ٣ — الطلب والدفع */}
-                        <SettingsGroup title="الطلب والدفع">
-                            <Field
-                                label="رقم واتساب للطلبات"
-                                hint="يصله الطلب مكتوبًا — ورقم متجرك إن تركته فارغًا"
-                                error={storeForm.errors.store_whatsapp}
-                            >
-                                <Input
-                                    dir="ltr"
-                                    value={storeForm.data.store_whatsapp}
-                                    onChange={(e) => storeForm.setData('store_whatsapp', e.target.value)}
-                                    placeholder={business.phone ?? '96891234567'}
-                                    className="max-w-[16rem]"
-                                />
-                            </Field>
-
-                            <div className="mt-4 space-y-3">
-                                <Toggle
-                                    on={storeForm.data.store_show_prices}
-                                    onChange={(v) => storeForm.setData('store_show_prices', v)}
-                                    label="إظهار الأسعار"
-                                    hint="أطفئه إن كنت تسعّر حسب الطلب — ويبقى زرّ الطلب يعمل"
-                                />
-                                <Toggle
-                                    on={storeForm.data.store_pay_cod}
-                                    onChange={(v) => storeForm.setData('store_pay_cod', v)}
-                                    label="الدفع عند الاستلام"
-                                />
-                                <Toggle
-                                    on={storeForm.data.store_pay_transfer}
-                                    onChange={(v) => storeForm.setData('store_pay_transfer', v)}
-                                    label="تحويل بنكي"
-                                />
-                            </div>
-
-                            {storeForm.data.store_pay_transfer && (
-                                <div className="mt-4">
-                                    <Field
-                                        label="بيانات الحساب البنكي"
-                                        hint="تظهر للزبون في صفحة متجرك — اسم البنك ورقم الحساب والآيبان"
-                                        error={storeForm.errors.store_bank}
-                                    >
-                                        <Textarea
-                                            rows={3}
-                                            value={storeForm.data.store_bank}
-                                            onChange={(e) => storeForm.setData('store_bank', e.target.value)}
-                                        />
-                                    </Field>
-                                </div>
-                            )}
-                        </SettingsGroup>
-
-                        {/* ٤ — النشر */}
-                        <SettingsGroup title="النشر">
-                            <Toggle
-                                on={storeForm.data.store_on}
-                                onChange={(v) => storeForm.setData('store_on', v)}
-                                label="نشر المتجر"
-                                hint="حتى يُنشر لا يفتحه أحد — والعنوان يردّ «غير موجود» لا صفحةً فارغة"
-                            />
-
-                            {/*
-                                ولا يُنشر متجرٌ بلا بضاعة: صفحةٌ فارغة تُفقد
-                                الزبون ثقته، ولا يعود إليها بعد أن رآها خالية.
-                            */}
-                            {storeForm.data.store_on && store.productCount === 0 && (
-                                <p className="mt-3 rounded-[10px] bg-[#fffbeb] px-3 py-2 text-[12px] text-[#b45309]">
-                                    {t('لا صنف معروضًا في متجرك — ستُفتح الصفحة خالية. اعرض صنفًا قبل نشرها.')}
-                                </p>
-                            )}
-                        </SettingsGroup>
-
-                        <SettingsGroup>
-                            <PageActions>
-                                <Button type="submit" loading={storeForm.processing}>
-                                    <Save />
-                                    {t('حفظ ونشر')}
-                                </Button>
-                            </PageActions>
-                        </SettingsGroup>
-                    </SettingsSection>
-                </form>
-
-                {/*
-                    ٥ — ما يُعرض. قسمٌ قائمٌ بذاته لأنّه يُحفظ بذاته.
-
-                    وكانت الصفحة تعرض كلّ صنفٍ فعّال بلا استثناء: أوراقُ
-                    التغليف ومكوّناتُ الباقات وأسعارُ الجملة تصل زبائن
-                    التاجر، ولا يملك منعَ صنفٍ إلّا بإيقاف بيعه عند
-                    الطاولة أيضًا — أي أن يُوقف بيعه ليُخفيه.
-
-                    والضغطةُ هنا تصل الخادم فورًا (`setShown`) ولا تنتظر «حفظ
-                    ونشر» — فكونُها داخل نموذجٍ له زرُّ حفظٍ كان يَعِد بغير ما
-                    يقع: من أخفى صنفًا ثمّ غادر بلا حفظٍ ظنّه لم يُخفَ.
-                */}
-                <SettingsSection
-                    title="ما يظهر في متجرك"
-                    description="تُحفظ الضغطة فورًا — لا تنتظر «حفظ ونشر»."
-                    status={
-                        <span className="text-[12px] text-[#9ca3af]">
-                            {t(':n صنفًا معروضًا من :all', {
-                                n: store.productCount,
-                                all: store.products.filter((p) => p.active).length,
-                            })}
-                        </span>
-                    }
-                    action={
-                        <>
-                            <Button type="button" variant="outline" size="sm" onClick={() => setShown(true, null)}>
-                                {t('اعرض الكل')}
-                            </Button>
-                            <Button type="button" variant="outline" size="sm" onClick={() => setShown(false, null)}>
-                                {t('أخفِ الكل')}
-                            </Button>
-                        </>
-                    }
-                >
-                            {store.products.length > 8 && (
-                                <Input
-                                    value={pickQuery}
-                                    onChange={(e) => setPickQuery(e.target.value)}
-                                    placeholder={t('ابحث في الأصناف')}
-                                    className="mb-3"
-                                />
-                            )}
-
-                            <ul className="max-h-[320px] divide-y divide-[var(--ui-border,#e8e8e8)] overflow-y-auto rounded-[12px] border border-[var(--ui-border,#e8e8e8)]">
-                                {store.products
-                                    .filter((p) => p.name.toLowerCase().includes(pickQuery.trim().toLowerCase()))
-                                    .map((p) => (
-                                        <li key={p.id} className="flex items-center gap-3 px-3 py-2.5">
-                                            {p.image ? (
-                                                <img src={p.image} alt="" className="size-9 shrink-0 rounded-lg object-cover" />
-                                            ) : (
-                                                <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-[#f3f4f6] text-[12px] font-bold text-[#9ca3af]">
-                                                    {p.name.slice(0, 1)}
-                                                </span>
-                                            )}
-                                            <span className="min-w-0 flex-1">
-                                                <span className="block truncate text-[13px] font-medium text-[#111]">{p.name}</span>
-                                                {/* غيرُ الفعّال لا يظهر ولو رُفع مفتاحه — يُقال هنا لا في المتجر */}
-                                                {!p.active && (
-                                                    <span className="text-[11px] text-[#b45309]">{t('غير مفعّل — لا يظهر')}</span>
-                                                )}
-                                            </span>
-                                            <button
-                                                type="button"
-                                                onClick={() => setShown(!p.published, p.id)}
-                                                className={cn(
-                                                    'shrink-0 rounded-full px-3 py-1 text-[11px] font-medium transition',
-                                                    p.published
-                                                        ? 'bg-[#ecfdf5] text-[#059669] hover:bg-[#d1fae5]'
-                                                        : 'bg-[#f3f4f6] text-[#6b7280] hover:bg-[#e5e7eb]',
-                                                )}
-                                            >
-                                                {p.published ? t('معروض') : t('مخفيّ')}
-                                            </button>
-                                        </li>
-                                    ))}
-                            </ul>
-                </SettingsSection>
-
-                {/* ٦ — المعاينة: المتجر نفسه في إطار، لا رسمًا يشبهه */}
-                <SettingsSection
-                    title="معاينة"
-                    description="هكذا يراه زبونك — ولا يفتحها أحد سواك."
-                    action={
-                        <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={reloadPreview}
-                            aria-label={t('تحديث المعاينة')}
-                        >
-                            <RefreshCw />
-                            {t('تحديث المعاينة')}
-                        </Button>
-                    }
-                >
-                    <div className="overflow-hidden rounded-[14px] border border-[var(--ui-border,#e8e8e8)] bg-[#fafafa] p-2">
-                        <iframe
-                            key={previewKey}
-                            src={route('admin.store.preview')}
-                            title={t('معاينة المتجر')}
-                            className="h-[560px] w-full rounded-[10px] border border-[var(--ui-border,#e8e8e8)] bg-white"
-                        />
-                    </div>
-                </SettingsSection>
-                </>
-                )}
-
-                {showOwnCard && (
-                <>
-                {/*
-                    الموقع الخارجيّ — ومفتاحٌ يقول ما يُشغّله.
-
-                    كانتا بطاقتين: «إعدادات الدومين» فيها حقلُ نطاق، و«إعدادات
-                    الموقع» فيها رافعُ شعار — ووصفاهما يَعِدان بمتجرٍ يُنشر
-                    للزوّار ولا وجود له. فيبحث التاجر عن «تفعيل الموقع» بينهما
-                    ولا يجده، وليس بينهما ما يُفعَّل.
-
-                    والموقع في «افنت بلس» شيئان لا ثالث: زرٌّ في الشريط يفتحه،
-                    وفحصٌ يقرأ صفحته في «الظهور في البحث». والبطاقة تقولهما
-                    بالحرف تحت المفتاح، فلا يُترك التاجر يُخمّن ما فعّل.
-
-                    والشعار انتقل إلى «بيانات النشاط»: شعارُ المتجر يُطبع على
-                    الفاتورة، ولا علاقة له بموقعٍ خارج النظام.
-                */}
-                <form onSubmit={saveSite}>
-                    <SettingsSection
-                        title="الموقع الإلكتروني"
-                        description="موقعك أو صفحتك خارج النظام — «افنت بلس» لا يستضيفه، بل يربط إليه ويفحص ظهوره في البحث."
-                        icon={Globe}
-                        status={
-                            ! siteForm.data.site_on
-                                ? <StatusPill state="off" />
-                                : siteForm.data.site_domain.trim()
-                                  ? <StatusPill state="ready" />
-                                  : <StatusPill state="action" label="مفعَّل بلا نطاق" />
-                        }
-                        action={
-                            siteForm.data.site_on && siteForm.data.site_domain && (
-                                <Button variant="outline" size="sm" asChild>
-                                    <a
-                                        href={`https://${siteForm.data.site_domain}`}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                    >
-                                        <ExternalLink />
-                                        {t('فتح الموقع')}
-                                    </a>
-                                </Button>
-                            )
-                        }
-                    >
-                        <Toggle
-                            on={siteForm.data.site_on}
-                            onChange={(v) => siteForm.setData('site_on', v)}
-                            label="تفعيل الموقع الإلكتروني"
-                            hint="أطفئه لتُخفي زرّ الموقع وتوقف فحصه — ويبقى نطاقك محفوظًا كما هو"
-                        />
-
-                        {/*
-                            وما يُشغّله المفتاح مكتوبٌ تحته لا مخبوءٌ في رأس أحد:
-                            مفتاحٌ لا يُعرف أثرُه يُترك مطفأً أو يُرفع على غير هدى.
-                        */}
-                        <ul className="mt-4 space-y-1.5 text-[13px] text-[#6b7280]">
-                            <li className="flex items-start gap-2">
-                                <Globe className="mt-0.5 size-4 shrink-0 text-[#9ca3af]" />
-                                {t('زرّ «الموقع الإلكتروني» في الشريط العلوي — يفتح موقعك في تبويب جديد')}
-                            </li>
-                            <li className="flex items-start gap-2">
-                                <Search className="mt-0.5 size-4 shrink-0 text-[#9ca3af]" />
-                                {t('فحص «الظهور في البحث» — يفتح صفحتك ويقول ما يراه محرّك البحث فيها')}
-                            </li>
-                        </ul>
-
-                        <div className="mt-5">
-                            <Field
-                                label="النطاق"
-                                hint="اكتب النطاق وحده بلا https:// — مثل: mystore.om"
-                                error={siteForm.errors.site_domain}
-                            >
-                                <Input
-                                    dir="ltr"
-                                    value={siteForm.data.site_domain}
-                                    onChange={(e) => siteForm.setData('site_domain', e.target.value)}
-                                    placeholder="mystore.om"
-                                    disabled={!siteForm.data.site_on}
-                                />
-                            </Field>
-                        </div>
-
-                        {siteForm.data.site_on && !siteForm.data.site_domain.trim() && (
-                            <p className="mt-3 rounded-[10px] bg-[#fffbeb] px-3 py-2 text-[12px] text-[#b45309]">
-                                {t('مفعَّل بلا نطاق: لا زرَّ يظهر ولا فحصَ يقع حتى تكتب نطاقك.')}
-                            </p>
-                        )}
-
-                        <PageActions className="mt-6">
-                            <Button type="submit" loading={siteForm.processing}>
-                                <Save />
-                                {t('حفظ التغييرات')}
-                            </Button>
-                        </PageActions>
-                    </SettingsSection>
-                </form>
-                </>
-                )}
-                </>
-                )}
-                </div>
             ) : tab === 'custom-alerts' ? (
                 <CustomAlerts
                     alerts={customAlerts ?? []}
@@ -1135,14 +547,6 @@ export default function SettingsIndex() {
                 <BranchesPanel branches={branches ?? []} />
             ) : tab === 'employees' ? (
                 <EmployeesPanel employees={employees ?? []} jobTitles={jobTitles ?? []} />
-            ) : tab === 'devices' ? (
-                <DevicesPanel
-                    devices={devices ?? []}
-                    branches={branchOptions ?? []}
-                    peripheralTypes={peripheralTypes ?? []}
-                    drivableTypes={drivableTypes ?? []}
-                    paperWidths={paperWidths ?? []}
-                />
             ) : tab === 'activity' ? (
                 /* العنوان يُمرَّر: التصفية والتصفّح يعودان إلى الإعدادات لا
                    إلى الصفحة المستقلّة، وإلا قفز المستخدم عند أوّل «التالي» */

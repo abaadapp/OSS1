@@ -12,13 +12,6 @@ class ProfileController extends Controller
     {
         $user = auth()->user();
 
-        // القشرة تتبع الدور: لكل لوحة قائمتها، فلا تُعرض لمدير المنصة قائمة متجر
-        $shell = match (true) {
-            $user->isSuperAdmin() => 'platform',
-            $user->role === 'cashier' => 'pos',
-            default => 'admin',
-        };
-
         return \Inertia\Inertia::render('Profile/Edit', [
             'profile' => [
                 'name' => $user->name,
@@ -27,7 +20,6 @@ class ProfileController extends Controller
                 'avatar' => $user->avatar,
                 'roleLabel' => $user->roleLabel(),
             ],
-            'shell' => $shell,
             'limited' => $user->role === 'cashier',
         ]);
     }
