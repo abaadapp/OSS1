@@ -12,7 +12,6 @@ use App\Support\Demo;
 use App\Support\Lexicon;
 use App\Support\ListFilters;
 use App\Support\Pagination;
-use App\Support\PlanLimits;
 use App\Support\ProductImages;
 use App\Support\Sort;
 use App\Support\StockLedger;
@@ -194,7 +193,6 @@ class ProductController extends Controller
         unset($data['composition']);
 
         $data['business_id'] = $this->bid();
-        PlanLimits::enforce(auth()->user()->business, 'products');
         // القيم الرقمية الفارغة → افتراضياتها (الأعمدة NOT NULL؛ الفراغ يُحوَّل إلى null فيفشل)
         $data['cost'] = $data['cost'] ?? 0;
         $data['quantity'] = $data['quantity'] ?? 0;
@@ -347,7 +345,6 @@ class ProductController extends Controller
     public function duplicate($id)
     {
         $source = Product::where('business_id', $this->bid())->findOrFail($id);
-        PlanLimits::enforce(auth()->user()->business, 'products');
 
         $copy = $source->replicate(['sku', 'barcode', 'quantity', 'created_at', 'updated_at']);
         $copy->name = $source->name.' — '.__('نسخة');

@@ -171,7 +171,7 @@ Route::middleware('auth')->group(function () {
 });
 
 /* ------------------------------- Admin ----------------------------- */
-Route::prefix('admin')->name('admin.')->middleware(['auth', 'tenant', 'business', 'panel', 'ability', 'plan'])->group(function () {
+Route::prefix('admin')->name('admin.')->middleware(['auth', 'tenant', 'business', 'panel', 'ability'])->group(function () {
     Route::get('/dashboard', [DashboardController::class, 'admin'])->name('dashboard');
 
     /*
@@ -341,7 +341,6 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'tenant', 'business'
         ->defaults('type', 'customer')->name('customers.restore');
     Route::delete('/customers/{id}/purge', [TrashController::class, 'purge'])
         ->defaults('type', 'customer')->name('customers.purge');
-    Route::post('/customers/{id}/redeem', [CustomerController::class, 'redeem'])->name('customers.redeem');
     Route::post('/customers/{id}/addresses', [CustomerController::class, 'saveAddress'])->name('customers.addresses.save');
     Route::post('/customers/{id}/addresses/{addressId}/default', [CustomerController::class, 'defaultAddress'])->name('customers.addresses.default');
     Route::delete('/customers/{id}/addresses/{addressId}', [CustomerController::class, 'deleteAddress'])->name('customers.addresses.delete');

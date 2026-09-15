@@ -34,7 +34,6 @@ Schedule::command('subscriptions:notify')->dailyAt('07:30')->withoutOverlapping(
  * ورسالةٌ واحدة لكلّ فاتورةٍ وحدث: فاتورةٌ تأخّرت شهرًا لا تُرسل ثلاثين
  * تذكيرًا. ومن أراد الإلحاح يضغط الزرّ بيده.
  */
-Schedule::command('invoices:remind')->dailyAt('09:00')->withoutOverlapping();
 
 /*
  * حالُ القوالب عند ميتا — كلّ ساعة.

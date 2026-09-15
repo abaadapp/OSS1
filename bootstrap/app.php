@@ -1,8 +1,6 @@
 <?php
 
-use App\Http\Middleware\BindPosBranch;
 use App\Http\Middleware\CheckAbility;
-use App\Http\Middleware\CheckPlanFeature;
 use App\Http\Middleware\CheckRole;
 use App\Http\Middleware\CheckTenantStatus;
 use App\Http\Middleware\EntersPanel;
@@ -31,11 +29,9 @@ return Application::configure(basePath: dirname(__DIR__))
             // وحارسُ فعلٍ بعينه داخل قسمٍ يُمنح كاملًا — انظر RequireAction
             'may' => RequireAction::class,
             // قدرات الباقة — أخو 'ability' وليس هو: ذاك يسأل عن الموظّف وهذا عن المشترَك
-            'plan' => CheckPlanFeature::class,
             'panel' => EntersPanel::class,
             'business' => RequiresBusiness::class,
             'tenant' => CheckTenantStatus::class,
-            'pos.branch' => BindPosBranch::class,
         ]);
         $middleware->web(append: [
             SecurityHeaders::class,

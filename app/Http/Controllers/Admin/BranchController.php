@@ -8,7 +8,6 @@ use App\Models\BranchStock;
 use App\Models\PosDevice;
 use App\Support\Activity;
 use App\Support\Demo;
-use App\Support\PlanLimits;
 use App\Support\PosTerminal;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -63,7 +62,6 @@ class BranchController extends Controller
             'name.unique' => __('لديك فرعٌ بهذا الاسم — الفرع يُعرَف باسمه في كل شاشة.'),
         ]);
         $data['business_id'] = $this->bid();
-        PlanLimits::enforce(auth()->user()->business, 'branches');
         Branch::create($data);
         Activity::log('created', 'أضاف فرعًا: '.$data['name']);
 

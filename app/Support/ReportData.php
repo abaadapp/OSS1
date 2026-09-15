@@ -6,7 +6,6 @@ use App\Models\ActivityLog;
 use App\Models\BankStatementLine;
 use App\Models\Branch;
 use App\Models\Category;
-use App\Models\Coupon;
 use App\Models\Expense;
 use App\Models\Order;
 use App\Models\Product;
@@ -862,46 +861,4 @@ class ReportData
         ]);
     }
 
-    /* ======================= الكوبونات والتسويق ======================= */
-
-    public static function marketing(int $bid, array $filters): array
-    {
-        $start = self::start($filters['range'] ?? 'month');
-
-        /*
-         * الخصمُ يُقرأ من الطلبات لا من الكوبون: `used_count` عدّادٌ يزيد ولا
-         * ينقص، ولا يعرف كم خُصم فعلًا ولا في أيّ فترة. والطلبُ يحمل الرمز
-         * والقيمة معًا.
-         */
-        $used = Order::where('business_id', $bid)->sold()->whereNotNull('coupon_code')
-            ->when($start, fn ($q) => $q->where('ordered_at', '>=', $start))
-            ->selectRaw('coupon_code, COUNT(*) as c, SUM(coupon_discount) as d, SUM(total) as t')
-            ->groupBy('coupon_code')->get()->keyBy('coupon_code');
-
-        $rows = Coupon::where('business_id', $bid)->orderBy('code')->get()
-            ->map(function ($c) use ($used) {
-                $hit = $used->get($c->code);
-
-                return [
-                    'id' => $c->id,
-                    'code' => $c->code,
-                    'type' => $c->type,
-                    'value' => round((float) $c->value, 3),
-                    'active' => (bool) $c->active,
-                    'uses' => (int) ($hit->c ?? 0),
-                    'discount' => round((float) ($hit->d ?? 0), 3),
-                    'revenue' => round((float) ($hit->t ?? 0), 3),
-                ];
-            })->sortByDesc('uses');
-
-        return array_merge(self::capped($rows->take(self::LIMIT), $rows->count()), [
-            'summary' => [
-                'coupons' => $rows->count(),
-                'used' => $rows->where('uses', '>', 0)->count(),
-                'uses' => (int) $rows->sum('uses'),
-                'discount' => round((float) $rows->sum('discount'), 3),
-            ],
-            'options' => [],
-        ]);
-    }
 }

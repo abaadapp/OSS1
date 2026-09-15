@@ -2,7 +2,6 @@
 
 namespace App\Support;
 
-use App\Http\Middleware\CheckPlanFeature;
 use App\Models\User;
 use Illuminate\Support\Collection;
 
@@ -200,17 +199,6 @@ class Reports
             'icon' => 'trash-2',
             'route' => 'admin.reports.waste',
         ],
-        [
-            'key' => 'marketing',
-            'category' => 'analytical',
-            'section' => 'marketing',
-            'title' => 'الكوبونات والتسويق',
-            'desc' => 'استخدام الكوبونات وقيمة الخصومات وشرائح العملاء.',
-            'icon' => 'ticket-percent',
-            // إلى الشاشة نفسها لا إلى تحويلٍ إليها: بطاقةٌ تقود إلى ٣٠٢
-            // تصل إلى وجهتها اليوم، وتصل إلى غيرها يوم يتبدّل التحويل
-            'route' => 'admin.reports.marketing',
-        ],
     ];
 
     /**
@@ -222,13 +210,6 @@ class Reports
     public static function forUser(?User $user): array
     {
         return self::visibleTo($user)
-            /*
-             * وما لا تفتحه الباقة لا تُعرض بطاقتُه.
-             *
-             * الفهرس بابٌ يقود إلى شاشات، وبطاقةٌ تقود إلى 403 تجعل صاحبها
-             * يظنّ العطب في النظام. والقدرة تُقرأ من مصدر الحارس نفسه — انظر
-             * `CheckPlanFeature::featureFor` — فلا تفترق بطاقةٌ عن بابها.
-             */
             ->map(fn ($r) => [
                 'key' => $r['key'],
                 'category' => $r['category'],
@@ -254,18 +235,7 @@ class Reports
     {
         return collect(self::ALL)
             ->filter(fn ($r) => $user?->allows($r['section']) ?? false)
-            /*
-             * وما لا تفتحه الباقة لا تُعرض بطاقتُه.
-             *
-             * الفهرس بابٌ يقود إلى شاشات، وبطاقةٌ تقود إلى 403 تجعل صاحبها
-             * يظنّ العطب في النظام. والقدرة تُقرأ من مصدر الحارس نفسه — انظر
-             * `CheckPlanFeature::featureFor` — فلا تفترق بطاقةٌ عن بابها.
-             */
-            ->filter(function ($r) use ($user) {
-                $key = CheckPlanFeature::featureFor($r['route']);
-
-                return $key === null || PlanFeatures::allows($user?->business, $key);
-            });
+            ;
     }
 
     /**

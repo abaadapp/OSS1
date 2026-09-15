@@ -10,8 +10,6 @@ use App\Support\Activity;
 use App\Support\Demo;
 use App\Support\MerchantAccount;
 use App\Support\Permissions;
-use App\Support\PlanFeatures;
-use App\Support\PlanLimits;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
@@ -99,7 +97,6 @@ class EmployeeController extends Controller
         $this->refuseManualPermissionsBeyondPlan($title, $manual);
         $this->refuseGrantingMoreThanIHave($title, $manual);
 
-        PlanLimits::enforce(auth()->user()->business, 'employees');
 
         // ولا يُكتب راتبٌ بيد من لا يقرؤه — يبقى صفرًا حتى يكتبه صاحبُه
         $data = $this->withoutPayrollFields($data);
@@ -213,19 +210,6 @@ class EmployeeController extends Controller
             }
         }
 
-        if (PlanFeatures::allows(auth()->user()?->business, 'custom_permissions')) {
-            return;
-        }
-
-        /*
-         * والرفضُ يُقال في النموذج لا يُصفع به.
-         *
-         * `abort(403)` على حفظِ نموذجٍ يُخرج صفحة خطأٍ كاملة: يفقد المالك ما
-         * كتبه، ولا يعرف أيُّ حقلٍ سبّبها ولا أنّ السبب باقتُه أصلًا.
-         */
-        throw ValidationException::withMessages([
-            'permissions' => PlanFeatures::refusal(auth()->user()?->business, 'custom_permissions'),
-        ]);
     }
 
     private function refuseGrantingMoreThanIHave(JobTitle $title, ?array $manual): void

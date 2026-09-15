@@ -3,7 +3,6 @@
 namespace App\Support;
 
 use App\Models\Business;
-use App\Models\Plan;
 use App\Models\Setting;
 use App\Models\User;
 use Illuminate\Support\Carbon;
@@ -133,34 +132,4 @@ class Signup
         });
     }
 
-    /**
-     * الباقةُ ومدّةُ التجربة — من إعدادات المنصّة كما يفعل بابُ المشغّل.
-     *
-     * ومتجرٌ بلا تاريخ انتهاءٍ يعمل إلى الأبد: لا تجربةَ تنتهي ولا مطالبةَ
-     * تحلّ. ومتجرٌ بلا باقةٍ يبقى بلا سعرٍ ولا فاتورة.
-     *
-     * @return array<string, mixed>
-     */
-    private static function subscription(): array
-    {
-        $out = [];
-
-        $plan = trim((string) Tenancy::platform('default_plan', ''));
-
-        if ($plan !== '') {
-            // ولا تُخترع باقة: اسمٌ لا يطابق شيئًا يُترك فارغًا كما في باب المشغّل
-            $out['plan_id'] = Plan::where('name', $plan)->value('id') ?: null;
-        }
-
-        $days = (int) Tenancy::platform('trial_days', 14);
-        $starts = Carbon::now();
-
-        $out['starts_at'] = $starts->toDateString();
-
-        if ($days > 0) {
-            $out['ends_at'] = $starts->copy()->addDays($days)->toDateString();
-        }
-
-        return $out;
-    }
 }

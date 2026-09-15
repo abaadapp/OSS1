@@ -190,36 +190,6 @@ class CustomerController extends Controller
         return back()->with('toast', ['msg' => __('تم حفظ الملاحظة'), 'type' => 'success']);
     }
 
-    public function redeem(Request $request, $id)
-    {
-        $customer = Customer::where('business_id', $this->bid())->findOrFail($id);
-        $points = (int) $request->input('points', $customer->points);
-        $points = max(0, min($points, (int) $customer->points));
-        if ($points <= 0) {
-            return back()->with('toast', ['msg' => __('لا توجد نقاط كافية للصرف'), 'type' => 'warning']);
-        }
-        /*
-         * الخصم شرطيّ — والشرط في الجملة نفسها لا قبلها.
-         *
-         * كان يُقرأ الرصيد ثمّ يُخصم في خطوتين: ضغطتان متتاليتان على الزرّ
-         * تقرآن مئةً كلتاهما فتخصمان مئتين، والعمود لا يقبل سالبًا فتنكسر
-         * الثانية بخطأ قاعدةٍ صريح — أو تدور تحته إلى رقمٍ هائل. والصرف
-         * يخصم من فاتورةٍ حقيقية، فالنقطة المصروفة مرّتين مالٌ خرج مرّتين.
-         */
-        $done = Customer::whereKey($customer->id)->where('points', '>=', $points)
-            ->update(['points' => \DB::raw('points - '.$points)]);
-
-        if (! $done) {
-            return back()->with('toast', ['msg' => __('لا توجد نقاط كافية للصرف'), 'type' => 'warning']);
-        }
-
-        $customer->refresh();
-        \App\Models\PointTransaction::record($customer, 'redeem', $points, (int) $customer->points, null, 'صرف يدوي من ملف العميل');
-        \App\Support\Activity::log('updated', "صرف {$points} نقطة للعميل: {$customer->name}", ['subject_id' => $customer->id]);
-
-        return back()->with('toast', ['msg' => __('تم صرف :points نقطة (خصم :amount)', ['points' => $points, 'amount' => Demo::money($points / 100)]), 'type' => 'success']);
-    }
-
     /* ------------------------- عناوين العميل ------------------------- */
 
     /**

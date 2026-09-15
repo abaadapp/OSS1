@@ -3,14 +3,12 @@
 namespace App\Support;
 
 use App\Models\BranchStock;
-use App\Models\Coupon;
 use App\Models\Customer;
 use App\Models\InventoryMovement;
 use App\Models\Order;
 use App\Models\OrderEdit;
 use App\Models\OrderItem;
 use App\Models\OrderItemAddon;
-use App\Models\PointTransaction;
 use App\Models\Product;
 use App\Models\ProductVariant;
 use App\Models\Setting;
@@ -88,7 +86,6 @@ class OrderCorrection
             $order->refresh();
 
             self::syncTransaction($order);
-            self::syncLoyalty($order);
 
             $edit = OrderEdit::create([
                 'business_id' => $bid,
@@ -502,7 +499,6 @@ class OrderCorrection
             $order->refresh();
 
             self::syncTransaction($order);
-            self::syncLoyalty($order);
 
             $edit = OrderEdit::create([
                 'business_id' => $bid,
@@ -639,8 +635,6 @@ class OrderCorrection
                 self::releaseAddons($order, $item);
             }
 
-            self::releaseCoupon($order);
-            self::reverseLoyalty($order);
 
             /*
              * لا قيدَ دخلٍ على بيعةٍ لم تقع.
@@ -691,60 +685,6 @@ class OrderCorrection
         });
     }
 
-    /**
-     * يردّ استعمال الكوبون — ولا ينزل تحت الصفر.
-     *
-     * عدّادٌ سالب يجعل «مرّة واحدة» مرّتين، وهو عطبٌ في الجهة الأخرى.
-     */
-    private static function releaseCoupon(Order $order): void
-    {
-        if (blank($order->coupon_code)) {
-            return;
-        }
-
-        Coupon::where('business_id', $order->business_id)
-            ->where('code', $order->coupon_code)
-            ->where('used_count', '>', 0)
-            ->decrement('used_count');
-    }
-
-    /**
-     * النقاط: ما اكتُسب يُسحب، وما استُبدل يُردّ.
-     *
-     * والسحب لا يُنزل رصيد العميل تحت الصفر: قد يكون أنفق نقاطه بين
-     * البيعة والإلغاء، فسحبُ ما اكتسبه كاملًا يُنقصه ما لم يأخذه — وهي
-     * القاعدة نفسها التي يطبّقها تصحيح الفاتورة.
-     */
-    private static function reverseLoyalty(Order $order): void
-    {
-        $customer = $order->customer_id ? Customer::find($order->customer_id) : null;
-        if (! $customer) {
-            return;
-        }
-
-        $earned = (int) $order->points_earned;
-        $redeemed = (int) $order->redeemed_points;
-
-        if ($earned > 0) {
-            $take = min($earned, (int) $customer->points);
-            if ($take > 0) {
-                $customer->decrement('points', $take);
-                PointTransaction::record($customer, 'redeem', $take, (int) $customer->fresh()->points,
-                    $order->id, 'إلغاء فاتورة '.$order->number);
-            }
-            $order->points_earned = 0;
-        }
-
-        if ($redeemed > 0) {
-            $customer->increment('points', $redeemed);
-            PointTransaction::record($customer, 'earn', $redeemed, (int) $customer->fresh()->points,
-                $order->id, 'ردّ نقاط فاتورة ملغاة '.$order->number);
-            $order->redeemed_points = 0;
-        }
-
-        $order->save();
-    }
-
     private static function syncTransaction(Order $order): void
     {
         Transaction::where('order_id', $order->id)->update([
@@ -753,49 +693,4 @@ class OrderCorrection
         ]);
     }
 
-    /**
-     * النقاط المكتسبة تتبع الإجمالي الجديد.
-     *
-     * وتُصحَّح بالفرق لا بالمحو: العميل قد يكون أنفق نقاطه بين البيعة
-     * والتصحيح، فطرحُ ما اكتسبه كاملًا يُنقصه ما لم يأخذه. والنقاط
-     * المستبدَلة لا تُمسّ — تلك دفعةٌ وقعت.
-     */
-    private static function syncLoyalty(Order $order): void
-    {
-        $customer = $order->customer_id ? Customer::find($order->customer_id) : null;
-        if (! $customer) {
-            return;
-        }
-
-        $rate = (float) (Setting::where('business_id', $order->business_id)
-            ->where('key', 'loyalty_earn_rate')->value('value') ?? 5);
-
-        $enabled = (string) (Setting::where('business_id', $order->business_id)
-            ->where('key', 'loyalty_enabled')->value('value') ?? '1') !== '0';
-
-        $should = ($enabled && $rate > 0) ? (int) floor((float) $order->total * $rate) : 0;
-        $delta = $should - (int) $order->points_earned;
-
-        if ($delta === 0) {
-            return;
-        }
-
-        // ولا تُدفع نقاطه إلى ما دون الصفر بتصحيحٍ لاحق
-        $delta = max($delta, -(int) $customer->points);
-        if ($delta === 0) {
-            return;
-        }
-
-        $customer->increment('points', $delta);
-        PointTransaction::record(
-            $customer,
-            $delta > 0 ? 'earn' : 'redeem',
-            abs($delta),
-            (int) $customer->fresh()->points,
-            $order->id,
-            'تصحيح فاتورة '.$order->number,
-        );
-
-        $order->update(['points_earned' => (int) $order->points_earned + $delta]);
-    }
 }

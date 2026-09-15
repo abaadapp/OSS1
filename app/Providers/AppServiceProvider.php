@@ -12,17 +12,6 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        /*
-         * مزوّدُ نطاقات التجّار — واحدٌ اليوم وقد يُبدَّل غدًا.
-         *
-         * والربطُ هنا لا في مكان الاستعمال: يوم يُتعاقَد مع مزوّدٍ يتولّى
-         * الشهادات، يُبدَّل هذا السطرُ وحده — ولا تُفتح شاشةٌ ولا نموذج.
-         */
-        $this->app->bind(
-            \App\Support\Website\Domain\CustomDomainProvider::class,
-            \App\Support\Website\Domain\ManualDnsProvider::class,
-        );
-
         //
     }
 
@@ -34,22 +23,7 @@ class AppServiceProvider extends ServiceProvider
         // إتاحة استخدام <x-layouts.xxx> للتخطيطات الموجودة في resources/views/layouts
         Blade::anonymousComponentPath(resource_path('views/layouts'), 'layouts');
 
-        // إعدادات المنصة تُطبَّق على النظام — لا تُحفظ وتُنسى (انظر PlatformConfig)
-        \App\Support\PlatformConfig::apply();
-
-        /*
-         * من يسمع تغيّر حالة الطلب.
-         *
-         * المراقب على النموذج لا على المتحكّمات: ثلاثة مواضع تكتب الحالة
-         * اليوم، ورابعٌ يُضاف غدًا فينساه من يكتبه — والمراقب يسمع الكتابة
-         * نفسها فلا يفوته موضع.
-         */
         \App\Models\Order::observe(\App\Observers\OrderObserver::class);
-
-        \Illuminate\Support\Facades\Event::listen(
-            \App\Events\OrderStatusChanged::class,
-            \App\Listeners\SendWhatsAppOnOrderStatus::class,
-        );
 
         // لغة افتراضية لـ Carbon قبل معالجة الطلب (الأوامر المجدولة مثلًا).
         // داخل الطلب يعيد SetLocale ضبطها على لغة المستخدم، وإلا بقيت التواريخ
