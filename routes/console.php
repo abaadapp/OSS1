@@ -8,9 +8,6 @@ Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
 })->purpose('Display an inspiring quote');
 
-// قلبُ الاشتراكات المنتهية إلى «منتهي» أول كل يوم — قبل أن يفتح أحد لوحته
-Schedule::command('subscriptions:expire')->dailyAt('00:10')->withoutOverlapping();
-
 // نسخ احتياطي تلقائي يومي لكل المتاجر (الساعة 02:00)
 Schedule::command('backup:run')->dailyAt('02:00')->withoutOverlapping();
 
@@ -20,30 +17,6 @@ Schedule::command('backup:run')->dailyAt('02:00')->withoutOverlapping();
  * قبل ذهابها. نصف ساعةٍ تكفي لأكبر متجرٍ عندنا بمراحل.
  */
 Schedule::command('trash:purge')->dailyAt('02:30')->withoutOverlapping();
-
-/*
- * إنذار الاشتراك (07:30) — قبل `subscriptions:expire` بيومٍ في المعنى لا في
- * الساعة: الإنذار يُرسل ما دام المتجر يعمل، فلو تأخّر عن قلب الحالة لوصل
- * الخبر بعد وقوعه.
- */
-Schedule::command('subscriptions:notify')->dailyAt('07:30')->withoutOverlapping();
-
-/*
- * تذكيرُ سداد فواتير العملاء (09:00) — بعد فتح المحلّات لا قبلها.
- *
- * ورسالةٌ واحدة لكلّ فاتورةٍ وحدث: فاتورةٌ تأخّرت شهرًا لا تُرسل ثلاثين
- * تذكيرًا. ومن أراد الإلحاح يضغط الزرّ بيده.
- */
-
-/*
- * حالُ القوالب عند ميتا — كلّ ساعة.
- *
- * الاعتمادُ يتبدّل مرّةً في عمر القالب، لكنّ **متى** يتبدّل لا نعرفه: ميتا
- * تراجع متى شاءت. وقالبٌ اعتُمد قبل ساعةٍ وشاشتُنا تقول «قيد المراجعة» يجعل
- * التاجر ينتظر ما تمّ؛ وقالبٌ أُوقف وشاشتُنا تقول «معتمَد» يجعله يظنّ رسائله
- * تخرج وهي تُردّ. فساعةٌ أضيقُ ما يُحتمل بلا أن يُثقل على ميتا.
- */
-Schedule::command('whatsapp:sync-templates')->hourly()->withoutOverlapping();
 
 // تنبيه انخفاض المخزون بالبريد يوميًا (الساعة 08:00)
 Schedule::command('alerts:low-stock')->dailyAt('08:00')->withoutOverlapping();

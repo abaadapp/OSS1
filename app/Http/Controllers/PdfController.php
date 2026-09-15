@@ -285,19 +285,7 @@ class PdfController extends Controller
         return $this->pdf($html, 'expenses-report-'.now()->format('Y-m-d'));
     }
 
-    /** تقرير الشركات (PDF) — لوحة المنصة */
-    public function businessesReport()
-    {
-        $businesses = Demo::businesses();
-        $html = view('pdf.businesses-report', [
-            'businesses' => $businesses,
-            'generatedAt' => now()->format('Y-m-d H:i'),
-        ])->render();
-
-        Activity::log('report', 'صدّر الشركات (PDF)');
-
-        return $this->pdf($html, 'businesses-report-'.now()->format('Y-m-d'));
-    }
+    
 
     /**
      * الفاتورةُ الضريبيّة — ولا تخرج باسمٍ يكتبه النظام.
@@ -456,5 +444,4 @@ class PdfController extends Controller
 
         return $this->pdf($html, 'finance-report-'.now()->format('Y-m-d'));
     }
-
 }

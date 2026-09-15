@@ -413,32 +413,6 @@ class ReportExportController extends Controller
 
         return $this->download($spreadsheet, $sheet, $money, 'expenses-'.now()->format('Y-m-d').'.xlsx');
     }
-
-    /** تصدير الشركات كملف Excel (لوحة المنصة) */
-    public function businessesXlsx()
-    {
-        $spreadsheet = new Spreadsheet;
-        [$sheet] = $this->sheet($spreadsheet, __('الشركات'));
-        $firstDataRow = $this->tableHead($sheet, [__('المعرّف'), __('الشركة'), __('النوع'), __('المالك'), __('الهاتف'), __('البريد'), __('المدينة'), __('الباقة'), __('الحالة'), __('الفروع'), __('التسجيل')]);
-        foreach (Demo::businesses() as $b) {
-            $r = $this->row;
-            $sheet->setCellValue("A{$r}", (int) $b['id']);
-            $sheet->setCellValue("B{$r}", $b['name']);
-            $sheet->setCellValue("C{$r}", $b['type']);
-            $sheet->setCellValue("D{$r}", $b['owner']);
-            $sheet->setCellValueExplicit("E{$r}", (string) $b['phone'], DataType::TYPE_STRING);
-            $sheet->setCellValue("F{$r}", $b['email']);
-            $sheet->setCellValue("G{$r}", $b['city']);
-            $sheet->setCellValue("H{$r}", $b['plan']);
-            $sheet->setCellValue("I{$r}", $b['status']);
-            $sheet->setCellValue("J{$r}", (int) $b['branches']);
-            $sheet->setCellValue("K{$r}", $b['registered']);
-            $this->row++;
-        }
-        $sheet->freezePane("A{$firstDataRow}");
-        Activity::log('report', 'صدّر الشركات (Excel)');
-
-        return $this->download($spreadsheet, $sheet, [], 'businesses-'.now()->format('Y-m-d').'.xlsx');
-    }
+    
 
 }

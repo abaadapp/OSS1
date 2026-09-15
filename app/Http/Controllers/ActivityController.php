@@ -37,17 +37,6 @@ class ActivityController extends Controller
         ]);
     }
 
-    public function superIndex(Request $request)
-    {
-        $logs = self::shape(ActivityLog::query(), $request);
-
-        return Inertia::render('Platform/Activity', [
-            'logs' => $logs->items(),
-            'pagination' => Pagination::meta($logs),
-            'filters' => $request->only('q', 'action'),
-        ]);
-    }
-
     public function adminIndex(Request $request)
     {
         return Inertia::render('Admin/Activity', self::adminData($request));

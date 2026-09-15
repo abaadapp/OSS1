@@ -128,11 +128,6 @@ class ReportPageController extends Controller
         return $this->report($request, 'activity', 'Activity', ['user_id', 'action']);
     }
 
-    public function marketing(Request $request): Response
-    {
-        return $this->report($request, 'marketing', 'Marketing');
-    }
-
     public function stocktake(Request $request): Response
     {
         return $this->report($request, 'stocktake', 'Stocktake', ['branch_id', 'reason']);
