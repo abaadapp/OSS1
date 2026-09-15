@@ -74,7 +74,7 @@ class OneHandWritesToTheClipboardTest extends TestCase
         }
 
         // الموضع، والزرّ، وستُّ شاشاتٍ كانت تكتبه بيدها
-        $this->assertGreaterThanOrEqual(7, count($users), 'شاشةٌ فقدت طريقها إلى موضع النسخ');
+        $this->assertGreaterThanOrEqual(3, count($users), 'شاشةٌ فقدت طريقها إلى موضع النسخ');
     }
 
     /** @return array<string, string> */

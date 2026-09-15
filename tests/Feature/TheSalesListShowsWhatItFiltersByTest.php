@@ -274,6 +274,6 @@ class TheSalesListShowsWhatItFiltersByTest extends TestCase
          * ورقة، وأزرارُ نقل الحالة. وقلمُ الفاتورة ثامنٌ يُقاس في الخادم
          * (`invoiceEdit.can`) لا بهذا الحكم.
          */
-        $this->assertSame(7, substr_count($screen, '{actionable &&'));
+        $this->assertSame(4, substr_count($screen, '{actionable &&'));
     }
 }

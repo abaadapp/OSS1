@@ -64,10 +64,6 @@ class ReportColumns
             ['at', 'الوقت', 'text'], ['user', 'المستخدم', 'text'],
             ['action', 'الإجراء', 'text'], ['description', 'التفصيل', 'text'],
         ],
-        'marketing' => [
-            ['code', 'الرمز', 'text'], ['type', 'النوع', 'text'], ['value', 'القيمة', 'number'],
-            ['uses', 'مرات الاستخدام', 'number'], ['discount', 'الخصم', 'money'], ['revenue', 'الإيراد', 'money'],
-        ],
         'vat' => [
             ['month', 'الشهر', 'text'], ['taxable', 'المبيعات الخاضعة', 'money'],
             ['output', 'ضريبة المخرجات', 'money'], ['purchases', 'المشتريات', 'money'],

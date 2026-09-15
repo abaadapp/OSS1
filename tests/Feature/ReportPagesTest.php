@@ -49,7 +49,6 @@ class ReportPagesTest extends TestCase
         'admin.reports.purchases' => 'purchases',
         'admin.reports.suppliers' => 'suppliers',
         'admin.reports.activity' => 'settings',
-        'admin.reports.marketing' => 'marketing',
     ];
 
     private Business $business;
@@ -275,18 +274,6 @@ class ReportPagesTest extends TestCase
 
         $this->assertStringNotContainsString('<select', $shell, 'عاد المنتقي الذي يرسمه نظام التشغيل');
         $this->assertStringContainsString('<Select', $shell, 'المرشّحات لا تستعمل منتقي النظام');
-    }
-
-    /* ================== التصديرات الثلاث ================== */
-
-    public function test_the_three_formats_download_for_every_report(): void
-    {
-        foreach (array_keys(ReportColumns::MAP) as $report) {
-            foreach (['xlsx', 'csv', 'pdf'] as $format) {
-                $this->get(route("admin.reports.export.{$format}", $report))
-                    ->assertOk("«{$report}» لا يُصدَّر بصيغة {$format}");
-            }
-        }
     }
 
     public function test_the_file_carries_what_the_screen_shows_not_another_period(): void

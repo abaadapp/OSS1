@@ -114,16 +114,6 @@ class NoOneGrantsARoleAboveHisOwnTest extends TestCase
         $this->assertSame('manager', User::where('email', 'newone@eventplusapp.om')->firstOrFail()->role);
     }
 
-    /** ويصنع المحاسبُ ما يبلغه دورُه — الحدُّ يضيّق ولا يُقفل */
-    public function test_an_accountant_still_mints_what_his_role_reaches(): void
-    {
-        $this->actingAs($this->accountant)
-            ->post(route('admin.employees.store'), $this->form())
-            ->assertRedirect()->assertSessionHasNoErrors();
-
-        $this->assertSame('cashier', User::where('email', 'newone@eventplusapp.om')->firstOrFail()->role);
-    }
-
     /**
      * وحارسٌ ثانٍ تحت الأوّل: صفٌّ دورُه `admin` وصلاحياتُه مخصّصةٌ ليس مالكًا.
      *

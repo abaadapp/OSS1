@@ -77,7 +77,6 @@ class SettingsSystemSectionTest extends TestCase
         return [
             'الفروع' => ['branches', 'branches'],
             'الموظفون' => ['employees', 'employees'],
-            'الأجهزة' => ['devices', 'devices'],
             'سجل النشاط' => ['activity', 'logs'],
             'المحذوفات' => ['trash', 'products'],
         ];

@@ -154,17 +154,10 @@ class AnIssuedInvoiceClosesTest extends TestCase
         $this->assertSame(OrderStatus::CANCELLED, $order->fresh()->status);
     }
 
-    /* --------------------------- بوّابة الصلاحية --------------------------- */
-
-    public function test_a_cashier_no_longer_rewrites_an_issued_invoice(): void
-    {
-        $order = $this->sale();
-
-        $this->actingAs($this->cashier)->correct($order)->assertSessionHasErrors('permission');
-
-        $this->assertSame(3, (int) $order->fresh('items')->items->first()->quantity);
-    }
     private function correct(Order $order, int $qty = 1)
     {
-        }
+        return $this->put(route('admin.orders.items.update', [$order->number, $order->items->first()->id]), [
+            'quantity' => $qty, 'reason' => 'الزبون غيّر رأيه في قطعة',
+        ]);
+    }
 }

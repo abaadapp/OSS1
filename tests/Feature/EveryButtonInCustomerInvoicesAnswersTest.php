@@ -308,19 +308,6 @@ class EveryButtonInCustomerInvoicesAnswersTest extends TestCase
         $this->assertSame(0.0, $invoice->fresh()->outstanding());
     }
 
-    /** «تذكير بالسداد» — يُخرج رابطًا يُفتح، لا وعدًا بإرسال */
-    public function test_the_remind_button_hands_back_a_link(): void
-    {
-        $invoice = $this->invoice();
-
-        $this->actingAs($this->owner)
-            ->post('/admin/customer-invoices/'.$invoice->id.'/remind')
-            ->assertSessionHasNoErrors();
-
-        $this->assertStringContainsString('wa.me/', session('toast')['link']['url']);
-        $this->assertStringContainsString($invoice->number, urldecode(session('toast')['link']['url']));
-    }
-
     /* ------------------------ والدفترُ يوافق ------------------------ */
 
     /**

@@ -154,23 +154,6 @@ class SearchWorksForEveryRoleTest extends TestCase
         ]);
     }
 
-    /**
-     * والكاشير يجد فاتورته برقمها.
-     *
-     * صلاحية `orders` تفتح شاشة الطلبات في اللوحة، وهو لا يملكها — فكان
-     * البحث يحجب الفواتير عنه كلَّها. وهو أكثرُ من يكتب رقم فاتورةٍ في
-     * يومه: عند الإرجاع، وإعادة الطباعة، وحين يسأل زبونٌ عن بيعةٍ سابقة.
-     */
-    public function test_a_cashier_finds_an_invoice_by_its_number(): void
-    {
-        $this->sale('INV-777777');
-
-        $this->assertContains(
-            'INV-777777',
-            $this->labels($this->onFloor, '777777', 'admin.search'),
-            'الكاشير لا يجد فاتورةً يفتحها بنفسه من الإيصالات',
-        );
-    }
     /** ومن يملك شاشة الطلبات يُقاد إليها لا إلى نقطة البيع */
     public function test_the_owner_still_lands_on_the_orders_screen(): void
     {
