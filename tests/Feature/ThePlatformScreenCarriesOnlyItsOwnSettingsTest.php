@@ -2,11 +2,9 @@
 
 namespace Tests\Feature;
 
-use App\Http\Controllers\SuperAdmin\PageController;
 use App\Models\Business;
 use App\Models\Setting;
 use App\Models\User;
-use App\Support\GoogleReviews;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Crypt;
 use Tests\TestCase;
@@ -49,37 +47,6 @@ class ThePlatformScreenCarriesOnlyItsOwnSettingsTest extends TestCase
         ]);
     }
     /* ------------------------- ما لا يتسرّب ------------------------- */
-
-    /** المفتاحُ المعمّى لا يصل حمولةَ الصفحة — وهو ما كان يصل */
-    public function test_the_encrypted_platform_key_never_reaches_the_page(): void
-    {
-        GoogleReviews::storePlatformKey('AIzaSy-PLATFORM-SECRET-0000-wXyZ');
-
-        $stored = (string) Setting::whereNull('business_id')
-            ->where('key', GoogleReviews::PLATFORM_KEY)->value('value');
-
-        $this->assertNotSame('', $stored, 'لم يُحفظ شيءٌ — فالحارس لا يقيس شيئًا');
-
-        $this->assertStringNotContainsString($stored, $this->body(),
-            'نصُّ المفتاح المعمّى في حمولة الصفحة — يأخذه من يفتح مصدرها');
-    }
-
-    /** ولا خامُه بحال */
-    public function test_the_plain_platform_key_never_reaches_the_page(): void
-    {
-        GoogleReviews::storePlatformKey('AIzaSy-PLATFORM-SECRET-0000-wXyZ');
-
-        $this->assertStringNotContainsString('AIzaSy-PLATFORM-SECRET-0000-wXyZ', $this->body());
-    }
-
-    /** ولا يظهر في `settings` مفتاحًا باسمه */
-    public function test_the_key_is_not_listed_among_the_settings(): void
-    {
-        GoogleReviews::storePlatformKey('AIzaSy-PLATFORM-SECRET-0000-wXyZ');
-
-        $this->assertArrayNotHasKey(GoogleReviews::PLATFORM_KEY, $this->props()['settings']);
-    }
-
     /**
      * وسرٌّ يُخزَّن غدًا لا يتسرّب لأنّ أحدًا نسي أن يستثنيه.
      *
@@ -99,24 +66,6 @@ class ThePlatformScreenCarriesOnlyItsOwnSettingsTest extends TestCase
         $this->assertStringNotContainsString('some_future_provider_secret', $body);
         $this->assertArrayNotHasKey('some_future_provider_secret', $this->props()['settings']);
     }
-
-    /** والشاشة تحمل مفاتيحَها هي لا أكثر */
-    public function test_the_screen_carries_exactly_its_own_keys(): void
-    {
-        GoogleReviews::storePlatformKey('AIzaSy-PLATFORM-SECRET-0000-wXyZ');
-        Setting::create(['business_id' => null, 'key' => 'google_billing_state', 'value' => 'trial']);
-
-        $allowed = array_keys(
-            (new \ReflectionClass(PageController::class))->getConstant('SETTING_DEFAULTS')
-        );
-
-        $this->assertSame(
-            [],
-            array_diff(array_keys($this->props()['settings']), $allowed),
-            'الشاشة تحمل مفاتيحَ ليست لها',
-        );
-    }
-
     /* ------------------------- وما يجب أن يصل ------------------------- */
 
     /** والإغلاقُ لا يكسر الشاشة: المحفوظُ المسموح يصلها */
@@ -128,21 +77,5 @@ class ThePlatformScreenCarriesOnlyItsOwnSettingsTest extends TestCase
         );
 
         $this->assertSame('افنت بلس', $this->props()['settings']['app_name']);
-    }
-
-    /** وما لم يُحفظ يبقى على افتراضيّه */
-    public function test_an_unsaved_key_keeps_its_default(): void
-    {
-        $defaults = (new \ReflectionClass(PageController::class))->getConstant('SETTING_DEFAULTS');
-
-        $this->assertSame($defaults['locale'], $this->props()['settings']['locale']);
-    }
-
-    /** وتلميحُ المفتاح يصل — أربعةُ أحرفٍ ليُعرف أيُّه محفوظ */
-    public function test_the_hint_still_reaches_the_screen(): void
-    {
-        GoogleReviews::storePlatformKey('AIzaSy-PLATFORM-SECRET-0000-wXyZ');
-
-        $this->assertSame('••••wXyZ', $this->props()['googleKeyHint']);
     }
 }

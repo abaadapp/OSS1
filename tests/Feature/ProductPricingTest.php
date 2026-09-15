@@ -33,24 +33,6 @@ class ProductPricingTest extends TestCase
     private Branch $branch;
 
     private User $owner;
-
-    protected function setUp(): void
-    {
-        parent::setUp();
-
-        $this->business = Business::create(['name' => 'متجري', 'type' => 'عام', 'status' => 'نشط']);
-        $this->branch = Branch::create(['business_id' => $this->business->id, 'name' => 'الرئيسي']);
-        $this->owner = User::create([
-            'business_id' => $this->business->id, 'name' => 'المالك', 'email' => 'o@eventplus.om',
-            'password' => bcrypt('password'), 'role' => 'admin', 'status' => 'نشط',
-        ]);
-
-        Setting::create(['business_id' => $this->business->id, 'key' => 'vat_rate', 'value' => '5']);
-
-        $this->actingAs($this->owner);
-        $this->activatePosDevice($this->business->id, $this->branch->id);
-    }
-
     private function product(array $over = []): Product
     {
         return Product::create(array_merge([

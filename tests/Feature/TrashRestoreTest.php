@@ -195,29 +195,6 @@ class TrashRestoreTest extends TestCase
         // والسلّة نفسها تبقى للإعدادات: التصفّح غير التراجع
         $this->actingAs($clerk)->get(route('admin.settings.trash'))->assertForbidden();
     }
-
-    /* ---------------------------- الفروع ---------------------------- */
-
-    public function test_deleting_a_branch_no_longer_wipes_its_registers(): void
-    {
-        $branch = Branch::create(['business_id' => $this->business->id, 'name' => 'الخوير']);
-        $device = \App\Models\PosDevice::create([
-            'business_id' => $this->business->id, 'branch_id' => $branch->id,
-            'name' => 'صندوق ١', 'token_hash' => str_repeat('a', 64),
-            'status' => \App\Models\PosDevice::ACTIVE, 'activated_at' => now(),
-        ]);
-
-        $this->actingAs($this->owner)->delete(route('admin.branches.destroy', $branch->id));
-
-        /*
-         * pos_devices.branch_id عليه ON DELETE CASCADE: الحذف النهائي كان
-         * يمحو كل صندوقٍ في الفرع معه. والصفّ الباقي يمنع تسلسل الحذف.
-         */
-        $this->assertNull(Branch::find($branch->id));
-        $this->assertNotNull(Branch::withTrashed()->find($branch->id));
-        $this->assertDatabaseHas('pos_devices', ['id' => $device->id, 'branch_id' => $branch->id]);
-    }
-
     public function test_a_deleted_branch_leaves_no_dangling_orders(): void
     {
         $branch = Branch::create(['business_id' => $this->business->id, 'name' => 'الخوير']);

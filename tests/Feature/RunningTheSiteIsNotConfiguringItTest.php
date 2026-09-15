@@ -5,10 +5,7 @@ namespace Tests\Feature;
 use App\Models\Business;
 use App\Models\Product;
 use App\Models\User;
-use App\Models\Website;
 use App\Support\Permissions;
-use App\Support\Website\Blueprints;
-use App\Support\Website\Builder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
@@ -42,23 +39,6 @@ class RunningTheSiteIsNotConfiguringItTest extends TestCase
     private Business $business;
 
     private User $owner;
-
-    protected function setUp(): void
-    {
-        parent::setUp();
-
-        $this->business = Business::create([
-            'name' => 'ورود مسقط', 'type' => 'محل ورود', 'status' => 'نشط',
-        ]);
-
-        $this->owner = User::create([
-            'business_id' => $this->business->id, 'name' => 'المالك', 'email' => 'o@eventplus.om',
-            'password' => bcrypt('password'), 'role' => 'admin', 'status' => 'نشط',
-        ]);
-
-        Builder::create($this->business, Blueprints::STORE, 'modern', $this->owner->id);
-    }
-
     /** موظّفٌ مُنح التشغيل وحده — بصلاحياتٍ مكتوبةٍ بيدها لا موروثةٍ بدور */
     private function operator(array $permissions): User
     {

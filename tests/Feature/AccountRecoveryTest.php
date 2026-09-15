@@ -7,7 +7,6 @@ use App\Models\Branch;
 use App\Models\Business;
 use App\Models\PasswordRecoveryChallenge;
 use App\Models\PasswordRecoveryOtp;
-use App\Models\PosDevice;
 use App\Models\User;
 use App\Support\RecoveryEmail;
 use App\Support\RecoveryOtp;
@@ -367,34 +366,6 @@ class AccountRecoveryTest extends TestCase
 
         $this->assertNotSame('the-old-remember-token', $this->owner->fresh()->remember_token);
     }
-
-    /**
-     * وجهاز نقطة البيع يبقى مفعَّلًا.
-     *
-     * تفعيلُه كوكيّةٌ على الجهاز لا جلسةُ مستخدم، وإسقاطُه يعني كاشيرًا يقف
-     * أمام شاشة إعدادٍ صباحًا لأنّ صاحب المحلّ نسي كلمته ليلًا.
-     */
-    public function test_the_pos_device_stays_activated(): void
-    {
-        $device = PosDevice::create([
-            'business_id' => $this->business->id,
-            'branch_id' => Branch::where('business_id', $this->business->id)->value('id'),
-            'name' => 'كاشير', 'token_hash' => hash('sha256', 'raw'),
-            'status' => PosDevice::ACTIVE, 'activated_at' => now(),
-        ]);
-
-        $challenge = $this->startFor($this->owner);
-        $this->post(route('recovery.check'), ['challenge' => $challenge->token, 'code' => $this->codeFromMail()]);
-        $this->post(route('recovery.password.store'), [
-            'challenge' => $challenge->token, 'password' => 'new-password-9',
-            'password_confirmation' => 'new-password-9',
-        ]);
-
-        $fresh = $device->fresh();
-        $this->assertSame(PosDevice::ACTIVE, $fresh->status);
-        $this->assertNotNull($fresh->activated_at);
-    }
-
     /* ============================== عزل المتاجر ============================== */
 
     /** محاولةُ متجرٍ لا تُغيّر كلمة مرور متجرٍ آخر */

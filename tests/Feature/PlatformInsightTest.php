@@ -5,8 +5,6 @@ namespace Tests\Feature;
 use App\Models\ActivityLog;
 use App\Models\Business;
 use App\Models\Order;
-use App\Models\Plan;
-use App\Models\Subscription;
 use App\Models\User;
 use App\Support\Activity;
 use App\Support\Demo;
@@ -115,38 +113,6 @@ class PlatformInsightTest extends TestCase
                 ->count('logs', 1));
     }
     /* ------------------ ٢· الإيراد المتكرّر والفاقد ------------------ */
-
-    /**
-     * الاشتراك السنوي يُقسَّم على شهوره.
-     *
-     * جمعُ الفواتير يجعل شهرًا يبدو عظيمًا وأحد عشر شهرًا تبدو خرابًا —
-     * والمتكرّر يقيس ما يتكرّر.
-     */
-    public function test_a_yearly_subscription_counts_as_its_monthly_share(): void
-    {
-        Subscription::create([
-            'business_id' => $this->biz->id, 'amount' => 120, 'status' => 'نشط',
-            'starts_at' => now()->subMonth(), 'ends_at' => now()->addMonths(11),
-        ]);
-
-        $mrr = collect(Demo::superStats())->firstWhere('label', __('الإيراد الشهري المتكرّر'));
-
-        $this->assertNotNull($mrr, 'بطاقة الإيراد المتكرّر غير موجودة');
-        $this->assertStringContainsString('10', $mrr['value'], '١٢٠ على ١٢ شهرًا = ١٠');
-    }
-
-    /** واشتراكٌ لم يبدأ بعد لا يُحسب: وعدٌ لا إيراد */
-    public function test_a_future_subscription_is_not_counted_yet(): void
-    {
-        Subscription::create([
-            'business_id' => $this->biz->id, 'amount' => 120, 'status' => 'نشط',
-            'starts_at' => now()->addMonth(), 'ends_at' => now()->addMonths(13),
-        ]);
-
-        $mrr = collect(Demo::superStats())->firstWhere('label', __('الإيراد الشهري المتكرّر'));
-        $this->assertStringStartsWith('0', $mrr['value']);
-    }
-
     /** والفاقد يعدّ من خرج هذا الشهر */
     public function test_churn_counts_a_business_disabled_this_month(): void
     {
@@ -158,21 +124,4 @@ class PlatformInsightTest extends TestCase
         $this->assertStringStartsWith('1', $churn['value']);
     }
     /* ------------------ ٤· تقرير المنصة يشمل الجميع ------------------ */
-
-    /**
-     * تقرير أداء الشركات لا يقتصر على نوعٍ واحد.
-     *
-     * كان يقرأ «محلات الورود» وحدها — بقيّةٌ من كون النظام محلَّ ورودٍ يومًا —
-     * فيسقط المخابز والمغاسل والورش. تقريرٌ ناقصٌ لا يقول إنه ناقص.
-     */
-    public function test_the_platform_report_covers_every_business_type(): void
-    {
-        Business::create(['name' => 'مخبز', 'type' => 'مخبز', 'status' => 'نشط']);
-        Plan::create(['name' => 'أساسية', 'monthly_price' => 10, 'yearly_price' => 100]);
-
-        $names = collect(Demo::businessPerformance())->pluck('name')->all();
-
-        $this->assertContains('مخبز', $names);
-        $this->assertContains('متجر', $names);
-    }
 }

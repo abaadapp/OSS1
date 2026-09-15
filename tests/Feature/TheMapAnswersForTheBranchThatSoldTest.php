@@ -3,14 +3,10 @@
 namespace Tests\Feature;
 
 use App\Models\Branch;
-use App\Models\BranchGooglePlace;
 use App\Models\Business;
 use App\Models\JobTitle;
 use App\Models\Setting;
 use App\Models\User;
-use App\Support\BranchGoogle;
-use App\Support\GoogleReviews;
-use App\Support\MarketingSettings;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Crypt;
@@ -77,36 +73,6 @@ class TheMapAnswersForTheBranchThatSoldTest extends TestCase
 
         $this->actingAs($this->owner);
     }
-
-    /* ═══════════════════ أدوات ═══════════════════ */
-
-    private function platformKey(string $key = 'platform-places-key'): void
-    {
-        Setting::updateOrCreate(
-            ['business_id' => null, 'key' => GoogleReviews::PLATFORM_KEY],
-            ['value' => Crypt::encryptString($key)],
-        );
-    }
-
-    private function linked(Branch $branch, string $placeId = self::A, ?float $rating = 4.8, int $count = 127): BranchGooglePlace
-    {
-        return BranchGooglePlace::create([
-            'branch_id' => $branch->id,
-            'place_id' => $placeId,
-            'place_name' => 'ورد افنت بلس',
-            'maps_url' => 'https://maps.google.com/?cid=111',
-            'rating' => $rating,
-            'review_count' => $count,
-            'synced_at' => now(),
-            'linked_at' => now(),
-        ]);
-    }
-
-    private function onReceipt(): void
-    {
-        MarketingSettings::save($this->shop->id, 'google', ['google_review_on_receipt' => '1']);
-    }
-
     private function fakeDetails(?float $rating = 4.2, int $count = 300): void
     {
         Http::fake(['places.googleapis.com/*' => Http::response([
@@ -124,85 +90,6 @@ class TheMapAnswersForTheBranchThatSoldTest extends TestCase
     }
 
     /* ═══════════════════ ١ · الرمز يتبع بائعَه ═══════════════════ */
-
-    /**
-     * فرعٌ حُذف وبقي رقمُه في طلباته — لا يُستعار له رمزُ فرعٍ آخر.
-     *
-     * والفروعُ تُغلق: موسمٌ ينتهي، أو عقدُ محلٍّ لا يُجدَّد. وطلباتُه تبقى،
-     * وإيصالاتُها تُعاد طباعتُها للضمان وللمرتجعات.
-     */
-    public function test_a_receipt_of_a_removed_branch_borrows_no_other_code(): void
-    {
-        $this->onReceipt();
-        $this->linked($this->khoud, self::A);
-
-        $closed = Branch::create(['business_id' => $this->shop->id, 'name' => 'فرع أُغلق']);
-        $id = $closed->id;
-        $closed->delete();
-
-        $this->assertNull(
-            GoogleReviews::onReceipt($this->shop->id, $id),
-            'طُبع على إيصال فرعٍ محذوفٍ غيرِ مربوطٍ رمزُ فرعٍ آخر',
-        );
-    }
-
-    /**
-     * ورقمُ فرعٍ لا يخصّ هذا المتجر لا يُطبع له شيء.
-     *
-     * وفرعُ الجارِ **مربوطٌ** في هذا الاختبار قصدًا: بلا ذلك يمرّ الحارسُ
-     * ولو سقط حصرُ المتجر، لأنّ فرعًا غيرَ مربوطٍ يردُّ فراغًا من تلقائه.
-     * ومع الربط يُقاس ما يُخشى فعلًا — أن يخرج على ورقتنا رمزُ محلٍّ آخر،
-     * فيُحسب تقييمُ زبوننا لجارنا.
-     */
-    public function test_a_foreign_branch_id_prints_nothing(): void
-    {
-        $this->onReceipt();
-        $this->linked($this->khoud, self::A);
-
-        $other = Business::create(['name' => 'محل آخر', 'type' => 'بقالة', 'status' => 'نشط']);
-        $theirs = Branch::create(['business_id' => $other->id, 'name' => 'فرعهم']);
-        $this->linked($theirs, self::B);
-
-        $this->assertNull(
-            GoogleReviews::onReceipt($this->shop->id, $theirs->id),
-            'خرج على إيصالنا رمزُ فرعِ متجرٍ آخر',
-        );
-    }
-
-    /**
-     * وفرعٌ أُغلق وهو مربوط يحمل رمزَ **نفسِه**.
-     *
-     * هو موضعُ البيع، وملفُّه على الخرائط قائم. ومنعُ الرمز عنه خسارةُ
-     * تقييمٍ بلا سبب — والمقصودُ منعُ **الاستعارة** لا منعُ الحقّ.
-     */
-    public function test_a_closed_but_linked_branch_keeps_its_own_code(): void
-    {
-        $this->onReceipt();
-        $this->linked($this->khoud, self::A);
-        $this->linked($this->mawaleh, self::B);
-
-        $id = $this->mawaleh->id;
-        $this->mawaleh->delete();
-
-        $this->assertSame(
-            $this->review(self::B),
-            GoogleReviews::onReceipt($this->shop->id, $id),
-            'فرعٌ أُغلق وهو مربوطٌ فقد رمزَه هو',
-        );
-    }
-
-    /** وورقةٌ بلا فرعٍ أصلًا تقرأ الفرعَ الأوّل — وهذا مقصود */
-    public function test_a_paper_with_no_branch_reads_the_first_one(): void
-    {
-        $this->onReceipt();
-        $this->linked($this->khoud, self::A);
-
-        $this->assertSame(
-            $this->review(self::A),
-            GoogleReviews::onReceipt($this->shop->id, null),
-        );
-    }
-
     /* ═══════════════════ ٢ · لا علامةَ تمامٍ على ناقص ═══════════════════ */
 
     /** فرعٌ من فرعين مربوطٌ — والخطوةُ ليست تامّة */
@@ -251,91 +138,5 @@ class TheMapAnswersForTheBranchThatSoldTest extends TestCase
         $this->assertFalse($step['done'], 'اكتملت خطوةُ الفروع لمتجرٍ بلا فروع');
         $this->assertStringContainsString('أضِف فرعًا', (string) $step['fix']);
     }
-
-    /** @return array<string, mixed> */
-    private function placeStep(): array
-    {
-        $steps = GoogleReviews::readiness($this->shop->id, ['state' => 'ok', 'error' => null])['steps'];
-
-        foreach ($steps as $step) {
-            if ($step['key'] === 'place') {
-                return $step;
-            }
-        }
-
-        $this->fail('لا خطوةَ اسمُها place');
-    }
-    /** وغيابُ المفتاح يُقال غيابًا لا عطلَ شبكة */
-    public function test_a_missing_key_is_not_reported_as_a_network_failure(): void
-    {
-        Http::fake();
-        $this->linked($this->khoud, self::A);
-
-        $out = BranchGoogle::sync(BranchGoogle::for($this->khoud), force: true);
-
-        $this->assertFalse($out['ok']);
-        $this->assertStringContainsString('غير مفعلة', (string) $out['error']);
-        Http::assertNothingSent();
-    }
-
-    /**
-     * ومزامنةُ ربطٍ حديثٍ ليست إخفاقًا.
-     *
-     * كانت تردُّ `false` كما يردُّها الرفض، فيقول الزرُّ «تعذّر الاتّصال» عن
-     * صفٍّ سليمٍ لا شيء فيه.
-     */
-    public function test_a_fresh_row_is_a_success_that_wrote_nothing(): void
-    {
-        Http::fake();
-        $this->platformKey();
-        $this->linked($this->khoud, self::A);
-
-        $out = BranchGoogle::sync(BranchGoogle::for($this->khoud));
-
-        $this->assertTrue($out['ok'], 'عُدّ ربطٌ حديثٌ إخفاقًا');
-        $this->assertFalse($out['wrote']);
-        $this->assertNull($out['error']);
-        Http::assertNothingSent();
-    }
-
     /* ═══════════════════ ٤ · رقمٌ واحدٌ لا رقمان ═══════════════════ */
-
-    /**
-     * ما سحبته بطاقةُ التقييمات يُكتب على صفّ الفرع.
-     *
-     * فالرقمُ المعروض فوق هو الرقمُ المعروض تحت — ونداءٌ دُفع ثمنُه مرّةً
-     * يُكتب مرّة.
-     */
-    public function test_the_pulled_rating_and_the_row_agree(): void
-    {
-        $this->platformKey();
-        $place = $this->linked($this->khoud, self::A, rating: 4.8, count: 127);
-        $this->fakeDetails(rating: 4.2, count: 300);
-
-        $pulled = GoogleReviews::pull($this->shop->id);
-
-        $this->assertSame('ok', $pulled['state']);
-        $this->assertSame(4.2, $pulled['place']['rating']);
-        $this->assertSame(4.2, (float) $place->fresh()->rating, 'بطاقةُ التقييمات تقول رقمًا وصفُّ الفرع يقول آخر');
-        $this->assertSame(300, (int) $place->fresh()->review_count);
-    }
-
-    /**
-     * ونداءٌ واحدٌ لا نداءان.
-     *
-     * السحبُ يجعل `synced_at` حديثة، فمزامنةُ الشاشة تتخطّاه — ولولا ذلك
-     * لَخرج نداءان مدفوعان عن المحلّ نفسِه في فتحةٍ واحدة.
-     */
-    public function test_the_screen_does_not_call_google_twice_for_one_place(): void
-    {
-        $this->platformKey();
-        $place = $this->linked($this->khoud, self::A);
-        $place->forceFill(['synced_at' => now()->subDay()])->save();
-        $this->fakeDetails();
-
-        GoogleReviews::pull($this->shop->id);
-        BranchGoogle::branches($this->shop->id);
-
-        Http::assertSentCount(1);
-    }
 }

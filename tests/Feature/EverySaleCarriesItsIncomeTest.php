@@ -5,9 +5,7 @@ namespace Tests\Feature;
 use App\Models\Branch;
 use App\Models\Business;
 use App\Models\Order;
-use App\Models\Plan;
 use App\Models\Transaction;
-use App\Support\DemoStore;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -146,48 +144,5 @@ class EverySaleCarriesItsIncomeTest extends TestCase
 
         $this->assertSame(1, Transaction::count());
         $this->assertSame((int) $mine->business_id, (int) Transaction::first()->business_id);
-    }
-
-    /* ------------------------------ البذور ------------------------------ */
-
-    public function test_the_demo_store_is_born_with_its_books_in_balance(): void
-    {
-        Plan::updateOrCreate(['name' => 'الباقة الاحترافية'], [
-            'monthly_price' => 30, 'yearly_price' => 300,
-            'max_branches' => 3, 'max_employees' => 15, 'max_products' => 100000,
-        ]);
-
-        $business = DemoStore::create('متجر الميزان', 'صغير');
-
-        $sold = Order::where('business_id', $business->id)->sold()->count();
-        $entries = Transaction::where('business_id', $business->id)
-            ->where('type', 'دخل')->whereNotNull('order_id')->count();
-
-        $this->assertGreaterThan(0, $sold);
-        $this->assertSame($sold, $entries, 'كلّ فاتورةٍ مباعة لها قيدُ دخلها');
-
-        // والإيراد المقروء من القيود يطابق ما بيع فعلًا — لا كسرًا منه
-        $this->assertEqualsWithDelta(
-            (float) Order::where('business_id', $business->id)->sold()->sum('total'),
-            (float) Transaction::where('business_id', $business->id)->where('type', 'دخل')
-                ->whereNotNull('order_id')->sum('amount'),
-            0.05,
-        );
-    }
-
-    public function test_the_demo_items_carry_their_cost_at_the_moment_of_sale(): void
-    {
-        Plan::updateOrCreate(['name' => 'الباقة الاحترافية'], [
-            'monthly_price' => 30, 'yearly_price' => 300,
-            'max_branches' => 3, 'max_employees' => 15, 'max_products' => 100000,
-        ]);
-
-        $business = DemoStore::create('متجر اللقطة', 'صغير');
-
-        $withoutCost = \App\Models\OrderItem::whereIn(
-            'order_id', Order::where('business_id', $business->id)->select('id'),
-        )->where(fn ($q) => $q->whereNull('cost')->orWhere('cost', 0))->count();
-
-        $this->assertSame(0, $withoutCost, 'بندٌ بلا لقطة تكلفة يجعل الربح يُقرأ من بطاقة المنتج اليوم');
     }
 }

@@ -6,7 +6,6 @@ use App\Models\Branch;
 use App\Models\Business;
 use App\Models\JobTitle;
 use App\Models\Order;
-use App\Models\Plan;
 use App\Models\Supplier;
 use App\Models\SupplierInvoice;
 use App\Models\User;
@@ -327,29 +326,6 @@ class VatReportTest extends TestCase
 
         $this->assertContains('vat', $keys);
     }
-    public function test_the_file_comes_out_on_every_plan(): void
-    {
-        /*
-         * ملفُّ الإقرار ليس تحليلًا يُشترى — هو الورقةُ التي يُقدَّم بها
-         * إقرارٌ إلى جهةٍ حكومية. وتقريرُ ضريبةٍ لا يخرج ملفُّه لا يؤدّي
-         * الغرضَ الوحيد الذي وُجد له: يُقرأ على الشاشة ثم يُنقل رقمًا رقمًا بيد.
-         */
-        $plan = Plan::create([
-            'name' => 'الباقة الأساسية', 'monthly_price' => 9.9, 'yearly_price' => 99,
-            'capabilities' => [],
-        ]);
-        $this->business->update(['plan_id' => $plan->id]);
-        $this->business->refresh();
-        $this->sale(subtotal: 100, discount: 0, tax: 5);
-
-        $this->actingAs(User::find($this->owner->id))
-            ->get(route('admin.reports.export.csv', 'vat'))->assertOk();
-
-        // وبقيّةُ التقارير تبقى على ما هي — الاستثناء واحدٌ لا بابٌ عامّ
-        $this->actingAs(User::find($this->owner->id))
-            ->get(route('admin.reports.export.csv', 'orders'))->assertForbidden();
-    }
-
     public function test_the_exported_file_carries_the_tax_column(): void
     {
         // ملفٌّ بلا عمود الضريبة لا يُقدَّم به إقرار

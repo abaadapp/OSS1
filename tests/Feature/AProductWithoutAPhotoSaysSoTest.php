@@ -7,7 +7,6 @@ use App\Models\Business;
 use App\Models\Category;
 use App\Models\Product;
 use App\Models\User;
-use App\Support\DemoStore;
 use App\Support\ProductImages;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
@@ -137,22 +136,6 @@ class AProductWithoutAPhotoSaysSoTest extends TestCase
             );
         }
     }
-
-    public function test_the_demo_store_still_carries_its_own_photos(): void
-    {
-        /*
-         * والبديلُ يبقى حيث يصحّ: كتالوجُ عرضٍ بلا صورٍ لا يُعرض. لكنّه
-         * يُكتب في بيانات المتجر التجريبيّ لا يُخترع لكلّ متجر.
-         */
-        $demo = DemoStore::create('متجر العرض', 'صغير');
-
-        $withPhotos = Product::where('business_id', $demo->id)
-            ->whereNotNull('image')->count();
-
-        $this->assertGreaterThan(0, $withPhotos);
-        $this->assertSame(Product::where('business_id', $demo->id)->count(), $withPhotos);
-    }
-
     /* ==================== وما كُتب قبل الإغلاق ==================== */
 
     public function test_the_migration_empties_a_photo_no_one_uploaded(): void

@@ -4,7 +4,6 @@ namespace Tests\Feature;
 
 use App\Models\Branch;
 use App\Models\Business;
-use App\Models\Coupon;
 use App\Models\Customer;
 use App\Models\User;
 use App\Support\Demo;
@@ -54,16 +53,6 @@ class ACouponSaysWhatTheRegisterWillDoTest extends TestCase
         ]);
 
         $this->actingAs($this->owner);
-    }
-
-    private function coupon(array $over = []): Coupon
-    {
-        return Coupon::create(array_merge([
-            'business_id' => $this->business->id,
-            'code' => 'SAVE'.mt_rand(1000, 9999),
-            'type' => 'نسبة', 'value' => 10, 'min_order' => 0,
-            'max_uses' => null, 'used_count' => 0, 'expires_at' => null, 'active' => true,
-        ], $over));
     }
     /* ------------------------------ الشارة ------------------------------ */
 

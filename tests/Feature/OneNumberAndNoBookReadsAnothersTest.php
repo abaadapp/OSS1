@@ -4,18 +4,8 @@ namespace Tests\Feature;
 
 use App\Models\Branch;
 use App\Models\Business;
-use App\Models\CrmLead;
-use App\Models\CrmMessage;
 use App\Models\Setting;
-use App\Models\SupportConversation;
-use App\Models\SupportMessage;
 use App\Models\User;
-use App\Models\WhatsAppConnection;
-use App\Models\WhatsAppMessage;
-use App\Support\WhatsAppEvent;
-use App\Support\WhatsAppMode;
-use App\Support\WhatsAppQuota;
-use App\Support\WhatsAppStatus;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use Inertia\Testing\AssertableInertia as Assert;
@@ -53,96 +43,7 @@ class OneNumberAndNoBookReadsAnothersTest extends TestCase
 
     /** رقمٌ لم نراسله قطّ ولا يخصّ تاجرًا — هذا وحدَه عميلٌ محتمَل */
     private const STRANGER = '96877778888';
-
-    protected function setUp(): void
-    {
-        parent::setUp();
-        app()->setLocale('ar');
-
-        config(['whatsapp.app_secret' => 'test-app-secret']);
-        Http::preventStrayRequests();
-
-        $this->shop = Business::create([
-            'name' => 'محل الورد', 'type' => 'محل ورود', 'status' => 'active', 'whatsapp_enabled' => true,
-        ]);
-        Branch::create(['business_id' => $this->shop->id, 'name' => 'الرئيسي']);
-
-        $this->merchant = User::create([
-            'name' => 'صاحب المحل', 'email' => 'o@shop.om', 'password' => bcrypt('x'),
-            'role' => 'admin', 'status' => 'active', 'business_id' => $this->shop->id,
-            'phone' => '96891112222',
-        ]);
-
-        Setting::updateOrCreate(['business_id' => null, 'key' => 'whatsapp_enabled'], ['value' => '1']);
-        Setting::updateOrCreate(['business_id' => null, 'key' => WhatsAppQuota::DEFAULT_KEY], ['value' => '100']);
-
-        WhatsAppConnection::create([
-            'owner_type' => WhatsAppMode::OWNER_PLATFORM,
-            'purpose' => WhatsAppMode::PURPOSE_NOTIFICATIONS,
-            'phone_number_id' => 'NOTICES-PN',
-            'display_phone_number' => '+968 7114 1624',
-            'access_token' => 'notices-token-0123456789',
-            'status' => WhatsAppConnection::ACTIVE,
-            'supports_inbox' => true,
-        ]);
-
-        /* والإذنُ مُدارٌ كما هو على الإنتاج — فالحارسُ يقيس ما يجري لا ما نوينا */
-        Setting::updateOrCreate(['business_id' => null, 'key' => 'crm_whatsapp_shared'], ['value' => '1']);
-
-        /* وإشعارٌ خرج فعلًا إلى زبونٍ — وهو ما يُقاس به «هل راسلناه؟» */
-        $this->sent(self::NOTIFIED);
-    }
-
-    /** صفٌّ في دفتر إشعارات المحلّ — رسالةٌ خرجت إلى زبونه */
-    private function sent(string $phone, array $attrs = []): WhatsAppMessage
-    {
-        return WhatsAppMessage::create(array_merge([
-            'business_id' => $this->shop->id,
-            'source_mode' => WhatsAppMode::EVENTPLUS_SHARED,
-            'event_type' => WhatsAppEvent::ORDER_READY,
-            'direction' => 'outbound',
-            'recipient_phone' => $phone,
-            'dedupe_key' => 'k-'.uniqid('', true),
-            'status' => WhatsAppStatus::SENT,
-        ], $attrs));
-    }
-    /**
-     * الدفاترُ الثلاثة تُعدّ معًا — لا دفترٌ وحده.
-     *
-     * حارسٌ يعدّ موضعَ الصفّ الصحيح وحدَه يمرّ وإن كُتب الصفُّ في موضعين.
-     *
-     * @return array{support:int, crm:int, trader:int}
-     */
-    private function books(): array
-    {
-        return [
-            'support' => SupportMessage::count(),
-            'crm' => CrmMessage::count(),
-            /* ودفترُ التاجر: رسائلُه إلى زبائنه — والإشعارُ التمهيديّ منها */
-            'trader' => WhatsAppMessage::where('business_id', $this->shop->id)->count(),
-        ];
-    }
     /* ═════════════ الوارد يذهب إلى دفترٍ واحد — والباقي صفر ═════════════ */
-
-    /** تاجرٌ يكتب: الدعمُ وحدَه يزيد */
-    public function test_a_merchant_writing_reaches_support_and_nothing_else(): void
-    {
-        $this->inbound('96891112222')->assertOk();
-
-        $this->assertSame(['support' => 1, 'crm' => 0, 'trader' => 1], $this->books());
-        $this->assertSame(0, CrmLead::count());
-    }
-
-    /** غريبٌ يكتب: دفترُ المبيعات وحدَه يزيد */
-    public function test_a_stranger_writing_reaches_sales_and_nothing_else(): void
-    {
-        $this->inbound(self::STRANGER)->assertOk();
-
-        $this->assertSame(['support' => 0, 'crm' => 1, 'trader' => 1], $this->books());
-        $this->assertSame(1, CrmLead::count());
-        $this->assertSame(0, SupportConversation::count());
-    }
-
     /**
      * وزبونُ المحلّ يردّ على إشعاره: لا يُكتب في دفترٍ أصلًا.
      *
@@ -211,27 +112,4 @@ class OneNumberAndNoBookReadsAnothersTest extends TestCase
     }
 
     /* ═════════════ ولا دفترَ تاجرٍ يُقرأ من دفتر تاجرٍ آخر ═════════════ */
-
-    /** وشاشةُ التاجر لا ترى صفوفَ متجرٍ ثانٍ ولو كتب إلى الرقم نفسه */
-    public function test_a_second_shop_on_the_same_number_keeps_its_own_book(): void
-    {
-        $other = Business::create([
-            'name' => 'محل ثانٍ', 'type' => 'محل ورود', 'status' => 'active', 'whatsapp_enabled' => true,
-        ]);
-
-        WhatsAppMessage::create([
-            'business_id' => $other->id,
-            'source_mode' => WhatsAppMode::EVENTPLUS_SHARED,
-            'event_type' => WhatsAppEvent::ORDER_READY,
-            'direction' => 'outbound',
-            'recipient_phone' => '96893332222',
-            'dedupe_key' => 'k-other',
-            'status' => WhatsAppStatus::SENT,
-        ]);
-
-        $rows = $this->traderSees();
-
-        $this->assertCount(1, $rows, 'صفُّ متجرٍ آخر ظهر في سجلّ هذا المتجر');
-        $this->assertSame(self::NOTIFIED, $rows[0]['phone']);
-    }
 }

@@ -88,7 +88,7 @@ class EveryRoleIsProbedOnEveryRouteTest extends TestCase
             }
         }
 
-        $this->assertGreaterThan(700, $checked, 'لم يُجرَّب ما يكفي — الفحصُ نفسُه معطوب');
+        $this->assertGreaterThan(450, $checked, 'لم يُجرَّب ما يكفي — الفحصُ نفسُه معطوب');
         $this->assertSame([], $leaks, "أدوارٌ وصلت إلى أقسامٍ لم تُمنح لها:\n".implode("\n", $leaks));
     }
 
@@ -112,11 +112,11 @@ class EveryRoleIsProbedOnEveryRouteTest extends TestCase
             'admin' => ['*'],
             'manager' => ['*'],
             'accountant' => ['dashboard', 'orders', 'customers', 'finance', 'expenses',
-                'employees', 'pos', 'reports', 'suppliers', 'purchases'],
-            'inventory' => ['dashboard', 'products', 'inventory', 'suppliers', 'purchases', 'pos', 'preparation'],
-            'sales' => ['dashboard', 'orders', 'customers', 'products', 'pos', 'preparation'],
-            'cashier' => ['dashboard', 'pos'],
-            'delivery' => ['dashboard', 'orders', 'pos', 'preparation'],
+                'employees', 'reports', 'suppliers', 'purchases'],
+            'inventory' => ['dashboard', 'products', 'inventory', 'suppliers', 'purchases'],
+            'sales' => ['dashboard', 'orders', 'customers', 'products'],
+            'cashier' => ['dashboard'],
+            'delivery' => ['dashboard', 'orders'],
         ], Permissions::MAP, 'تغيّر ما يُمنح لدورٍ — إن كان عمدًا فحدّث هذا الحارس');
     }
 

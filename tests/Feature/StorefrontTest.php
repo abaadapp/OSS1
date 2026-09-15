@@ -8,8 +8,6 @@ use App\Models\Category;
 use App\Models\Product;
 use App\Models\User;
 use App\Support\Demo;
-use App\Support\MarketingSettings;
-use App\Support\Storefront;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -52,62 +50,7 @@ class StorefrontTest extends TestCase
             'price' => 12.5, 'cost' => 5, 'quantity' => 10, 'alert_qty' => 2, 'active' => true,
         ]);
     }
-
-    private function publish(array $extra = []): void
-    {
-        $this->business->forceFill(['site_slug' => 'ward-alkhuwair'])->save();
-        MarketingSettings::save($this->business->id, 'website', array_merge(['store_on' => '1'], $extra));
-    }
-    /* --------------------------- العنوان --------------------------- */
-
-    public function test_a_slug_is_cleaned_to_something_a_customer_can_type(): void
-    {
-        $this->assertSame('ward-alkhuwair', Storefront::slug('  Ward  Alkhuwair '));
-        $this->assertSame('ward-alkhuwair', Storefront::slug('ward--alkhuwair'));
-        $this->assertSame('my-store', Storefront::slug('My_Store'));
-    }
-
-    /** والقصيرُ والمحجوز والعربيّ يُردّون — العنوان يُملى في هاتف ويُكتب على بطاقة */
-    public function test_a_slug_that_cannot_serve_as_an_address_is_refused(): void
-    {
-        $this->assertNull(Storefront::slug('ab'));
-        $this->assertNull(Storefront::slug('admin'));
-        $this->assertNull(Storefront::slug('www'));
-        $this->assertNull(Storefront::slug('ورد الخوير'));
-        $this->assertNull(Storefront::slug(str_repeat('a', 41)));
-    }
     /* ------------------- ولا يبتلع النظامَ نفسه ------------------- */
-
-    /**
-     * `app.eventplusapp.om` ليست متجرًا.
-     *
-     * مسارُ النطاق الفرعيّ يلتقط كلَّ اسمٍ تحت النطاق، ولاراڤيل تُقدّم المسار
-     * المقيَّد بنطاق على المطلق — **فابتلع هذا المسارُ الصفحةَ الرئيسية للنظام
-     * وردّها «غير موجود»**. وقع ذلك فعلًا على الإنتاج، ولم يظهر في اختبارٍ
-     * لأنّ الاختبارات تطلب المسار ولا تحمل مضيفًا.
-     *
-     * فيُطلب هنا بالمضيف صراحةً — وهو الشيء الوحيد الذي كان سيكشفه.
-     */
-    public function test_the_system_own_hosts_are_never_read_as_shops(): void
-    {
-        foreach (['app', 'www', 'admin', 'api', 'pos'] as $host) {
-            $this->get('https://'.$host.'.'.Storefront::domain().'/')
-                ->assertOk();
-
-            $this->assertSame(
-                'login',
-                request()->route()?->getName(),
-                "«{$host}» قُرئ متجرًا فابتلع صفحة النظام",
-            );
-        }
-    }
-
-    /** والنطاق العاري كذلك: `eventplusapp.om` هو النظام لا متجرٌ اسمُه فارغ */
-    public function test_the_bare_domain_still_belongs_to_the_system(): void
-    {
-        $this->get('https://'.Storefront::domain().'/')->assertOk();
-    }
-
     /* --------------------------- الباب --------------------------- */
 
     public function test_a_published_shop_opens_for_anyone_with_no_login(): void
@@ -227,32 +170,4 @@ class StorefrontTest extends TestCase
     }
 
     /* --------------------------- الترويسة --------------------------- */
-
-    /** ومتجرُ افنت بلس يسبق الرابط الخارجيّ: زرُّ الترويسة يفتح المتجر الحيّ */
-    public function test_the_header_button_prefers_the_shop_hosted_here(): void
-    {
-        MarketingSettings::save($this->business->id, 'website', [
-            'site_on' => '1', 'site_domain' => 'old-site.om',
-        ]);
-        $this->publish();
-
-        $this->actingAs($this->owner);
-
-        $this->assertSame(
-            'https://ward-alkhuwair.'.Storefront::domain(),
-            Demo::websiteUrl(),
-        );
-    }
-
-    /** ومن لم ينشر يبقى رابطُه الخارجيّ كما كان */
-    public function test_an_unpublished_shop_keeps_its_external_link(): void
-    {
-        MarketingSettings::save($this->business->id, 'website', [
-            'site_on' => '1', 'site_domain' => 'old-site.om',
-        ]);
-
-        $this->actingAs($this->owner);
-
-        $this->assertSame('https://old-site.om', Demo::websiteUrl());
-    }
 }

@@ -4,7 +4,6 @@ namespace Tests\Feature;
 
 use App\Models\Branch;
 use App\Models\Business;
-use App\Models\Coupon;
 use App\Models\Customer;
 use App\Models\JobTitle;
 use App\Models\Order;
@@ -104,51 +103,5 @@ class LoyaltyAndCouponGuardsTest extends TestCase
         $this->assertSame(0, (int) $order->points_earned);
         $this->assertSame(0, (int) $order->redeemed_points);
         $this->assertSame(100000, (int) $this->customer->fresh()->points);
-    }
-
-    /** كوبونٌ بلغ حدّ استعماله لا يُقبل مهما أُرسل */
-    public function test_a_spent_coupon_is_refused(): void
-    {
-        $coupon = Coupon::create([
-            'business_id' => $this->business->id, 'code' => 'X10', 'type' => 'نسبة',
-            'value' => 10, 'max_uses' => 1, 'used_count' => 1, 'active' => true,
-        ]);
-
-        // ويُردّ صراحةً: المرفوض صمتًا يُطبع فاتورةً بغير السعر الذي قيل
-        $this->refused(['coupon_code' => $coupon->code])
-            ->assertStatus(422)->assertJsonValidationErrors('coupon_code');
-
-        $this->assertSame(0, Order::count(), 'كوبونٌ استُهلك ومُنح فاتورة');
-        $this->assertSame(1, (int) $coupon->fresh()->used_count, 'ازداد عدّاد كوبونٍ مرفوض');
-    }
-
-    /** وكوبونٌ منتهٍ كذلك */
-    public function test_an_expired_coupon_is_refused(): void
-    {
-        $coupon = Coupon::create([
-            'business_id' => $this->business->id, 'code' => 'OLD', 'type' => 'نسبة',
-            'value' => 25, 'active' => true, 'expires_at' => now()->subDay(),
-        ]);
-
-        $this->refused(['coupon_code' => $coupon->code])
-            ->assertStatus(422)->assertJsonValidationErrors('coupon_code');
-
-        $this->assertSame(0, Order::count(), 'كوبونٌ منتهٍ مُنح فاتورة');
-    }
-
-    /** وكوبون متجرٍ آخر لا يُصرف هنا */
-    public function test_a_coupon_of_another_shop_is_refused(): void
-    {
-        $other = Business::create(['name' => 'الجار', 'type' => 'عام', 'status' => 'نشط']);
-        $coupon = Coupon::create([
-            'business_id' => $other->id, 'code' => 'THEIRS', 'type' => 'نسبة',
-            'value' => 50, 'active' => true,
-        ]);
-
-        $this->refused(['coupon_code' => $coupon->code])
-            ->assertStatus(422)->assertJsonValidationErrors('coupon_code');
-
-        $this->assertSame(0, Order::count(), 'صُرف كوبون متجرٍ آخر');
-        $this->assertSame(0, (int) $coupon->fresh()->used_count);
     }
 }

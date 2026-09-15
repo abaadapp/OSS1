@@ -4,7 +4,6 @@ namespace Tests\Feature;
 
 use App\Models\Branch;
 use App\Models\Business;
-use App\Models\Coupon;
 use App\Models\Order;
 use App\Models\Product;
 use App\Models\Setting;
@@ -51,14 +50,6 @@ class HeldOrderCouponTest extends TestCase
 
         Setting::create(['business_id' => $this->business->id, 'key' => 'vat_rate', 'value' => '5']);
 
-    }
-
-    private function coupon(array $attrs = []): Coupon
-    {
-        return Coupon::create(array_merge([
-            'business_id' => $this->business->id,
-            'code' => 'SAVE10', 'type' => 'نسبة', 'value' => 10, 'active' => true,
-        ], $attrs));
     }
     public function test_holding_an_order_remembers_its_coupon(): void
     {

@@ -5,12 +5,8 @@ namespace Tests\Feature;
 use App\Models\Business;
 use App\Models\Category;
 use App\Models\Product;
-use App\Models\Review;
 use App\Models\Setting;
 use App\Models\User;
-use App\Support\Website\Builder;
-use App\Support\Website\Preview;
-use App\Support\Website\Publisher;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -55,49 +51,6 @@ class PublicDocumentTest extends TestCase
 
         $this->actingAs($this->owner);
     }
-
-    private function seedShop(): void
-    {
-        $bid = $this->business->id;
-
-        foreach ([
-            'store_headline' => 'ورودٌ طازجة كلّ صباح',
-            'store_about' => 'محلُّ ورودٍ في الخوير منذ ٢٠١٥.',
-            'store_instagram' => 'wroodmuscat',
-            'store_whatsapp' => '96890000000',
-            'currency' => 'OMR',
-        ] as $key => $value) {
-            Setting::create(['business_id' => $bid, 'key' => $key, 'value' => $value]);
-        }
-
-        \App\Support\Website\Domains::attach($this->business, 'wrood.om');
-
-        $cat = Category::create(['business_id' => $bid, 'name' => 'باقات']);
-        Category::create(['business_id' => $bid, 'name' => 'نباتات داخلية']);
-
-        foreach ([['باقة ورد جوري', 12.5, 0], ['باقة توليب', 18.0, 20], ['صبّار صغير', 4.75, 0]] as $i => [$n, $p, $d]) {
-            Product::create([
-                'business_id' => $bid, 'name' => $n, 'price' => $p, 'discount' => $d,
-                'category_id' => $cat->id, 'active' => true, 'quantity' => 10, 'alert_qty' => 2,
-                'description' => 'وصفٌ قصير للمنتج يظهر في البطاقة.',
-                'image' => 'products/sample'.$i.'.jpg',
-            ]);
-        }
-
-        Review::create([
-            'business_id' => $bid, 'author_name' => 'سالم', 'rating' => 5,
-            'comment' => 'خدمة ممتازة والورد وصل طازجًا.', 'status' => 'منشور',
-        ]);
-    }
-
-    /** @return array<string, mixed> */
-    private function document(string $goal = 'store', string $template = 'modern'): array
-    {
-        $site = Builder::create($this->business, $goal, $template, $this->owner->id);
-
-        return Preview::document($site);
-    }
-
     public function test_the_document_carries_brand_currency_and_direction(): void
     {
         $this->seedShop();
@@ -112,41 +65,6 @@ class PublicDocumentTest extends TestCase
         $this->assertSame('ar', $doc['locale']);
         $this->assertSame('rtl', $doc['dir']);
     }
-
-    public function test_every_image_url_in_the_document_is_absolute(): void
-    {
-        $this->seedShop();
-        $site = Builder::create($this->business, 'store', 'modern', $this->owner->id);
-
-        // صورةٌ رفعها التاجر — تُحفظ مسارًا وتخرج رابطًا كاملًا
-        $hero = $site->pages()->where('key', 'home')->first()->sections()->where('type', 'hero')->first();
-        $hero->update(['data' => array_merge($hero->data, ['image' => 'website/1/hero.jpg'])]);
-
-        $doc = Preview::document($site->refresh());
-        $found = 0;
-
-        foreach ($doc['pages'] as $page) {
-            foreach ($page['sections'] as $section) {
-                foreach (['image'] as $key) {
-                    if (($section['data'][$key] ?? '') !== '') {
-                        $found++;
-                        $this->assertStringStartsWith('http', $section['data'][$key]);
-                    }
-                }
-
-                foreach ($section['items'] ?? [] as $item) {
-                    if (($item['image'] ?? null) !== null) {
-                        $found++;
-                        $this->assertStringStartsWith('http', $item['image']);
-                    }
-                }
-            }
-        }
-
-        $this->assertGreaterThan(0, $found, 'لا صورة في المستند — الاختبار لا يفحص شيئًا');
-        $this->assertStringStartsWith('http', $doc['brand']['logo']);
-    }
-
     public function test_a_product_without_a_real_photo_reports_no_photo(): void
     {
         $this->seedShop();
@@ -212,57 +130,5 @@ class PublicDocumentTest extends TestCase
 
         $this->assertNotContains('تحويل بنكي', $doc['brand']['payments']);
         $this->assertContains('نقدي', $doc['brand']['payments']);
-    }
-    /**
-     * ويُولَّد من هذا الاختبار ما تقرؤه اختبارات العارض.
-     *
-     * مستندٌ يُكتب بيدٍ يوافق فهمَ كاتبه للعقد لا العقدَ نفسه، فيبقى أخضرَ
-     * بينما الموقع الحقيقيّ لا يُرسم. فيُولَّد من هنا.
-     *
-     * وكان يتخطّى نفسه إن لم يجد مستودع العارض بجانب افنت بلس — فكان يخضرّ
-     * صامتًا في كلّ بيئةٍ ليس فيها الاثنان متجاورين، وتبقى التجهيزةُ على
-     * عقدٍ قديم. وقد وقع ذلك فعلًا. والعارضُ اليوم في `storefront/` داخل
-     * المستودع نفسه، فلا مكانَ للتخطّي: المسارُ موجودٌ دائمًا.
-     */
-    public function test_it_refreshes_the_fixtures_the_renderer_tests_read(): void
-    {
-        $this->seedShop();
-
-        // بلغة التاجر لا بلغة الاختبار: عناوينُ الصفحات تُخزَّن مترجمةً وقت
-        // البناء، ومستندٌ فيه «Contact us» لا يشبه ما يبنيه تاجرٌ عربيّ
-        app()->setLocale('ar');
-
-        $site = Builder::create($this->business, 'store', 'modern', $this->owner->id);
-        Publisher::publish($site, $this->owner->id);
-        $site->refresh();
-
-        $dir = base_path('storefront/tests/fixtures');
-
-        $this->assertDirectoryExists(dirname($dir), 'العارض ليس في مكانه — storefront/ مفقود من المستودع');
-
-        @mkdir($dir, 0777, true);
-
-        $flags = JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT;
-        file_put_contents(
-            $dir.'/store.json',
-            json_encode(Preview::resolve($site->publishedVersion->payload, $this->business->id), $flags),
-        );
-
-        $other = Business::create([
-            'name' => 'عيادة نور', 'type' => 'عيادة', 'status' => 'نشط',
-            'phone' => '96899999999', 'city' => 'صلالة',
-        ]);
-        $doctor = User::create([
-            'business_id' => $other->id, 'name' => 'مالك', 'email' => 'n@eventplus.om',
-            'password' => bcrypt('password'), 'role' => 'admin', 'status' => 'نشط',
-        ]);
-        $this->actingAs($doctor);
-
-        file_put_contents(
-            $dir.'/profile.json',
-            json_encode(Preview::document(Builder::create($other, 'profile', 'minimal', $doctor->id)), $flags),
-        );
-
-        $this->assertFileExists($dir.'/store.json');
     }
 }

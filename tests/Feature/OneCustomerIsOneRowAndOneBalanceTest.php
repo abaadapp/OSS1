@@ -6,7 +6,6 @@ use App\Models\Branch;
 use App\Models\Business;
 use App\Models\Customer;
 use App\Models\Order;
-use App\Models\PointTransaction;
 use App\Models\User;
 use App\Support\Demo;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -172,77 +171,6 @@ class OneCustomerIsOneRowAndOneBalanceTest extends TestCase
 
         $this->actingAs($this->owner)->post(route('admin.customers.import.confirm'))->assertRedirect();
     }
-
-    /** مجموعُ الحركات يجب أن يُعيد بناء الأرصدة */
-    private function pointsGap(): int
-    {
-        $balances = (int) Customer::where('business_id', $this->shop->id)->sum('points');
-        $moved = (int) PointTransaction::where('business_id', $this->shop->id)->sum('points');
-
-        return $balances - $moved;
-    }
-
-    public function test_points_imported_for_a_new_customer_are_explained(): void
-    {
-        $this->import("الاسم,الهاتف,النقاط\nنورة,99887766,5000\n");
-
-        $customer = Customer::where('business_id', $this->shop->id)->firstOrFail();
-        $this->assertSame(5000, (int) $customer->points, 'الاستيراد لم يعد يكتب الرصيد');
-        $this->assertSame(0, $this->pointsGap(), 'رصيدٌ لا تُفسّره حركةٌ واحدة');
-
-        $move = PointTransaction::where('customer_id', $customer->id)->firstOrFail();
-        $this->assertSame('earn', $move->type);
-        $this->assertSame(5000, (int) $move->points);
-        $this->assertSame(5000, (int) $move->balance_after);
-        $this->assertStringContainsString('عملاء.csv', (string) $move->note, 'الحركةُ لا تقول من أين جاءت');
-    }
-
-    public function test_raising_a_balance_by_import_records_only_the_difference(): void
-    {
-        $customer = Customer::create([
-            'business_id' => $this->shop->id, 'name' => 'نورة', 'phone' => '99887766', 'points' => 100,
-        ]);
-        PointTransaction::record($customer, 'earn', 100, 100, null, 'بيع');
-
-        $this->import("الاسم,الهاتف,النقاط\nنورة,99887766,450\n");
-
-        $this->assertSame(450, (int) $customer->fresh()->points);
-        $this->assertSame(0, $this->pointsGap());
-        $this->assertSame(350, (int) PointTransaction::where('customer_id', $customer->id)
-            ->orderByDesc('id')->value('points'), 'كُتب الرصيدُ كلُّه حركةً بدل الفارق');
-    }
-
-    public function test_lowering_a_balance_by_import_is_recorded_as_a_withdrawal(): void
-    {
-        $customer = Customer::create([
-            'business_id' => $this->shop->id, 'name' => 'نورة', 'phone' => '99887766', 'points' => 900,
-        ]);
-        PointTransaction::record($customer, 'earn', 900, 900, null, 'بيع');
-
-        $this->import("الاسم,الهاتف,النقاط\nنورة,99887766,200\n");
-
-        $this->assertSame(200, (int) $customer->fresh()->points);
-        $this->assertSame(0, $this->pointsGap());
-
-        $last = PointTransaction::where('customer_id', $customer->id)->orderByDesc('id')->firstOrFail();
-        $this->assertSame('redeem', $last->type);
-        $this->assertSame(-700, (int) $last->points);
-    }
-
-    public function test_a_file_that_never_mentions_points_moves_nothing(): void
-    {
-        $customer = Customer::create([
-            'business_id' => $this->shop->id, 'name' => 'نورة', 'phone' => '99887766', 'points' => 300,
-        ]);
-        PointTransaction::record($customer, 'earn', 300, 300, null, 'بيع');
-
-        $this->import("الاسم,الهاتف\nنورة,99887766\n");
-
-        $this->assertSame(300, (int) $customer->fresh()->points, 'ملفٌّ لا يذكر النقاط محاها');
-        $this->assertSame(1, PointTransaction::where('customer_id', $customer->id)->count(),
-            'حركةٌ كُتبت بلا تغيّرٍ في الرصيد');
-    }
-
     /* ═════════════ البطاقةُ تقرأ ما تقرؤه صفوفُها ═════════════ */
 
     private function spender(string $name, string $phone, float $total): Customer

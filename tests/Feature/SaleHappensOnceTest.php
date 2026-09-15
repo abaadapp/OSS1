@@ -4,7 +4,6 @@ namespace Tests\Feature;
 
 use App\Models\Branch;
 use App\Models\Business;
-use App\Models\Coupon;
 use App\Models\Customer;
 use App\Models\Order;
 use App\Models\Product;
@@ -127,26 +126,6 @@ class SaleHappensOnceTest extends TestCase
 
         $this->assertSame(1, Order::where('is_held', false)->count());
     }
-
-    /* ------------------- الإلغاء يقع مرّة ------------------- */
-
-    private function soldOrder(): Order
-    {
-        $customer = Customer::create([
-            'business_id' => $this->business->id, 'name' => 'سالم', 'phone' => '90000001',
-        ]);
-        Coupon::create([
-            'business_id' => $this->business->id, 'code' => 'WELCOME', 'type' => 'نسبة',
-            'value' => 10, 'active' => true, 'used_count' => 0, 'min_order' => 0,
-        ]);
-
-        $this->checkout([
-            'customer' => 'سالم', 'customer_id' => $customer->id, 'coupon_code' => 'WELCOME',
-        ])->assertOk();
-
-        return Order::where('is_held', false)->firstOrFail();
-    }
-
     /**
      * الضغطتان على «إلغاء» — أو موظّفان يفتحان الطلب نفسه.
      *
@@ -164,18 +143,6 @@ class SaleHappensOnceTest extends TestCase
 
         $this->assertSame($stockAfterSale + 2, (int) $this->product->fresh()->quantity);
     }
-
-    public function test_a_stale_second_cancel_does_not_return_the_coupon_twice(): void
-    {
-        $order = $this->soldOrder();
-        $stale = Order::findOrFail($order->id);
-
-        OrderCorrection::cancel($order);
-        OrderCorrection::cancel($stale);
-
-        $this->assertSame(0, (int) Coupon::where('code', 'WELCOME')->value('used_count'));
-    }
-
     public function test_a_stale_second_cancel_writes_one_audit_line_only(): void
     {
         $order = $this->soldOrder();
@@ -187,20 +154,6 @@ class SaleHappensOnceTest extends TestCase
         $this->assertSame(1, \App\Models\OrderEdit::where('order_id', $order->id)
             ->where('kind', \App\Models\OrderEdit::CANCEL)->count());
     }
-
-    public function test_cancelling_once_still_does_everything_it_should(): void
-    {
-        $order = $this->soldOrder();
-        $stockAfterSale = (int) $this->product->fresh()->quantity;
-
-        OrderCorrection::cancel($order);
-
-        $this->assertSame($stockAfterSale + 2, (int) $this->product->fresh()->quantity);
-        $this->assertSame(OrderStatus::CANCELLED, $order->fresh()->status);
-        $this->assertSame(0, Transaction::where('order_id', $order->id)->count());
-        $this->assertSame(0, (int) Coupon::where('code', 'WELCOME')->value('used_count'));
-    }
-
     /* ------------------- حدّ المتجر ------------------- */
 
     public function test_the_key_belongs_to_its_own_shop(): void

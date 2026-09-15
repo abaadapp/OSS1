@@ -3,7 +3,6 @@
 namespace Tests\Feature;
 
 use App\Models\Business;
-use App\Models\Plan;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -25,21 +24,6 @@ class PlatformPanelTest extends TestCase
     private Plan $plan;
 
     private \App\Models\Business $business;
-
-    protected function setUp(): void
-    {
-        parent::setUp();
-
-        $this->plan = Plan::create([
-            'name' => 'الباقة الأساسية', 'monthly_price' => 10, 'yearly_price' => 100,
-            'max_branches' => 1, 'max_employees' => 3, 'max_products' => 100,
-        ]);
-        $this->super = User::create([
-            'business_id' => null, 'name' => 'مدير المنصة', 'email' => 'super@eventplus.om',
-            'password' => bcrypt('password'), 'role' => 'super_admin', 'status' => 'نشط',
-        ]);
-        $this->business = \App\Models\Business::create(['name' => 'متجر الفحص', 'status' => 'نشط']);
-    }
     /* ------------------------------ الحراسة ------------------------------ */
 
     public static function writeRoutes(): array

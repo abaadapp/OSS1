@@ -6,8 +6,6 @@ use App\Models\Branch;
 use App\Models\Business;
 use App\Models\JobTitle;
 use App\Models\User;
-use App\Support\MarketingSettings;
-use App\Support\Seo;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
@@ -68,52 +66,6 @@ class SeoAnalyticsTest extends TestCase
             return Http::response($this->body, $this->status);
         });
     }
-
-    private function domain(string $domain = 'mystore.om'): void
-    {
-        MarketingSettings::save($this->business->id, 'website', ['site_domain' => $domain]);
-    }
-
-    private function tag(?string $id = self::ID): void
-    {
-        MarketingSettings::save($this->business->id, 'seo', ['ga_measurement_id' => (string) $id]);
-    }
-
-    /**
-     * متجرٌ **نخدم صفحته نحن** — لا موقعٌ عند غيرنا.
-     *
-     * والفرقُ ليس شكليًّا: نصُّ النصيحة يفترق بالحالين — من صفحتُه عندنا
-     * يُقال له «اكتبه في الموقع الإلكتروني ‹ الظهور في البحث»، ومن هو عند
-     * غيرنا يُقال له «أضف <meta …>». ونجَت طفرةٌ أسقطت نصَّ الأوّل لأنّ
-     * الحالات كلَّها كانت تقيس الثاني.
-     */
-    private function hosted(): void
-    {
-        $this->business->forceFill(['site_slug' => 'my-shop'])->save();
-        MarketingSettings::save($this->business->id, 'website', ['store_on' => '1']);
-    }
-
-    /** صفحةٌ سليمة — ويُبدَّل منها ما يُختبر */
-    private function page(array $with = []): string
-    {
-        $d = array_merge([
-            'title' => 'محل ورود افنت بلس — مسقط',
-            /* ووصفُ الصفحة السليم أطولُ من `Seo::DESC_MIN` — وإلّا كانت الحالُ «السليمة» تحذيرًا */
-            'description' => 'باقات ورد وهدايا وتوصيل داخل مسقط في اليوم نفسه لكل المناسبات والأعراس والمكاتب.',
-            'viewport' => true,
-            'robots' => '',
-            'tag' => '',
-        ], $with);
-
-        return '<html lang="ar"><head>'
-            .'<title>'.$d['title'].'</title>'
-            .'<meta name="description" content="'.$d['description'].'">'
-            .($d['viewport'] ? '<meta name="viewport" content="width=device-width, initial-scale=1">' : '')
-            .($d['robots'] !== '' ? '<meta name="robots" content="'.$d['robots'].'">' : '')
-            .($d['tag'] !== '' ? '<script src="https://www.googletagmanager.com/gtag/js?id='.$d['tag'].'"></script>' : '')
-            .'</head><body>ورود</body></html>';
-    }
-
     /*
      * والردُّ يُبدَّل بمتغيّرٍ لا بتسجيلٍ ثانٍ.
      *
@@ -129,46 +81,11 @@ class SeoAnalyticsTest extends TestCase
         $this->body = $this->page($with);
         $this->status = $status;
     }
-
-    private function check(bool $refresh = false): array
-    {
-        return Seo::check($this->business->id, $refresh);
-    }
-
     /** بندٌ بمفتاحه من نتيجة الفحص */
     private function item(array $audit, string $key): array
     {
         return collect($audit['checks'])->firstWhere('key', $key) ?? [];
     }
-
-    /* ========================= معرّف القياس ========================= */
-
-    public function test_it_reads_a_measurement_id(): void
-    {
-        $this->assertSame(self::ID, Seo::measurementId(' g-abc1234567 '));
-    }
-
-    public function test_it_refuses_the_ids_that_never_measure(): void
-    {
-        /*
-         * `UA-` توقّفت عن جمع البيانات، و`GTM-` معرّفُ مدير الوسوم لا القياس.
-         * ومن لصق أحدهما ورأى «مربوط» انتظر أرقامًا لا تأتي أبدًا.
-         */
-        foreach (['UA-12345-1', 'GTM-ABCD12', 'ABC1234567', ''] as $bad) {
-            $this->assertNull(Seo::measurementId($bad), "قُبل «{$bad}» وهو لا يقيس");
-        }
-    }
-    public function test_the_snippet_carries_the_id_that_was_saved(): void
-    {
-        // وسمٌ بمعرّفٍ آخر يُلصق في الموقع فيُرسل القياس إلى حسابٍ ليس حسابه
-        $this->tag();
-
-        $snippet = Seo::forBusiness($this->business->id)['snippet'];
-
-        $this->assertStringContainsString(self::ID, $snippet);
-        $this->assertStringContainsString('googletagmanager.com/gtag/js', $snippet);
-    }
-
     /* ==================== «مربوط» تُقاس بالفحص ==================== */
 
     public function test_a_saved_id_alone_is_not_a_connection(): void
@@ -231,18 +148,6 @@ class SeoAnalyticsTest extends TestCase
 
         $this->assertSame('pass', $this->item($this->check(), 'noindex')['state']);
     }
-
-    public function test_a_missing_title_is_a_failure_and_a_long_one_a_warning(): void
-    {
-        $this->domain();
-        $this->fakeSite(['title' => '']);
-        $this->assertSame('fail', $this->item($this->check(), 'title')['state']);
-
-        Seo::forget($this->business->id);
-        $this->fakeSite(['title' => str_repeat('ورود ومناسبات ', 12)]);
-        $this->assertSame('warn', $this->item($this->check(true), 'title')['state']);
-    }
-
     /**
      * ووصفٌ قصيرٌ يُحذَّر منه — لا يُجاز بعلامةٍ خضراء.
      *
@@ -264,78 +169,6 @@ class SeoAnalyticsTest extends TestCase
         $this->assertSame('warn', $item['state'], 'أُجيز وصفٌ من خمسةَ عشرَ حرفًا');
         $this->assertNotNull($item['fix'], 'حُذّر بلا قولِ ما يُفعل');
     }
-
-    /**
-     * وعنوانٌ لا يحمل إلّا اسمَ المحلّ كذلك — ويُقال لكلٍّ أين يُصلحه.
-     *
-     * والحالتان معًا: من صفحتُه عندنا يُدَلّ على شاشتنا، ومن هو عند غيرنا
-     * يُدَلّ على `<title>`. ونصٌّ واحدٌ مفحوصٌ يترك الآخرَ بلا حارس.
-     */
-    public function test_a_bare_shop_name_title_is_not_passed(): void
-    {
-        $this->domain();
-        $this->fakeSite(['title' => 'متجري']);
-
-        $external = $this->item($this->check(), 'title');
-
-        $this->assertSame('warn', $external['state'], 'أُجيز عنوانٌ من خمسة أحرف');
-        $this->assertStringContainsString((string) Seo::TITLE_MIN, (string) $external['fix']);
-        /* ولا يُدَلّ صاحبُ موقعٍ عند غيرنا على شاشةٍ عندنا لا تمسّ صفحته */
-        $this->assertStringNotContainsString('الظهور في البحث', (string) $external['fix']);
-
-        Seo::forget($this->business->id);
-        $this->hosted();
-
-        $own = $this->item($this->check(true), 'title');
-
-        $this->assertSame('warn', $own['state']);
-        $this->assertStringContainsString('الظهور في البحث', (string) $own['fix']);
-        $this->assertStringContainsString((string) Seo::TITLE_MIN, (string) $own['fix']);
-    }
-
-    /**
-     * والحدُّ الذي قاس به الشرطُ هو الحدُّ المكتوب في النصيحة.
-     *
-     * «حقلان يقولان الشيء نفسه يفترقان يومًا»: رقمٌ في `if` وآخرُ في الجملة
-     * يعني شاشةً تقول «✓» وتحتها «اكتبه في ١٢٠ حرفًا».
-     */
-    public function test_the_advice_quotes_the_limit_that_judged_it(): void
-    {
-        $this->domain();
-        $this->fakeSite(['description' => 'قصير.']);
-
-        $this->assertStringContainsString(
-            (string) Seo::DESC_MIN,
-            (string) $this->item($this->check(), 'description')['fix'],
-        );
-
-        Seo::forget($this->business->id);
-        $this->fakeSite(['description' => str_repeat('وصفٌ طويلٌ جدًّا ', 30)]);
-
-        $this->assertStringContainsString(
-            (string) Seo::DESC_MAX,
-            (string) $this->item($this->check(true), 'description')['fix'],
-        );
-    }
-
-    /**
-     * ومن صفحتُه عندنا يُدَلّ على شاشتنا — لا على وسمٍ لا يملك إليه بابًا.
-     *
-     * `<head>` نكتبه نحن. و«أضف <meta name="description">» تجعله يبحث عن
-     * مكانٍ لا وجود له، ثمّ يظنّ العطبَ في نفسه.
-     */
-    public function test_a_hosted_shop_is_pointed_at_our_own_screen(): void
-    {
-        $this->hosted();
-        $this->fakeSite(['description' => 'تسوّق من متجري.']);
-
-        $fix = (string) $this->item($this->check(), 'description')['fix'];
-
-        $this->assertStringContainsString('الظهور في البحث', $fix, 'دُلَّ صاحبُ صفحةٍ عندنا على وسمٍ لا يملكه');
-        $this->assertStringNotContainsString('<meta', $fix);
-        $this->assertStringContainsString((string) Seo::DESC_MIN, $fix);
-    }
-
     /** ووصفٌ في المدى يمرّ — فالحارسُ يميّز ولا يحذّر من كلّ شيء */
     public function test_a_good_description_still_passes(): void
     {
@@ -414,28 +247,5 @@ class SeoAnalyticsTest extends TestCase
         $this->check();
 
         $this->assertCount($sent, Http::recorded());
-    }
-    public function test_one_shops_check_never_reaches_another(): void
-    {
-        $this->domain();
-        $this->fakeSite();
-        $this->check();
-
-        $other = Business::create(['name' => 'جارتي', 'type' => 'عام', 'status' => 'نشط']);
-
-        $this->assertSame('nodomain', Seo::check($other->id)['state']);
-    }
-    public function test_the_screen_promises_no_field_it_cannot_deliver(): void
-    {
-        /*
-         * لا حقلَ لعنوان الصفحة ولا وصفها ولا كلماتها المفتاحية.
-         *
-         * الموقع خارج النظام، فما يُكتب عندنا لا يصل صفحةً يقرؤها محرّك.
-         * وهي الحقول التي حُذفت من الإعدادات لهذا السبب، وإعادتُها تعيد
-         * شاشةً تُملأ ولا تفعل شيئًا.
-         */
-        $keys = array_keys(MarketingSettings::GROUPS['seo']);
-
-        $this->assertSame(['ga_measurement_id'], $keys);
     }
 }

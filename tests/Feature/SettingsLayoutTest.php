@@ -52,7 +52,7 @@ class SettingsLayoutTest extends TestCase
     {
         $nav = $this->nav();
 
-        foreach (['business', 'website', 'finance', 'chart', 'templates'] as $key) {
+        foreach (['business', 'finance', 'chart', 'templates'] as $key) {
             $this->assertStringContainsString("key: '{$key}'", $nav, "بطاقة «{$key}» غائبة");
         }
     }
@@ -85,8 +85,8 @@ class SettingsLayoutTest extends TestCase
             "tab === 'finance'", 'vat_rate', 'tax_mode', 'symbol_pos', 'decimals', 'PAYMENT_METHODS',
             // الترقيم والورق → قوالب الفواتير
             'inv_prefix', 'inv_start',
-            // النطاق → الإعدادات في بطاقةٍ واحدة، والشعار → بيانات النشاط
-            "tab === 'website'", 'site_domain', 'site_on', 'pickLogo',
+            // والشعار → بيانات النشاط
+            'pickLogo',
         ];
 
         foreach ($moved as $needle) {
@@ -113,17 +113,6 @@ class SettingsLayoutTest extends TestCase
         foreach ($dead as $needle) {
             $this->assertStringNotContainsString($needle, $tsx, "«{$needle}» مقبضٌ لا يقرؤه شيء وما زال معروضًا");
         }
-    }
-    /* ------------------------- ما يصل من الخادم ------------------------- */
-
-    public function test_the_settings_page_carries_the_website_keys(): void
-    {
-        $props = $this->actingAs($this->owner)
-            ->get(route('admin.settings.index'))
-            ->assertOk()->viewData('page')['props'];
-
-        $this->assertArrayHasKey('site', $props, 'إعدادات الموقع لا تصل الشاشة');
-        $this->assertArrayHasKey('site_domain', $props['site']);
     }
 
     /** وشجرة الحسابات تُحسب لقسمها وحده — لا تُجرّ مع كل فتحةِ إعدادات */

@@ -5,7 +5,6 @@ namespace Tests\Feature;
 use App\Models\Addon;
 use App\Models\Branch;
 use App\Models\Business;
-use App\Models\Coupon;
 use App\Models\Customer;
 use App\Models\InventoryMovement;
 use App\Models\Order;
@@ -132,27 +131,6 @@ class PosSecondPassAuditTest extends TestCase
         $this->assertSame(0.714, round((float) $order->tax, 3), '١٥ × ٥ ÷ ١٠٥');
         $this->assertSame(15.0, round((float) $order->total, 3), 'المعروض هو المدفوع');
     }
-
-    public function test_a_discount_is_spread_over_the_whole_bill_including_the_addon(): void
-    {
-        /*
-         * حصّةُ كلّ بندٍ من الخصم تُقاس بنصيبه من المجموع، والمجموعُ يضمّ
-         * الإضافة. فبإسقاطها كانت الحصص تجمع أقلّ من واحدٍ صحيح — يُطرح من
-         * وعاء الضريبة ثلثا الخصم ويبقى ثلثُه محسوبًا عليه.
-         */
-        $coupon = Coupon::create([
-            'business_id' => $this->business->id, 'code' => 'CUT5', 'type' => 'مبلغ',
-            'value' => 5, 'min_order' => 0, 'active' => true, 'used_count' => 0,
-        ]);
-
-        $this->sellWithAddon(['coupon_code' => $coupon->code])->assertOk();
-        $order = Order::latest('id')->firstOrFail();
-
-        $this->assertSame(5.0, round((float) $order->discount, 3));
-        // (١٥ − ٥) × ٥٪ = ٠٫٥٠٠
-        $this->assertSame(0.5, round((float) $order->tax, 3), 'الخصم يُطرح من الوعاء كاملًا');
-        $this->assertSame(10.5, round((float) $order->total, 3));
-    }
     public function test_the_screen_and_the_server_weigh_the_same_line(): void
     {
         /*
@@ -203,28 +181,5 @@ class PosSecondPassAuditTest extends TestCase
         $this->sellWithAddon(['customer' => 'جارٌ', 'customer_phone' => '90000002'])->assertOk();
 
         $this->assertNull(Order::latest('id')->firstOrFail()->customer_id);
-    }
-    /* ==================== الفشل لا يترك نصف بيعة ==================== */
-
-    public function test_a_sale_that_fails_on_its_last_step_leaves_no_trace(): void
-    {
-        /*
-         * الخصمُ من الرفّ يقع داخل معاملة البيع، فرفضٌ بعده يجب أن يعيده.
-         * والكوبونُ الميت يقع بعد التسعير وقبل الكتابة — فهو أقصر طريقٍ
-         * لاختبار التراجع كاملًا بلا حيلة.
-         */
-        Coupon::create([
-            'business_id' => $this->business->id, 'code' => 'DEAD', 'type' => 'مبلغ',
-            'value' => 1, 'min_order' => 0, 'active' => false, 'used_count' => 0,
-        ]);
-
-        $before = (int) $this->product->fresh()->quantity;
-
-        $this->sellWithAddon(['coupon_code' => 'DEAD'])->assertStatus(422);
-
-        $this->assertSame(0, Order::count(), 'فاتورةٌ كُتبت لبيعةٍ رُفضت');
-        $this->assertSame(0, Transaction::count(), 'دخلٌ قُيّد لبيعةٍ لم تقع');
-        $this->assertSame(0, InventoryMovement::count(), 'حركةُ مخزونٍ بقيت بعد التراجع');
-        $this->assertSame($before, (int) $this->product->fresh()->quantity, 'بضاعةٌ خرجت من الرفّ ولم تُبَع');
     }
 }

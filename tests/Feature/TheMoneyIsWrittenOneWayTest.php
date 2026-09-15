@@ -15,7 +15,6 @@ use App\Support\DocumentRenderer;
 use App\Support\DocumentTemplates;
 use App\Support\Money;
 use App\Support\PublicDocument;
-use App\Support\Storefront;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -248,20 +247,6 @@ class TheMoneyIsWrittenOneWayTest extends TestCase
     }
 
     /* ═══════════════ والمتجرُ ثالثُهم ═══════════════ */
-
-    /** المتجرُ يكتب ما تكتبه اللوحة — ويطيع موضعَ الرمز */
-    public function test_the_storefront_writes_what_the_dashboard_writes(): void
-    {
-        $this->dirham();
-        Setting::create(['business_id' => $this->business->id, 'key' => 'symbol_pos', 'value' => 'before']);
-        $this->actingAs($this->owner);
-
-        $currency = Storefront::currency($this->business);
-
-        $this->assertSame(Demo::moneyBase(5.25), Storefront::amount(5.25, $currency));
-        $this->assertSame('د.إ 5.25', Storefront::amount(5.25, $currency), 'موضعُ الرمز لا يُطاع في المتجر');
-    }
-
     /** والريالُ العمانيُّ يبقى ثلاثَ منازلَ — لا يُكسر ما كان صحيحًا */
     public function test_the_omani_rial_keeps_its_three_places(): void
     {

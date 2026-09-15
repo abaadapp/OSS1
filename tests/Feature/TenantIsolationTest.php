@@ -7,10 +7,8 @@ use App\Models\Business;
 use App\Models\Customer;
 use App\Models\JobTitle;
 use App\Models\Order;
-use App\Models\Plan;
 use App\Models\Product;
 use App\Models\User;
-use App\Support\DemoStore;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -29,29 +27,6 @@ class TenantIsolationTest extends TestCase
     private User $mine;
 
     private Business $theirs;
-
-    protected function setUp(): void
-    {
-        parent::setUp();
-        app()->setLocale('ar');
-
-        Plan::updateOrCreate(['name' => 'الباقة الاحترافية'], [
-            'monthly_price' => 30, 'yearly_price' => 300,
-            'max_branches' => 3, 'max_employees' => 15, 'max_products' => 100000,
-        ]);
-
-        $mineBusiness = Business::create(['name' => 'متجري', 'type' => 'عام', 'status' => 'نشط']);
-        Branch::create(['business_id' => $mineBusiness->id, 'name' => 'الرئيسي']);
-        JobTitle::create(['business_id' => $mineBusiness->id, 'name' => 'مدير', 'role' => 'admin']);
-        $this->mine = User::create([
-            'business_id' => $mineBusiness->id, 'name' => 'أنا', 'email' => 'me@eventplusapp.om',
-            'password' => bcrypt('password'), 'role' => 'admin', 'status' => 'نشط',
-        ]);
-
-        // متجر الجار ممتلئ: لكلّ نوعٍ من الصفوف مثالٌ يُجرَّب عليه
-        $this->theirs = DemoStore::create('متجر الجار', 'صغير');
-    }
-
     /** صفٌّ من متجر الجار لكلّ شاشةٍ تحمل معرّفًا */
     public static function doors(): array
     {

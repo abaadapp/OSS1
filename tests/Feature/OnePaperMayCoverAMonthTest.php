@@ -12,13 +12,11 @@ use App\Models\Order;
 use App\Models\Product;
 use App\Models\Setting;
 use App\Models\User;
-use App\Models\WhatsAppMessage;
 use App\Support\CustomerInvoices;
 use App\Support\CustomerPayments;
 use App\Support\Ledger;
 use App\Support\OrderCorrection;
 use App\Support\Receivables;
-use App\Support\WhatsAppEvent;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use RuntimeException;
 use Tests\TestCase;
@@ -284,21 +282,6 @@ class OnePaperMayCoverAMonthTest extends TestCase
     }
 
     // ————— التذكيرُ المجدول —————
-
-    public function test_the_reminder_runs_by_itself(): void
-    {
-        $a = $this->sell(8);
-        $invoice = CustomerInvoices::consolidate($this->company, [$a->id], [], $this->owner->id);
-        $invoice->update(['due_at' => now()->subDays(5)->toDateString()]);
-        $this->company->update(['phone' => '99887766']);
-        Setting::create(['business_id' => $this->business->id, 'key' => 'wa_on_invoice_overdue', 'value' => '1']);
-
-        $this->artisan('invoices:remind')->assertSuccessful();
-
-        // متجرٌ لم يربط واتساب لا يُقيَّد له صفٌّ ولا تُستهلك حصّة
-        $this->assertSame(0, WhatsAppMessage::count());
-    }
-
     public function test_an_invoice_with_no_due_date_is_never_called_late(): void
     {
         $a = $this->sell(8);
@@ -308,13 +291,5 @@ class OnePaperMayCoverAMonthTest extends TestCase
         // بلا موعدٍ متّفقٍ عليه لا يُقال إنّه تأخّر
         $this->assertSame(0, $invoice->fresh()->daysOverdue());
         $this->artisan('invoices:remind')->assertSuccessful();
-    }
-
-    public function test_the_reminder_events_are_switchable_by_the_merchant(): void
-    {
-        // مفتاحان في «إشعارات واتساب» — قرارُ التاجر لا قرارُنا
-        $this->assertArrayHasKey(WhatsAppEvent::INVOICE_OVERDUE, WhatsAppEvent::SETTING_KEYS);
-        $this->assertArrayHasKey(WhatsAppEvent::INVOICE_DUE_SOON, WhatsAppEvent::SETTING_KEYS);
-        $this->assertContains(WhatsAppEvent::INVOICE_OVERDUE, WhatsAppEvent::ALL);
     }
 }

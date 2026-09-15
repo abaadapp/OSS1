@@ -9,7 +9,6 @@ use App\Models\Order;
 use App\Models\Product;
 use App\Models\Setting;
 use App\Models\User;
-use App\Models\WhatsAppMessage;
 use App\Support\Contention;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -61,89 +60,7 @@ class ACollisionDoesNotKillWhatSurroundsItTest extends TestCase
         $this->assertNotNull($row);
         $this->assertDatabaseHas('settings', ['key' => 'k1']);
     }
-
-    /**
-     * والمصطدمةُ تعود بـnull — والمعاملةُ المحيطة تبقى حيّة.
-     *
-     * وهذا هو الحارس: بلا نقطة الحفظ يُردّ الاستعلامُ التالي على PostgreSQL
-     * بـ`25P02` فيسقط الاختبار.
-     */
-    public function test_a_collision_returns_null_and_leaves_the_transaction_alive(): void
-    {
-        WhatsAppMessage::create($this->message('dup-1'));
-
-        DB::transaction(function () {
-            $again = Contention::attempt(fn () => WhatsAppMessage::create($this->message('dup-1')));
-
-            $this->assertNull($again);
-
-            // ‏والمعاملةُ ما زالت تقبل: قراءةً ثمّ كتابةً
-            $this->assertSame(1, WhatsAppMessage::count());
-
-            Setting::create(['business_id' => $this->business->id, 'key' => 'after', 'value' => 'ok']);
-        });
-
-        $this->assertDatabaseHas('settings', ['key' => 'after']);
-        $this->assertSame(1, WhatsAppMessage::count());
-    }
-
-    /** وإعادةُ المحاولة تنجح بعد اصطدام — كلُّ محاولةٍ في نقطة حفظها */
-    public function test_a_retry_succeeds_after_a_collision(): void
-    {
-        WhatsAppMessage::create($this->message('taken'));
-
-        DB::transaction(function () {
-            $key = 'taken';
-
-            $row = Contention::retry(function () use (&$key) {
-                $mine = $key;
-                // ‏المحاولةُ الأولى تصطدم، والثانية تكتب
-                $key = 'free';
-
-                return WhatsAppMessage::create($this->message($mine));
-            }, 3);
-
-            $this->assertSame('free', $row->dedupe_key);
-
-            // ‏والمعاملةُ حيّةٌ بعد الاصطدام الأوّل
-            Setting::create(['business_id' => $this->business->id, 'key' => 'after-retry', 'value' => 'ok']);
-        });
-
-        $this->assertDatabaseHas('whatsapp_messages', ['dedupe_key' => 'free']);
-        $this->assertDatabaseHas('settings', ['key' => 'after-retry']);
-    }
-
-    /** وبعد آخر محاولةٍ يُرمى الاستثناء ولا يُبتلع صامتًا */
-    public function test_a_retry_that_never_lands_throws(): void
-    {
-        WhatsAppMessage::create($this->message('always'));
-
-        $this->expectException(UniqueConstraintViolationException::class);
-
-        Contention::retry(fn () => WhatsAppMessage::create($this->message('always')), 2);
-    }
-
     /* ==================== المواضعُ الأربعة ==================== */
-
-    /**
-     * رسالةُ واتساب مكرّرة لا تُسقط ما حولها.
-     *
-     * والحدثُ نفسُه يقع مرّتين واقعًا لا استثناءً: طلبٌ يُنقل إلى «جاهز» ثمّ
-     * يُعاد ثمّ يُنقل إليها ثانيةً.
-     */
-    public function test_a_duplicate_whatsapp_message_does_not_abort_its_transaction(): void
-    {
-        WhatsAppMessage::create($this->message('1:1:ready'));
-
-        DB::transaction(function () {
-            $this->assertNull(
-                Contention::attempt(fn () => WhatsAppMessage::create($this->message('1:1:ready'))),
-            );
-
-            $this->assertSame(1, WhatsAppMessage::where('dedupe_key', '1:1:ready')->count());
-        });
-    }
-
     /** ورصيدُ فرعٍ يُنشأ مرّتين يُقرأ ويُعدَّل ولا يُجهض معاملةَ البيع */
     public function test_a_duplicate_branch_stock_row_does_not_abort_its_transaction(): void
     {

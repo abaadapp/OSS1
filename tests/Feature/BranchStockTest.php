@@ -73,19 +73,6 @@ class BranchStockTest extends TestCase
             'product_id' => $this->product->id, 'quantity' => $salalah,
         ]);
     }
-
-    /**
-     * الوقوف في فرع.
-     *
-     * صار الجهاز هو من يقرّر فرع نقطة البيع، فالجلسة وحدها لم تعد تكفي —
-     * وهذا بالضبط ما جاء التفعيل ليغلقه: فرعٌ يتبدّل من تبويبٍ آخر.
-     */
-    private function inBranch(Branch $branch): void
-    {
-        $this->actingAs($this->owner);
-        $this->activatePosDevice($this->business->id, $branch->id);
-        session(['current_branch' => $branch->id]);
-    }
     /* ------------------------- ما كان مكسورًا ------------------------- */
 
     public function test_a_branch_with_no_stock_cannot_sell_its_neighbours_goods(): void

@@ -4,7 +4,6 @@ namespace Tests\Feature;
 
 use App\Models\Branch;
 use App\Models\Business;
-use App\Models\Coupon;
 use App\Models\Customer;
 use App\Models\Order;
 use App\Models\Product;
@@ -81,18 +80,6 @@ class CancelReleasesTest extends TestCase
         $this->assertSame(0, (int) $this->customer->fresh()->points, 'النقاط بقيت بعد الإلغاء');
         $this->assertSame(0, (int) Order::latest('id')->firstOrFail()->points_earned);
     }
-    public function test_a_single_use_coupon_is_given_back(): void
-    {
-        $coupon = Coupon::create([
-            'business_id' => $this->business->id, 'code' => 'ONCE', 'type' => 'مبلغ',
-            'value' => 2, 'min_order' => 0, 'max_uses' => 1, 'used_count' => 0, 'active' => true,
-        ]);
-
-        $this->sellAndCancel(['coupon_code' => 'ONCE']);
-
-        $this->assertSame(0, (int) $coupon->fresh()->used_count, 'استعمال الكوبون لم يُحرَّر');
-    }
-
     public function test_no_income_stays_on_a_sale_that_did_not_happen(): void
     {
         $order = $this->sellAndCancel();

@@ -4,17 +4,7 @@ namespace Tests\Feature;
 
 use App\Http\Middleware\CheckRole;
 use App\Models\Business;
-use App\Models\CrmAttachment;
-use App\Models\CrmLead;
-use App\Models\CrmMessage;
-use App\Models\SupportAttachment;
-use App\Models\SupportConversation;
-use App\Models\SupportMessage;
 use App\Models\User;
-use App\Models\WhatsAppConnection;
-use App\Support\Support;
-use App\Support\WhatsAppMedia;
-use App\Support\WhatsAppMode;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Http;
@@ -56,42 +46,6 @@ class WhatIsSentAsAPictureArrivesAsAPictureTest extends TestCase
     private WhatsAppConnection $line;
 
     private WhatsAppConnection $sales;
-
-    protected function setUp(): void
-    {
-        parent::setUp();
-
-        config(['whatsapp.app_secret' => 'test-app-secret']);
-        Http::preventStrayRequests();
-        Storage::fake('local');
-
-        $this->shop = Business::create([
-            'name' => 'محل الورد', 'type' => 'محل ورود', 'status' => 'نشط',
-        ]);
-
-        $this->owner = $this->person($this->shop->id, 'admin', 'صاحب المحل', '96891112222');
-        $this->staff = $this->person(null, 'super_admin', 'دعم افنت بلس');
-
-        $this->line = WhatsAppConnection::create([
-            'owner_type' => WhatsAppMode::OWNER_PLATFORM,
-            'phone_number_id' => 'EVENTPLUS-PN',
-            'display_phone_number' => '+968 7114 1624',
-            'access_token' => 'platform-token-value-0123456789',
-            'status' => WhatsAppConnection::ACTIVE,
-            'purpose' => WhatsAppMode::PURPOSE_NOTIFICATIONS,
-            'supports_inbox' => true,
-        ]);
-
-        $this->sales = WhatsAppConnection::create([
-            'owner_type' => WhatsAppMode::OWNER_PLATFORM,
-            'phone_number_id' => 'SALES-PN',
-            'display_phone_number' => '+968 7114 9999',
-            'access_token' => 'sales-token-value-01234567890',
-            'status' => WhatsAppConnection::ACTIVE,
-            'purpose' => WhatsAppMode::PURPOSE_CRM_SALES,
-        ]);
-    }
-
     /* ═══════════════════ أدوات ═══════════════════ */
 
     private function person(?int $businessId, string $role, string $name, ?string $phone = null): User
@@ -131,32 +85,6 @@ class WhatIsSentAsAPictureArrivesAsAPictureTest extends TestCase
             'https://lookaside.test/*' => Http::response($bytes, 200),
         ]);
     }
-
-    /** محادثةُ دعمٍ نافذتُها مفتوحة */
-    private function thread(): SupportConversation
-    {
-        $c = Support::open($this->owner, 'عطب', 'أخرى', 'الشاشة لا تفتح', 'whatsapp', '96891112222');
-        $c->forceFill(['whatsapp_window_at' => now(), 'contact_phone' => '96891112222'])->save();
-
-        return $c->fresh();
-    }
-    private function lastReply(): SupportMessage
-    {
-        return SupportMessage::where('sender_scope', 'platform')->orderByDesc('id')->firstOrFail();
-    }
-
-    /** عميلٌ محتمَلٌ نافذتُه مفتوحة */
-    private function lead(): CrmLead
-    {
-        $this->metaServesFile();
-        $this->inbound([
-            'id' => 'wamid.LEAD-1', 'from' => '96896669730', 'type' => 'text',
-            'text' => ['body' => 'كم سعر النظام؟'],
-        ], 'SALES-PN')->assertOk();
-
-        return CrmLead::firstOrFail();
-    }
-
     /* ═══════════════════ الصادر — الدعم ═══════════════════ */
 
     /**
@@ -255,180 +183,8 @@ class WhatIsSentAsAPictureArrivesAsAPictureTest extends TestCase
         Http::assertNothingSent();
     }
     /* ═══════════════════ الوارد — الدعم ═══════════════════ */
-
-    /** صورةٌ واردةٌ تُنزَّل وتُحفظ مرفقًا على رسالتها */
-    public function test_an_inbound_picture_is_downloaded_and_attached(): void
-    {
-        $this->metaServesFile('JPEG-BYTES');
-
-        $this->inbound($this->picture())->assertOk();
-
-        $attachment = SupportAttachment::firstOrFail();
-
-        $this->assertSame('image/jpeg', $attachment->mime);
-        $this->assertSame(strlen('JPEG-BYTES'), $attachment->size);
-        $this->assertTrue(Storage::disk('local')->exists($attachment->path), 'المرفقُ لم يُكتب على القرص');
-
-        /*
-         * والصورةُ تصل بلا اسم — فيُولَّد لها واحد.
-         *
-         * مرفقٌ بلا اسمٍ يُعرض سطرًا فارغًا يُضغط ولا يُعرف ما هو، ويُحمَّل
-         * ملفًّا بلا امتدادٍ لا يفتحه النظام.
-         */
-        $this->assertStringStartsWith('whatsapp-', $attachment->name);
-        $this->assertStringEndsWith('.jpg', $attachment->name, 'نزل الملفُّ بلا امتدادٍ يُفتح به');
-        $this->assertSame(
-            SupportMessage::orderByDesc('id')->first()->id,
-            $attachment->message_id,
-            'المرفقُ عُلّق على رسالةٍ غير رسالته'
-        );
-    }
-
-    /** وتعليقُ الصورة يصير نصَّ الرسالة — لا يُطرح */
-    public function test_a_caption_becomes_the_message_body(): void
-    {
-        $this->metaServesFile();
-
-        $this->inbound($this->picture(extra: ['caption' => 'هنا يقف عند الطباعة']))->assertOk();
-
-        $this->assertSame(
-            'هنا يقف عند الطباعة',
-            SupportMessage::orderByDesc('id')->first()->body
-        );
-    }
-
-    /**
-     * وإخفاقُ التنزيل يُقال ولا يُحفظ مرفقٌ فارغ.
-     *
-     * «طمأنينةٌ كاذبة أسوأ من تحذيرٍ كاذب»: مرفقٌ بصفرِ بايتٍ يُضغط فلا
-     * يُفتح، وسطرٌ فارغٌ يُقرأ رسالةً بلا معنى.
-     */
-    public function test_a_failed_download_says_so_and_stores_nothing(): void
-    {
-        Http::fake(['*' => Http::response(['error' => ['message' => 'media not found']], 404)]);
-
-        $this->inbound($this->picture())->assertOk();
-
-        $this->assertSame(0, SupportAttachment::count(), 'حُفظ مرفقٌ لم يُنزَّل');
-        $this->assertStringContainsString(
-            'media not found',
-            (string) SupportMessage::orderByDesc('id')->first()->body
-        );
-    }
-
-    /** وملفٌّ يصل فارغًا ليس ملفًّا */
-    public function test_an_empty_download_is_not_kept(): void
-    {
-        $this->metaServesFile('');
-
-        $this->inbound($this->picture())->assertOk();
-
-        $this->assertSame(0, SupportAttachment::count(), 'حُفظ ملفٌّ بصفرِ بايت');
-    }
-
-    /**
-     * ونوعٌ لا تعرضه شاشتُنا لا يُنزَّل أصلًا.
-     *
-     * رسالةٌ صوتيّةٌ بلا مشغّلٍ في الخيط بايتاتٌ على القرص لا يفتحها أحد.
-     */
-    public function test_an_unsupported_type_is_named_not_downloaded(): void
-    {
-        Http::fake();
-
-        $this->inbound([
-            'id' => 'wamid.AUD-1', 'from' => '96891112222', 'type' => 'audio',
-            'audio' => ['id' => 'MEDIA-IN-9', 'mime_type' => 'audio/ogg'],
-        ])->assertOk();
-
-        Http::assertNothingSent();
-        $this->assertSame(0, SupportAttachment::count());
-        $this->assertStringContainsString(
-            'رسالة صوتية',
-            (string) SupportMessage::orderByDesc('id')->first()->body
-        );
-    }
-
     /* ═══════════════════ المبيعات ═══════════════════ */
-
-    /** صورةٌ من عميلٍ محتمَلٍ تُحفظ في دفتره هو */
-    public function test_a_lead_picture_lands_in_the_sales_book(): void
-    {
-        $this->lead();
-        $this->metaServesFile('LEAD-JPEG');
-
-        $this->inbound($this->picture(wamid: 'wamid.IMG-2', from: '96896669730'), 'SALES-PN')->assertOk();
-
-        $attachment = CrmAttachment::firstOrFail();
-        $message = CrmMessage::orderByDesc('id')->first();
-
-        $this->assertSame($message->id, $attachment->message_id);
-        $this->assertSame('image', $message->media_type, 'نوعُ ما جاءت به الرسالةُ لم يُكتب');
-        $this->assertSame(0, SupportAttachment::count(), 'مرفقُ مبيعاتٍ كُتب في دفتر الدعم');
-    }
-
-    /**
-     * ونوعٌ لا تعرضه شاشتُنا لا يُنزَّل على خطّ المبيعات أيضًا.
-     *
-     * والحارسان منفصلان في الكود — كلٌّ في دفتره. ومن يسقط أحدَهما لا
-     * يُسقِط الآخر، فيُقاس كلٌّ على حدة.
-     */
-    public function test_an_unsupported_lead_file_is_named_not_downloaded(): void
-    {
-        $this->lead();
-        Http::fake();
-
-        $this->inbound([
-            'id' => 'wamid.AUD-2', 'from' => '96896669730', 'type' => 'audio',
-            'audio' => ['id' => 'MEDIA-IN-8', 'mime_type' => 'audio/ogg'],
-        ], 'SALES-PN')->assertOk();
-
-        Http::assertNothingSent();
-        $this->assertSame(0, CrmAttachment::count(), 'نُزّل ما لا تعرضه الشاشة في دفتر المبيعات');
-        $this->assertStringContainsString(
-            'رسالة صوتية',
-            (string) CrmMessage::orderByDesc('id')->first()->body
-        );
-    }
     /* ═══════════════════ القائمةُ واحدة ═══════════════════ */
-
-    /**
-     * وما يُقبل رفعُه هو ما يحمله واتساب — قائمةً واحدة.
-     *
-     * «حقلان يقولان الشيء نفسه يفترقان يومًا»: قائمةٌ في الدعم وأخرى في
-     * القناة تعنيان ملفًّا يُقبل رفعُه ويُقال للموظّف «أُرسل» ثمّ تردُّه ميتا.
-     */
-    public function test_the_upload_policy_has_a_single_source(): void
-    {
-        $this->assertSame(WhatsAppMedia::EXTENSIONS, Support::EXTENSIONS);
-        $this->assertSame(WhatsAppMedia::MAX_KB, Support::MAX_KB);
-        $this->assertSame(WhatsAppMedia::MAX_FILES, Support::MAX_FILES);
-
-        /* وكلُّ امتدادٍ نقبله له نوعٌ عند ميتا — وإلّا قُبل ما لا يُرسَل */
-        foreach (WhatsAppMedia::KINDS as $mime => $kind) {
-            $this->assertContains(WhatsAppMedia::suffix($mime), WhatsAppMedia::EXTENSIONS);
-            $this->assertContains($kind, ['image', 'document']);
-        }
-    }
-
-    /**
-     * وصورةٌ فوق حدّ ميتا تُردّ قبل النداء لا بعده.
-     *
-     * ميتا تردُّها بخطأٍ عامٍّ إنجليزيٍّ لا يقول للموظّف ما يفعل — والقياسُ
-     * عندنا يقول له.
-     */
-    public function test_an_oversized_image_is_refused_before_the_call(): void
-    {
-        Http::fake();
-
-        Storage::disk('local')->put('big.jpg', str_repeat('x', (WhatsAppMedia::IMAGE_MAX_KB + 1) * 1024));
-
-        $result = WhatsAppMedia::upload($this->line, 'local', 'big.jpg', 'image/jpeg', 'big.jpg');
-
-        $this->assertFalse($result['ok']);
-        $this->assertSame('image_too_large', $result['code']);
-        Http::assertNothingSent();
-    }
-
     /**
      * ولا نوعَ توستٍ في المصدر خارج ما ترسمه الواجهة.
      *

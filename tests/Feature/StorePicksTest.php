@@ -9,7 +9,6 @@ use App\Models\JobTitle;
 use App\Models\Product;
 use App\Models\ProductVariant;
 use App\Models\User;
-use App\Support\MarketingSettings;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -30,30 +29,6 @@ class StorePicksTest extends TestCase
     private User $owner;
 
     private Product $bouquet;
-
-    protected function setUp(): void
-    {
-        parent::setUp();
-        app()->setLocale('ar');
-
-        $this->business = Business::create([
-            'name' => 'ورد الخوير', 'type' => 'محل ورود', 'status' => 'نشط', 'phone' => '91234567',
-        ]);
-        JobTitle::create(['business_id' => $this->business->id, 'name' => 'مدير', 'role' => 'admin']);
-
-        $this->owner = User::create([
-            'business_id' => $this->business->id, 'name' => 'المالك', 'email' => 'o@eventplus.om',
-            'password' => bcrypt('password'), 'role' => 'admin', 'status' => 'نشط',
-        ]);
-
-        $this->bouquet = Product::create([
-            'business_id' => $this->business->id, 'name' => 'بوكيه ورد',
-            'price' => 12.5, 'cost' => 5, 'quantity' => 10, 'active' => true,
-        ]);
-
-        $this->business->forceFill(['site_slug' => 'ward-alkhuwair'])->save();
-        MarketingSettings::save($this->business->id, 'website', ['store_on' => '1']);
-    }
     /* ------------------------------ ما يُعرض ------------------------------ */
 
     /**

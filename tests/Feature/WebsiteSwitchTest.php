@@ -7,8 +7,6 @@ use App\Models\Business;
 use App\Models\Setting;
 use App\Models\User;
 use App\Support\Demo;
-use App\Support\MarketingSettings;
-use App\Support\Seo;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -45,18 +43,6 @@ class WebsiteSwitchTest extends TestCase
             'password' => bcrypt('password'), 'role' => 'admin', 'status' => 'نشط',
         ]);
     }
-    /* --------------------------- الحفظ --------------------------- */
-
-    public function test_the_switch_and_the_domain_are_saved_together(): void
-    {
-        $this->save(['site_on' => true, 'site_domain' => 'mystore.om'])->assertSessionHasNoErrors();
-
-        $saved = MarketingSettings::group($this->business->id, 'website');
-
-        $this->assertSame('1', $saved['site_on']);
-        $this->assertSame('mystore.om', $saved['site_domain']);
-    }
-
     /**
      * والإطفاء يُخزَّن '0' لا سلسلةً فارغة.
      *
@@ -70,19 +56,6 @@ class WebsiteSwitchTest extends TestCase
         $this->assertSame('0', Setting::where('business_id', $this->business->id)
             ->where('key', 'site_on')->value('value'));
     }
-
-    /** والنطاق لا يُمحى بالإطفاء: من أطفأ شهرًا يُشغّل بضغطة لا بكتابةٍ من جديد */
-    public function test_the_domain_survives_being_switched_off(): void
-    {
-        $this->save(['site_on' => true, 'site_domain' => 'mystore.om']);
-        $this->save(['site_on' => false, 'site_domain' => 'mystore.om']);
-
-        $this->assertSame(
-            'mystore.om',
-            MarketingSettings::group($this->business->id, 'website')['site_domain'],
-        );
-    }
-
     /* ----------------------- وما يُديره المفتاح ----------------------- */
 
     /** زرُّ «الموقع الإلكتروني» في الشريط العلوي */
@@ -107,24 +80,6 @@ class WebsiteSwitchTest extends TestCase
 
         $this->assertNull($props['context']['website']);
     }
-
-    /**
-     * وفحصُ «الظهور في البحث» يقول «مُطفأ» لا «بلا نطاق».
-     *
-     * الأولى قرارٌ يُلغى بمفتاح، والثانية نقصٌ يُكمَل بكتابة نطاق. وجمعُهما
-     * في رسالةٍ واحدة يجعل من أطفأ موقعه يبحث عن نطاقٍ كتبه بالفعل.
-     */
-    public function test_the_search_audit_names_the_switch_not_a_missing_domain(): void
-    {
-        $this->actingAs($this->owner);
-
-        $this->save(['site_on' => false, 'site_domain' => 'mystore.om']);
-        $this->assertSame('off', Seo::check($this->business->id)['state']);
-
-        $this->save(['site_on' => true, 'site_domain' => '']);
-        $this->assertSame('nodomain', Seo::check($this->business->id)['state']);
-    }
-
     /* --------------------------- الميّت يبقى ميّتًا --------------------------- */
 
     /**

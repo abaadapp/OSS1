@@ -6,9 +6,7 @@ use App\Models\Branch;
 use App\Models\Business;
 use App\Models\JobTitle;
 use App\Models\Order;
-use App\Models\PosDevice;
 use App\Models\User;
-use App\Support\PosTerminal;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
 use Tests\TestCase;
@@ -79,27 +77,6 @@ class PosDeviceTest extends TestCase
         }
 
         return $u;
-    }
-
-    /** يفعّل جهازًا مباشرةً ويُرجع [الجهاز، الرمز الخام] */
-    private function device(Branch $branch, string $name = 'كاشير 01'): array
-    {
-        $raw = Str::random(64);
-        $device = PosDevice::create([
-            'business_id' => $branch->business_id,
-            'branch_id' => $branch->id,
-            'name' => $name,
-            'token_hash' => hash('sha256', $raw),
-            'status' => PosDevice::ACTIVE,
-            'activated_at' => now(),
-        ]);
-
-        return [$device, $raw];
-    }
-
-    private function onDevice(PosDevice $device, string $raw): self
-    {
-        return $this->withCookie(PosTerminal::COOKIE, $device->id.'|'.$raw);
     }
     /* ------------------------- لا باب إلا واحد ------------------------- */
 

@@ -6,7 +6,6 @@ use App\Models\Branch;
 use App\Models\Business;
 use App\Models\Customer;
 use App\Models\User;
-use App\Support\PosTerminal;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -93,24 +92,6 @@ class FiredEmployeeStopsWorkingTest extends TestCase
             ->assertSessionHasErrors();
         $this->assertGuest();
     }
-
-    /** ولا يبيع على صندوقٍ مفعَّل: الجلسة تُقطع عند حارس الطلب */
-    public function test_a_deleted_employee_cannot_sell_on_an_active_register(): void
-    {
-        $branch = Branch::where('business_id', $this->business->id)->first();
-        $owner = User::create([
-            'business_id' => $this->business->id, 'name' => 'المالك', 'email' => 'o@eventplus.om',
-            'password' => bcrypt('password'), 'role' => 'admin', 'status' => 'نشط',
-        ]);
-        PosTerminal::activate($branch, 'صندوق', $owner->id);
-
-        $this->employee->delete();
-
-        $this->post(route('login.attempt'), ['email' => 'e@eventplus.om', 'password' => 'password'])
-            ->assertSessionHasErrors();
-        $this->assertGuest();
-    }
-
     /** والحيّ يبقى حيًّا — لئلا يُقرأ الإغلاق إغلاقًا على الجميع */
     public function test_an_employee_who_was_never_deleted_still_works(): void
     {

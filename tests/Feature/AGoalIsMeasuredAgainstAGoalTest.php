@@ -8,12 +8,7 @@ use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\Product;
 use App\Models\User;
-use App\Models\Website;
-use App\Models\WebsitePage;
-use App\Models\WebsiteSection;
 use App\Support\Demo;
-use App\Support\Website\Builder;
-use App\Support\Website\Preview;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -232,39 +227,6 @@ class AGoalIsMeasuredAgainstAGoalTest extends TestCase
         $this->assertSame(25.0, $row['target_pct']);
         $this->assertSame(200.0, $row['target']);
     }
-
-    /* ═══════════════════ والأكثرُ مبيعًا يُقاس على بيع ═══════════════════ */
-
-    private function site(): Website
-    {
-        Category::create(['business_id' => $this->bid(), 'name' => 'باقات']);
-
-        return Builder::create($this->business, 'store', 'modern', $this->owner->id);
-    }
-
-    /** قسمُ «الأكثر مبيعًا» على الصفحة الأولى — يُنشأ إن لم يكن */
-    private function bestSection(Website $site, int $limit = 5, int $days = 90): void
-    {
-        /** @var WebsitePage $home */
-        $home = $site->homePage();
-
-        $section = WebsiteSection::where('website_id', $site->id)
-            ->where('type', 'best_sellers')->first();
-
-        if ($section) {
-            $section->update(['visible' => true, 'data' => ['limit' => $limit, 'days' => $days]]);
-
-            return;
-        }
-
-        WebsiteSection::create([
-            'website_id' => $site->id, 'business_id' => $this->bid(),
-            'page_id' => $home->id, 'slot' => null, 'type' => 'best_sellers',
-            'position' => 99, 'visible' => true,
-            'data' => ['limit' => $limit, 'days' => $days],
-        ]);
-    }
-
     /** بندٌ في طلب — بكمّيته */
     private function line(Order $order, Product $p, int $qty): void
     {
@@ -274,13 +236,6 @@ class AGoalIsMeasuredAgainstAGoalTest extends TestCase
             'total' => $p->price * $qty,
         ]);
     }
-
-    /** @return array<int, string> أسماءُ «الأكثر مبيعًا» بترتيبها */
-    private function best(Website $site): array
-    {
-        return array_column(Preview::document($site->fresh())['data']['best'], 'name');
-    }
-
     public function test_a_cancelled_order_does_not_make_a_best_seller(): void
     {
         $site = $this->site();

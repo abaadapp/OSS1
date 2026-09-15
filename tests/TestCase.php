@@ -72,30 +72,4 @@ abstract class TestCase extends BaseTestCase
 
         return $invoices->count();
     }
-
-    /**
-     * جهاز نقطة بيع مفعَّل على هذا المتصفّح.
-     *
-     * صار البيع يتطلّبه: الجهاز هو من يعرف الفرع، وبلا تفعيل يعود الفرع إلى
-     * جلسة المتصفّح — وهو العطب الذي جاء التفعيل ليغلقه. وهو في أكثر
-     * الاختبارات شرطُ السيناريو لا موضوعُه، فيُهيَّأ هنا في سطر.
-     */
-    protected function activatePosDevice(int $businessId, ?int $branchId = null): \App\Models\PosDevice
-    {
-        $raw = \Illuminate\Support\Str::random(64);
-
-        $device = \App\Models\PosDevice::create([
-            'business_id' => $businessId,
-            'branch_id' => $branchId ?? Branch::where('business_id', $businessId)->orderBy('id')->value('id'),
-            'name' => 'كاشير الاختبار',
-            'token_hash' => hash('sha256', $raw),
-            'status' => \App\Models\PosDevice::ACTIVE,
-            'activated_at' => now(),
-        ]);
-
-        $this->withCookie(\App\Support\PosTerminal::COOKIE, $device->id.'|'.$raw);
-
-        return $device;
-    }
-
 }

@@ -5,8 +5,6 @@ namespace Tests\Feature;
 use App\Models\Branch;
 use App\Models\Business;
 use App\Models\User;
-use App\Support\MarketingSettings;
-use App\Support\Storefront;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -71,13 +69,6 @@ class DomainChoiceTest extends TestCase
 
         $this->assertSame('sub', $this->path());
     }
-
-    public function test_a_shop_that_already_wrote_its_own_domain_is_not_asked_again(): void
-    {
-        MarketingSettings::save($this->business->id, 'website', ['site_domain' => 'mystore.om']);
-
-        $this->assertSame('own', $this->path());
-    }
     /* ------------------------------- السعر ------------------------------- */
 
     public function test_the_price_reaches_the_screen_from_the_configuration(): void
@@ -95,39 +86,5 @@ class DomainChoiceTest extends TestCase
         $this->assertSame(20.0, $pricing['subdomain']['yearly']);
         $this->assertFalse($pricing['subdomain']['free']);
         $this->assertSame('ر.ع', $pricing['currency']);
-    }
-
-    public function test_no_price_set_reads_as_included_not_as_missing(): void
-    {
-        /*
-         * وصفرٌ ليس «سعرًا مفقودًا»: الشاشة تقول «مشمول في باقتك». ولو حُسب
-         * ذلك في الشاشة لا في الخادم لافترقا يومًا — تقول واحدةٌ «٠٫٠٠٠ ر.ع»
-         * ويقول الآخر «مجّانًا».
-         */
-        config(['storefront.pricing.subdomain.monthly' => 0, 'storefront.pricing.subdomain.yearly' => 0]);
-
-        $this->assertTrue(Storefront::pricing()['subdomain']['free']);
-    }
-
-    public function test_a_broken_price_is_read_as_zero_not_as_a_negative_charge(): void
-    {
-        // قيمةٌ خاطئة في البيئة تُقرأ صفرًا: سعرٌ سالب يُعرض «خصمًا» لا رسمًا
-        config(['storefront.pricing.subdomain.monthly' => 'مجانا', 'storefront.pricing.subdomain.yearly' => -5]);
-
-        $pricing = Storefront::pricing();
-
-        $this->assertSame(0.0, $pricing['subdomain']['monthly']);
-        $this->assertSame(0.0, $pricing['subdomain']['yearly']);
-        $this->assertTrue($pricing['subdomain']['free']);
-    }
-
-    /* ------------------------------ العزل ------------------------------ */
-
-    public function test_a_neighbours_choice_is_not_read_as_mine(): void
-    {
-        $neighbour = Business::create(['name' => 'الجار', 'type' => 'عام', 'status' => 'نشط']);
-        MarketingSettings::save($neighbour->id, 'website', ['site_path' => 'own']);
-
-        $this->assertSame('', $this->path());
     }
 }

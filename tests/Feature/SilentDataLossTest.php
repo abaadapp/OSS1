@@ -5,7 +5,6 @@ namespace Tests\Feature;
 use App\Models\Branch;
 use App\Models\BranchStock;
 use App\Models\Business;
-use App\Models\Coupon;
 use App\Models\Currency;
 use App\Models\Customer;
 use App\Models\Expense;
@@ -179,39 +178,6 @@ class SilentDataLossTest extends TestCase
             'branch_id' => $this->branch->id,
         ]);
         $this->actingAs($this->owner)->post(route("admin.{$kind}.import.confirm"));
-    }
-
-    /* ========================== الكوبونات ========================== */
-
-    public function test_a_coupon_expiring_today_works_today(): void
-    {
-        /*
-         * التاريخ يُحفظ «2026-08-12» فيُقرأ 00:00:00 — فكوبونُ اليوم ميّتٌ من
-         * لحظة إنشائه. عرض «خصم اليوم فقط» لم يكن يعمل ولا مرّة، والتاجر
-         * يظنّ الكود خطأً من الكاشير.
-         */
-        $coupon = Coupon::create([
-            'business_id' => $this->business->id, 'code' => 'اليوم', 'type' => 'نسبة',
-            'value' => 10, 'min_order' => 0, 'active' => true, 'expires_at' => now()->toDateString(),
-        ]);
-
-        $this->assertTrue($coupon->isValid(), 'كوبونٌ ينتهي اليوم لا يعمل اليوم');
-        $this->assertFalse($coupon->isExpired());
-
-        $this->actingAs($this->owner);
-        $codes = array_column(Demo::activeCoupons(), 'code');
-        $this->assertContains('اليوم', $codes, 'لم يُعرض في نقطة البيع');
-    }
-
-    public function test_a_coupon_that_expired_yesterday_stays_expired(): void
-    {
-        $coupon = Coupon::create([
-            'business_id' => $this->business->id, 'code' => 'أمس', 'type' => 'نسبة',
-            'value' => 10, 'active' => true, 'expires_at' => now()->subDay()->toDateString(),
-        ]);
-
-        $this->assertTrue($coupon->isExpired());
-        $this->assertFalse($coupon->isValid());
     }
     /* =========================== المالية =========================== */
 

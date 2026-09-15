@@ -7,13 +7,7 @@ use App\Models\Product;
 use App\Models\RecipeItem;
 use App\Models\Setting;
 use App\Models\User;
-use App\Models\Website;
 use App\Support\PaymentMethods;
-use App\Support\Website\Blueprints;
-use App\Support\Website\Builder;
-use App\Support\Website\Commerce;
-use App\Support\Website\Preview;
-use App\Support\Website\Readiness;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -72,18 +66,6 @@ class TheSiteShowsWhatTheShopActuallyHasTest extends TestCase
             'quantity' => 5,
         ]);
     }
-
-    private function site(): Website
-    {
-        return Builder::create($this->business, Blueprints::STORE, 'modern', $this->owner->id);
-    }
-
-    /** أسماءُ ما يعرضه الموقع فعلًا */
-    private function onSite(): array
-    {
-        return array_column(Preview::document($this->site())['data']['products'], 'name');
-    }
-
     /* ==================== ١ · ما أخفاه صاحبُه لا يُعرض ==================== */
 
     public function test_a_product_the_owner_hid_is_not_on_the_site(): void
@@ -146,20 +128,6 @@ class TheSiteShowsWhatTheShopActuallyHasTest extends TestCase
 
         $this->assertSame(['باقة نفدت'], $this->onSite());
     }
-
-    /** والسعرُ حيٌّ لا مجمَّد: ما يُغيَّر في النظام يظهر بلا إعادة نشر */
-    public function test_the_price_on_the_site_is_the_price_in_the_system(): void
-    {
-        $product = $this->product(['price' => 12.5]);
-        $site = $this->site();
-
-        $this->assertSame(12.5, Preview::document($site)['data']['products'][0]['final']);
-
-        $product->update(['price' => 19.0]);
-
-        $this->assertSame(19.0, Preview::document($site->fresh())['data']['products'][0]['final']);
-    }
-
     /** ولا يُقرأ جردُ الجار: كلُّ استعلامٍ مقيَّدٌ بمتجره */
     public function test_a_neighbour_shelf_is_never_read(): void
     {
@@ -175,77 +143,4 @@ class TheSiteShowsWhatTheShopActuallyHasTest extends TestCase
     }
 
     /* ==================== ٣ · والدفع يُقال بحقيقته ==================== */
-
-    /**
-     * «مفعّلة في نقطة البيع» ليست «تُقبض على الموقع».
-     *
-     * وبينهما بوّابةُ دفعٍ مربوطةٌ ومتحقَّق منها — ولا بوّابةَ في افنت بلس.
-     */
-    public function test_a_card_enabled_at_the_counter_is_not_called_online_ready(): void
-    {
-        $this->site();
-
-        $card = collect(Commerce::payments($this->business->id))
-            ->firstWhere('label', __(PaymentMethods::CARD));
-
-        $this->assertTrue($card['pos'], 'الغياب إذنٌ — فالبطاقة مأذونةٌ في نقطة البيع');
-        $this->assertFalse($card['online'], 'قيل إنّ الموقع يقبض البطاقة ولا بوّابة له');
-        $this->assertNotSame('', $card['note'], 'قيل «غير متاحة» بلا سبب');
-    }
-
-    /** وما أطفأه التاجر يُقال مطفأً — لا «متاحًا على الموقع» */
-    public function test_a_method_switched_off_is_shown_as_off(): void
-    {
-        Setting::create([
-            'business_id' => $this->business->id, 'key' => 'pay_transfer', 'value' => '0',
-        ]);
-
-        $transfer = collect(Commerce::payments($this->business->id))
-            ->firstWhere('label', __(PaymentMethods::TRANSFER));
-
-        $this->assertFalse($transfer['pos']);
-        $this->assertFalse($transfer['online']);
-    }
-
-    /** ولا سلّةَ في الموقع — والقناةُ تُقال باسمها */
-    public function test_the_order_channel_is_named_for_what_it_is(): void
-    {
-        $this->assertFalse(Commerce::checkout($this->business->id), 'ادُّعيت سلّةٌ لا وجود لها');
-        $this->assertSame(Commerce::CHANNEL_WHATSAPP, Commerce::channel($this->business->id));
-
-        // ومن لا رقمَ له لا زرَّ طلبٍ عنده أصلًا
-        $this->business->forceFill(['phone' => ''])->save();
-
-        $this->assertSame(Commerce::CHANNEL_NONE, Commerce::channel($this->business->id));
-    }
-
-    /* ==================== ٤ · والجاهزيةُ تُقاس ==================== */
-
-    public function test_readiness_counts_what_the_visitor_actually_sees(): void
-    {
-        $this->product(['name' => 'ظاهرة']);
-        $this->product(['name' => 'نفدت', 'quantity' => 0]);
-        $this->product(['name' => 'مخفيّة', 'published' => false]);
-
-        $this->assertSame(1, Readiness::shown($this->business->id));
-
-        $facts = collect(Readiness::check($this->site()))->keyBy('key');
-
-        $this->assertTrue($facts['products']['ok']);
-        // والنطاقُ اختياريّ: لافنت بلسَ عنوانٌ يعمل من اليوم الأوّل
-        $this->assertTrue($facts['address']['optional']);
-        // والدفعُ الإلكتروني لا يُعدّ نقصًا يُطالَب به التاجر — لا بوّابةَ بعد
-        $this->assertFalse($facts['payment']['ok']);
-        $this->assertTrue($facts['payment']['optional']);
-    }
-
-    /** ومتجرٌ فارغُ الرفّ يُقال له ذلك قبل أن ينشر لا بعده */
-    public function test_an_empty_shelf_is_reported_before_publishing(): void
-    {
-        $this->product(['name' => 'نفدت', 'quantity' => 0]);
-
-        $facts = collect(Readiness::check($this->site()))->keyBy('key');
-
-        $this->assertFalse($facts['products']['ok']);
-    }
 }

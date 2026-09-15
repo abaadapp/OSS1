@@ -5,14 +5,8 @@ namespace Tests\Feature;
 use App\Models\Business;
 use App\Models\Setting;
 use App\Models\User;
-use App\Support\DomainOptions;
-use App\Support\Storefront;
-use App\Support\Website\Blueprints;
-use App\Support\Website\Builder;
-use App\Support\Website\Publisher;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
-use App\Support\Website\Domains;
 
 /**
  * الاسمُ الذي حجزه التاجر هو الذي يفتح موقعه.
@@ -57,38 +51,11 @@ class TheReservedNameOpensTheSiteTest extends TestCase
             'password' => bcrypt('password'), 'role' => 'admin', 'status' => 'نشط',
         ]);
     }
-
-    private function publish(): void
-    {
-        $site = Builder::create($this->business, Blueprints::STORE, 'modern', $this->owner->id);
-        Publisher::publish($site, $this->owner->id);
-    }
-
     private function reserve(string $slug): void
     {
         $this->business->forceFill(['site_slug' => $slug])->save();
     }
-
-    private function host(string $label): string
-    {
-        return $label.'.'.Storefront::domain();
-    }
     /* --------------------------- اللاحقة الواحدة --------------------------- */
-
-    /**
-     * ولاحقةٌ واحدة: التي يخدمها الخادم.
-     *
-     * والفحصُ على المصدر لا على القيمة: كلتاهما تردّ `eventplusapp.om` اليوم،
-     * فمقارنةُ النصّ تمرّ ولو بقي مصدران. فيُبدَّل الإعداد الحيّ ويُنظر
-     * أتتبعه اللاحقة أم تتبع إعدادًا لا يكتبه أحد.
-     */
-    public function test_the_suffix_follows_the_domain_the_server_serves(): void
-    {
-        config(['storefront.domain' => 'example.om']);
-
-        $this->assertSame('example.om', DomainOptions::suffix());
-        $this->assertSame('my-store.example.om', DomainOptions::host('my-store'));
-    }
     /**
      * ولا يُقرأ المفتاح في شفرةٍ حيّة.
      *

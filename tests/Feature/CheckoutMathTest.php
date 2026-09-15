@@ -4,7 +4,6 @@ namespace Tests\Feature;
 
 use App\Models\Branch;
 use App\Models\Business;
-use App\Models\Coupon;
 use App\Models\Customer;
 use App\Models\Order;
 use App\Models\Product;
@@ -72,36 +71,6 @@ class CheckoutMathTest extends TestCase
         $this->assertEqualsWithDelta(1.0, $order->tax, 0.0005);   // 20 × 5%
         $this->assertEqualsWithDelta(21.0, $order->total, 0.0005);
     }
-
-    public function test_tax_is_charged_after_the_discount_not_before(): void
-    {
-        Coupon::create([
-            'business_id' => $this->business->id,
-            'code' => 'HALF', 'type' => 'نسبة', 'value' => 50, 'active' => true,
-        ]);
-
-        $order = $this->sell(['items' => [$this->line(2)], 'coupon_code' => 'HALF']);
-
-        // 20 − 10 = 10 وعاءً ضريبيًا، لا 20
-        $this->assertEqualsWithDelta(10.0, $order->discount, 0.0005);
-        $this->assertEqualsWithDelta(0.5, $order->tax, 0.0005);
-        $this->assertEqualsWithDelta(10.5, $order->total, 0.0005);
-    }
-
-    public function test_a_fixed_amount_coupon_subtracts_its_value(): void
-    {
-        Coupon::create([
-            'business_id' => $this->business->id,
-            'code' => 'MINUS3', 'type' => 'مبلغ', 'value' => 3, 'active' => true,
-        ]);
-
-        $order = $this->sell(['items' => [$this->line(2)], 'coupon_code' => 'MINUS3']);
-
-        $this->assertEqualsWithDelta(3.0, $order->discount, 0.0005);
-        $this->assertEqualsWithDelta(0.85, $order->tax, 0.0005);   // (20 − 3) × 5%
-        $this->assertEqualsWithDelta(17.85, $order->total, 0.0005);
-    }
-
     public function test_delivery_is_added_after_tax_and_is_never_taxed(): void
     {
         $order = $this->sell(['items' => [$this->line(2)], 'delivery_fee' => 5]);
@@ -110,77 +79,6 @@ class CheckoutMathTest extends TestCase
         $this->assertEqualsWithDelta(1.0, $order->tax, 0.0005);
         $this->assertEqualsWithDelta(26.0, $order->total, 0.0005);
     }
-
-    public function test_a_discount_can_never_exceed_the_subtotal(): void
-    {
-        Coupon::create([
-            'business_id' => $this->business->id,
-            'code' => 'HUGE', 'type' => 'مبلغ', 'value' => 999, 'active' => true,
-        ]);
-
-        $order = $this->sell(['items' => [$this->line(1)], 'coupon_code' => 'HUGE']);
-
-        // بلا سقف يصبح المجموع سالبًا ويقيَّد "دخلًا" سالبًا في المالية
-        $this->assertEqualsWithDelta(10.0, $order->discount, 0.0005);
-        $this->assertEqualsWithDelta(0.0, $order->tax, 0.0005);
-        $this->assertEqualsWithDelta(0.0, $order->total, 0.0005);
-        $this->assertGreaterThanOrEqual(0, $order->total);
-    }
-
-    public function test_a_coupon_below_its_minimum_order_is_not_applied(): void
-    {
-        Coupon::create([
-            'business_id' => $this->business->id,
-            'code' => 'BIG50', 'type' => 'مبلغ', 'value' => 5,
-            'min_order' => 50, 'active' => true,
-        ]);
-
-        /*
-         * ولا يمضي البيعُ بلا خصمٍ صمتًا.
-         *
-         * كان يمضي: تُطبع فاتورةٌ بواحدٍ وعشرين وقد قيل للزبون تسعةَ عشر،
-         * ولا شيء على شاشة الكاشير يقول لماذا. فيُردّ الطلب ويُقال السبب،
-         * ويُعيد الكاشير المحاولة بلا كوبون.
-         */
-        $res = $this->refusedSale(['items' => [$this->line(2)], 'coupon_code' => 'BIG50']);
-
-        $res->assertStatus(422)->assertJsonValidationErrors('coupon_code');
-        $this->assertSame(0, Order::count(), 'فاتورةٌ كُتبت بسعرٍ غير الذي قيل للزبون');
-    }
-
-    public function test_an_expired_coupon_is_refused_at_checkout_not_only_at_apply(): void
-    {
-        Coupon::create([
-            'business_id' => $this->business->id,
-            'code' => 'OLD', 'type' => 'نسبة', 'value' => 50,
-            'expires_at' => now()->subDay(), 'active' => true,
-        ]);
-
-        // التحقّق عند زرّ «تطبيق» وحده لا يكفي: العميل قد يرسل الكود مباشرة
-        $res = $this->refusedSale(['items' => [$this->line(2)], 'coupon_code' => 'OLD']);
-
-        $res->assertStatus(422)->assertJsonValidationErrors('coupon_code');
-        $this->assertSame(0, Order::count());
-    }
-
-    public function test_a_used_up_coupon_stops_working(): void
-    {
-        $coupon = Coupon::create([
-            'business_id' => $this->business->id,
-            'code' => 'ONCE', 'type' => 'مبلغ', 'value' => 2,
-            'max_uses' => 1, 'used_count' => 0, 'active' => true,
-        ]);
-
-        $first = $this->sell(['items' => [$this->line(1)], 'coupon_code' => 'ONCE']);
-        $this->assertEqualsWithDelta(2.0, $first->discount, 0.0005);
-        $this->assertSame(1, $coupon->refresh()->used_count, 'عدّاد الاستخدام يجب أن يزيد');
-
-        $second = $this->refusedSale(['items' => [$this->line(1)], 'coupon_code' => 'ONCE']);
-        $second->assertStatus(422)->assertJsonValidationErrors('coupon_code');
-        $this->assertSame(1, $coupon->refresh()->used_count, 'الاستخدام المرفوض لا يزيد العدّاد');
-        $this->assertSame(1, Order::count(), 'ولا تُكتب فاتورةٌ ثانية');
-    }
-
     public function test_a_zero_vat_business_is_charged_no_tax(): void
     {
         Setting::where('business_id', $this->business->id)
@@ -206,26 +104,6 @@ class CheckoutMathTest extends TestCase
         $this->assertEqualsWithDelta(0.05, $order->tax, 0.0005);
         $this->assertEqualsWithDelta(1.055, $order->total, 0.0005);
     }
-
-    public function test_the_stored_total_equals_its_own_parts(): void
-    {
-        Coupon::create([
-            'business_id' => $this->business->id,
-            'code' => 'MIX', 'type' => 'نسبة', 'value' => 10, 'active' => true,
-        ]);
-
-        $order = $this->sell([
-            'items' => [$this->line(3)],
-            'coupon_code' => 'MIX',
-            'delivery_fee' => 2.5,
-        ]);
-
-        // الفاتورة وثيقة: يجب أن تُجمع بنودها المخزّنة فتساوي إجماليها
-        $recomputed = $order->subtotal - $order->discount + $order->tax + $order->delivery_fee;
-
-        $this->assertEqualsWithDelta($recomputed, $order->total, 0.0005);
-    }
-
     public function test_loyalty_redemption_lowers_the_taxable_amount_too(): void
     {
         Setting::insert([

@@ -38,33 +38,6 @@ class PosWithoutShiftsTest extends TestCase
     private User $cashier;
 
     private Product $product;
-
-    protected function setUp(): void
-    {
-        parent::setUp();
-
-        $this->business = Business::create(['name' => 'متجري', 'type' => 'عام', 'status' => 'نشط']);
-        $this->branch = Branch::create(['business_id' => $this->business->id, 'name' => 'الرئيسي']);
-        Currency::create([
-            'business_id' => $this->business->id, 'code' => 'OMR', 'name' => 'ريال عماني',
-            'symbol' => 'ر.ع', 'rate' => 1, 'is_base' => true, 'active' => true,
-        ]);
-
-        $this->owner = User::create([
-            'business_id' => $this->business->id, 'name' => 'صاحب النشاط', 'email' => 'o@eventplus.om',
-            'password' => bcrypt('password'), 'role' => 'admin', 'status' => 'نشط',
-        ]);
-        $this->cashier = User::create([
-            'business_id' => $this->business->id, 'name' => 'أحمد', 'email' => 'c@eventplus.om',
-            'password' => bcrypt('password'), 'role' => 'cashier', 'status' => 'نشط',
-        ]);
-        $this->product = Product::create([
-            'business_id' => $this->business->id, 'name' => 'باقة ورد',
-            'price' => 10, 'cost' => 4, 'quantity' => 50, 'alert_qty' => 2, 'active' => true,
-        ]);
-
-        $this->activatePosDevice($this->business->id);
-    }
     /* ------------------------- الشاشات كلّها ------------------------- */
 
     /**

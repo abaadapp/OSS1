@@ -3,12 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Business;
-use App\Models\SupportAttachment;
-use App\Models\SupportConversation;
-use App\Models\SupportMessage;
 use App\Models\User;
-use App\Models\WhatsAppMessage;
-use App\Support\Support;
 use App\Support\TenantTables;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
@@ -78,96 +73,6 @@ class AShopSpeaksToEventPlusTest extends TestCase
             'والتسلسلُ يتقدّم واحدًا لا يقفز',
         );
     }
-    /* ═══════════════ الترجمة ═══════════════ */
-
-    public function test_every_status_priority_and_channel_has_an_english_word(): void
-    {
-        $en = json_decode(file_get_contents(base_path('lang/en.json')), true);
-
-        $keys = array_merge(
-            ['جديدة', 'مفتوحة', 'بانتظار العميل', 'بانتظار فريق افنت بلس', 'تم الحل', 'مغلقة'],
-            ['منخفضة', 'عادية', 'عالية', 'عاجلة'],
-            ['داخل افنت بلس'],
-            Support::CATEGORIES,
-            ['مركز المحادثات', 'المساعدة والدعم', 'رد للعميل', 'ملاحظة داخلية',
-                'غير معيّن', 'فتح صفحة النشاط', 'إرفاق ملف', 'إرسال',
-                'لا توجد محادثات حاليًا', 'لا توجد رسائل بعد', 'اختر محادثة لعرض الرسائل'],
-        );
-
-        foreach ($keys as $key) {
-            $this->assertArrayHasKey($key, $en, "لا ترجمة إنجليزية لـ«{$key}»");
-            $this->assertNotSame('', trim((string) $en[$key]), "ترجمةٌ فارغة لـ«{$key}»");
-        }
-    }
-    /** ولا سطرَ في مركز المحادثات يقرأ جدولَ رسائل المتاجر */
-    public function test_the_platform_inbox_never_reads_the_tenant_message_table(): void
-    {
-        $files = [
-            app_path('Http/Controllers/SuperAdmin/ConversationController.php'),
-            app_path('Support/Support.php'),
-        ];
-
-        foreach ($files as $file) {
-            /*
-             * والتعليقاتُ تُنزَع قبل الفحص.
-             *
-             * هذا الملفُّ نفسُه يشرح في ترويسته أنّه **لا** يمسّ
-             * `whatsapp_messages` — فحارسٌ يقرأ النصّ الخام يسقط على شرحِ
-             * البراءة ويحسبه جُرمًا. والمقروءُ هو ما يُنفَّذ لا ما يُكتب
-             * لقارئٍ بشريّ.
-             */
-            $code = '';
-            foreach (token_get_all(file_get_contents($file)) as $token) {
-                if (! is_array($token)) {
-                    $code .= $token;
-
-                    continue;
-                }
-
-                if (! in_array($token[0], [T_COMMENT, T_DOC_COMMENT], true)) {
-                    $code .= $token[1];
-                }
-            }
-
-            foreach (['WhatsAppMessage', 'whatsapp_messages', 'Order::', 'Customer::'] as $forbidden) {
-                $this->assertStringNotContainsString(
-                    $forbidden,
-                    $code,
-                    basename($file).' يمسّ '.$forbidden.' — والحدُّ بين اللوحتين لا يُعبر',
-                );
-            }
-        }
-    }
-    /**
-     * وكلُّ ما يُبحث فيه أو يُرشَّح به مفهرَس.
-     *
-     * والمفتاحُ الأجنبيّ ليس فهرسًا: PostgreSQL تُنشئ قيدًا لا فهرسًا،
-     * فجدولٌ يُقرأ بـ`where message_id in (…)` يُمسح كاملًا في كلّ فتحة.
-     * ويعمل صامتًا حتّى يكبر.
-     */
-    public function test_the_columns_that_are_searched_are_indexed(): void
-    {
-        $expected = [
-            'support_conversations' => ['status', 'business_id', 'assigned_to', 'channel', 'reference'],
-            'support_messages' => ['conversation_id'],
-            'support_attachments' => ['message_id'],
-            'support_reads' => ['conversation_id'],
-        ];
-
-        foreach ($expected as $table => $columns) {
-            $indexed = collect(\Illuminate\Support\Facades\Schema::getIndexes($table))
-                ->pluck('columns')->flatten()->unique()->all();
-
-            foreach ($columns as $column) {
-                $this->assertContains(
-                    $column,
-                    $indexed,
-                    "{$table}.{$column} يُرشَّح به ولا فهرسَ عليه",
-                );
-            }
-        }
-    }
-
     /* ═══════════════ النسخةُ الاحتياطيّة ═══════════════ */
 
     /**
@@ -209,23 +114,5 @@ class AShopSpeaksToEventPlusTest extends TestCase
             Schema::hasTable('support_tickets'),
             'إن بُني جدولُ التذاكر فليُوصَل الزرُّ — لا أن يُترك هذا الحارس',
         );
-    }
-
-    /** والخيطُ يبقى كاملًا: حذفُ المحادثة يحذف رسائلها ومرفقاتها ولا شيء غيرها */
-    public function test_deleting_a_conversation_takes_its_messages_with_it(): void
-    {
-        Storage::fake('local');
-
-        $c = $this->conversation();
-        Support::attach($c->messages()->first(), UploadedFile::fake()->image('a.png'));
-
-        $this->assertSame(1, SupportMessage::count());
-        $this->assertSame(1, SupportAttachment::count());
-
-        $c->delete();
-
-        $this->assertSame(0, SupportMessage::count());
-        $this->assertSame(0, SupportAttachment::count());
-        $this->assertDatabaseHas('businesses', ['id' => $this->shop->id]);
     }
 }

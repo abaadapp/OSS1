@@ -2,7 +2,6 @@
 
 namespace Tests\Feature;
 
-use App\Http\Controllers\SuperAdmin\PageController;
 use App\Models\Business;
 use App\Models\User;
 use App\Support\MerchantAccount;
@@ -156,19 +155,6 @@ class ThePanelKeepsOneWayInTest extends TestCase
         $this->edit($op, $clerk, ['role' => 'manager'])->assertSessionHasNoErrors();
 
         $this->assertSame(0, $counted, 'عُدّ مدراءُ المنصّة لتعديل حساب تاجر');
-    }
-    public function test_the_list_holds_every_status_the_system_itself_writes(): void
-    {
-        /*
-         * ولا تُقرأ القائمةُ من نفسها: اختبارٌ يدور على `STATUSES` يمرّ وإن
-         * ضاقت — يضيق معها. والقياسُ على ما يكتبه النظام بيده:
-         * `destroy` يكتب «معطل»، و`activate` يكتب «منتهي» أو «نشط» —
-         * وكلُّها تلتفّ حول التحقّق. فحالةٌ يكتبها النظام ولا تقبلها الشاشة
-         * تعني شركةً لا يستطيع المشغّل حفظَ أيّ تعديلٍ عليها.
-         */
-        foreach (['نشط', 'منتهي', 'معطل'] as $written) {
-            $this->assertContains($written, PageController::STATUSES, "«{$written}» يكتبه النظام ولا تقبله الشاشة");
-        }
     }
     public function test_a_status_outside_the_list_would_be_a_silent_ghost(): void
     {

@@ -7,8 +7,6 @@ use App\Models\Business;
 use App\Models\DocumentLink;
 use App\Models\Order;
 use App\Models\OrderItem;
-use App\Models\PosDevice;
-use App\Models\PosPeripheral;
 use App\Models\PurchaseOrder;
 use App\Models\PurchaseOrderItem;
 use App\Models\Setting;
@@ -16,7 +14,6 @@ use App\Models\Supplier;
 use App\Models\User;
 use App\Support\Document\Pdf\MpdfDriver;
 use App\Support\Pdf;
-use App\Support\PosTerminal;
 use App\Support\PublicDocument;
 use App\Support\ReceiptTemplate;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -191,41 +188,6 @@ class PapersAreOnePressTest extends TestCase
     {
         $this->assertGreaterThanOrEqual(60, Pdf::stripHeight('<div>x</div>', 80));
     }
-
-    /**
-     * وطابعةُ هذا الصندوق تغلب قالب المتجر.
-     *
-     * القالب إعدادٌ واحد للمتجر كلّه، والصناديق تختلف: صندوق المدخل بورق ٨٠
-     * وصندوق التغليف بورق ٥٨. وورقٌ لا يطابق الطابعة يخرج مقصوصًا من
-     * الحافة، ويُكتشف بعد أن يأخذه الزبون.
-     */
-    public function test_the_till_printer_beats_the_shop_template(): void
-    {
-        $order = $this->order();
-
-        $raw = 'terminal-secret';
-        $device = PosDevice::create([
-            'business_id' => $this->business->id, 'branch_id' => $this->branch->id,
-            'name' => 'صندوق التغليف', 'token_hash' => hash('sha256', $raw), 'status' => 'نشط',
-        ]);
-        PosPeripheral::create([
-            'business_id' => $this->business->id, 'pos_device_id' => $device->id,
-            'type' => PosPeripheral::PRINTER, 'name' => 'طابعة ضيّقة',
-            'paper_width' => 58, 'active' => true,
-        ]);
-
-        /* وبابُ الشريط لا بابُ الفاتورة: تلك على A4 ولا تعرف طابعاتِ الصناديق */
-        $wide = $this->actingAs($this->owner)->get(route('admin.orders.receipt', $order->number));
-        $wide->assertOk();
-
-        $narrow = $this->withCookie(PosTerminal::COOKIE, $device->id.'|'.$raw)
-            ->actingAs($this->owner)->get(route('admin.orders.receipt', $order->number));
-        $narrow->assertOk();
-
-        $this->assertSame(80.0, $this->pageWidth($wide->getContent()));
-        $this->assertSame(58.0, $this->pageWidth($narrow->getContent()));
-    }
-
     /* ————————————— الرمز والورقة أونلاين ————————————— */
 
     /** طباعةُ الإيصال تفتح له بابًا أونلاين، ورمزُه يحمل عنوانَه */

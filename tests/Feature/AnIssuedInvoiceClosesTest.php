@@ -13,7 +13,6 @@ use App\Models\User;
 use App\Support\OrderCorrection;
 use App\Support\OrderStatus;
 use App\Support\Permissions;
-use App\Support\PosCashier;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use RuntimeException;
 use Tests\TestCase;
@@ -186,33 +185,6 @@ class AnIssuedInvoiceClosesTest extends TestCase
 
         $this->assertFalse(Permissions::entersPanel($this->cashier->fresh()));
     }
-
-    public function test_the_cashier_picker_does_not_hand_out_the_permission(): void
-    {
-        /*
-         * مبدِّلُ الكاشير في الترويسة لافتةٌ لا بوّابة: يضبطه أيُّ واقفٍ على
-         * الجهاز بلا كلمة سرّ ولا تحقّق. فلو قُرئ منه الإذن، لفتح الكاشيرُ
-         * القائمةَ واختار اسم زميلٍ يملك التصحيح ومضى يعيد كتابة الفواتير.
-         *
-         * والمالكُ لا يظهر في تلك القائمة أصلًا (`PosCashier::selectable`
-         * تستبعده)، فالثغرة تُختبر بزميلٍ **يظهر فيها** ويملك الصلاحية.
-         */
-        $colleague = User::create([
-            'business_id' => $this->business->id, 'name' => 'سالم', 'email' => 's@eventplusapp.om',
-            'password' => bcrypt('secret12345'), 'role' => 'sales', 'status' => 'نشط',
-            'permissions' => ['dashboard', 'pos', 'order.edit'],
-        ]);
-
-        $order = $this->sale();
-
-        $this->actingAs($this->cashier);
-        $this->assertNotNull(PosCashier::set($colleague->id), 'الزميل ليس في قائمة الاختيار — الثغرة لا تُختبر');
-
-        $this->correct($order)->assertSessionHasErrors('permission');
-
-        $this->assertSame(3, (int) $order->fresh('items')->items->first()->quantity);
-    }
-
     /* ------------------------------ الشاشة ------------------------------ */
 
     public function test_the_screen_hides_the_pencil_when_the_invoice_is_closed(): void

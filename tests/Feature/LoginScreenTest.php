@@ -6,7 +6,6 @@ use App\Models\Branch;
 use App\Models\Business;
 use App\Models\JobTitle;
 use App\Models\User;
-use App\Support\PosTerminal;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\RateLimiter;
 use Tests\TestCase;
@@ -45,28 +44,6 @@ class LoginScreenTest extends TestCase
         RateLimiter::clear('login:salem@eventplus.om|127.0.0.1');
         RateLimiter::clear('login-hour:salem@eventplus.om|127.0.0.1');
     }
-
-    public function test_a_fresh_browser_sees_no_device_identity(): void
-    {
-        /*
-         * متجرٌ واحد في القاعدة — وPosTerminal::businessId تسقط عليه تسهيلًا.
-         * لو بُني العرض عليها لظهر اسم المتجر لزائرٍ لا يعنيه.
-         */
-        $this->get(route('login'))
-            ->assertOk()
-            ->assertInertia(fn ($page) => $page->component('Auth/Login')->where('device', null));
-    }
-
-    /** ولا بابَ رمزٍ في الشاشة أصلًا: البروب الذي كان يفتحه لم يعد يُرسل */
-    public function test_the_screen_offers_no_pin_door(): void
-    {
-        $this->activatePosDevice($this->business->id);
-
-        $this->get(route('login'))->assertOk()->assertInertia(
-            fn ($page) => $page->component('Auth/Login')->missing('pin')
-        );
-    }
-
     /** والمسار نفسه رُفع — لا شاشةً مستقلّة ولا محاولةً تُقبل */
     public function test_the_pin_routes_are_gone(): void
     {
@@ -83,39 +60,6 @@ class LoginScreenTest extends TestCase
 
         $this->assertGuest();
     }
-
-    public function test_the_device_identity_appears_after_the_first_email_login(): void
-    {
-        $this->post(route('login.attempt'), [
-            'email' => 'salem@eventplus.om', 'password' => 'secret-pass',
-        ])->assertSessionHasNoErrors();
-
-        // أول دخولٍ يكتب كوكي المتجر — وهي أثر «هذا الجهاز يخصّ هذا المحل»
-        $this->withCookie(PosTerminal::LEGACY_COOKIE, (string) $this->business->id)
-            ->get(route('login'))
-            ->assertInertia(fn ($page) => $page->where('device.business', 'متجر الورد'));
-    }
-
-    public function test_an_activated_device_shows_its_branch_and_register(): void
-    {
-        $device = $this->activatePosDevice($this->business->id);
-
-        // الموظف يعرف بنظرةٍ أنه على الجهاز الصحيح: هذا الجهاز يبيع لهذا الفرع
-        $this->get(route('login'))
-            ->assertInertia(fn ($page) => $page
-                ->where('device.business', 'متجر الورد')
-                ->where('device.branch', 'الخوير')
-                ->where('device.device', $device->name));
-    }
-
-    public function test_a_stale_cookie_pointing_nowhere_shows_nothing(): void
-    {
-        // متجرٌ حُذف أو كوكي عُبث بها: لا اسم متجرٍ بلا متجرٍ خلفه
-        $this->withCookie(PosTerminal::LEGACY_COOKIE, '99999')
-            ->get(route('login'))
-            ->assertInertia(fn ($page) => $page->where('device', null));
-    }
-
     /* --------------------------- حدّ المحاولات --------------------------- */
 
     /**
@@ -138,52 +82,5 @@ class LoginScreenTest extends TestCase
         ])->assertSessionHasErrors('email');
 
         $this->assertGuest();
-    }
-
-    /* ------------------------ المخرج: نسيان الجهاز ------------------------ */
-
-    public function test_forgetting_clears_the_remembered_shop(): void
-    {
-        /*
-         * شاشةٌ تتذكّر متجرًا وتعرض اسمه تلزمها بابُ خروج: جهازٌ بيع، أو نُقل
-         * إلى محلٍّ آخر، أو رُبط يوم التركيب بالمتجر الخطأ. وبلا هذا لا حيلة
-         * إلا مسح كوكي المتصفّح يدويًّا.
-         */
-        $response = $this->withCookie(PosTerminal::LEGACY_COOKIE, (string) $this->business->id)
-            ->post(route('device.forget'))
-            ->assertRedirect(route('login'));
-
-        $response->assertCookieExpired(PosTerminal::LEGACY_COOKIE);
-        $response->assertCookieExpired(PosTerminal::COOKIE);
-    }
-
-    public function test_forgetting_does_not_revoke_the_device_in_the_records(): void
-    {
-        $device = $this->activatePosDevice($this->business->id);
-
-        $this->post(route('device.forget'))->assertRedirect(route('login'));
-
-        // الكوكي وحدها تُمسح؛ الإبطال الحقيقي في الإعدادات خلف صلاحيته
-        $this->assertSame(\App\Models\PosDevice::ACTIVE, $device->fresh()->status);
-    }
-
-    public function test_the_screen_says_whether_the_device_is_activated(): void
-    {
-        // ثمن النسيان يفترق: كوكي تُكتب من جديد، أو جهازٌ يحتاج مديرًا
-        $this->withCookie(PosTerminal::LEGACY_COOKIE, (string) $this->business->id)
-            ->get(route('login'))
-            ->assertInertia(fn ($page) => $page->where('device.activated', false));
-
-        $this->activatePosDevice($this->business->id);
-
-        $this->get(route('login'))
-            ->assertInertia(fn ($page) => $page->where('device.activated', true));
-    }
-
-    public function test_there_is_no_forget_link_on_an_unknown_device(): void
-    {
-        // لا متجر يُنسى، فلا زرّ — والواجهة تقرأ device وحدها
-        $this->get(route('login'))
-            ->assertInertia(fn ($page) => $page->where('device', null));
     }
 }

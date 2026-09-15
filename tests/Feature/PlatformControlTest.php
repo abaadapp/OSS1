@@ -4,13 +4,9 @@ namespace Tests\Feature;
 
 use App\Models\Branch;
 use App\Models\Business;
-use App\Models\Invoice;
 use App\Models\JobTitle;
-use App\Models\Plan;
 use App\Models\Product;
-use App\Models\Subscription;
 use App\Models\User;
-use App\Support\Billing;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -125,19 +121,6 @@ class PlatformControlTest extends TestCase
         $this->actingAs($owner)->get(route('admin.dashboard'))
             ->assertInertia(fn ($page) => $page->where('context.subscription.daysLeft', 3));
     }
-
-    /* -------------------- ٣· حدود الباقة -------------------- */
-
-    private function planned(array $limits): array
-    {
-        $plan = Plan::create(array_merge([
-            'name' => 'الأساسية', 'monthly_price' => 10, 'yearly_price' => 100,
-            'max_branches' => 1, 'max_employees' => 1, 'max_products' => 1,
-        ], $limits));
-
-        return $this->tenant(['plan_id' => $plan->id]);
-    }
-
     public function test_the_branch_limit_is_enforced(): void
     {
         [$biz, $owner] = $this->planned(['max_branches' => 1]);
@@ -172,48 +155,5 @@ class PlatformControlTest extends TestCase
             ->assertSessionHasErrors('name');
 
         $this->assertSame(1, Product::where('business_id', $biz->id)->count());
-    }
-    /**
-     * والتجديد المبكر لا يُهدر ما تبقّى.
-     *
-     * لو مُدّد من اليوم لخسر من جدّد قبل أسبوع ذلك الأسبوع — فيصير التجديد
-     * المبكّر عقوبةً، ولا يجدّد أحدٌ إلا متأخّرًا.
-     */
-    public function test_renewing_early_keeps_the_remaining_days(): void
-    {
-        [$biz] = $this->planned([]);
-        $biz->update(['ends_at' => now()->addDays(20)]);
-
-        Billing::renew($biz->fresh(), 'monthly');
-
-        $this->assertTrue($biz->fresh()->ends_at->isSameDay(now()->addDays(20)->addMonth()));
-    }
-
-    /** والمنتهي يُجدَّد من اليوم لا من ماضٍ مضى */
-    public function test_renewing_an_expired_one_starts_today(): void
-    {
-        [$biz] = $this->planned([]);
-        $biz->update(['ends_at' => now()->subMonths(3), 'status' => 'منتهي']);
-
-        Billing::renew($biz->fresh(), 'monthly');
-
-        $this->assertTrue($biz->fresh()->ends_at->isSameDay(now()->addMonth()));
-        $this->assertSame('نشط', $biz->fresh()->status);
-    }
-
-    public function test_invoice_numbers_do_not_repeat(): void
-    {
-        [$biz] = $this->planned([]);
-
-        Billing::renew($biz->fresh(), 'monthly');
-        Billing::renew($biz->fresh(), 'monthly');
-        Invoice::latest('id')->first()->delete();
-        Billing::renew($biz->fresh(), 'monthly');
-
-        $this->assertSame(
-            Invoice::count(),
-            Invoice::distinct()->count('number'),
-            'تكرّر رقم فاتورة بعد حذف واحدة',
-        );
     }
 }

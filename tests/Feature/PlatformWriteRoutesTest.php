@@ -5,12 +5,8 @@ namespace Tests\Feature;
 use App\Mail\RecoveryOtpMail;
 use App\Models\Branch;
 use App\Models\Business;
-use App\Models\Invoice;
-use App\Models\Plan;
 use App\Models\Setting;
 use App\Models\User;
-use App\Models\WhatsAppConnection;
-use App\Support\WhatsAppMode;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Mail;
 use Tests\TestCase;
@@ -54,33 +50,6 @@ class PlatformWriteRoutesTest extends TestCase
         $this->super = User::create([
             'business_id' => null, 'name' => 'مدير المنصة', 'email' => 'root@eventplus.om',
             'password' => bcrypt('password'), 'role' => 'super_admin', 'status' => 'نشط',
-        ]);
-    }
-
-    private function shared(string $status = WhatsAppConnection::ACTIVE): WhatsAppConnection
-    {
-        return WhatsAppConnection::create([
-            'owner_type' => WhatsAppMode::OWNER_PLATFORM,
-            'phone_number_id' => 'EVENTPLUS-PN',
-            'display_phone_number' => '+96890000000',
-            'access_token' => 'platform-token-value-0123456789',
-            'status' => $status,
-            'connected_at' => now(),
-        ]);
-    }
-    /* ------------------------- فاتورة الاشتراك على ورق ------------------------- */
-
-    private function invoice(string $status = 'مدفوعة'): Invoice
-    {
-        $plan = Plan::create(['name' => 'الباقة الاحترافية', 'monthly_price' => 25, 'yearly_price' => 250]);
-
-        return Invoice::create([
-            'number' => 'INV-2026-0001',
-            'business_id' => $this->business->id,
-            'plan_id' => $plan->id,
-            'amount' => 25,
-            'issued_at' => '2026-09-01',
-            'status' => $status,
         ]);
     }
     /** اسم المنصّة على الورقة يأتي من إعداداتها لا من ثابتٍ في القالب */

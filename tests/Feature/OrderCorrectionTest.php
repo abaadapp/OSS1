@@ -150,37 +150,6 @@ class OrderCorrectionTest extends TestCase
         $this->assertSame(0.5, (float) $row->tax_amount);
     }
 
-    public function test_loyalty_points_are_pulled_back_to_what_was_really_bought(): void
-    {
-        $customer = Customer::create([
-            'business_id' => $this->business->id, 'name' => 'سالم', 'phone' => '90000001', 'points' => 0,
-        ]);
-        $order = $this->sale(3, $customer);
-        $customer->update(['points' => (int) $order->points_earned]);
-        $this->actingAs($this->cashier);
-
-        OrderCorrection::setQuantity($order, $order->items->first(), 1, 'خطأ كمية');
-
-        // 10.500 × 5 = 52 نقطة على ما اشتُري فعلًا
-        $this->assertSame(52, (int) $customer->fresh()->points);
-        $this->assertSame(52, (int) $order->fresh()->points_earned);
-    }
-
-    public function test_points_are_never_pushed_below_zero_by_a_later_correction(): void
-    {
-        // العميل قد ينفق نقاطه بين البيعة والتصحيح
-        $customer = Customer::create([
-            'business_id' => $this->business->id, 'name' => 'سالم', 'phone' => '90000002', 'points' => 0,
-        ]);
-        $order = $this->sale(3, $customer);
-        $customer->update(['points' => 5]);
-        $this->actingAs($this->cashier);
-
-        OrderCorrection::setQuantity($order, $order->items->first(), 1, 'خطأ كمية');
-
-        $this->assertSame(0, (int) $customer->fresh()->points);
-    }
-
     /* --------------------------- الحراسة --------------------------- */
 
     public function test_an_invoice_is_never_emptied_of_its_last_line(): void

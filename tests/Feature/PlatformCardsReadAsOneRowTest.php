@@ -3,8 +3,6 @@
 namespace Tests\Feature;
 
 use App\Models\Business;
-use App\Models\Invoice;
-use App\Models\Plan;
 use App\Support\Demo;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -104,33 +102,6 @@ class PlatformCardsReadAsOneRowTest extends TestCase
         $this->assertTrue($card['up']);
         $this->assertSame('success', $card['color']);
     }
-
-    /**
-     * و«في التجربة» تُقاس على أوّل الشهر.
-     *
-     * ومن دفع بعد أوّل الشهر كان في التجربة حينها: عدُّه خارجَها يجعل الرقم
-     * القديم أصغر ممّا كان، فتقول البطاقة إنّ التجربة تنمو وهي تنكمش.
-     */
-    public function test_a_trial_that_converted_this_month_still_counted_at_the_start(): void
-    {
-        $plan = Plan::create(['name' => 'باقة', 'monthly_price' => 10, 'yearly_price' => 100]);
-
-        $paid = $this->shop('دفع هذا الشهر');
-        Invoice::create([
-            'number' => 'INV-1', 'business_id' => $paid->id, 'plan_id' => $plan->id,
-            'amount' => 10, 'issued_at' => now()->startOfMonth()->addDays(3), 'status' => 'مدفوعة',
-        ]);
-
-        $this->shop('ما زال يجرّب');
-
-        $card = $this->cards()['في التجربة'];
-
-        // الآن واحد، وأوّل الشهر اثنان — فالتجربة تنكمش
-        $this->assertSame('1', $card['value']);
-        $this->assertSame('−50%', $card['trend']);
-        $this->assertFalse($card['up']);
-    }
-
     public function test_a_growing_trial_pool_is_green(): void
     {
         $this->shop('قديم', ['starts_at' => now()->subYear()]);

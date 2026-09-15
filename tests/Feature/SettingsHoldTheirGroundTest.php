@@ -7,7 +7,6 @@ use App\Models\BranchStock;
 use App\Models\Business;
 use App\Models\Currency;
 use App\Models\Order;
-use App\Models\Plan;
 use App\Models\Product;
 use App\Models\Setting;
 use App\Models\User;
@@ -100,15 +99,6 @@ class SettingsHoldTheirGroundTest extends TestCase
         $this->assertStringContainsString('12.50', Demo::money(12.5));
         $this->assertSame(2, Demo::baseCurrency()['decimals']);
     }
-
-    /* ============ حدود الباقة: لا يُلتفّ عليها بحذفٍ واستعادة ============ */
-
-    private function cappedAtOneBranch(): void
-    {
-        $plan = Plan::create(['name' => 'أساسية', 'monthly_price' => 1, 'yearly_price' => 10, 'max_branches' => 1, 'max_employees' => 5, 'max_products' => 50]);
-        $this->business->update(['plan_id' => $plan->id]);
-    }
-
     public function test_a_second_branch_is_refused_at_the_cap(): void
     {
         $this->cappedAtOneBranch();

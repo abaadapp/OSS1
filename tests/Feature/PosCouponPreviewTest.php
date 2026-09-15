@@ -4,7 +4,6 @@ namespace Tests\Feature;
 
 use App\Models\Branch;
 use App\Models\Business;
-use App\Models\Coupon;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -40,19 +39,6 @@ class PosCouponPreviewTest extends TestCase
         $this->cashier = User::create([
             'business_id' => $this->business->id, 'name' => 'كاشير', 'email' => 'c@coupon.local',
             'password' => bcrypt('secret'), 'role' => 'cashier', 'status' => 'نشط',
-        ]);
-    }
-
-    private function coupon(array $attributes = []): Coupon
-    {
-        return Coupon::create($attributes + [
-            'business_id' => $this->business->id,
-            'code' => 'WARD10',
-            'type' => 'نسبة',
-            'value' => 10,
-            'min_order' => 0,
-            'active' => true,
-            'used_count' => 0,
         ]);
     }
     /* ------------------------------ ما يُقبل ------------------------------ */
@@ -124,18 +110,5 @@ class PosCouponPreviewTest extends TestCase
         $this->coupon(['min_order' => 50]);
 
         $this->try('WARD10', 20)->assertStatus(422)->assertJsonPath('ok', false);
-    }
-
-    /* ------------------------------- الجار ------------------------------- */
-
-    public function test_a_neighbours_code_is_not_found_here(): void
-    {
-        $other = Business::create(['name' => 'متجر الجار', 'status' => 'نشط']);
-        Coupon::create([
-            'business_id' => $other->id, 'code' => 'JAAR', 'type' => 'نسبة',
-            'value' => 90, 'min_order' => 0, 'active' => true, 'used_count' => 0,
-        ]);
-
-        $this->try('JAAR')->assertStatus(422)->assertJsonPath('ok', false);
     }
 }

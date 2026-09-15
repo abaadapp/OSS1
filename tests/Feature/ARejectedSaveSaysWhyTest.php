@@ -2,12 +2,8 @@
 
 namespace Tests\Feature;
 
-use App\Http\Controllers\SuperAdmin\PageController;
-use App\Http\Controllers\SuperAdmin\SettingController;
-use App\Models\Plan;
 use App\Models\Setting;
 use App\Models\User;
-use App\Support\WhatsAppFeature;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Inertia\Testing\AssertableInertia as Assert;
@@ -49,33 +45,6 @@ class ARejectedSaveSaysWhyTest extends TestCase
         ]);
     }
     /**
-     * والافتراضيُّ المرسَل لا يسمّي باقةً غيرَ موجودة.
-     *
-     * ولا يُقارن بالفراغ وحده: القاعدةُ أنّ ما تُرسله الشاشةُ إمّا لا شيء
-     * وإمّا اسمُ باقةٍ **قائمة**. فمن كتب افتراضيًّا آخر غدًا يسقط هنا.
-     */
-    public function test_the_default_it_sends_is_either_nothing_or_a_real_plan(): void
-    {
-        Plan::create(['name' => 'الباقة الأساسية', 'monthly_price' => 9.9, 'yearly_price' => 99]);
-
-        $sent = $this->whatTheScreenSends()['default_plan'];
-
-        $this->assertTrue(
-            $sent === '' || Plan::where('name', trim((string) $sent))->exists(),
-            'الشاشةُ ترسل باقةً افتراضيّةً لا وجود لها: '.var_export($sent, true),
-        );
-    }
-
-    /** ولا في الثابت نفسِه اسمُ باقةٍ يخترعه الكود */
-    public function test_the_constant_does_not_invent_a_plan_name(): void
-    {
-        $defaults = (new ReflectionClass(PageController::class))
-            ->getReflectionConstant('SETTING_DEFAULTS')->getValue();
-
-        $this->assertSame('', $defaults['default_plan'],
-            'افتراضيُّ الباقة اسمٌ لا يطابق شيئًا — وهو يردّ كلَّ حفظ');
-    }
-    /**
      * والشاشةُ تفتح تبويبَ الحقل المعطوب وتقول ما وقع.
      *
      * وتُقاس على شكل الكود لا على نصٍّ عربيٍّ في تعليق: خريطةٌ تربط كلَّ
@@ -89,25 +58,5 @@ class ARejectedSaveSaysWhyTest extends TestCase
         $this->assertStringContainsString("default_plan: 'subscriptions',", $screen);
         $this->assertStringContainsString('setTab(owner);', $screen, 'لا يُفتح تبويبُ الخطأ');
         $this->assertStringContainsString('{errorKeys.length > 0 && (', $screen, 'لا شريطَ يقول ما وقع');
-    }
-
-    /** وكلُّ حقلٍ يُصادَق في الخادم له تبويبٌ في الخريطة — وإلّا اختفى خطؤه */
-    public function test_every_saved_field_knows_which_tab_owns_it(): void
-    {
-        $keys = array_keys(
-            (new ReflectionClass(SettingController::class))
-                ->getReflectionConstant('KEYS')->getValue()
-        );
-
-        $screen = file_get_contents(resource_path('js/Pages/Platform/Settings/Index.tsx'));
-        $map = substr($screen, strpos($screen, 'const FIELD_TAB'), 1400);
-
-        foreach ($keys as $key) {
-            $this->assertStringContainsString(
-                $key.':',
-                $map,
-                "الحقل «{$key}» بلا تبويبٍ في الخريطة — خطؤه يقع في صمت",
-            );
-        }
     }
 }

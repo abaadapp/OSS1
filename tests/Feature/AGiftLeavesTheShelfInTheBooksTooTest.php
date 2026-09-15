@@ -4,7 +4,6 @@ namespace Tests\Feature;
 
 use App\Models\Branch;
 use App\Models\Business;
-use App\Models\Coupon;
 use App\Models\Currency;
 use App\Models\JournalEntry;
 use App\Models\Order;
@@ -69,16 +68,6 @@ class AGiftLeavesTheShelfInTheBooksTooTest extends TestCase
             'price' => 10, 'cost' => 4, 'quantity' => 100, 'active' => true,
         ]);
     }
-    private function freeSale(): Order
-    {
-        Coupon::create([
-            'business_id' => $this->business->id, 'code' => 'HADIYA',
-            'type' => 'نسبة', 'value' => 100, 'active' => true,
-        ]);
-
-        return $this->sell(['coupon_code' => 'HADIYA']);
-    }
-
     /* ==================== الهديّة ==================== */
 
     public function test_a_free_sale_still_takes_the_flowers_off_the_shelf(): void

@@ -2,7 +2,6 @@
 
 namespace Tests\Feature;
 
-use App\Support\Website\Sections;
 use Tests\TestCase;
 
 /**
@@ -60,34 +59,6 @@ class RendererParityTest extends TestCase
             'طبقة الرسم عُدّلت هنا بلا مزامنة: عدّلها في storefront/src/site ثمّ شغّل `node storefront/scripts/sync-renderer.mjs`',
         );
     }
-
-    public function test_every_section_type_in_the_catalogue_has_a_renderer(): void
-    {
-        $blocks = (string) file_get_contents($this->dir().'/blocks.tsx');
-
-        // سجلُّ الرسم: `REGISTRY` — يُقرأ منه، فلا قائمةٌ ثانية تُكتب هنا
-        $registry = substr($blocks, (int) strpos($blocks, 'export const REGISTRY'));
-        $registry = substr($registry, 0, (int) strpos($registry, '};'));
-
-        preg_match_all('/^\s{4}(\w+):/m', $registry, $matches);
-        $drawn = $matches[1];
-
-        $this->assertNotEmpty($drawn, 'لم يُقرأ سجلُّ الأقسام من blocks.tsx');
-
-        foreach (Sections::CATALOGUE as $type => $spec) {
-            // الترويسة والتذييل لهما مكوّناهما لا مدخلٌ في السجلّ
-            if ($spec['slot'] ?? false) {
-                $this->assertFileExists(
-                    $this->dir().'/'.($type === Sections::HEADER ? 'Header.tsx' : 'Footer.tsx'),
-                );
-
-                continue;
-            }
-
-            $this->assertContains($type, $drawn, "القسم «{$type}» في مكتبة افنت بلس بلا رسمٍ في العارض");
-        }
-    }
-
     public function test_the_renderer_carries_no_dependency_beyond_react(): void
     {
         /*

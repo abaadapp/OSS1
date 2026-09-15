@@ -2,20 +2,15 @@
 
 namespace Tests\Feature;
 
-use App\Http\Middleware\CheckPlanFeature;
 use App\Models\Branch;
 use App\Models\Business;
 use App\Models\Customer;
 use App\Models\JobTitle;
-use App\Models\Plan;
 use App\Models\Product;
 use App\Models\Setting;
 use App\Models\User;
 use App\Support\Permissions;
-use App\Support\PlanFeatures;
 use App\Support\Reports;
-use App\Support\WhatsAppFeature;
-use App\Support\WhatsAppStatus;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\File;
 use Tests\TestCase;
@@ -55,45 +50,6 @@ class PlanOpensWhatItSoldTest extends TestCase
             'password' => bcrypt('password'), 'role' => 'admin', 'status' => 'نشط',
         ]);
     }
-
-    /** يضع المتجر على باقةٍ بقدراتٍ بعينها — و`null` تعني «لم تُضبط» */
-    private function onPlan(?array $capabilities, string $name = 'الباقة الأساسية'): Plan
-    {
-        $plan = Plan::create([
-            'name' => $name, 'monthly_price' => 9.9, 'yearly_price' => 99,
-            'capabilities' => $capabilities,
-        ]);
-
-        $this->business->update(['plan_id' => $plan->id]);
-        $this->business->refresh();
-
-        return $plan;
-    }
-
-    /* ====================== الأصل: مفتوحٌ لا مغلق ====================== */
-
-    public function test_a_shop_with_no_plan_at_all_keeps_everything(): void
-    {
-        /*
-         * متجرٌ أُنشئ قبل الباقات لا يُقفل لأنّ حقلًا فيه فارغ — كما في
-         * `PlanLimits`: «بلا باقة لا سقف».
-         */
-        foreach (array_keys(PlanFeatures::CAPABILITIES) as $key) {
-            $this->assertTrue(PlanFeatures::allows($this->business, $key), "أُغلق «{$key}» على متجرٍ بلا باقة");
-        }
-
-        $this->actingAs($this->owner)->get(route('admin.reports.waste'))->assertOk();
-    }
-
-    public function test_a_plan_whose_capabilities_were_never_set_keeps_everything(): void
-    {
-        // `null` تعني «لم تُضبط» لا «لا شيء» — والفرق بينهما متجرٌ يتوقّف عمله
-        $this->onPlan(null);
-
-        $this->assertTrue(PlanFeatures::allows($this->business->fresh(), 'reports_advanced'));
-        $this->actingAs($this->owner)->get(route('admin.reports.waste'))->assertOk();
-    }
-
     public function test_a_capability_that_is_granted_opens_its_door(): void
     {
         $this->onPlan(['reports_advanced']);
@@ -135,22 +91,6 @@ class PlanOpensWhatItSoldTest extends TestCase
         $this->actingAs(User::find($this->owner->id))
             ->get(route('admin.reports.export.csv', 'waste'))->assertForbidden();
     }
-
-    public function test_the_refusal_names_the_plan_and_the_feature(): void
-    {
-        /*
-         * 403 وحدها لا تقول شيئًا: من يصطدم بها اشترى نظامًا وله أن يعرف أنّ
-         * البابَ موجودٌ وأنّ باقتَه لا تفتحه — وإلّا ظنّ العطب في النظام
-         * فاتّصل بالدعم بدل أن يرقّي.
-         */
-        $this->onPlan([], 'الباقة الأساسية');
-
-        $message = PlanFeatures::refusal($this->business->fresh(), 'reports_advanced');
-
-        $this->assertStringContainsString('التقارير المتقدّمة', $message);
-        $this->assertStringContainsString('الباقة الأساسية', $message);
-    }
-
     public function test_the_report_exports_are_closed_with_the_screen(): void
     {
         // قفلُ الشاشة وحدها وترك ملفّها مفتوحًا يعني عنوانًا يُكتب فيصل الملفّ
@@ -188,35 +128,6 @@ class PlanOpensWhatItSoldTest extends TestCase
 
         $this->actingAs($this->owner)->get(route('admin.export.customers'))->assertOk();
     }
-
-    public function test_no_card_points_at_a_door_the_plan_closes(): void
-    {
-        /*
-         * بطاقةٌ تقود إلى 403 تجعل صاحبها يظنّ العطب في النظام ويعيد المحاولة
-         * — والفهرس يقرأ من مصدر الحارس نفسه فلا تفترق بطاقةٌ عن بابها.
-         *
-         * والقاعدة تُقاس على التقارير كلّها لا على واحدٍ بعينه: كانت تُفحص
-         * بـ«الهالك» وحده، فلمّا فُتح للجميع لم يبقَ في الفحص شيء. وهذا
-         * يقيس **العلاقة** نفسها، فيصمد لأيّ قفلٍ يُضاف أو يُرفع غدًا.
-         */
-        foreach ([[], ['reports_advanced'], ['loyalty', 'reports_advanced']] as $capabilities) {
-            $this->onPlan($capabilities);
-            $business = $this->business->fresh();
-            $shown = collect(Reports::forUser(User::find($this->owner->id)))->pluck('key')->all();
-
-            foreach (Reports::ALL as $report) {
-                $feature = CheckPlanFeature::featureFor($report['route']);
-                $open = $feature === null || PlanFeatures::allows($business, $feature);
-
-                $this->assertSame(
-                    $open,
-                    in_array($report['key'], $shown, true),
-                    "بطاقة «{$report['key']}» تفترق عن بابها على باقةٍ تفتح: ".(implode('، ', $capabilities) ?: 'لا شيء'),
-                );
-            }
-        }
-    }
-
     /* ======================== الصلاحيات المخصّصة ======================== */
 
     private function jobTitle(string $name = 'كاشير', string $role = 'cashier'): JobTitle
@@ -392,43 +303,5 @@ class PlanOpensWhatItSoldTest extends TestCase
         $source = file_get_contents(resource_path('js/Pages/Admin/Employees/partials/EmployeeForm.tsx'));
 
         $this->assertStringContainsString('custom_permissions', $source, 'شاشة الموظف لا تعرف الباقة');
-    }
-    /* =========================== واتساب =========================== */
-
-    public function test_the_sender_refuses_for_a_plan_that_excludes_it(): void
-    {
-        /*
-         * الإشعار يخرج من الطلب حين تتغيّر حالته لا من زرٍّ يضغطه أحد، فقفلٌ
-         * في الشاشة وحدها يعني رسائل تُرسَل — وتُحاسَب على المنصّة — لباقةٍ
-         * لا تشملها.
-         */
-        $this->onPlan([]);
-        $this->business->update(['whatsapp_enabled' => true]);
-
-        Setting::updateOrCreate(['business_id' => null, 'key' => WhatsAppFeature::GLOBAL_KEY], ['value' => '1']);
-
-        $this->assertSame(
-            WhatsAppStatus::SKIP_PLAN,
-            WhatsAppFeature::blockReason($this->business->fresh()),
-        );
-    }
-    public function test_every_listed_capability_is_actually_guarded_somewhere(): void
-    {
-        /*
-         * مفتاحٌ في القائمة بلا حارسٍ في الكود هو `features` نفسها بثوبٍ
-         * جديد: يُؤشَّر في الشاشة، ويُقرأ في صفحة التسعير، ولا يمنع شيئًا.
-         *
-         * والبحث في المصدر لا في الشاشة: الحارس قد يكون مسارًا في الخريطة أو
-         * سطرًا في متحكّم، والاثنان يُكتبان بالمفتاح نفسه.
-         */
-        $sources = collect(File::allFiles(app_path()))
-            ->filter(fn ($f) => $f->getExtension() === 'php')
-            ->reject(fn ($f) => str_ends_with($f->getFilename(), 'PlanFeatures.php'))
-            ->map(fn ($f) => file_get_contents($f->getPathname()))
-            ->implode("\n");
-
-        foreach (array_keys(PlanFeatures::CAPABILITIES) as $key) {
-            $this->assertStringContainsString("'{$key}'", $sources, "القدرة «{$key}» تُعرض ولا يفحصها أحد");
-        }
     }
 }

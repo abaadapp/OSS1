@@ -5,9 +5,7 @@ namespace Tests\Feature;
 use App\Models\Branch;
 use App\Models\Business;
 use App\Models\JobTitle;
-use App\Models\Plan;
 use App\Models\User;
-use App\Support\DemoStore;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Route;
 use Tests\TestCase;
@@ -26,29 +24,6 @@ class EveryScreenOpensTest extends TestCase
     private User $owner;
 
     private User $super;
-
-    protected function setUp(): void
-    {
-        parent::setUp();
-        app()->setLocale('ar');
-
-        Plan::updateOrCreate(['name' => 'الباقة الاحترافية'], [
-            'monthly_price' => 30, 'yearly_price' => 300,
-            'max_branches' => 3, 'max_employees' => 15, 'max_products' => 100000,
-        ]);
-
-        $business = DemoStore::create('متجر الفحص', 'صغير');
-        $this->owner = $business->users()->where('role', 'admin')->firstOrFail();
-
-        $platform = Business::create(['name' => 'المنصّة', 'type' => 'عام', 'status' => 'نشط']);
-        Branch::create(['business_id' => $platform->id, 'name' => 'الرئيسي']);
-        JobTitle::create(['business_id' => $platform->id, 'name' => 'مدير', 'role' => 'admin']);
-        $this->super = User::create([
-            'business_id' => $platform->id, 'name' => 'مدير المنصة', 'email' => 'root@eventplusapp.om',
-            'password' => bcrypt('password'), 'role' => 'super_admin', 'status' => 'نشط',
-        ]);
-    }
-
     /** @return list<array{string, string}> */
     private function screens(string $prefix): array
     {
