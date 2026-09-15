@@ -48,7 +48,7 @@ class ActivityStaffOnlyTest extends TestCase
             'name' => 'كاشير',
             'email' => 'cashier@eventplusapp.om',
             'password' => bcrypt('password'),
-            'role' => 'cashier',
+            'role' => 'sales',
             'status' => 'نشط',
         ]);
     }
@@ -96,7 +96,7 @@ class ActivityStaffOnlyTest extends TestCase
             'name' => 'كاشير الجار',
             'email' => 'stranger@eventplusapp.om',
             'password' => bcrypt('password'),
-            'role' => 'cashier',
+            'role' => 'sales',
             'status' => 'نشط',
         ]);
 

@@ -45,7 +45,7 @@ class OrderCorrectionTest extends TestCase
         $this->branch = Branch::create(['business_id' => $this->business->id, 'name' => 'الرئيسي']);
         $this->cashier = User::create([
             'business_id' => $this->business->id, 'name' => 'نورة', 'email' => 'n@eventplusapp.om',
-            'password' => bcrypt('secret12345'), 'role' => 'cashier', 'status' => 'نشط',
+            'password' => bcrypt('secret12345'), 'role' => 'sales', 'status' => 'نشط',
         ]);
 
         Setting::create(['business_id' => $this->business->id, 'key' => 'vat_rate', 'value' => '5']);
@@ -72,7 +72,7 @@ class OrderCorrectionTest extends TestCase
             'employee_name' => 'نورة', 'user_id' => $this->cashier->id,
             'subtotal' => $gross, 'discount' => 0, 'tax' => $tax, 'delivery_fee' => 0,
             'total' => round($gross + $tax, 3), 'payment_method' => 'نقدي',
-            'status' => 'مكتمل', 'payment_status' => 'مدفوع', 'is_held' => false,
+            'status' => 'مكتمل', 'payment_status' => 'مدفوع',
             'ordered_at' => now(), 'points_earned' => $customer ? (int) floor(($gross + $tax) * 5) : 0,
         ]);
         $order->items()->create([

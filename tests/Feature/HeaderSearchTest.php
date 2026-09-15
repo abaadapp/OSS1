@@ -101,24 +101,13 @@ class HeaderSearchTest extends TestCase
         Order::create([
             'business_id' => $this->business->id, 'number' => 'INV-000042',
             'customer_name' => 'خالد', 'status' => Order::CANCELLED,
-            'total' => 12, 'ordered_at' => now(), 'is_held' => false,
+            'total' => 12, 'ordered_at' => now(),
         ]);
 
         $hit = collect($this->search('INV-000042'))->firstWhere('label', 'INV-000042');
 
         $this->assertNotNull($hit, 'فاتورةٌ ملغاة لا تُوجَد برقمها');
         $this->assertSame(route('admin.orders.show', 'INV-000042'), $hit['url']);
-    }
-
-    /** والمعلّق يبقى خارجها: سلّةٌ لم تُبَع بعد ولا رقمَ لها يُطلب */
-    public function test_a_held_basket_is_not_a_receipt(): void
-    {
-        Order::create([
-            'business_id' => $this->business->id, 'number' => 'INV-000099',
-            'status' => 'قيد التنفيذ', 'total' => 5, 'ordered_at' => now(), 'is_held' => true,
-        ]);
-
-        $this->assertNotContains('INV-000099', $this->labels('INV-000099'));
     }
 
     /* ------------------------ رموز السندات ------------------------ */
@@ -262,7 +251,7 @@ class HeaderSearchTest extends TestCase
     {
         $order = Order::create([
             'business_id' => $this->business->id, 'number' => 'INV-000700',
-            'status' => 'مكتمل', 'total' => 40, 'ordered_at' => now(), 'is_held' => false,
+            'status' => 'مكتمل', 'total' => 40, 'ordered_at' => now(),
         ]);
         Transaction::create([
             'business_id' => $this->business->id, 'order_id' => $order->id,
@@ -396,12 +385,14 @@ class HeaderSearchTest extends TestCase
     /** وحسابٌ لا يملك التقارير لا يرى منها شيئًا في دليله */
     public function test_the_report_index_stops_at_what_its_reader_owns(): void
     {
-        $cashier = User::create([
-            'business_id' => $this->business->id, 'name' => 'كاشير', 'email' => 'cash@eventplusapp.om',
-            'password' => bcrypt('password'), 'role' => 'cashier', 'status' => 'نشط',
+        // موظّفٌ خُصّصت صلاحياتُه في قسمٍ لا تقريرَ تحته
+        $clerk = User::create([
+            'business_id' => $this->business->id, 'name' => 'موظف', 'email' => 'cash@eventplusapp.om',
+            'password' => bcrypt('password'), 'role' => 'sales', 'status' => 'نشط',
+            'permissions' => ['dashboard'],
         ]);
 
-        $this->assertSame([], Reports::forUser($cashier));
+        $this->assertSame([], Reports::forUser($clerk));
         $this->assertNotSame([], Reports::forUser($this->owner));
     }
 }

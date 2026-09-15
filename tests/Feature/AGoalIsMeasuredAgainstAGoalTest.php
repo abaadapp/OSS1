@@ -70,7 +70,7 @@ class AGoalIsMeasuredAgainstAGoalTest extends TestCase
         return User::create([
             'business_id' => $this->bid(), 'name' => $name,
             'email' => $name.'@eventplus.om', 'password' => bcrypt('password'),
-            'role' => 'cashier', 'status' => 'نشط', 'monthly_target' => $target,
+            'role' => 'sales', 'status' => 'نشط', 'monthly_target' => $target,
         ]);
     }
 
@@ -89,7 +89,7 @@ class AGoalIsMeasuredAgainstAGoalTest extends TestCase
             'business_id' => $this->bid(),
             'user_id' => $by?->id,
             'number' => 'INV-'.str_pad((string) (Order::count() + 1), 5, '0', STR_PAD_LEFT),
-            'status' => 'مكتمل', 'is_held' => false,
+            'status' => 'مكتمل',
             'payment_method' => 'نقدي', 'payment_status' => 'مدفوع',
             'subtotal' => $total, 'tax' => 0, 'total' => $total,
             'ordered_at' => now(),
@@ -159,9 +159,8 @@ class AGoalIsMeasuredAgainstAGoalTest extends TestCase
         $salem = $this->staff('سالم', target: 100);
         $this->sell($salem, 40);
         $this->sell($salem, 60, ['status' => Order::CANCELLED]);
-        $this->sell($salem, 60, ['is_held' => true]);
 
-        $this->assertSame(40.0, $this->row($salem)['target_pct'], 'الملغى والمعلَّق ليسا بيعًا');
+        $this->assertSame(40.0, $this->row($salem)['target_pct'], 'الملغى ليس بيعًا');
     }
 
     public function test_last_months_sales_do_not_count_toward_this_months_target(): void

@@ -140,8 +140,8 @@ class AlertMetrics
             ->join('orders', 'orders.id', '=', 'order_items.order_id')
             ->leftJoin('products', 'products.id', '=', 'order_items.product_id')
             ->where('orders.business_id', $businessId)
-            // الشرط بيدٍ هنا لأنه انضمام: النطاق يكتب `is_held` بلا بادئة
-            ->where('orders.is_held', false)->where('orders.status', '!=', \App\Models\Order::CANCELLED)
+            // الشرط بيدٍ هنا لأنه انضمام: النطاق يكتب العمود بلا بادئة
+            ->where('orders.status', '!=', \App\Models\Order::CANCELLED)
             ->whereDate('orders.ordered_at', today())
             ->sum(DB::raw('COALESCE(products.cost, 0) * order_items.quantity'));
 

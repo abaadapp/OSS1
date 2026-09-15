@@ -30,7 +30,7 @@ class OrderController extends Controller
 
     public function index(Request $request)
     {
-        $q = Order::where('business_id', $this->bid())->where('is_held', false)->withCount('items')
+        $q = Order::where('business_id', $this->bid())->withCount('items')
             ->when(Demo::currentBranchId(), fn ($w) => $w->where('branch_id', Demo::currentBranchId()));
 
         // القاعدة نفسها التي يقرأ بها الملفّ — انظر App\Support\ListFilters

@@ -323,7 +323,7 @@ export default function EmployeeForm({
                         <Field
                             label="فروع العمل"
                             className="md:col-span-2"
-                            hint="بلا تحديد = كل الفروع. الموظف يدخل نقطة البيع في فروعه فقط"
+                            hint="بلا تحديد = كل الفروع. الموظف يعمل في فروعه وحدها"
                             error={form.errors.branches}
                         >
                             <div className="flex flex-wrap gap-2">
@@ -371,13 +371,13 @@ export default function EmployeeForm({
             <Section
                 icon={KeyRound}
                 title="الدخول والأمان"
-                hint="بالبريد وكلمة المرور يدخل الموظف — اللوحة ونقطة البيع معًا."
+                hint="بالبريد وكلمة المرور يدخل الموظف إلى اللوحة."
             >
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                     {/*
                         إلزاميّ: هو الباب الوحيد بعد رفع الدخول بالرمز.
-                        وهو فريدٌ على المنصة كلّها، فأوّل متجرين يريدان
-                        `cashier@` يصطدمان — والتلميح يقول ذلك قبل الاصطدام.
+                        وهو فريدٌ في النظام كلّه، فحسابان يريدان العنوان
+                        نفسَه يصطدمان — والتلميح يقول ذلك قبل الاصطدام.
                     */}
                     <Field
                         label="اسم المستخدم"

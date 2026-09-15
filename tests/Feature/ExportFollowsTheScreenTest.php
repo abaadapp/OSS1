@@ -85,7 +85,7 @@ class ExportFollowsTheScreenTest extends TestCase
         return Order::create([
             'business_id' => $this->business->id, 'number' => $number,
             'customer_name' => $customer, 'employee_name' => 'كاشير',
-            'status' => $status, 'payment_method' => 'نقدي', 'is_held' => false,
+            'status' => $status, 'payment_method' => 'نقدي',
             'subtotal' => 10, 'tax' => 0, 'total' => 10,
             'ordered_at' => $at ?? now()->toDateTimeString(),
         ]);

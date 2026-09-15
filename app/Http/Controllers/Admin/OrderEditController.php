@@ -54,7 +54,6 @@ class OrderEditController extends Controller
     private function find(string $number): Order
     {
         return Order::where('business_id', $this->bid())
-            ->where('is_held', false)
             ->when(Demo::currentBranchId(), fn ($w) => $w->where('branch_id', Demo::currentBranchId()))
             ->where('number', $number)
             ->firstOrFail();

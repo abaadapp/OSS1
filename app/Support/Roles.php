@@ -26,7 +26,6 @@ class Roles
         'inventory' => 'مسؤول مخزون',
         'sales' => 'موظف مبيعات',
         'delivery' => 'مندوب توصيل',
-        'cashier' => 'كاشير',
     ];
 
     /**
@@ -35,7 +34,7 @@ class Roles
      * دون `admin` — فهو صاحب العمل نفسه: وظيفةٌ تمنحه لأيّ موظّف تمنحه
      * كلَّ شيء.
      */
-    public const STAFF = ['manager', 'accountant', 'inventory', 'sales', 'delivery', 'cashier'];
+    public const STAFF = ['manager', 'accountant', 'inventory', 'sales', 'delivery'];
 
     /** كل المفاتيح — يُتحقَّق بها من المُدخل فلا يُحفظ دورٌ لا يعرفه النظام */
     public static function keys(): array

@@ -94,7 +94,7 @@ class SettingsWriteRoutesTest extends TestCase
 
     public function test_an_unused_job_title_is_deleted(): void
     {
-        $title = JobTitle::create(['business_id' => $this->business->id, 'name' => 'سائق', 'role' => 'cashier']);
+        $title = JobTitle::create(['business_id' => $this->business->id, 'name' => 'سائق', 'role' => 'sales']);
 
         $this->delete(route('admin.jobTitles.destroy', $title->id))->assertSessionHasNoErrors();
 
@@ -107,10 +107,10 @@ class SettingsWriteRoutesTest extends TestCase
          * وحذفُه يترك موظّفًا بمسمًّى لا وجود له: تُفتح صفحتُه فلا يُعرف
          * موقعُه، وتُحسب صلاحيّاتُه على مسمًّى محذوف.
          */
-        $title = JobTitle::create(['business_id' => $this->business->id, 'name' => 'كاشير', 'role' => 'cashier']);
+        $title = JobTitle::create(['business_id' => $this->business->id, 'name' => 'موظف مبيعات', 'role' => 'sales']);
         User::create([
             'business_id' => $this->business->id, 'name' => 'موظف', 'email' => 'e@eventplus.om',
-            'password' => bcrypt('password'), 'role' => 'cashier', 'status' => 'نشط',
+            'password' => bcrypt('password'), 'role' => 'sales', 'status' => 'نشط',
             'job_title' => $title->name,
         ]);
 
@@ -121,7 +121,7 @@ class SettingsWriteRoutesTest extends TestCase
 
     public function test_a_neighbours_job_title_is_out_of_reach(): void
     {
-        $theirs = JobTitle::create(['business_id' => $this->neighbour->id, 'name' => 'مسمّاهم', 'role' => 'cashier']);
+        $theirs = JobTitle::create(['business_id' => $this->neighbour->id, 'name' => 'مسمّاهم', 'role' => 'sales']);
 
         $this->delete(route('admin.jobTitles.destroy', $theirs->id))->assertNotFound();
 

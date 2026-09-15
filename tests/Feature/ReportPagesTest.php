@@ -109,8 +109,6 @@ class ReportPagesTest extends TestCase
             'customer_name' => 'زبون',
             'total' => $total,
             'status' => 'مكتمل',
-            // صراحةً: `sold()` تشترط `is_held = false`، والافتراض null لا false
-            'is_held' => false,
             'ordered_at' => $when,
             'user_id' => $by?->id,
         ]);
@@ -178,7 +176,7 @@ class ReportPagesTest extends TestCase
     {
         $seller = User::create([
             'business_id' => $this->business->id, 'name' => 'بائع', 'email' => 's@eventplusapp.om',
-            'password' => bcrypt('password'), 'role' => 'cashier', 'status' => 'نشط',
+            'password' => bcrypt('password'), 'role' => 'sales', 'status' => 'نشط',
         ]);
 
         $this->sale(300, now()->toDateTimeString(), $seller);
@@ -203,7 +201,7 @@ class ReportPagesTest extends TestCase
         // تقريرُ أداءٍ أوّلُ سطرٍ فيه أقدمُ موظفٍ لا أعلاهم بيعًا لا يُقرأ بنظرة
         $second = User::create([
             'business_id' => $this->business->id, 'name' => 'الثاني', 'email' => 'b@eventplusapp.om',
-            'password' => bcrypt('password'), 'role' => 'cashier', 'status' => 'نشط',
+            'password' => bcrypt('password'), 'role' => 'sales', 'status' => 'نشط',
         ]);
 
         $this->sale(900, now()->toDateTimeString(), $second);

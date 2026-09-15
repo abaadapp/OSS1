@@ -37,7 +37,7 @@ class SectionRoutingTest extends TestCase
         return User::create([
             'business_id' => $this->business->id, 'name' => 'موظف',
             'email' => 'e'.uniqid().'@eventplus.om', 'password' => bcrypt('password'),
-            'role' => 'cashier', 'status' => 'نشط', 'permissions' => $permissions,
+            'role' => 'sales', 'status' => 'نشط', 'permissions' => $permissions,
         ]);
     }
 

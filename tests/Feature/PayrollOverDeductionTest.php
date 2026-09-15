@@ -116,7 +116,7 @@ class PayrollOverDeductionTest extends TestCase
         // زميلٌ سليم معه: بلا صافٍ موجب يوقفه فحصٌ آخر قبل هذا
         User::create([
             'business_id' => $this->business->id, 'name' => 'زميل', 'email' => 'z@eventplusapp.om',
-            'password' => bcrypt('password'), 'role' => 'cashier', 'status' => 'نشط',
+            'password' => bcrypt('password'), 'role' => 'sales', 'status' => 'نشط',
             'basic_salary' => 1000, 'allowances' => 0,
         ]);
 

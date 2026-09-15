@@ -513,7 +513,7 @@ class ReportData
         $branch = self::pick($filters, 'branch_id');
         $method = self::pick($filters, 'payment_method');
 
-        $base = Order::where('business_id', $bid)->where('is_held', false)
+        $base = Order::where('business_id', $bid)
             ->when($start, fn ($q) => $q->where('ordered_at', '>=', $start))
             ->when($status, fn ($q) => $q->where('status', $status))
             ->when($branch, fn ($q) => $q->where('branch_id', $branch))
@@ -572,7 +572,7 @@ class ReportData
          */
         $sold = DB::table('order_items')
             ->join('orders', 'orders.id', '=', 'order_items.order_id')
-            ->where('orders.business_id', $bid)->where('orders.is_held', false)
+            ->where('orders.business_id', $bid)
             ->where('orders.status', '!=', Order::CANCELLED)
             ->when($start, fn ($q) => $q->where('orders.ordered_at', '>=', $start))
             ->whereNotNull('order_items.product_id')

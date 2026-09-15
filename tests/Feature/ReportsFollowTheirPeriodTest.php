@@ -49,7 +49,7 @@ class ReportsFollowTheirPeriodTest extends TestCase
     {
         Order::create([
             'business_id' => $this->business->id, 'branch_id' => 1,
-            'number' => 'INV-'.uniqid(), 'status' => 'مكتمل', 'is_held' => false,
+            'number' => 'INV-'.uniqid(), 'status' => 'مكتمل',
             'payment_method' => 'نقدي', 'subtotal' => $total, 'total' => $total,
             'ordered_at' => $when, 'created_at' => $when, 'updated_at' => $when,
         ]);

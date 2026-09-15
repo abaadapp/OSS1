@@ -43,7 +43,7 @@ class BackupIntegrityTest extends TestCase
             Order::create([
                 'business_id' => $this->business->id, 'branch_id' => $branch->id,
                 'number' => 'INV-'.$i, 'subtotal' => 10, 'discount' => 0, 'tax' => 0, 'total' => 10,
-                'payment_method' => 'نقدي', 'status' => 'مكتمل', 'is_held' => false, 'ordered_at' => now(),
+                'payment_method' => 'نقدي', 'status' => 'مكتمل', 'ordered_at' => now(),
             ]);
         }
     }

@@ -33,16 +33,25 @@ class AccessControlTest extends TestCase
             'شرط config/app.php يشترط local قبل النظر إلى المتغيّر'
         );
     }
-    public function test_a_cashier_cannot_reach_the_shop_admin_panel(): void
+    /**
+     * ما لم يُمنح لا يُفتح — ولو كان صاحبُه يدخل اللوحة.
+     *
+     * دخولُ اللوحة سؤالٌ، وفتحُ الشاشة سؤالٌ آخر: موظّفٌ خُصّصت صلاحياتُه
+     * في «المبيعات» وحدها يمرّ من حارس اللوحة ثمّ يُردّ عند كلّ شاشةٍ
+     * سواها. وكان هذا يُقاس بدور «الكاشير» — وقد زال مع صندوقه — فيُقاس
+     * الآن بما يقيسه الحارسُ فعلًا: القائمةُ اليدويّة.
+     */
+    public function test_a_section_that_was_not_granted_is_not_opened(): void
     {
-        $business = Business::create(['name' => 'متجر', 'status' => 'نشط']);
-        $cashier = User::create([
-            'business_id' => $business->id, 'name' => 'كاشير', 'email' => 'c@test.local',
-            'password' => bcrypt('x'), 'role' => 'cashier', 'status' => 'نشط',
+        $business = Business::create(['name' => 'شركة', 'status' => 'نشط']);
+        $clerk = User::create([
+            'business_id' => $business->id, 'name' => 'موظف', 'email' => 'c@test.local',
+            'password' => bcrypt('x'), 'role' => 'sales', 'status' => 'نشط',
+            'permissions' => ['orders'],
         ]);
 
-        $this->actingAs($cashier)->get('/admin/dashboard')->assertForbidden();
-        $this->actingAs($cashier)->get('/admin/settings')->assertForbidden();
+        $this->actingAs($clerk)->get('/admin/dashboard')->assertForbidden();
+        $this->actingAs($clerk)->get('/admin/settings')->assertForbidden();
     }
 
     public function test_a_missing_record_is_a_404_not_someone_elses_record(): void

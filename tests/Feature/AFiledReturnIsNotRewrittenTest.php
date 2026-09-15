@@ -67,7 +67,7 @@ class AFiledReturnIsNotRewrittenTest extends TestCase
     {
         return Order::create([
             'business_id' => $this->bid(), 'number' => 'S'.uniqid(),
-            'status' => OrderStatus::READY, 'payment_status' => 'مدفوع', 'is_held' => false,
+            'status' => OrderStatus::READY, 'payment_status' => 'مدفوع',
             'subtotal' => 100, 'discount' => 0, 'tax' => $tax, 'delivery_fee' => 0,
             'total' => 100 + $tax, 'payment_method' => 'نقدي',
             'ordered_at' => now()->parse($when),

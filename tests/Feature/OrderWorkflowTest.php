@@ -47,7 +47,6 @@ class OrderWorkflowTest extends TestCase
             'branch_id' => Branch::where('business_id', $this->business->id)->value('id'),
             'number' => 'INV-'.uniqid(),
             'status' => OrderStatus::PENDING,
-            'is_held' => false,
             'payment_method' => 'نقدي',
             'payment_status' => 'مدفوع',
             'subtotal' => 25, 'total' => 25,

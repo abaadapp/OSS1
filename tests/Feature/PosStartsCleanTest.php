@@ -42,7 +42,7 @@ class PosStartsCleanTest extends TestCase
 
         $this->cashier = User::create([
             'business_id' => $this->business->id, 'name' => 'كاشير', 'email' => 'c@eventplusapp.om',
-            'password' => bcrypt('password'), 'role' => 'cashier', 'status' => 'نشط',
+            'password' => bcrypt('password'), 'role' => 'sales', 'status' => 'نشط',
         ]);
 
         $this->product = Product::create([
@@ -75,7 +75,7 @@ class PosStartsCleanTest extends TestCase
         Order::create([
             'business_id' => $other->id, 'customer_id' => $theirCustomer->id,
             'number' => 'JAAR-1', 'customer_name' => 'زبونهم', 'total' => 50,
-            'is_held' => false, 'status' => 'مكتمل', 'ordered_at' => now(),
+            'status' => 'مكتمل', 'ordered_at' => now(),
         ]);
 
         $numbers = collect(Demo::customers())->pluck('last_invoice')->filter()->all();

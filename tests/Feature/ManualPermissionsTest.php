@@ -31,7 +31,7 @@ class ManualPermissionsTest extends TestCase
         parent::setUp();
 
         $this->business = Business::create(['name' => 'متجري', 'type' => 'عام', 'status' => 'نشط']);
-        JobTitle::create(['business_id' => $this->business->id, 'name' => 'كاشير', 'role' => 'cashier']);
+        JobTitle::create(['business_id' => $this->business->id, 'name' => 'موظف مبيعات', 'role' => 'sales']);
 
         $this->owner = User::create([
             'business_id' => $this->business->id, 'name' => 'المالك', 'email' => 'o@eventplus.om',
@@ -39,7 +39,7 @@ class ManualPermissionsTest extends TestCase
         ]);
         $this->cashier = User::create([
             'business_id' => $this->business->id, 'name' => 'أحمد', 'email' => 'c@eventplus.om',
-            'password' => bcrypt('password'), 'role' => 'cashier', 'status' => 'نشط', 'job_title' => 'كاشير',
+            'password' => bcrypt('password'), 'role' => 'sales', 'status' => 'نشط', 'job_title' => 'موظف مبيعات',
         ]);
 
     }
@@ -47,7 +47,7 @@ class ManualPermissionsTest extends TestCase
     private function save(array $extra)
     {
         return $this->actingAs($this->owner)->put(route('admin.employees.update', $this->cashier->id), array_merge([
-            'name' => 'أحمد', 'email' => 'c@eventplus.om', 'job_title' => 'كاشير',
+            'name' => 'أحمد', 'email' => 'c@eventplus.om', 'job_title' => 'موظف مبيعات',
         ], $extra));
     }
     /** حفظٌ من شاشة أخرى لا يمحو التخصيص، ولا يفرضه على من لم يُخصَّص له */
@@ -70,7 +70,7 @@ class ManualPermissionsTest extends TestCase
         $this->assertTrue($cashier->allows('inventory'), 'لم تصل الصلاحية الممنوحة');
         $this->assertTrue($cashier->allows('products'));
         $this->assertFalse($cashier->allows('finance'), 'وصلت صلاحية لم تُمنح');
-        $this->assertSame('cashier', $cashier->role, 'تغيّر الدور، والمقصود منح صلاحية لا ترقية');
+        $this->assertSame('sales', $cashier->role, 'تغيّر الدور، والمقصود منح صلاحية لا ترقية');
     }
 
     /** الحارس على المسار يقرأ نفس الصلاحية، فالمنح يفتح الصفحة فعلًا */
@@ -95,7 +95,7 @@ class ManualPermissionsTest extends TestCase
             ->assertSessionHasErrors('permissions');
 
         $this->actingAs($this->owner)->post(route('admin.employees.store'), [
-            'name' => 'سالم', 'login_username' => 'salem', 'job_title' => 'كاشير',
+            'name' => 'سالم', 'login_username' => 'salem', 'job_title' => 'موظف مبيعات',
             'manual_permissions' => 1, 'permissions' => [],
         ])->assertSessionHasErrors('permissions');
 
@@ -137,7 +137,7 @@ class ManualPermissionsTest extends TestCase
     public function test_a_new_employee_can_be_created_with_manual_permissions(): void
     {
         $this->actingAs($this->owner)->post(route('admin.employees.store'), [
-            'name' => 'سالم', 'login_username' => 'salem', 'job_title' => 'كاشير',
+            'name' => 'سالم', 'login_username' => 'salem', 'job_title' => 'موظف مبيعات',
             'manual_permissions' => 1, 'permissions' => ['inventory', 'suppliers'],
         ])->assertRedirect();
 
@@ -146,13 +146,13 @@ class ManualPermissionsTest extends TestCase
         $this->assertSame(['inventory', 'suppliers'], $new->permissions);
         $this->assertTrue($new->allows('inventory'));
         $this->assertFalse($new->allows('finance'));
-        $this->assertSame('cashier', $new->role, 'الوظيفة تقترح ولا تُلزم — والدور لم يتغيّر');
+        $this->assertSame('sales', $new->role, 'الوظيفة تقترح ولا تُلزم — والدور لم يتغيّر');
     }
 
     public function test_a_new_employee_without_the_flag_follows_the_job_title(): void
     {
         $this->actingAs($this->owner)->post(route('admin.employees.store'), [
-            'name' => 'مريم', 'login_username' => 'maryam', 'job_title' => 'كاشير',
+            'name' => 'مريم', 'login_username' => 'maryam', 'job_title' => 'موظف مبيعات',
         ])->assertRedirect();
 
         $this->assertNull(User::where('email', 'maryam@eventplusapp.om')->firstOrFail()->permissions);
@@ -162,7 +162,7 @@ class ManualPermissionsTest extends TestCase
     public function test_the_new_employee_can_open_what_was_granted(): void
     {
         $this->actingAs($this->owner)->post(route('admin.employees.store'), [
-            'name' => 'سالم', 'login_username' => 'salem', 'job_title' => 'كاشير',
+            'name' => 'سالم', 'login_username' => 'salem', 'job_title' => 'موظف مبيعات',
             'manual_permissions' => 1, 'permissions' => ['inventory'],
         ]);
 
@@ -176,7 +176,7 @@ class ManualPermissionsTest extends TestCase
     {
         $this->actingAs($this->owner)
             ->put(route('admin.employees.update', $this->owner->id), [
-                'name' => 'المالك', 'email' => 'o@eventplus.om', 'job_title' => 'كاشير',
+                'name' => 'المالك', 'email' => 'o@eventplus.om', 'job_title' => 'موظف مبيعات',
                 'manual_permissions' => 1, 'permissions' => ['dashboard'],
             ])
             ->assertSessionHasErrors('permissions');

@@ -48,7 +48,7 @@ class SearchWorksForEveryRoleTest extends TestCase
          */
         $this->cashier = User::create([
             'business_id' => $this->shop->id, 'name' => 'كاشير', 'email' => 'cashier@eventplusapp.om',
-            'password' => bcrypt('x'), 'role' => 'cashier', 'status' => 'نشط',
+            'password' => bcrypt('x'), 'role' => 'sales', 'status' => 'نشط',
         ]);
 
         /*
@@ -59,7 +59,7 @@ class SearchWorksForEveryRoleTest extends TestCase
          */
         $this->onFloor = User::create([
             'business_id' => $this->shop->id, 'name' => 'بائع', 'email' => 'floor@eventplusapp.om',
-            'password' => bcrypt('x'), 'role' => 'cashier', 'status' => 'نشط',
+            'password' => bcrypt('x'), 'role' => 'sales', 'status' => 'نشط',
             'permissions' => ['pos', 'products'],
         ]);
 
@@ -149,7 +149,7 @@ class SearchWorksForEveryRoleTest extends TestCase
     {
         return Order::create([
             'business_id' => $this->shop->id, 'number' => $number, 'status' => 'مكتمل',
-            'payment_status' => 'مدفوع', 'payment_method' => 'نقدي', 'is_held' => false,
+            'payment_status' => 'مدفوع', 'payment_method' => 'نقدي',
             'subtotal' => 5, 'discount' => 0, 'tax' => 0, 'delivery_fee' => 0, 'total' => 5,
         ]);
     }

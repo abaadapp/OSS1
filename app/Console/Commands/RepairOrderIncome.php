@@ -39,7 +39,6 @@ class RepairOrderIncome extends Command
          * فلو خالفتها هنا لكتبتُ دخلًا على بيعةٍ لا تعدّها التقارير بيعة.
          */
         $query = Order::query()
-            ->where('is_held', false)
             ->where('status', '!=', OrderStatus::CANCELLED)
             ->whereDoesntHave('transactions', fn ($q) => $q->where('type', 'دخل'))
             ->when($this->option('business'), fn ($q, $id) => $q->where('business_id', $id))

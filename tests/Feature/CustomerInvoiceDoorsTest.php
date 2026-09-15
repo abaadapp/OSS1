@@ -185,14 +185,14 @@ class CustomerInvoiceDoorsTest extends TestCase
             ->get('/admin/finance/receivables/'.$this->customer->id.'/statement/pdf')->assertOk();
     }
 
-    public function test_a_cashier_cannot_open_the_invoices_screen(): void
+    public function test_whoever_lacks_sales_cannot_open_the_invoices_screen(): void
     {
-        $cashier = User::create([
-            'business_id' => $this->business->id, 'name' => 'كاشير', 'email' => 'c@eventplus.om',
-            'password' => bcrypt('password'), 'role' => 'cashier', 'status' => 'نشط',
+        $keeper = User::create([
+            'business_id' => $this->business->id, 'name' => 'أمين مخزن', 'email' => 'c@eventplus.om',
+            'password' => bcrypt('password'), 'role' => 'inventory', 'status' => 'نشط',
         ]);
 
-        $this->actingAs($cashier)->get('/admin/customer-invoices')->assertForbidden();
+        $this->actingAs($keeper)->get('/admin/customer-invoices')->assertForbidden();
     }
 
     public function test_credit_settings_are_written_through_one_door(): void

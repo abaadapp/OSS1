@@ -323,7 +323,7 @@ class ARestoreReturnsTheShopTest extends TestCase
         $order = DB::table('orders')->insertGetId([
             'business_id' => $bid, 'branch_id' => $branch, 'customer_id' => $customer,
             'number' => 'INV-'.$bid.'-1', 'subtotal' => 10, 'tax' => 0.5, 'total' => 10.5,
-            'payment_method' => 'نقدي', 'status' => 'مكتمل', 'is_held' => false,
+            'payment_method' => 'نقدي', 'status' => 'مكتمل',
             'ordered_at' => now(), 'created_at' => now(), 'updated_at' => now(),
         ]);
         DB::table('order_items')->insert([

@@ -70,7 +70,7 @@ class SearchController extends Controller
          */
         $seesOrders = $user->allows('orders');
 
-        $orders = $seesOrders ? Order::where('business_id', $bid)->where('is_held', false)
+        $orders = $seesOrders ? Order::where('business_id', $bid)
             ->where(fn ($w) => $w->where('number', $op, $like)->orWhere('customer_name', $op, $like))
             ->orderByDesc('id')->limit(5)->get()->map(fn ($o) => [
                 'label' => $o->number, 'meta' => $o->customer_name ?? __('عميل نقدي'),

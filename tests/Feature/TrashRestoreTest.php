@@ -182,7 +182,7 @@ class TrashRestoreTest extends TestCase
          */
         $clerk = User::create([
             'business_id' => $this->business->id, 'name' => 'موظف', 'email' => 'clerk@eventplus.om',
-            'role' => 'cashier', 'job_title' => 'كاشير', 'status' => 'نشط', 'password' => 'x',
+            'role' => 'sales', 'job_title' => 'موظف مبيعات', 'status' => 'نشط', 'password' => 'x',
             'permissions' => ['products'],
         ]);
 
@@ -201,7 +201,7 @@ class TrashRestoreTest extends TestCase
         Order::create([
             'business_id' => $this->business->id, 'branch_id' => $branch->id,
             'number' => 'INV-9', 'subtotal' => 10, 'total' => 10,
-            'payment_method' => 'نقدي', 'status' => 'مكتمل', 'is_held' => false, 'ordered_at' => now(),
+            'payment_method' => 'نقدي', 'status' => 'مكتمل', 'ordered_at' => now(),
         ]);
 
         $this->actingAs($this->owner)->delete(route('admin.branches.destroy', $branch->id));

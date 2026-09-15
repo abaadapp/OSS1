@@ -108,7 +108,7 @@ class StockInvariantGuardsTest extends TestCase
             'business_id' => $this->business->id, 'branch_id' => $this->other->id,
             'number' => 'INV-1', 'status' => 'مكتمل', 'payment_method' => 'نقدي',
             'subtotal' => 30, 'tax' => 0, 'discount' => 0, 'total' => 30,
-            'is_held' => false, 'ordered_at' => now(),
+            'ordered_at' => now(),
         ]);
         $item = OrderItem::create([
             'order_id' => $order->id, 'product_id' => $p->id, 'name' => $p->name,

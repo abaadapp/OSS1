@@ -88,7 +88,7 @@ class PasswordRecoveryTest extends TestCase
 
         $cashier = User::create([
             'business_id' => $this->business->id, 'name' => 'احمد',
-            'email' => 'ahmed@gmail.com', 'role' => 'cashier', 'job_title' => 'كاشير',
+            'email' => 'ahmed@gmail.com', 'role' => 'sales', 'job_title' => 'موظف مبيعات',
             'status' => 'نشط', 'password' => 'x',
         ]);
 

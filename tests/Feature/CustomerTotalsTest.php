@@ -46,7 +46,7 @@ class CustomerTotalsTest extends TestCase
         $this->actingAs($this->owner);
     }
 
-    private function order(string $status, float $total, bool $held = false): Order
+    private function order(string $status, float $total): Order
     {
         return Order::create([
             'business_id' => $this->business->id,
@@ -54,7 +54,7 @@ class CustomerTotalsTest extends TestCase
             'customer_id' => $this->customer->id, 'customer_name' => 'سالم',
             'branch' => 'الرئيسي', 'payment_method' => 'نقدي', 'payment_status' => 'مدفوع',
             'status' => $status, 'subtotal' => $total, 'discount' => 0, 'tax' => 0,
-            'total' => $total, 'is_held' => $held, 'ordered_at' => now(),
+            'total' => $total, 'ordered_at' => now(),
         ]);
     }
 
@@ -74,14 +74,6 @@ class CustomerTotalsTest extends TestCase
 
         $this->assertSame(100.0, $row['total_spent'], 'الملغى دخل إنفاق العميل');
         $this->assertSame(1, $row['orders']);
-    }
-
-    public function test_a_held_cart_is_not_spending_either(): void
-    {
-        $this->order('مكتمل', 100);
-        $this->order('معلق', 900, held: true);
-
-        $this->assertSame(100.0, $this->row()['total_spent']);
     }
 
     /** والبطاقة فوق الجدول والصفّ تحتها يقولان الرقم نفسه */

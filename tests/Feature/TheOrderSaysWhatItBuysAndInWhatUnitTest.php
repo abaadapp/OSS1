@@ -120,7 +120,7 @@ class TheOrderSaysWhatItBuysAndInWhatUnitTest extends TestCase
     {
         $cashier = User::create([
             'business_id' => $this->business->id, 'name' => 'كاشير', 'email' => 'c@eventplus.om',
-            'password' => bcrypt('password'), 'role' => 'cashier', 'status' => 'نشط',
+            'password' => bcrypt('password'), 'role' => 'sales', 'status' => 'نشط',
         ]);
 
         $this->actingAs($cashier)->get(route('admin.purchases.create'))->assertForbidden();

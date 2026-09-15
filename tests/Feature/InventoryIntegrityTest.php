@@ -252,7 +252,7 @@ class InventoryIntegrityTest extends TestCase
         $order = Order::create([
             'business_id' => $this->business->id, 'branch_id' => $this->muscat->id,
             'number' => 'ORD-1', 'status' => 'مكتمل', 'payment_method' => 'نقدي',
-            'subtotal' => 20, 'tax' => 0, 'total' => 20, 'ordered_at' => now(), 'is_held' => false,
+            'subtotal' => 20, 'tax' => 0, 'total' => 20, 'ordered_at' => now(),
         ]);
         OrderItem::create([
             'order_id' => $order->id, 'product_id' => $this->product->id,
@@ -275,7 +275,7 @@ class InventoryIntegrityTest extends TestCase
         $order = Order::create([
             'business_id' => $this->business->id, 'branch_id' => $this->muscat->id,
             'number' => 'ORD-2', 'status' => 'مكتمل', 'payment_method' => 'نقدي',
-            'subtotal' => 20, 'tax' => 0, 'total' => 20, 'ordered_at' => now(), 'is_held' => false,
+            'subtotal' => 20, 'tax' => 0, 'total' => 20, 'ordered_at' => now(),
         ]);
         OrderItem::create([
             'order_id' => $order->id, 'product_id' => $this->product->id,

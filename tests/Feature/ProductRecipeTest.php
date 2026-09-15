@@ -47,8 +47,8 @@ class ProductRecipeTest extends TestCase
         ]);
 
         $this->cashier = User::create([
-            'business_id' => $this->business->id, 'name' => 'كاشير', 'email' => 'c@r.local',
-            'password' => bcrypt('secret'), 'role' => 'cashier', 'status' => 'نشط',
+            'business_id' => $this->business->id, 'name' => 'موظف مبيعات', 'email' => 'c@r.local',
+            'password' => bcrypt('secret'), 'role' => 'sales', 'status' => 'نشط',
         ]);
 
         $this->bouquet = Product::create([

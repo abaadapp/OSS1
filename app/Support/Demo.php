@@ -783,7 +783,6 @@ class Demo
             ->withCount('items')->orderByDesc('ordered_at');
 
         if ($filter) {
-            $query->where('is_held', false);
             ListFilters::orders($query, $filter);
         } else {
             $query->sold();
@@ -2516,7 +2515,7 @@ class Demo
             ->leftJoin('products', 'products.id', '=', 'order_items.product_id')
             ->leftJoin('categories', 'categories.id', '=', 'products.category_id')
             // بيدٍ لأنه انضمام — انظر Order::scopeSold
-            ->where('orders.business_id', self::bid())->where('orders.is_held', false)
+            ->where('orders.business_id', self::bid())
             ->where('orders.status', '!=', Order::CANCELLED)
             ->when($start, fn ($q) => $q->where('orders.ordered_at', '>=', $start))
             // علامة تنصيص مفردة لا مزدوجة: SQLite يتساهل ويعدّ "..." نصًّا،
@@ -2602,35 +2601,7 @@ class Demo
 
     
 
-    /**
-     * الطلبات المعلّقة والمحفوظة — للفرع لا للشخص.
-     *
-     * كانت تُرشَّح على `employee_name == auth()->user()->name`، وهو ما كان
-     * صحيحًا يوم كان اسم الموظف هو اسم الحساب المسجَّل. ثم صار البيع يُنسب
-     * إلى الكاشير المختار على الصندوق، فصار الطلب يُحفظ باسم «أحمد» ويُبحث
-     * عنه باسم «مالك النشاط» — فيُخزَّن بنجاح، وتظهر رسالة «تم تعليق الطلب»،
-     * ولا يظهر في القائمة أبدًا. أسوأ أنواع العطب: يقول لك إنه نجح.
-     *
-     * والصواب أن تكون للفرع: الطلب المعلّق زبونٌ ينتظر عند الصندوق، فمن يقف
-     * عليه حين يعود الزبون هو من يستكمله — لا صاحب الجلسة التي أنشأته.
-     */
-    public static function heldOrders(): array
-    {
-        return Order::where('business_id', self::bid())->where('is_held', true)
-            ->when(self::currentBranchId(), fn ($q) => $q->where('branch_id', self::currentBranchId()))
-            ->withCount('items')->orderByDesc('id')->get()->map(fn ($o) => [
-                'order_id' => $o->id,
-                'id' => $o->number,
-                'customer' => self::customerLabel($o->customer_name, $o->customer_name_en),
-                'items' => $o->items_count,
-                'total' => (float) $o->total,
-                'time' => optional($o->ordered_at)->format('H:i') ?? '—',
-                // كان الاحتياط اسمًا تجريبيًّا («سارة حسن») يظهر في متجرٍ حقيقي
-                'employee' => $o->employee_name ?: __('غير محدّد'),
-                'status' => $o->status ?? 'معلّق',
-                'saved' => ($o->status ?? '') === 'محفوظ',
-            ])->all();
-    }
+    
 
     
 

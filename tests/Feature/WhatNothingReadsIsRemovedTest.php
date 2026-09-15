@@ -174,12 +174,12 @@ class WhatNothingReadsIsRemovedTest extends TestCase
          */
         $clerk = User::create([
             'business_id' => $this->shop->id, 'name' => 'كاشير', 'email' => 'c@eventplus.om',
-            'password' => bcrypt('password'), 'role' => 'cashier', 'status' => 'نشط',
+            'password' => bcrypt('password'), 'role' => 'sales', 'status' => 'نشط',
         ]);
 
         Order::create([
             'business_id' => $this->shop->id, 'user_id' => $clerk->id, 'number' => 'INV-1',
-            'status' => 'مكتمل', 'is_held' => false, 'payment_method' => 'نقدي',
+            'status' => 'مكتمل', 'payment_method' => 'نقدي',
             'payment_status' => 'مدفوع', 'subtotal' => 40, 'tax' => 0, 'total' => 40,
             'ordered_at' => now(),
         ]);
@@ -195,7 +195,7 @@ class WhatNothingReadsIsRemovedTest extends TestCase
         // وحذفُ عمودٍ لا يكسر ما حوله: الحسابُ يُنشأ ويُعدَّل كما كان
         $clerk = User::create([
             'business_id' => $this->shop->id, 'name' => 'كاشير', 'email' => 'c2@eventplus.om',
-            'password' => bcrypt('password'), 'role' => 'cashier', 'status' => 'نشط',
+            'password' => bcrypt('password'), 'role' => 'sales', 'status' => 'نشط',
         ]);
 
         $clerk->update(['phone' => '96890000000']);

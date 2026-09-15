@@ -80,7 +80,7 @@ class TheSalesListShowsWhatItFiltersByTest extends TestCase
             'customer_name' => 'عدي', 'customer_name_en' => 'Oday',
             'employee_name' => 'نورة', 'subtotal' => 10, 'tax' => 0, 'total' => 10,
             'payment_method' => 'نقدي', 'payment_status' => 'مدفوع',
-            'status' => OrderStatus::COMPLETED, 'is_held' => false, 'ordered_at' => now(),
+            'status' => OrderStatus::COMPLETED, 'ordered_at' => now(),
         ], $over));
     }
 

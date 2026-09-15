@@ -50,7 +50,6 @@ class ShiftStoredClock extends Command
         'expenses' => ['spent_at', 'created_at', 'updated_at'],
         'journal_entries' => ['posted_at', 'created_at', 'updated_at'],
         'inventory_movements' => ['created_at', 'updated_at'],
-        'shifts' => ['opened_at', 'closed_at', 'created_at', 'updated_at'],
         'purchase_orders' => ['received_at', 'created_at', 'updated_at'],
         'supplier_invoices' => ['paid_at', 'created_at', 'updated_at'],
         'activities' => ['created_at', 'updated_at'],

@@ -38,7 +38,8 @@ class StaffCannotOutrankThemselvesTest extends TestCase
             'password' => bcrypt('password'), 'role' => 'admin', 'status' => 'نشط',
         ]);
 
-        foreach ([['محاسب', 'accountant'], ['مدير فرع', 'manager'], ['كاشير', 'cashier']] as [$name, $role]) {
+        foreach ([['محاسب', 'accountant'], ['مدير فرع', 'manager'], ['أمين مخزن', 'inventory'],
+            ['منسّق ميداني', 'delivery']] as [$name, $role]) {
             JobTitle::create(['business_id' => $this->business->id, 'name' => $name, 'role' => $role]);
         }
     }
@@ -56,7 +57,8 @@ class StaffCannotOutrankThemselvesTest extends TestCase
     private function payload(array $over = []): array
     {
         return array_merge([
-            'name' => 'موظف جديد', 'job_title' => 'كاشير',
+            // وظيفةٌ دورُها دون المحاسب: `delivery` أقسامُه جزءٌ من أقسامه
+            'name' => 'موظف جديد', 'job_title' => 'منسّق ميداني',
             'login_username' => 'newstaff', 'password' => 'secret123',
         ], $over);
     }
@@ -137,7 +139,7 @@ class StaffCannotOutrankThemselvesTest extends TestCase
 
     public function test_the_owner_may_raise_anyone(): void
     {
-        $clerk = $this->staff('cashier', 'كاشير');
+        $clerk = $this->staff('inventory', 'أمين مخزن');
         $this->actingAs($this->owner);
 
         $this->put(route('admin.employees.update', $clerk->id), [
@@ -171,14 +173,14 @@ class StaffCannotOutrankThemselvesTest extends TestCase
         $other = Business::create(['name' => 'الجار', 'type' => 'عام', 'status' => 'نشط']);
         $theirs = User::create([
             'business_id' => $other->id, 'name' => 'موظفهم', 'email' => 'x@other.om',
-            'password' => bcrypt('password'), 'role' => 'cashier', 'status' => 'نشط',
+            'password' => bcrypt('password'), 'role' => 'sales', 'status' => 'نشط',
         ]);
 
         $this->actingAs($this->owner);
 
         $this->get(route('admin.employees.edit', $theirs->id))->assertNotFound();
         $this->put(route('admin.employees.update', $theirs->id), [
-            'name' => 'مسروق', 'job_title' => 'كاشير',
+            'name' => 'مسروق', 'job_title' => 'موظف مبيعات',
         ])->assertNotFound();
         $this->post(route('admin.employees.resetPassword', $theirs->id))->assertNotFound();
         $this->post(route('admin.employees.toggle', $theirs->id))->assertNotFound();
@@ -206,7 +208,7 @@ class StaffCannotOutrankThemselvesTest extends TestCase
     private function draftRun(): PayrollRun
     {
         $this->actingAs($this->owner);
-        $this->staff('cashier', 'كاشير', ['email' => 'c1@eventplus.om', 'basic_salary' => 400, 'allowances' => 0]);
+        $this->staff('inventory', 'أمين مخزن', ['email' => 'c1@eventplus.om', 'basic_salary' => 400, 'allowances' => 0]);
         Ledger::seedChart($this->business->id);
 
         $this->post(route('admin.payroll.store'), ['period' => now()->format('Y-m')])

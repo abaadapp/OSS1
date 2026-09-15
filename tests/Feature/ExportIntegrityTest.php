@@ -81,7 +81,7 @@ class ExportIntegrityTest extends TestCase
             'customer_id' => $this->customer->id, 'customer_name' => $this->customer->name,
             'number' => 'ORD-1001', 'status' => 'مكتمل', 'payment_method' => 'نقدي',
             'subtotal' => 25, 'discount' => 0, 'tax' => 1.25, 'total' => 26.25,
-            'ordered_at' => now()->subDay(), 'is_held' => false,
+            'ordered_at' => now()->subDay(),
             'employee_name' => 'المالك',
         ]);
         OrderItem::create([

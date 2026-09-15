@@ -226,7 +226,7 @@ class EveryMovementCarriesItsEntryTest extends TestCase
     {
         $order = Order::create([
             'business_id' => $this->bid(), 'number' => 'INV-1', 'status' => Order::CANCELLED,
-            'total' => 30, 'subtotal' => 30, 'payment_method' => 'نقدي', 'is_held' => false,
+            'total' => 30, 'subtotal' => 30, 'payment_method' => 'نقدي',
         ]);
 
         Transaction::create([

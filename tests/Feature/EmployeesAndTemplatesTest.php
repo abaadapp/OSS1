@@ -20,7 +20,7 @@ use Tests\TestCase;
  *
  * وأخطر ما هنا أن الموظفين مرتبطون بالوظيفة **بالاسم لا بالمعرّف**: تغيير
  * اسم وظيفة يترك حامليها معلَّقين على وظيفة لا وجود لها، وتغيير صلاحيتها
- * لا يصلهم فيبقى «كاشير» بصلاحيات مدير.
+ * لا يصلهم فيبقى «موظّف مبيعات» بصلاحيات مدير.
  */
 class EmployeesAndTemplatesTest extends TestCase
 {
@@ -48,12 +48,12 @@ class EmployeesAndTemplatesTest extends TestCase
         ]);
     }
 
-    private function title(string $name = 'كاشير', string $role = 'cashier'): JobTitle
+    private function title(string $name = 'موظف مبيعات', string $role = 'sales'): JobTitle
     {
         return JobTitle::create(['business_id' => $this->business->id, 'name' => $name, 'role' => $role]);
     }
 
-    private function employee(string $jobTitle = 'كاشير', string $role = 'cashier'): User
+    private function employee(string $jobTitle = 'موظف مبيعات', string $role = 'sales'): User
     {
         return User::create([
             'business_id' => $this->business->id, 'name' => 'أحمد', 'email' => 'a@eventplus.om',
@@ -234,11 +234,11 @@ class EmployeesAndTemplatesTest extends TestCase
 
     public function test_renaming_a_job_title_carries_its_holders_with_it(): void
     {
-        $title = $this->title('كاشير');
-        $e = $this->employee('كاشير');
+        $title = $this->title('موظف مبيعات');
+        $e = $this->employee('موظف مبيعات');
 
         $this->actingAs($this->owner)->put(route('admin.jobTitles.update', $title->id), [
-            'name' => 'أمين صندوق', 'role' => 'cashier',
+            'name' => 'أمين صندوق', 'role' => 'sales',
         ])->assertRedirect();
 
         $this->assertSame('أمين صندوق', $e->fresh()->job_title, 'بقي الموظف على وظيفة لا وجود لها');
@@ -279,11 +279,11 @@ class EmployeesAndTemplatesTest extends TestCase
 
     public function test_a_renamed_title_is_still_accepted_when_saving_the_employee(): void
     {
-        $title = $this->title('كاشير');
-        $e = $this->employee('كاشير');
+        $title = $this->title('موظف مبيعات');
+        $e = $this->employee('موظف مبيعات');
 
         $this->actingAs($this->owner)->put(route('admin.jobTitles.update', $title->id), [
-            'name' => 'أمين صندوق', 'role' => 'cashier',
+            'name' => 'أمين صندوق', 'role' => 'sales',
         ]);
 
         // كان هذا يُرفض بـ«الوظيفة المحددة غير موجودة»
@@ -323,7 +323,7 @@ class EmployeesAndTemplatesTest extends TestCase
     public function test_a_title_of_another_business_is_out_of_reach(): void
     {
         $other = Business::create(['name' => 'جارنا', 'type' => 'عام', 'status' => 'نشط']);
-        $theirs = JobTitle::create(['business_id' => $other->id, 'name' => 'وظيفة الجار', 'role' => 'cashier']);
+        $theirs = JobTitle::create(['business_id' => $other->id, 'name' => 'وظيفة الجار', 'role' => 'sales']);
 
         $this->actingAs($this->owner)->put(route('admin.jobTitles.update', $theirs->id), [
             'name' => 'مسروقة', 'role' => 'manager',

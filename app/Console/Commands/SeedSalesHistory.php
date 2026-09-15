@@ -128,7 +128,6 @@ class SeedSalesHistory extends Command
                         'subtotal' => $subtotal,
                         'tax' => $tax,
                         'total' => $total,
-                        'is_held' => false,
                         'ordered_at' => $orderedAt,
                     ]);
                     foreach ($items as $it) {

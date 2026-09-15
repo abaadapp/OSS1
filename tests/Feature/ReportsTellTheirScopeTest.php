@@ -212,7 +212,7 @@ class ReportsTellTheirScopeTest extends TestCase
     {
         $cashier = User::create([
             'business_id' => $this->business->id, 'name' => 'كاشير', 'email' => 'c@eventplus.om',
-            'password' => bcrypt('password'), 'role' => 'cashier', 'status' => 'نشط',
+            'password' => bcrypt('password'), 'role' => 'sales', 'status' => 'نشط',
         ]);
 
         $this->actingAs($cashier)->get(route('admin.export.suppliers'))->assertForbidden();
@@ -247,7 +247,7 @@ class ReportsTellTheirScopeTest extends TestCase
 
         $order = Order::create([
             'business_id' => $this->business->id, 'branch_id' => $this->muscat->id,
-            'number' => 'INV-P1', 'status' => 'مكتمل', 'is_held' => false,
+            'number' => 'INV-P1', 'status' => 'مكتمل',
             'payment_method' => 'نقدي', 'subtotal' => 950, 'tax' => 50, 'total' => 1000,
             'ordered_at' => now(), 'created_at' => now(), 'updated_at' => now(),
         ]);

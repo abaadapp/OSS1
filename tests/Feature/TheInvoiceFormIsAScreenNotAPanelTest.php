@@ -76,14 +76,14 @@ class TheInvoiceFormIsAScreenNotAPanelTest extends TestCase
     }
 
     /** ومن لا يملك المبيعات لا يفتحها */
-    public function test_a_cashier_cannot_open_the_create_screen(): void
+    public function test_a_stock_keeper_cannot_open_the_create_screen(): void
     {
-        $cashier = User::create([
-            'business_id' => $this->business->id, 'name' => 'كاشير', 'email' => 'c@eventplus.om',
-            'password' => bcrypt('password'), 'role' => 'cashier', 'status' => 'نشط',
+        $keeper = User::create([
+            'business_id' => $this->business->id, 'name' => 'أمين مخزن', 'email' => 'c@eventplus.om',
+            'password' => bcrypt('password'), 'role' => 'inventory', 'status' => 'نشط',
         ]);
 
-        $this->actingAs($cashier)->get('/admin/customer-invoices/create')->assertForbidden();
+        $this->actingAs($keeper)->get('/admin/customer-invoices/create')->assertForbidden();
     }
 
     /* --------------------------- ضريبةُ البند --------------------------- */
@@ -236,15 +236,15 @@ class TheInvoiceFormIsAScreenNotAPanelTest extends TestCase
         $this->assertSame(1, Customer::count());
     }
 
-    /** والكاشير لا يفتح هذا الباب أيضًا */
-    public function test_a_cashier_cannot_add_a_customer_through_this_door(): void
+    /** ومن لا يملك «المبيعات» لا يفتح هذا الباب أيضًا */
+    public function test_a_stock_keeper_cannot_add_a_customer_through_this_door(): void
     {
-        $cashier = User::create([
-            'business_id' => $this->business->id, 'name' => 'كاشير', 'email' => 'k@eventplus.om',
-            'password' => bcrypt('password'), 'role' => 'cashier', 'status' => 'نشط',
+        $keeper = User::create([
+            'business_id' => $this->business->id, 'name' => 'أمين مخزن', 'email' => 'k@eventplus.om',
+            'password' => bcrypt('password'), 'role' => 'inventory', 'status' => 'نشط',
         ]);
 
-        $this->actingAs($cashier)->post('/admin/customer-invoices/customers', ['name' => 'جهة'])
+        $this->actingAs($keeper)->post('/admin/customer-invoices/customers', ['name' => 'جهة'])
             ->assertForbidden();
 
         $this->assertSame(1, Customer::count());

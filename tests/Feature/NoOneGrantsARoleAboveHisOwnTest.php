@@ -59,7 +59,7 @@ class NoOneGrantsARoleAboveHisOwnTest extends TestCase
         Branch::create(['business_id' => $this->shop->id, 'name' => 'الرئيسي']);
 
         foreach ([['صاحب النشاط', 'admin'], ['مدير فرع', 'manager'],
-            ['محاسب', 'accountant'], ['بائع', 'sales'], ['كاشير', 'cashier']] as [$n, $r]) {
+            ['محاسب', 'accountant'], ['بائع', 'sales'], ['أمين مخزن', 'inventory']] as [$n, $r]) {
             JobTitle::create(['business_id' => $this->shop->id, 'name' => $n, 'role' => $r]);
         }
 
@@ -280,7 +280,7 @@ class NoOneGrantsARoleAboveHisOwnTest extends TestCase
     {
         return array_merge([
             'name' => 'حساب جديد', 'login_username' => 'newone',
-            'password' => 'password12345', 'job_title' => 'كاشير',
+            'password' => 'password12345', 'job_title' => 'موظف مبيعات',
             'manual_permissions' => true, 'permissions' => ['dashboard', 'pos'],
         ], $over);
         }

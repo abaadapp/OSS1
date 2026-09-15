@@ -59,7 +59,7 @@ class AddonConsumesStockTest extends TestCase
         ]);
         $this->cashier = User::create([
             'business_id' => $this->business->id, 'name' => 'كاشير', 'email' => 'c@k.local',
-            'password' => bcrypt('secret'), 'role' => 'cashier', 'status' => 'نشط',
+            'password' => bcrypt('secret'), 'role' => 'sales', 'status' => 'نشط',
         ]);
 
         $this->rose = $this->product('ورد أحمر', 100, cost: 0.300);

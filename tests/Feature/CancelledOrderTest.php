@@ -63,7 +63,7 @@ class CancelledOrderTest extends TestCase
             'branch_id' => $this->branch->id, 'branch' => 'الرئيسي',
             'payment_method' => 'نقدي', 'payment_status' => 'مدفوع', 'status' => $status,
             'subtotal' => $total - $tax, 'discount' => 0, 'tax' => $tax, 'total' => $total,
-            'is_held' => false, 'ordered_at' => now(),
+            'ordered_at' => now(),
         ]);
 
         OrderItem::create([

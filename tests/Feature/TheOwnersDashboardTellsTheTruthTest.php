@@ -85,7 +85,7 @@ class TheOwnersDashboardTellsTheTruthTest extends TestCase
             'business_id' => $this->business->id,
             'branch_id' => $this->main->id,
             'number' => 'INV-'.str_pad((string) (Order::count() + 1), 5, '0', STR_PAD_LEFT),
-            'status' => 'مكتمل', 'is_held' => false,
+            'status' => 'مكتمل',
             'payment_method' => 'نقدي', 'payment_status' => 'مدفوع',
             'subtotal' => $p->price * $qty, 'tax' => $tax, 'total' => $total,
             'ordered_at' => now(),
@@ -192,7 +192,7 @@ class TheOwnersDashboardTellsTheTruthTest extends TestCase
     {
         return User::create([
             'business_id' => $this->business->id, 'name' => $name, 'email' => $email,
-            'password' => bcrypt('password'), 'role' => 'cashier', 'status' => 'نشط',
+            'password' => bcrypt('password'), 'role' => 'sales', 'status' => 'نشط',
         ]);
     }
 

@@ -38,7 +38,6 @@ class PostMissingSales extends Command
 
         foreach ($businesses as $business) {
             $orders = Order::where('business_id', $business->id)
-                ->where('is_held', false)
                 ->where('status', '!=', \App\Support\OrderStatus::CANCELLED)
                 ->whereNotExists(function ($q) {
                     $q->selectRaw('1')->from('journal_entries')

@@ -41,7 +41,7 @@ class AdminPanelAuditTest extends TestCase
         return Order::create([
             'business_id' => $this->business->id, 'customer_id' => $c->id, 'number' => $n,
             'customer_name' => $c->name, 'subtotal' => 10, 'tax' => 0, 'discount' => 0, 'total' => 10,
-            'payment_method' => 'نقدي', 'status' => $status, 'is_held' => false, 'ordered_at' => $when,
+            'payment_method' => 'نقدي', 'status' => $status, 'ordered_at' => $when,
         ]);
     }
 

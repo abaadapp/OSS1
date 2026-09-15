@@ -88,7 +88,14 @@ class EveryRoleIsProbedOnEveryRouteTest extends TestCase
             }
         }
 
-        $this->assertGreaterThan(450, $checked, 'لم يُجرَّب ما يكفي — الفحصُ نفسُه معطوب');
+        /*
+         * والأرضيّة أرضيّة: تقول «المسحُ جرى» لا «المسحُ كامل».
+         *
+         * كانت ٤٥٠ حين كانت الأدوار سبعةً، وأكثرُها إسهامًا `cashier` —
+         * لم يكن يملك إلا «لوحة التحكم» فكادت كلُّ شاشةٍ تُحسب له. وقد زال
+         * الدور مع صندوقه، فهبط العددُ إلى ٣٦٦ بلا أن يتغيّر حارسٌ واحد.
+         */
+        $this->assertGreaterThan(300, $checked, 'لم يُجرَّب ما يكفي — الفحصُ نفسُه معطوب');
         $this->assertSame([], $leaks, "أدوارٌ وصلت إلى أقسامٍ لم تُمنح لها:\n".implode("\n", $leaks));
     }
 
@@ -115,7 +122,6 @@ class EveryRoleIsProbedOnEveryRouteTest extends TestCase
                 'employees', 'reports', 'suppliers', 'purchases'],
             'inventory' => ['dashboard', 'products', 'inventory', 'suppliers', 'purchases'],
             'sales' => ['dashboard', 'orders', 'customers', 'products'],
-            'cashier' => ['dashboard'],
             'delivery' => ['dashboard', 'orders'],
         ], Permissions::MAP, 'تغيّر ما يُمنح لدورٍ — إن كان عمدًا فحدّث هذا الحارس');
     }

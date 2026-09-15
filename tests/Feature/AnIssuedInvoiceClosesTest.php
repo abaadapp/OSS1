@@ -55,7 +55,7 @@ class AnIssuedInvoiceClosesTest extends TestCase
 
         $this->cashier = User::create([
             'business_id' => $this->business->id, 'name' => 'نورة', 'email' => 'n@eventplusapp.om',
-            'password' => bcrypt('secret12345'), 'role' => 'cashier', 'status' => 'نشط',
+            'password' => bcrypt('secret12345'), 'role' => 'sales', 'status' => 'نشط',
         ]);
         $this->owner = User::create([
             'business_id' => $this->business->id, 'name' => 'المالك', 'email' => 'o@eventplusapp.om',
@@ -84,7 +84,7 @@ class AnIssuedInvoiceClosesTest extends TestCase
             'employee_name' => 'نورة', 'user_id' => $this->cashier->id,
             'subtotal' => 30, 'discount' => 0, 'tax' => 1.5, 'delivery_fee' => 0,
             'total' => 31.5, 'payment_method' => 'نقدي',
-            'status' => 'مكتمل', 'payment_status' => 'مدفوع', 'is_held' => false,
+            'status' => 'مكتمل', 'payment_status' => 'مدفوع',
             'ordered_at' => $at,
         ]);
         $order->items()->create([

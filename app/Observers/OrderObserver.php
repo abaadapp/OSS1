@@ -12,23 +12,17 @@ use Illuminate\Support\Facades\DB;
  * والإعلان بعد تثبيت المعاملة: بيعُ الصندوق يكتب الطلب وبنودَه ومخزونَه
  * وقيدَه المالي في معاملةٍ واحدة قد تُلغى. ولو أُعلن داخلها لَخرجت رسالة عن
  * طلبٍ لا وجود له بعد ثوانٍ.
- *
- * والمعلَّق لا يُعلَن عنه: السلّة المعلّقة ليست طلبًا بعد.
  */
 class OrderObserver
 {
     public function created(Order $order): void
     {
-        if ($order->is_held) {
-            return;
-        }
-
         $this->announce($order, null, (string) $order->status);
     }
 
     public function updated(Order $order): void
     {
-        if (! $order->wasChanged('status') || $order->is_held) {
+        if (! $order->wasChanged('status')) {
             return;
         }
 

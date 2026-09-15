@@ -377,7 +377,7 @@ export default function Composition({ productId, data, currency, draft, onDraft,
                     </Button>
                 </div>
                 <p className="mb-4 text-[13px] text-[#6b7280]">
-                    {t('منتجٌ بلا مقاسات يُباع بسعره كما هو. ومن له مقاسات يأتي سعره من المقاس المختار في نقطة البيع.')}
+                    {t('منتجٌ بلا مقاسات يُباع بسعره كما هو. ومن له مقاسات يأتي سعره من المقاس المختار.')}
                 </p>
 
                 {addingVariant && (

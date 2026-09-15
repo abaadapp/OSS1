@@ -184,7 +184,7 @@ class EveryReportOpensOnRealDataTest extends TestCase
 
         User::create([
             'business_id' => $other->id, 'name' => 'غريب', 'email' => 'x@other.om',
-            'password' => bcrypt('password'), 'role' => 'cashier', 'status' => 'نشط',
+            'password' => bcrypt('password'), 'role' => 'sales', 'status' => 'نشط',
         ]);
 
         Customer::create(['business_id' => $other->id, 'name' => 'زبونُ الآخر', 'phone' => '96890000099']);
@@ -263,7 +263,7 @@ class EveryReportOpensOnRealDataTest extends TestCase
                 'customer_id' => $customer->id, 'customer_name' => 'زبونة',
                 'employee_name' => 'المالك', 'user_id' => $this->owner->id,
                 'number' => 'INV-'.($i + 1),
-                'status' => 'مكتمل', 'payment_status' => 'مدفوع', 'is_held' => false,
+                'status' => 'مكتمل', 'payment_status' => 'مدفوع',
                 'payment_method' => 'نقدي',
                 'subtotal' => 25, 'discount' => 0, 'tax' => 1.25, 'total' => 26.25,
                 'ordered_at' => $when, 'created_at' => $when, 'updated_at' => $when,

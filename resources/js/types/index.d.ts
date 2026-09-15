@@ -82,27 +82,14 @@ export interface SharedProps {
     } | null;
     context: {
         businessName: string;
-        /** رابط موقع التاجر المُطبَّع — null حين لم يُضبط بعد */
-        website: string | null;
         branchId: number | null;
         branchName: string;
-        /** اسم صندوق نقطة البيع المفعَّل على هذا الجهاز */
-        deviceName?: string | null;
-        /** ملحقات هذا الصندوق النشطة وحدها — طابعة، ماسح، درج… */
-        peripherals?: {
-            type: string;
-            name: string;
-            paperWidth: number | null;
-            autoPrint: boolean;
-        }[];
         branches: Branch[];
         currency: Currency;
         currencies: Currency[];
-        /** تهيئة المتجر — null حين أقرّ التاجر هويّته، فلا يبقى شريط بعد إتمامه */
+        /** تهيئة الشركة — null حين أُقرّت الهويّة، فلا يبقى شريط بعد إتمامه */
         setup: { done: number; total: number; missing: string[] } | null;
     } | null;
-    /** الموظف الواقف على الصندوق — غير الحساب المسجَّل دخوله */
-    posCashier: { id: number; name: string } | null;
     /**
      * فهرس التقارير المتاحة لهذا المستخدم — عنوانًا ووجهة.
      *

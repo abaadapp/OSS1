@@ -57,7 +57,7 @@ class PayrollTest extends TestCase
     {
         return User::create([
             'business_id' => $this->bid(), 'name' => $name,
-            'password' => bcrypt('password'), 'role' => 'cashier', 'status' => 'نشط',
+            'password' => bcrypt('password'), 'role' => 'sales', 'status' => 'نشط',
             'basic_salary' => $basic, 'allowances' => $allowances,
         ]);
     }
@@ -298,13 +298,13 @@ class PayrollTest extends TestCase
         $employee = $this->employee('سالم', 300);
         $employee->update(['email' => 'salem@eventplus.om']);
         $title = JobTitle::create([
-            'business_id' => $this->bid(), 'name' => 'كاشير', 'role' => 'cashier',
+            'business_id' => $this->bid(), 'name' => 'موظف مبيعات', 'role' => 'sales',
         ]);
 
         $this->actingAs($this->owner)->put(route('admin.employees.update', $employee->id), [
             'name' => $employee->name,
             'email' => 'salem@eventplus.om',
-            'role' => 'cashier',
+            'role' => 'sales',
             'job_title' => $title->name,
             'basic_salary' => '٥٠٠،٧٥',
             'allowances' => '٢٥٫٥',
@@ -369,7 +369,7 @@ class PayrollTest extends TestCase
         ]);
         $theirEmployee = User::create([
             'business_id' => $other->id, 'name' => 'موظفهم', 'email' => 'x@eventplusapp.om',
-            'password' => bcrypt('password'), 'role' => 'cashier', 'status' => 'نشط',
+            'password' => bcrypt('password'), 'role' => 'sales', 'status' => 'نشط',
             'basic_salary' => 400, 'allowances' => 0,
         ]);
         $theirLine = PayrollLine::create([

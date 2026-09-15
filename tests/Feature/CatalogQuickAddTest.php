@@ -39,8 +39,8 @@ class CatalogQuickAddTest extends TestCase
         ]);
 
         $this->cashier = User::create([
-            'business_id' => $this->business->id, 'name' => 'كاشير', 'email' => 'c@q.local',
-            'password' => bcrypt('secret'), 'role' => 'cashier', 'status' => 'نشط',
+            'business_id' => $this->business->id, 'name' => 'محاسب', 'email' => 'c@q.local',
+            'password' => bcrypt('secret'), 'role' => 'accountant', 'status' => 'نشط',
         ]);
     }
 

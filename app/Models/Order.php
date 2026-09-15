@@ -15,7 +15,7 @@ class Order extends Model
     protected $casts = [
         'document_snapshot' => 'array',
         'subtotal' => 'decimal:3', 'discount' => 'decimal:3', 'tax' => 'decimal:3',
-        'delivery_fee' => 'decimal:3', 'total' => 'decimal:3', 'is_held' => 'boolean',
+        'delivery_fee' => 'decimal:3', 'total' => 'decimal:3',
         'coupon_discount' => 'decimal:3',
         'ordered_at' => 'datetime',
         'scheduled_for' => 'datetime',
@@ -95,7 +95,7 @@ class Order extends Model
      */
     public function scopeSold($query)
     {
-        return $query->where('is_held', false)->where('status', '!=', self::CANCELLED);
+        return $query->where('status', '!=', self::CANCELLED);
     }
 
     /**
@@ -116,15 +116,13 @@ class Order extends Model
     /**
      * ما ينتظر التجهيز: طلبٌ حيّ له موعد.
      *
-     * المغلق يخرج (سُلّم أو استُلم أو اكتمل أو أُلغي)، والمعلَّق يخرج لأنّه
-     * سلّةٌ لم تُبَع بعد. والطلب بلا موعد يخرج أيضًا — وهو بيعُ المنضدة:
-     * دُفع وأُخذ في اللحظة نفسها، ولا شيء فيه يُجهَّز. ولولا ذلك لَامتلأت
-     * اللوحة بمئات الفواتير التي أُغلقت منذ شهور.
+     * المغلق يخرج (سُلّم أو استُلم أو اكتمل أو أُلغي)، والطلب بلا موعد يخرج
+     * أيضًا — دُفع وأُخذ في اللحظة نفسها، ولا شيء فيه يُجهَّز. ولولا ذلك
+     * لَامتلأت اللوحة بمئات الفواتير التي أُغلقت منذ شهور.
      */
     public function scopeAwaitingPreparation($query)
     {
-        return $query->where('is_held', false)
-            ->whereNotNull('scheduled_for')
+        return $query->whereNotNull('scheduled_for')
             ->whereNotIn('status', OrderStatus::CLOSED);
     }
 

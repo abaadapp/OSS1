@@ -265,7 +265,7 @@ class TheDashboardDoesNotComfortWithALieTest extends TestCase
         $order = Order::create(array_merge([
             'business_id' => $this->shop->id, 'branch_id' => $this->muscat->id,
             'number' => 'INV-'.str_pad((string) (Order::count() + 1), 5, '0', STR_PAD_LEFT),
-            'status' => 'مكتمل', 'is_held' => false,
+            'status' => 'مكتمل',
             'payment_method' => 'نقدي', 'payment_status' => 'مدفوع',
             'subtotal' => $p->price * $qty, 'tax' => 0, 'total' => $p->price * $qty,
             'ordered_at' => now(),

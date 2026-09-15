@@ -155,7 +155,7 @@ export default function Gallery({ productId, images, max, limits }: Props) {
                 <div>
                     <h3 className="font-bold text-[#111]">{t('صور المنتج')}</h3>
                     <p className="mt-1 text-[13px] text-[#6b7280]">
-                        {t('الرئيسية هي التي تظهر في نقطة البيع والقائمة والفاتورة — والباقي يُعرض في صفحة المنتج.')}
+                        {t('الرئيسية هي التي تظهر في القوائم والفواتير — والباقي يُعرض في صفحة المنتج.')}
                     </p>
                 </div>
                 <span className="shrink-0 text-[12px] text-[#9ca3af]">

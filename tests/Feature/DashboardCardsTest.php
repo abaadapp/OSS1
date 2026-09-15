@@ -90,7 +90,7 @@ class DashboardCardsTest extends TestCase
         Customer::create(['business_id' => $this->business->id, 'name' => 'خالد']);
         Order::create([
             'business_id' => $this->business->id, 'number' => 'INV-1', 'customer_name' => 'خالد',
-            'status' => 'جديد', 'is_held' => false, 'subtotal' => 5, 'total' => 5, 'ordered_at' => now(),
+            'status' => 'جديد', 'subtotal' => 5, 'total' => 5, 'ordered_at' => now(),
         ]);
 
         $before = Demo::allNotifications();
@@ -107,7 +107,7 @@ class DashboardCardsTest extends TestCase
     {
         Order::create([
             'business_id' => $this->business->id, 'number' => 'INV-1', 'customer_name' => 'نقدي',
-            'status' => 'جديد', 'is_held' => false, 'subtotal' => 5, 'total' => 5, 'ordered_at' => now(),
+            'status' => 'جديد', 'subtotal' => 5, 'total' => 5, 'ordered_at' => now(),
         ]);
         $this->assertNotEmpty(Demo::allNotifications());
 
@@ -121,7 +121,7 @@ class DashboardCardsTest extends TestCase
     {
         Order::create([
             'business_id' => $this->business->id, 'number' => 'INV-1', 'customer_name' => 'نقدي',
-            'status' => 'جديد', 'is_held' => false, 'subtotal' => 5, 'total' => 5, 'ordered_at' => now(),
+            'status' => 'جديد', 'subtotal' => 5, 'total' => 5, 'ordered_at' => now(),
         ]);
         $key = Demo::allNotifications()[0]['key'];
 

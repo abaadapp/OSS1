@@ -35,7 +35,7 @@ class LoginIdentityIsOneShapeTest extends TestCase
 
         $this->business = Business::create(['name' => 'محل ورد', 'status' => 'نشط']);
         Branch::create(['business_id' => $this->business->id, 'name' => 'الفرع الرئيسي']);
-        JobTitle::create(['business_id' => $this->business->id, 'name' => 'كاشير', 'role' => 'cashier']);
+        JobTitle::create(['business_id' => $this->business->id, 'name' => 'موظف مبيعات', 'role' => 'sales']);
 
         $this->owner = User::create([
             'business_id' => $this->business->id, 'name' => 'المالك', 'email' => 'owner@eventplusapp.om',
@@ -46,7 +46,7 @@ class LoginIdentityIsOneShapeTest extends TestCase
     private function hire(array $over = [])
     {
         return $this->actingAs($this->owner)->post(route('admin.employees.store'), array_merge([
-            'name' => 'أحمد', 'login_username' => 'ahmad', 'job_title' => 'كاشير',
+            'name' => 'أحمد', 'login_username' => 'ahmad', 'job_title' => 'موظف مبيعات',
         ], $over));
     }
 
@@ -94,7 +94,7 @@ class LoginIdentityIsOneShapeTest extends TestCase
         $other = Business::create(['name' => 'الجار', 'status' => 'نشط']);
         User::create([
             'business_id' => $other->id, 'name' => 'أحمدهم', 'email' => 'ahmad@eventplusapp.om',
-            'password' => bcrypt('password'), 'role' => 'cashier', 'status' => 'نشط', 'job_title' => 'كاشير',
+            'password' => bcrypt('password'), 'role' => 'sales', 'status' => 'نشط', 'job_title' => 'موظف مبيعات',
         ]);
 
         $this->hire()->assertSessionHasErrors('login_username');
@@ -113,7 +113,7 @@ class LoginIdentityIsOneShapeTest extends TestCase
     {
         return User::create([
             'business_id' => $this->business->id, 'name' => 'سالم', 'email' => 'salem@gmail.com',
-            'password' => bcrypt('password'), 'role' => 'cashier', 'status' => 'نشط', 'job_title' => 'كاشير',
+            'password' => bcrypt('password'), 'role' => 'sales', 'status' => 'نشط', 'job_title' => 'موظف مبيعات',
         ]);
     }
 
@@ -129,7 +129,7 @@ class LoginIdentityIsOneShapeTest extends TestCase
 
         $this->actingAs($this->owner)
             ->put(route('admin.employees.update', $legacy->id), [
-                'name' => 'سالم', 'job_title' => 'كاشير', 'phone' => '90000000',
+                'name' => 'سالم', 'job_title' => 'موظف مبيعات', 'phone' => '90000000',
             ])
             ->assertSessionHasNoErrors();
 
@@ -146,7 +146,7 @@ class LoginIdentityIsOneShapeTest extends TestCase
 
         $this->actingAs($this->owner)
             ->put(route('admin.employees.update', $legacy->id), [
-                'name' => 'سالم', 'job_title' => 'كاشير', 'login_username' => 'salem',
+                'name' => 'سالم', 'job_title' => 'موظف مبيعات', 'login_username' => 'salem',
             ])
             ->assertSessionHasNoErrors();
 

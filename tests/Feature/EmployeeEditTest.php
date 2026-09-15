@@ -31,7 +31,7 @@ class EmployeeEditTest extends TestCase
 
         $this->business = Business::create(['name' => 'متجري', 'status' => 'نشط']);
         Branch::create(['business_id' => $this->business->id, 'name' => 'الفرع الرئيسي']);
-        JobTitle::create(['business_id' => $this->business->id, 'name' => 'كاشير', 'role' => 'cashier']);
+        JobTitle::create(['business_id' => $this->business->id, 'name' => 'موظف مبيعات', 'role' => 'sales']);
 
         $this->owner = User::create([
             'business_id' => $this->business->id,
@@ -45,8 +45,8 @@ class EmployeeEditTest extends TestCase
         return User::create([
             'business_id' => $this->business->id,
             'name' => 'أحمد', 'email' => 'emp@test.local',
-            'password' => bcrypt('password'), 'role' => 'cashier', 'status' => 'نشط',
-            'job_title' => 'كاشير', 'branch' => 'الفرع الرئيسي',
+            'password' => bcrypt('password'), 'role' => 'sales', 'status' => 'نشط',
+            'job_title' => 'موظف مبيعات', 'branch' => 'الفرع الرئيسي',
         ]);
     }
 
@@ -56,7 +56,7 @@ class EmployeeEditTest extends TestCase
             'name' => 'أحمد',
             'email' => 'emp@test.local',
             'phone' => '+968 92223333',
-            'job_title' => 'كاشير',
+            'job_title' => 'موظف مبيعات',
             'branch' => 'الفرع الرئيسي',
         ], $overrides);
     }
@@ -148,7 +148,7 @@ class EmployeeEditTest extends TestCase
         $employee = $this->employee();
         User::create([
             'business_id' => $this->business->id, 'name' => 'سالم', 'email' => 'salem@eventplusapp.om',
-            'password' => bcrypt('password'), 'role' => 'cashier', 'status' => 'نشط', 'job_title' => 'كاشير',
+            'password' => bcrypt('password'), 'role' => 'sales', 'status' => 'نشط', 'job_title' => 'موظف مبيعات',
         ]);
 
         $this->actingAs($this->owner)
@@ -164,7 +164,7 @@ class EmployeeEditTest extends TestCase
         $stranger = User::create([
             'business_id' => $other->id,
             'name' => 'غريب', 'email' => 'stranger@test.local',
-            'password' => bcrypt('password'), 'role' => 'cashier', 'status' => 'نشط',
+            'password' => bcrypt('password'), 'role' => 'sales', 'status' => 'نشط',
         ]);
 
         $this->actingAs($this->owner)

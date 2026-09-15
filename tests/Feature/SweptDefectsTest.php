@@ -53,7 +53,7 @@ class SweptDefectsTest extends TestCase
             Order::create([
                 'business_id' => $this->business->id, 'branch_id' => $this->branch->id,
                 'branch' => $this->branch->name, 'number' => 'P-'.$i.'-'.uniqid(),
-                'status' => 'قيد التجهيز', 'is_held' => false,
+                'status' => 'قيد التجهيز',
                 'customer_name' => 'زبون', 'employee_name' => 'موظف',
                 'payment_method' => 'نقدي', 'subtotal' => 10, 'total' => 10,
                 'ordered_at' => now(), 'scheduled_for' => now()->addDays($daysAhead)->addMinutes($i),

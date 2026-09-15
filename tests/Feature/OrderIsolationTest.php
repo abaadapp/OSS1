@@ -42,7 +42,7 @@ class OrderIsolationTest extends TestCase
         $this->hisOrder = Order::create([
             'business_id' => $this->his->id,
             'branch_id' => Branch::where('business_id', $this->his->id)->value('id'),
-            'number' => 'INV-0001', 'status' => OrderStatus::CONFIRMED, 'is_held' => false,
+            'number' => 'INV-0001', 'status' => OrderStatus::CONFIRMED,
             'payment_method' => 'نقدي', 'payment_status' => 'مدفوع',
             'subtotal' => 25, 'total' => 25, 'ordered_at' => now(),
             'scheduled_for' => now()->addHour(),
@@ -95,7 +95,7 @@ class OrderIsolationTest extends TestCase
     {
         return Order::create([
             'business_id' => $this->mine->id, 'branch_id' => $branchId,
-            'number' => $number, 'status' => OrderStatus::CONFIRMED, 'is_held' => false,
+            'number' => $number, 'status' => OrderStatus::CONFIRMED,
             'payment_method' => 'نقدي', 'payment_status' => 'مدفوع',
             'subtotal' => 10, 'total' => 10, 'ordered_at' => now(),
             'scheduled_for' => now()->addHour(),

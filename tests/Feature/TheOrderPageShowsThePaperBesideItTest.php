@@ -59,7 +59,6 @@ class TheOrderPageShowsThePaperBesideItTest extends TestCase
             'customer_id' => $this->customer->id,
             'number' => 'INV-000900',
             'status' => OrderStatus::PENDING,
-            'is_held' => false,
             'payment_method' => 'نقدي',
             'payment_status' => 'مدفوع',
             'subtotal' => 25, 'total' => 25,

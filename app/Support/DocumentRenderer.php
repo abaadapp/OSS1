@@ -183,7 +183,6 @@ class DocumentRenderer
         $values = DocumentTemplates::settings($businessId, 'sale', $override);
 
         $order = Order::where('business_id', $businessId)
-            ->where('is_held', false)
             ->with('items', 'customerInvoices')
             ->latest('id')
             ->first() ?? self::sampleOrder($businessId);
@@ -386,7 +385,7 @@ class DocumentRenderer
     private static function latestOrSample(int $businessId, string $type): array
     {
         $record = match ($type) {
-            'delivery' => Order::where('business_id', $businessId)->where('is_held', false)
+            'delivery' => Order::where('business_id', $businessId)
                 ->with('items')->latest('id')->first(),
             'purchase' => PurchaseOrder::where('business_id', $businessId)
                 ->with('items', 'supplier')->latest('id')->first(),

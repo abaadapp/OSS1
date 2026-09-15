@@ -45,7 +45,7 @@ class CustomAlertsTest extends TestCase
         Order::create([
             'business_id' => $this->business->id, 'number' => 'INV-' . $c->id,
             'customer_id' => $c->id, 'customer_name' => $name, 'status' => 'مكتمل',
-            'is_held' => false, 'subtotal' => 10, 'total' => 10, 'ordered_at' => $when,
+            'subtotal' => 10, 'total' => 10, 'ordered_at' => $when,
         ]);
 
         return $c;
@@ -99,7 +99,7 @@ class CustomAlertsTest extends TestCase
         $c = Customer::create(['business_id' => $other->id, 'name' => 'عميل الجار']);
         Order::create([
             'business_id' => $other->id, 'number' => 'INV-JAR', 'customer_id' => $c->id,
-            'customer_name' => 'عميل الجار', 'status' => 'مكتمل', 'is_held' => false,
+            'customer_name' => 'عميل الجار', 'status' => 'مكتمل',
             'subtotal' => 10, 'total' => 10, 'ordered_at' => now()->subDays(200),
         ]);
 
@@ -119,7 +119,7 @@ class CustomAlertsTest extends TestCase
 
         Order::create([
             'business_id' => $this->business->id, 'number' => 'INV-P', 'customer_name' => 'نقدي',
-            'status' => 'جديد', 'is_held' => false, 'subtotal' => 5, 'total' => 5, 'ordered_at' => now(),
+            'status' => 'جديد', 'subtotal' => 5, 'total' => 5, 'ordered_at' => now(),
         ]);
 
         $this->assertStringContainsString('طلبات متراكمة', implode(' | ', $this->alertTexts()));

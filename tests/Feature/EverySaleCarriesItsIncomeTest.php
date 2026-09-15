@@ -41,7 +41,6 @@ class EverySaleCarriesItsIncomeTest extends TestCase
             'status' => \App\Support\OrderStatus::COMPLETED,
             'payment_method' => 'بطاقة',
             'subtotal' => 100, 'tax' => 5, 'total' => 105,
-            'is_held' => false,
             'ordered_at' => now()->subMonths(3),
         ], $attributes));
     }
@@ -86,16 +85,6 @@ class EverySaleCarriesItsIncomeTest extends TestCase
         $this->assertSame(0, Transaction::count());
     }
 
-    public function test_a_held_ticket_gets_no_entry(): void
-    {
-        // المعلّق لم يُبَع بعد — وقيدُ دخلٍ عليه دخلٌ لم يقع
-        $this->order(['is_held' => true]);
-
-        $this->artisan('finance:repair-order-income')->assertSuccessful();
-
-        $this->assertSame(0, Transaction::count());
-    }
-
     public function test_a_sale_that_already_has_its_entry_is_left_alone(): void
     {
         $order = $this->order();
@@ -118,7 +107,7 @@ class EverySaleCarriesItsIncomeTest extends TestCase
         $other = Business::create(['name' => 'محل آخر', 'email' => 'inc2@test.local', 'status' => 'نشط']);
         Order::create([
             'business_id' => $other->id, 'number' => 'INV-900001',
-            'status' => \App\Support\OrderStatus::COMPLETED, 'is_held' => false,
+            'status' => \App\Support\OrderStatus::COMPLETED,
             'subtotal' => 10, 'tax' => 0, 'total' => 10, 'ordered_at' => now(),
         ]);
 

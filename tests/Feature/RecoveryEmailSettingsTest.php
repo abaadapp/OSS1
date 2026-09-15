@@ -48,7 +48,7 @@ class RecoveryEmailSettingsTest extends TestCase
 
         $this->cashier = User::create([
             'business_id' => $this->business->id, 'name' => 'كاشير', 'email' => 'c@eventplusapp.om',
-            'password' => bcrypt('my-password'), 'role' => 'cashier', 'status' => 'نشط',
+            'password' => bcrypt('my-password'), 'role' => 'sales', 'status' => 'نشط',
         ]);
     }
 

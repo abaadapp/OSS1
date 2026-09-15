@@ -69,7 +69,7 @@ class NoOneSeizesAnAccountAboveHisOwnTest extends TestCase
         ]);
         Ledger::seedChart($this->business->id);
 
-        JobTitle::create(['business_id' => $this->business->id, 'name' => 'كاشير', 'role' => 'cashier']);
+        JobTitle::create(['business_id' => $this->business->id, 'name' => 'موظف مبيعات', 'role' => 'sales']);
         JobTitle::create(['business_id' => $this->business->id, 'name' => 'مدير فرع', 'role' => 'manager']);
 
         $this->owner = $this->staff('المالك', 'o', 'admin', null);

@@ -252,7 +252,7 @@ class PageController extends Controller
         }
 
         $order = Order::where('business_id', Demo::bid())
-            ->where('is_held', false)->where('number', $number)->first();
+            ->where('number', $number)->first();
 
         if (! $order || (int) $order->branch_id === (int) $here || ! $order->branch_id) {
             return null;
@@ -280,7 +280,6 @@ class PageController extends Controller
          * هو الفرع، وتقوله لافتةُ الصفحة كلِّها لا هذا الزرّ وحده.
          */
         $order = Order::where('business_id', Demo::bid())
-            ->where('is_held', false)
             ->when(Demo::currentBranchId(), fn ($w) => $w->where('branch_id', Demo::currentBranchId()))
             ->where('number', $number)->first();
 

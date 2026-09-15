@@ -56,7 +56,6 @@ class DashboardBranchScopeTest extends TestCase
             'total' => $total,
             'payment_method' => $method,
             'status' => 'مكتمل',
-            'is_held' => false,
             'ordered_at' => now(),
         ]);
     }

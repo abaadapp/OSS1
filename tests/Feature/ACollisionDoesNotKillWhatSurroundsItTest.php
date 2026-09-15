@@ -95,7 +95,7 @@ class ACollisionDoesNotKillWhatSurroundsItTest extends TestCase
         $branch = Branch::create(['business_id' => $this->business->id, 'name' => 'الرئيسي']);
         $user = User::create([
             'business_id' => $this->business->id, 'name' => 'كاشير', 'email' => 'k@eventplus.om',
-            'password' => bcrypt('password'), 'role' => 'cashier', 'status' => 'نشط',
+            'password' => bcrypt('password'), 'role' => 'sales', 'status' => 'نشط',
         ]);
 
         $taken = Order::create([

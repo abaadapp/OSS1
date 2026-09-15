@@ -523,7 +523,7 @@ export default function ProductForm({ categories, product, description, currency
                                     <div>
                                         <p className="text-sm font-medium text-[#111]">{t('تفعيل المنتج')}</p>
                                         <p className="mt-0.5 text-[12px] text-[#9ca3af]">
-                                            {t('إظهاره في نقطة البيع والفواتير')}
+                                            {t('إظهاره في القوائم والفواتير')}
                                         </p>
                                     </div>
                                     <Switch on={form.data.active} onChange={() => form.setData('active', !form.data.active)} />

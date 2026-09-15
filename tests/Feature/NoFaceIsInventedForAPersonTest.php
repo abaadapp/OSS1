@@ -45,7 +45,7 @@ class NoFaceIsInventedForAPersonTest extends TestCase
 
         $this->business = Business::create(['name' => 'محل ورد', 'type' => 'محل ورود', 'status' => 'نشط']);
         Branch::create(['business_id' => $this->business->id, 'name' => 'الفرع الرئيسي']);
-        JobTitle::create(['business_id' => $this->business->id, 'name' => 'كاشير', 'role' => 'cashier']);
+        JobTitle::create(['business_id' => $this->business->id, 'name' => 'موظف مبيعات', 'role' => 'sales']);
 
         $this->owner = User::create([
             'business_id' => $this->business->id, 'name' => 'المالك', 'email' => 'owner@eventplusapp.om',
@@ -94,7 +94,7 @@ class NoFaceIsInventedForAPersonTest extends TestCase
     public function test_a_new_employee_is_born_without_a_face(): void
     {
         $this->post(route('admin.employees.store'), [
-            'name' => 'سالم', 'login_username' => 'salem', 'job_title' => 'كاشير',
+            'name' => 'سالم', 'login_username' => 'salem', 'job_title' => 'موظف مبيعات',
         ])->assertSessionHasNoErrors();
 
         $id = DB::table('users')->where('name', 'سالم')->value('id');
@@ -113,7 +113,7 @@ class NoFaceIsInventedForAPersonTest extends TestCase
     public function test_no_row_written_by_the_doors_carries_a_third_party_face(): void
     {
         $this->post(route('admin.employees.store'), [
-            'name' => 'نورة', 'login_username' => 'noura', 'job_title' => 'كاشير',
+            'name' => 'نورة', 'login_username' => 'noura', 'job_title' => 'موظف مبيعات',
         ])->assertSessionHasNoErrors();
 
         $this->assertSame(0, DB::table('users')->where('avatar', 'like', '%picsum%')->count());
@@ -125,7 +125,7 @@ class NoFaceIsInventedForAPersonTest extends TestCase
     {
         User::create([
             'business_id' => $this->business->id, 'name' => 'سالم', 'email' => 'salem@eventplusapp.om',
-            'password' => bcrypt('password'), 'role' => 'cashier', 'status' => 'نشط',
+            'password' => bcrypt('password'), 'role' => 'sales', 'status' => 'نشط',
         ]);
 
         $row = collect(Demo::employees())->firstWhere('name', 'سالم');
@@ -138,7 +138,7 @@ class NoFaceIsInventedForAPersonTest extends TestCase
     {
         User::create([
             'business_id' => $this->business->id, 'name' => 'هدى', 'email' => 'huda@eventplusapp.om',
-            'password' => bcrypt('password'), 'role' => 'cashier', 'status' => 'نشط',
+            'password' => bcrypt('password'), 'role' => 'sales', 'status' => 'نشط',
             'avatar' => 'avatars/huda.jpg',
         ]);
 
@@ -190,7 +190,7 @@ class NoFaceIsInventedForAPersonTest extends TestCase
     {
         return User::create(array_merge([
             'business_id' => $this->business->id, 'name' => 'مخترع', 'email' => 'i@eventplusapp.om',
-            'password' => bcrypt('password'), 'role' => 'cashier', 'status' => 'نشط',
+            'password' => bcrypt('password'), 'role' => 'sales', 'status' => 'نشط',
             'avatar' => 'https://picsum.photos/seed/emp123/400/400',
         ], $over));
     }

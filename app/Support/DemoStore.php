@@ -49,8 +49,6 @@ class DemoStore
     /** بريد العرض — يُقال في الاجتماع ويُكتب على السبّورة، فليكن قصيرًا */
     public const DEMO_EMAIL = 'demo@gmail.com';
 
-    public const DEMO_CASHIER_EMAIL = 'demo-cashier@gmail.com';
-
     /**
      * بريدُ العرض ما دام حرًّا، وإلّا فبريدٌ يحمل معرّف المتجر.
      *
@@ -63,11 +61,6 @@ class DemoStore
     public static function ownerEmail(int $businessId): string
     {
         return self::freeEmail(self::DEMO_EMAIL, "demo{$businessId}@gmail.com");
-    }
-
-    public static function cashierEmail(int $businessId): string
-    {
-        return self::freeEmail(self::DEMO_CASHIER_EMAIL, "demo{$businessId}-cashier@gmail.com");
     }
 
     private static function freeEmail(string $preferred, string $fallback): string
@@ -292,20 +285,13 @@ class DemoStore
             'basic_salary' => 1800, 'allowances' => 250, 'last_login_at' => now(),
         ])];
 
-        $users[] = User::create([
-            'business_id' => $bid, 'name' => 'نورة البلوشي', 'email' => self::cashierEmail($bid),
-            'role' => 'cashier', 'phone' => '+968 90000001', 'password' => Hash::make(self::PASSWORD),
-            'status' => 'نشط', 'branch' => $main, 'job_title' => 'كاشير',
-            'basic_salary' => 420, 'allowances' => 60, 'last_login_at' => now()->subHours(3),
-        ]);
-
         $rest = [
             ['خالد الشعيلي', 'manager', 'مدير', 950, 150],
             ['ريم الكندي', 'accountant', 'محاسب', 780, 110],
             ['ماجد المعمري', 'sales', 'موظف مبيعات', 500, 80],
             ['هدى الرواحي', 'sales', 'موظف مبيعات', 500, 80],
             ['يوسف السيابي', 'inventory', 'أمين مخزن', 460, 70],
-            ['أسماء الهنائي', 'cashier', 'كاشير', 420, 60],
+            ['أسماء الهنائي', 'sales', 'موظف مبيعات', 420, 60],
         ];
 
         foreach ($rest as $i => [$name, $role, $title, $basic, $allow]) {
@@ -544,7 +530,7 @@ class DemoStore
         $bid = $this->business->id;
         // ‏`diffInDays` تُرجع عددًا عشريًّا في Carbon الحديث، و`intdiv` لا تقبله
         $days = max(1, (int) $from->diffInDays(now()));
-        $sellers = array_values(array_filter($staff, fn ($u) => in_array($u->role, ['cashier', 'sales'], true)));
+        $sellers = array_values(array_filter($staff, fn ($u) => $u->role === 'sales'));
         $statuses = ['مكتمل', 'مكتمل', 'مكتمل', 'مكتمل', 'قيد التجهيز', 'جاهز', 'خرج للتوصيل', 'ملغي'];
         $methods = ['نقدي', 'بطاقة', 'تحويل', 'نقدي', 'بطاقة'];
 

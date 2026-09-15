@@ -50,7 +50,7 @@ class TenantTables
         'bank_accounts', 'bank_statement_lines',
         'journal_entries', 'journal_lines',
         'transactions', 'expenses',
-        'fixed_assets', 'inventory_movements', 'stock_adjustments', 'stock_transfers',
+        'fixed_assets', 'inventory_movements', 'stock_adjustments',
         'purchase_orders', 'purchase_order_items', 'supplier_invoices',
         'goods_receipt_notes', 'goods_receipt_note_items',
         'orders', 'order_items', 'order_item_addons', 'order_edits',
@@ -73,7 +73,6 @@ class TenantTables
         'customer_payments', 'customer_payment_allocations',
         'customer_credit_notes',
         'delivery_notes', 'delivery_note_items',
-        'shifts', 'shift_movements',
         'payroll_runs', 'payroll_lines',
 
         /*

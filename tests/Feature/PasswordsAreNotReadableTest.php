@@ -39,7 +39,7 @@ class PasswordsAreNotReadableTest extends TestCase
 
         $this->business = Business::create(['name' => 'محل ورد', 'status' => 'نشط']);
         Branch::create(['business_id' => $this->business->id, 'name' => 'الرئيسي']);
-        JobTitle::create(['business_id' => $this->business->id, 'name' => 'كاشير', 'role' => 'cashier']);
+        JobTitle::create(['business_id' => $this->business->id, 'name' => 'موظف مبيعات', 'role' => 'sales']);
 
         $this->owner = User::create([
             'business_id' => $this->business->id, 'name' => 'المالك', 'email' => 'owner@eventplusapp.om',
@@ -48,7 +48,7 @@ class PasswordsAreNotReadableTest extends TestCase
 
         $this->employee = User::create([
             'business_id' => $this->business->id, 'name' => 'أحمد', 'email' => 'ahmad@eventplusapp.om',
-            'password' => bcrypt('sirr-al-muwazzaf'), 'role' => 'cashier', 'status' => 'نشط', 'job_title' => 'كاشير',
+            'password' => bcrypt('sirr-al-muwazzaf'), 'role' => 'sales', 'status' => 'نشط', 'job_title' => 'موظف مبيعات',
         ]);
     }
 
@@ -133,7 +133,7 @@ class PasswordsAreNotReadableTest extends TestCase
         $other = Business::create(['name' => 'الجار', 'status' => 'نشط']);
         $theirs = User::create([
             'business_id' => $other->id, 'name' => 'موظفهم', 'email' => 'x@eventplusapp.om',
-            'password' => bcrypt('kalimat-al-jaar'), 'role' => 'cashier', 'status' => 'نشط', 'job_title' => 'كاشير',
+            'password' => bcrypt('kalimat-al-jaar'), 'role' => 'sales', 'status' => 'نشط', 'job_title' => 'موظف مبيعات',
         ]);
 
         $this->actingAs($this->owner)

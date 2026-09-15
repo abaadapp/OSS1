@@ -359,8 +359,8 @@ class ProductGalleryTest extends TestCase
     public function test_the_screen_is_closed_to_whoever_lacks_the_products_section(): void
     {
         $cashier = User::create([
-            'business_id' => $this->business->id, 'name' => 'كاشير', 'email' => 'c@eventplusapp.om',
-            'password' => bcrypt('password'), 'role' => 'cashier', 'status' => 'نشط',
+            'business_id' => $this->business->id, 'name' => 'محاسب', 'email' => 'c@eventplusapp.om',
+            'password' => bcrypt('password'), 'role' => 'accountant', 'status' => 'نشط',
         ]);
 
         $this->actingAs($cashier)

@@ -218,7 +218,7 @@ class ProductActionsTest extends TestCase
             'business_id' => $this->business->id, 'number' => 'INV-000001',
             'payment_method' => 'نقدي', 'payment_status' => 'مدفوع', 'status' => 'مكتمل',
             'subtotal' => 10, 'discount' => 0, 'tax' => 0, 'total' => 10,
-            'is_held' => false, 'ordered_at' => now()->subDays(3),
+            'ordered_at' => now()->subDays(3),
         ]);
         OrderItem::create(['order_id' => $recent->id, 'product_id' => $moving->id, 'name' => 'يدور', 'price' => 10, 'quantity' => 1, 'total' => 10]);
 
@@ -226,7 +226,7 @@ class ProductActionsTest extends TestCase
             'business_id' => $this->business->id, 'number' => 'INV-000002',
             'payment_method' => 'نقدي', 'payment_status' => 'مدفوع', 'status' => 'مكتمل',
             'subtotal' => 10, 'discount' => 0, 'tax' => 0, 'total' => 10,
-            'is_held' => false, 'ordered_at' => now()->subDays(200),
+            'ordered_at' => now()->subDays(200),
         ]);
         OrderItem::create(['order_id' => $ancient->id, 'product_id' => $old->id, 'name' => 'بيع قديمًا', 'price' => 10, 'quantity' => 1, 'total' => 10]);
 

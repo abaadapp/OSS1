@@ -41,7 +41,7 @@ class ProductVariantsTest extends TestCase
 
         $this->cashier = User::create([
             'business_id' => $this->business->id, 'name' => 'كاشير', 'email' => 'c@v.local',
-            'password' => bcrypt('secret'), 'role' => 'cashier', 'status' => 'نشط',
+            'password' => bcrypt('secret'), 'role' => 'sales', 'status' => 'نشط',
         ]);
 
         $this->bouquet = Product::create([
