@@ -80,9 +80,7 @@ class SearchController extends Controller
             ->where(fn ($w) => $w->where('number', $op, $like)->orWhere('customer_name', $op, $like))
             ->orderByDesc('id')->limit(5)->get()->map(fn ($o) => [
                 'label' => $o->number, 'meta' => $o->customer_name ?? __('عميل نقدي'),
-                'url' => $seesOrders
-                    ? route('admin.orders.show', $o->number)
-                    : route('pos.order-details', $o->number),
+                'url' => route('admin.orders.show', $o->number),
             ]) : collect();
 
         $customers = $user->allows('customers') ? Customer::where('business_id', $bid)
@@ -113,41 +111,6 @@ class SearchController extends Controller
             $this->group(__('العملاء'), 'users', $customers),
             $this->group(__('الموردين'), 'truck', $suppliers),
             $this->group(__('السندات والمعاملات'), 'receipt', $this->documents($user, $bid, $q, $op)),
-        ]))]);
-    }
-
-    public function super(Request $request)
-    {
-        $q = Search::term($request);
-        if (mb_strlen($q) < 2) {
-            return response()->json(['groups' => []]);
-        }
-        $like = "%{$q}%";
-        /*
-         * والمعامل يُسأل هنا كما يُسأل في بحث اللوحة.
-         *
-         * كانت هذه الدالّة وحدها تكتب `like` نصًّا: تجري الاختبارات على SQLite
-         * فتمرّ، ويجري الإنتاج على PostgreSQL فتفرّق بين الحرف الكبير والصغير.
-         * فمن كتب بريد تاجرٍ بحرفٍ كبيرٍ واحد لم يجده — وهذه الشاشة أوّل ما
-         * يُفتح حين يتّصل التاجر.
-         */
-        $op = Search::like();
-
-        $businesses = Business::where(fn ($w) => $w->where('name', $op, $like)->orWhere('owner_name', $op, $like))
-            ->limit(6)->get()->map(fn ($b) => [
-                'label' => $b->name, 'meta' => $b->owner_name ?: '—',
-                'url' => route('super-admin.businesses.show', $b->id),
-            ]);
-
-        $users = User::where(fn ($w) => $w->where('name', $op, $like)->orWhere('email', $op, $like))
-            ->limit(6)->get()->map(fn ($u) => [
-                'label' => $u->name, 'meta' => $u->email ?: '—',
-                'url' => route('super-admin.users.show', $u->id),
-            ]);
-
-        return response()->json(['groups' => array_values(array_filter([
-            $this->group(__('الشركات'), 'building-2', $businesses),
-            $this->group(__('المستخدمون'), 'users', $users),
         ]))]);
     }
 

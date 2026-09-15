@@ -62,11 +62,4 @@ class DashboardController extends Controller
         ]);
     }
 
-    public function superStats()
-    {
-        return response()->json([
-            'stats' => Demo::superStats(),
-            'updated_at' => now()->format('H:i:s'),
-        ]);
-    }
 }

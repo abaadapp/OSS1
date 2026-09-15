@@ -29,6 +29,7 @@ use App\Http\Controllers\Admin\JobTitleController;
 use App\Http\Controllers\Admin\LanguageController;
 use App\Http\Controllers\Admin\OrderController;
 use App\Http\Controllers\Admin\OrderDetailController;
+use App\Http\Controllers\Admin\OrderEditController;
 use App\Http\Controllers\Admin\PageController;
 use App\Http\Controllers\Admin\Payroll\PayrollPaymentController;
 use App\Http\Controllers\Admin\Payroll\PayrollRunController;
@@ -66,6 +67,45 @@ use App\Http\Controllers\PublicDocumentController;
 use App\Http\Controllers\SearchController;
 use App\Support\Permissions;
 use Illuminate\Support\Facades\Route;
+
+/*
+|--------------------------------------------------------------------------
+| مسارات Event Plus OSS
+|--------------------------------------------------------------------------
+| صفحات العرض تُقدّم عبر Route::view وتقرأ بياناتها الحقيقية من قاعدة البيانات
+| عبر App\Support\Demo (حسب المستأجر). أفعال الحفظ/التعديل/الحذف عبر Controllers.
+*/
+
+/*
+ * كل {id} في هذا الملف مفتاحٌ أساسيٌّ صحيح. بلا هذا القيد يصل نصٌّ مثل
+ * "HOLD-JAR-1" إلى findOrFail، فيبتلعه SQLite صامتًا (يحوّله إلى 0 فيرجع 404)
+ * بينما PostgreSQL يرمي 22P02 فيصير 500 — أي أن عنوانًا معطوبًا واحدًا يُظهر
+ * صفحة خطأ للتاجر في الإنتاج بدل «غير موجود». القيد يجعل السلوك واحدًا على
+ * المحرّكين: المسار لا يُطابَق أصلًا، فيرجع 404 كما ينبغي.
+ * ونتيجةً جانبية: /products/export ونظائرها لم تعد تُبتلع كمعرّفات.
+ */
+Route::pattern('id', '[0-9]+');
+Route::pattern('addressId', '[0-9]+');
+
+/* ----------------------------- المصادقة ----------------------------- */
+Route::get('/', [LoginController::class, 'showLogin'])->name('login');
+Route::get('/login', [LoginController::class, 'showLogin'])->name('login.form');
+Route::post('/login', [LoginController::class, 'attempt'])->name('login.attempt');
+
+/*
+ * فتحُ نشاطٍ جديد — تسجيلٌ ذاتيّ.
+ *
+ * و`guest` عليهما: من دخل بحسابه لا يفتح معالجَ تسجيلٍ ثانٍ فيخرج بنشاطٍ
+ * ثانٍ لا يقصده. والخنقُ في المتحكّم لا هنا: مفتاحُه العنوانُ وحده، وهو
+ * ما لا يبلغه `throttle` بصيغته الافتراضيّة على الجلسة.
+ *
+ * والبابُ يُقفل من الإعدادات (`self_signup = 0`) فيردّ 404 —
+ * انظر Support\Signup::open.
+ */
+Route::middleware('guest')->group(function () {
+    Route::get('/register', [RegisterController::class, 'show'])->name('register');
+    Route::post('/register', [RegisterController::class, 'store'])->name('register.store');
+});
 
 /*
  * نقطة صحّة لمراقبٍ خارجي — بلا مصادقة.
@@ -252,6 +292,9 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'tenant', 'business'
      * ويشترط سببًا وصلاحيةً باسمها، وهذا يُصحّح رقم هاتفٍ أو موعدًا.
      */
     Route::put('/orders/{number}/details', [OrderDetailController::class, 'update'])->name('orders.details.update');
+    /* تصحيح فاتورةٍ صدرت — الحكم على الفعل `order.edit` لا على الشاشة */
+    Route::put('/orders/{number}/items/{item}', [OrderEditController::class, 'update'])->name('orders.items.update');
+    Route::put('/orders/{number}/payment', [OrderEditController::class, 'payment'])->name('orders.payment.update');
     Route::post('/orders/{number}/status', [OrderDetailController::class, 'status'])->name('orders.status');
 
     // إرسالُ الفاتورة إلى الزبون — نصٌّ يُكتب في الخادم ويُفتح على واتساب التاجر

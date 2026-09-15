@@ -12,8 +12,6 @@ import {
     Phone,
     Printer,
     ReceiptText,
-    Send,
-    Star,
     Truck,
     User,
 } from 'lucide-react';
@@ -103,7 +101,7 @@ interface OrderDetail {
  * صلاحيةُ `order.edit` ويومُ البيع، يقيسهما الخادم قبل الرسم وعند الكتابة.
  */
 export default function OrderShow() {
-    const { order, context, taxInvoice, googleReview, statusNotice, paper, invoiceEdit, otherBranch } = usePage<
+    const { order, context, taxInvoice, statusNotice, paper, invoiceEdit, otherBranch } = usePage<
         PageProps<{
             order: OrderDetail;
             /** أيُصحَّح متنُ الفاتورة الآن — وإن لم يُصحَّح فلمَ. يُقاس في الخادم */
@@ -114,7 +112,6 @@ export default function OrderShow() {
             paper: { html: string; size: string } | null;
             taxInvoice: { registered: boolean; ready: boolean };
             /** حالُ طلب التقييم — تُقاس في الخادم، والشاشةُ ترسم ما قِيس */
-            googleReview: { show: boolean; reason: string | null; requestedAt: string | null };
             statusNotice: {
                 event: string | null;
                 show: boolean;
@@ -159,7 +156,6 @@ export default function OrderShow() {
      * التسليم وسجلّ التصحيحات — لا حاجة لتبديل فرعٍ لقراءة ورقة.
      */
     const actionable = !otherBranch;
-
 
     /*
      * نموذج تعديل التنفيذ — يبدأ من القيم المحفوظة.
@@ -277,25 +273,6 @@ export default function OrderShow() {
                             و**تعديل** آخرًا: فعلٌ يخصّ حالاتٍ بعينها، وموضعُه
                             حيث لا يُضغَط سهوًا.
                         */}
-                        {actionable && (
-                            <Button
-                                disabled={sending.processing}
-                                onClick={() =>
-                                    sending.post(route('admin.orders.send', order.id), { preserveScroll: true })
-                                }
-                            >
-                                <Send />
-                                {/*
-                                    و«إرسال» وحدَها كذبة.
-
-                                    الزرُّ يفتح واتساب التاجر بنصٍّ مكتوب، ويضغط
-                                    هو «إرسال» هناك. ومن قرأ «إرسال» ظنّ أنّ
-                                    الفاتورة خرجت، فأغلق الشاشة ولم يرسلها —
-                                    ولا يعرف أنّه لم يرسلها.
-                                */}
-                                {t('إرسال بواتسابك')}
-                            </Button>
-                        )}
 
                         {/*
                             و«معاينة» على الشاشة الضيّقة وحدها.
@@ -357,29 +334,6 @@ export default function OrderShow() {
                                     {statusNotice.reason}
                                 </Button>
                             ))}
-                        {/*
-                            و«طلب تقييم Google» يُعرض بعد التسليم وحده، ولفرعٍ
-                            مربوط — والشرطان يُقاسان في الخادم. والنصُّ والرابط
-                            يُبنيان هناك بملفّ **فرع هذا الطلب**، ثمّ يُفتح واتساب
-                            التاجر ليضغط هو «إرسال»: لا مُرسِلَ آليّ ولا قالبَ
-                            ميتا معتمَد لطلب تقييم.
-                        */}
-                        {actionable && googleReview.show && (
-                            <Button
-                                variant="outline"
-                                disabled={sending.processing}
-                                onClick={() =>
-                                    sending.post(route('admin.orders.reviewRequest', order.id), {
-                                        preserveScroll: true,
-                                    })
-                                }
-                            >
-                                <Star />
-                                {googleReview.requestedAt
-                                    ? t('جهّز الطلب مجددًا')
-                                    : t('اطلب التقييم بواتسابك')}
-                            </Button>
-                        )}
                         {/*
                             الفاتورة الضريبيّة — ولا تُعرض لمن لا فاتورةَ ضريبيّةَ
                             له.

@@ -5,10 +5,8 @@ import {
     Building2,
     Check,
     ChevronDown,
-    Globe,
     Languages,
     Menu,
-    Store,
     X,
 } from 'lucide-react';
 import UnifiedSearch from '@/Components/UnifiedSearch';
@@ -163,39 +161,6 @@ export default function Topbar({ onMenuClick }: { onMenuClick: () => void }) {
             <div className="ms-auto flex shrink-0 items-center gap-1.5">
                 {context && (
                     <>
-                        <Button asChild variant="ghost" size="icon" title={t('نقطة البيع')}>
-                            <Link href={route('pos.index')}>
-                                <Store />
-                                <span className="sr-only">{t('نقطة البيع')}</span>
-                            </Link>
-                        </Button>
-
-                        {/* موقع التاجر إن ضُبط، وإلا فزرٌّ يدلّ على الإعدادات
-                            لإضافته — فلا يقف بلا وظيفة. */}
-                        {context.website ? (
-                            <Button asChild variant="ghost" size="icon" title={t('الموقع الإلكتروني')}>
-                                <a href={context.website} target="_blank" rel="noopener noreferrer">
-                                    <Globe />
-                                    <span className="sr-only">{t('الموقع الإلكتروني')}</span>
-                                </a>
-                            </Button>
-                        ) : (
-                            /*
-                             * إلى شاشة الموقع في أدوات التسويق لا إلى بيانات
-                             * النشاط.
-                             *
-                             * الموقع صار قسمًا قائمًا: نطاقٌ ونشرٌ وجملةٌ
-                             * تعريفية وما يراه الزائر. فمن يضغط الزرّ ليضيف
-                             * موقعه يصل إلى حيث يُضبط كلّه، لا إلى حقلٍ في
-                             * صفحة الإعدادات لا يفعل غير تشغيل هذا الزرّ.
-                             */
-                            <Button asChild variant="ghost" size="icon" title={t('أضف الموقع الإلكتروني')}>
-                                <Link href={route('admin.settings.index', { section: 'website' })}>
-                                    <Globe />
-                                    <span className="sr-only">{t('أضف الموقع الإلكتروني')}</span>
-                                </Link>
-                            </Button>
-                        )}
                     </>
                 )}
 
@@ -372,38 +337,6 @@ export default function Topbar({ onMenuClick }: { onMenuClick: () => void }) {
 
                         <DropdownMenuSeparator />
 
-                        {/*
-                         * «حسابي» — راتبُه ومسيراته.
-                         *
-                         * كانت تُفتح من نقطة البيع وحدها، فمن يدخل اللوحة —
-                         * بائعٌ أو أمينُ مخزنٍ أو محاسب — لا يجد بابًا إلى
-                         * راتبه إلّا أن يعرف عنوانها. ومن لا يدخل اللوحة
-                         * يجدها في شريط نقطة البيع كما كان.
-                         *
-                         * ولا تُعرض لصاحب النشاط: ملفُّه ليس ملفَّ موظّف —
-                         * لا مسيرةَ له ولا راتبَ مسجَّلًا، فتُفتح على فراغ.
-                         *
-                         * ولا لمدير المنصّة: كان الشرط «دورُه ليس admin»،
-                         * ومديرُ المنصّة ليس admin — فيُرسم له البند. فإن
-                         * ضغطه قذفه `RequiresBusiness` إلى لوحة المنصّة
-                         * برسالةٍ عن «لوحة النشاط» لا عن راتب. بابٌ مرسومٌ
-                         * لا يؤدّي إلى شيء — وهو ليس موظّفًا أصلًا.
-                         *
-                         * والسؤالُ يأتي من الخادم (`auth.isEmployee`) لا
-                         * يُحسب هنا: قاعدتان تفترقان يومًا — انظر
-                         * `User::isEmployee` و`MeController::show`.
-                         *
-                         * وتُشترط صلاحية «نقطة البيع» لأنّ المسار تحتها: من
-                         * لا يملكها يُردّ بـ٤٠٣ — وبابٌ معروضٌ لا يُفتح أسوأ
-                         * من بابٍ لا يُعرض.
-                         */}
-                        {auth?.isEmployee && auth?.abilities.includes('pos') && (
-                            <DropdownMenuItem asChild>
-                                <Link href={route('pos.me')} className="text-[14px] font-medium">
-                                    {t('حسابي وراتبي')}
-                                </Link>
-                            </DropdownMenuItem>
-                        )}
 
                         {/* إدارة الحساب */}
                         <DropdownMenuItem asChild>

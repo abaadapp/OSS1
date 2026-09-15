@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { router, useForm, usePage } from '@inertiajs/react';
 import {
-    Award, Mail, MapPin, MoreVertical, Pencil, Phone, Plus, Save, Receipt, Star, Trash2,
+    Mail, MapPin, MoreVertical, Pencil, Phone, Plus, Save, Receipt, Star, Trash2,
 } from 'lucide-react';
 import AdminLayout from '@/Layouts/AdminLayout';
 import BackLink from '@/Components/BackLink';
@@ -56,7 +56,6 @@ export default function CustomerShow() {
     const [ask, confirmDialog] = useConfirm();
     const currency = context!.currency;
     const m = (v: number) => money(v, currency);
-    const [redeeming, setRedeeming] = useState(false);
     const [editingProfile, setEditingProfile] = useState(false);
 
     /*
@@ -109,7 +108,6 @@ export default function CustomerShow() {
             value: m(customer.orders > 0 ? customer.total_spent / customer.orders : 0),
             icon: 'calculator', color: 'info',
         },
-        { label: t('نقاط الولاء'), value: number(customer.points), icon: 'star', color: 'warning' },
     ];
 
     const contact = [
@@ -136,11 +134,6 @@ export default function CustomerShow() {
                                 <Receipt />{t('كشف حساب')}
                             </a>
                         </Button>
-                        {customer.points > 0 && (
-                            <Button onClick={() => setRedeeming(true)}>
-                                <Award />{t('صرف النقاط')}
-                            </Button>
-                        )}
                         {/*
                             التعديل والحذف تحت النقاط الثلاث كما في المورّدين.
                             خمسة أزرارٍ في الرأس تجعل «كشف حساب» — وهو ما
@@ -195,11 +188,6 @@ export default function CustomerShow() {
                             <p className="text-[12px] text-[#9ca3af]">{customer.name}</p>
                         )}
                         <p className="mt-1 font-mono text-[12px] text-[#9ca3af]">#{customer.id}</p>
-                        {customer.points > 0 && (
-                            <Badge variant="warning" className="mt-3">
-                                <Award className="size-3.5" />{number(customer.points)} {t('نقطة')}
-                            </Badge>
-                        )}
                     </Card>
 
                     <Card className="p-6">
@@ -382,24 +370,6 @@ export default function CustomerShow() {
                             </Button>
                         </div>
                     </form>
-                </DialogContent>
-            </Dialog>
-
-            <Dialog open={redeeming} onOpenChange={setRedeeming}>
-                <DialogContent className="max-w-sm">
-                    <DialogHeader><DialogTitle>{t('صرف النقاط')}</DialogTitle></DialogHeader>
-                    <div className="px-5 pb-5">
-                        <p className="text-sm text-[#4b4b4b]">
-                            {t('سيتم صرف')} {number(customer.points)} {t('نقطة')} ({m(customer.points / 100)}).
-                        </p>
-                        <div className="mt-5 flex justify-end gap-2">
-                            <Button variant="outline" onClick={() => setRedeeming(false)}>{t('إلغاء')}</Button>
-                            <Button onClick={() => router.post(route('admin.customers.redeem', customer.id),
-                                { points: customer.points }, { onFinish: () => setRedeeming(false) })}>
-                                {t('صرف')}
-                            </Button>
-                        </div>
-                    </div>
                 </DialogContent>
             </Dialog>
 

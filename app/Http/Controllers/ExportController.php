@@ -155,16 +155,6 @@ class ExportController extends Controller
         return $this->stream('businesses', [__('المعرّف'), __('الشركة'), __('النوع'), __('المالك'), __('الهاتف'), __('البريد'), __('المدينة'), __('الباقة'), __('الحالة'), __('الفروع'), __('التسجيل')], $rows);
     }
 
-    public function invoices()
-    {
-        $rows = array_map(fn ($i) => [
-            $i['number'], $i['business'], $i['plan'],
-            number_format($i['amount'], 3, '.', ''), $i['date'], $i['status'],
-        ], Demo::invoices());
-
-        return $this->stream('invoices', [__('رقم الفاتورة'), __('الشركة'), __('الباقة'), __('المبلغ'), __('التاريخ'), __('الحالة')], $rows);
-    }
-
     /* ------------------------------ المولّد ------------------------------ */
 
     private function stream(string $name, array $headers, array $rows): StreamedResponse

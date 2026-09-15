@@ -2,7 +2,6 @@ import { type ReactNode, useEffect, useState } from 'react';
 import { Head, router, usePage } from '@inertiajs/react';
 import { motion } from 'framer-motion';
 import { Toaster, toast } from 'sonner';
-import ImpersonationBar from '@/Components/ImpersonationBar';
 import Sidebar from '@/Components/Sidebar';
 import SubscriptionBanner from '@/Components/SubscriptionBanner';
 import SetupBanner from '@/Components/SetupBanner';
@@ -85,12 +84,11 @@ export default function AdminLayout({ title, children, nav, sidebarSubtitle }: A
     }, [flash?.toast, t]);
 
     return (
-        /* dvh لا vh — انظر التعليق في PosLayout: على الآيباد يقيس vh شاشةً
-           بشريط سفاري مطويًّا، فيتغيّر الارتفاع عند أوّل تمرير */
+        /* dvh لا vh: على الآيباد يقيس vh شاشةً بشريط سفاري مطويًّا،
+           فيتغيّر الارتفاع عند أوّل تمرير */
         <div className="admin-ui min-h-dvh">
             <Head title={title} />
 
-            <ImpersonationBar />
 
             <Sidebar
                 open={sidebarOpen}

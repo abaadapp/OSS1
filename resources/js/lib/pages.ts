@@ -1,5 +1,5 @@
 import type { LucideIcon } from 'lucide-react';
-import { BarChart3, FileText, Store, UserCircle } from 'lucide-react';
+import { BarChart3, FileText, UserCircle } from 'lucide-react';
 import {
     CUSTOMER_TABS,
     EMPLOYEE_TABS,
@@ -159,7 +159,6 @@ export function adminPages(reports: ReportLink[] = []): PageEntry[] {
     }
 
     // نقطة البيع — شاشةٌ خارج اللوحة، فلا مدخل لها في القائمة الجانبية
-    add({ label: 'نقطة البيع', icon: Store, href: route('pos.index'), group: 'أقسام النظام', section: 'pos' });
 
     /*
      * وأقسام الإعدادات تُفتح بـ`?section=` لا بالمرساة.

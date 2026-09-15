@@ -1,5 +1,5 @@
 import { usePage } from '@inertiajs/react';
-import { Eye, Plus } from 'lucide-react';
+import { Eye } from 'lucide-react';
 import AdminLayout from '@/Layouts/AdminLayout';
 import PageHeader from '@/Components/PageHeader';
 import ExportMenu from '@/Components/ExportMenu';
@@ -160,12 +160,6 @@ export default function OrdersIndex() {
                             pdf={route('admin.orders.exportPdf')}
                             csv={route('admin.export.orders')}
                         />
-                        <Button asChild>
-                            <SmartLink routeName="pos.index" href={route('pos.index')}>
-                                <Plus />
-                                {t('إنشاء طلب')}
-                            </SmartLink>
-                        </Button>
                     </>
                 }
             />

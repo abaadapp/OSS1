@@ -441,32 +441,4 @@ class ReportExportController extends Controller
         return $this->download($spreadsheet, $sheet, [], 'businesses-'.now()->format('Y-m-d').'.xlsx');
     }
 
-    /** تصدير فواتير الاشتراكات كملف Excel (لوحة المنصة) */
-    public function invoicesXlsx()
-    {
-        $spreadsheet = new Spreadsheet;
-        [$sheet] = $this->sheet($spreadsheet, __('فواتير الاشتراكات'));
-        /*
-         * وهذه ورقةُ المنصّة لا ورقةُ متجر: افنت بلسُ بائعةٌ والمحلُّ مشترٍ،
-         * والاشتراكُ يُفوتَر بالريال العمانيّ دائمًا — لا بعملة المتجر.
-         * فالرمزُ هنا مثبَّتٌ عن قصد، كما في `pdf/platform-invoice`.
-         */
-        $firstDataRow = $this->tableHead($sheet, [__('رقم الفاتورة'), __('الشركة'), __('الباقة'), __('المبلغ (ر.ع)'), __('التاريخ'), __('الحالة')]);
-        $money = [];
-        foreach (Demo::invoices() as $i) {
-            $r = $this->row;
-            $sheet->setCellValueExplicit("A{$r}", (string) $i['number'], DataType::TYPE_STRING);
-            $sheet->setCellValue("B{$r}", $i['business']);
-            $sheet->setCellValue("C{$r}", $i['plan']);
-            $sheet->setCellValue("D{$r}", round((float) $i['amount'], 3));
-            $sheet->setCellValue("E{$r}", $i['date']);
-            $sheet->setCellValue("F{$r}", $i['status']);
-            $money[] = "D{$r}";
-            $this->row++;
-        }
-        $sheet->freezePane("A{$firstDataRow}");
-        Activity::log('report', 'صدّر فواتير الاشتراكات (Excel)');
-
-        return $this->download($spreadsheet, $sheet, $money, 'invoices-'.now()->format('Y-m-d').'.xlsx');
-    }
 }

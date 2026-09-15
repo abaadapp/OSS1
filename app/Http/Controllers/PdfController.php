@@ -186,46 +186,6 @@ class PdfController extends Controller
         return $paper === '58mm' ? 58 : 80;
     }
 
-    /** تقرير أداء المنصة (سوبر أدمن) */
-    public function financeReport()
-    {
-        // فترةٌ واحدة لكل ما في الورقة، وتُكتب فيها — انظر financeXlsx
-        $range = Demo::range(request()->query('range'));
-
-        $html = view('pdf.finance-report', [
-            'business' => Demo::business(auth()->user()->business_id ?? Demo::bid()),
-            'branch' => Demo::scopeName(false),
-            'stats' => Demo::financeStats($range),
-            'payments' => Demo::paymentMethods($range),
-            'transactions' => Demo::transactions($range, null),
-            'rangeLabel' => Demo::rangeLabel($range),
-            'generatedAt' => now()->format('Y-m-d H:i'),
-        ])->render();
-
-        Activity::log('report', 'صدّر التقرير المالي (PDF)');
-
-        return $this->pdf($html, 'finance-report-'.now()->format('Y-m-d'));
-    }
-
-    public function platformReport()
-    {
-        $businesses = Demo::businessPerformance();
-        usort($businesses, fn ($a, $b) => $b['sales'] <=> $a['sales']);
-
-        $html = view('pdf.platform-report', [
-            'stats' => Demo::superStats(),
-            'revenueSeries' => Demo::revenueSeries(),
-            'growthSeries' => Demo::businessesGrowthSeries(),
-            'planDistribution' => Demo::planDistribution(),
-            'topBusinesses' => array_slice($businesses, 0, 8),
-            'generatedAt' => now()->format('Y-m-d H:i'),
-        ])->render();
-
-        Activity::log('report', 'صدّر تقرير أداء المنصة (PDF)', ['business_id' => null]);
-
-        return $this->pdf($html, 'platform-report-'.now()->format('Y-m-d'));
-    }
-
     /** كشف حساب عميل (PDF) */
     public function customerStatement($id)
     {
@@ -337,21 +297,6 @@ class PdfController extends Controller
         Activity::log('report', 'صدّر الشركات (PDF)');
 
         return $this->pdf($html, 'businesses-report-'.now()->format('Y-m-d'));
-    }
-
-    /** تقرير فواتير الاشتراكات (PDF) — لوحة المنصة */
-    public function invoicesReport()
-    {
-        $invoices = Demo::invoices();
-        $html = view('pdf.invoices-report', [
-            'invoices' => $invoices,
-            'total' => array_sum(array_map(fn ($i) => (float) $i['amount'], $invoices)),
-            'generatedAt' => now()->format('Y-m-d H:i'),
-        ])->render();
-
-        Activity::log('report', 'صدّر فواتير الاشتراكات (PDF)');
-
-        return $this->pdf($html, 'invoices-report-'.now()->format('Y-m-d'));
     }
 
     /**
@@ -489,6 +434,27 @@ class PdfController extends Controller
     private function pdf(string $html, string $name)
     {
         return Pdf::a4($html, $name);
+    }
+
+    /** تقرير مالية التاجر (PDF) */
+    public function financeReport()
+    {
+        // فترةٌ واحدة لكل ما في الورقة، وتُكتب فيها — انظر financeXlsx
+        $range = Demo::range(request()->query('range'));
+
+        $html = view('pdf.finance-report', [
+            'business' => Demo::business(auth()->user()->business_id ?? Demo::bid()),
+            'branch' => Demo::scopeName(false),
+            'stats' => Demo::financeStats($range),
+            'payments' => Demo::paymentMethods($range),
+            'transactions' => Demo::transactions($range, null),
+            'rangeLabel' => Demo::rangeLabel($range),
+            'generatedAt' => now()->format('Y-m-d H:i'),
+        ])->render();
+
+        Activity::log('report', 'صدّر التقرير المالي (PDF)');
+
+        return $this->pdf($html, 'finance-report-'.now()->format('Y-m-d'));
     }
 
 }
