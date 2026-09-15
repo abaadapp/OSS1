@@ -23,8 +23,6 @@ class AppServiceProvider extends ServiceProvider
         // إتاحة استخدام <x-layouts.xxx> للتخطيطات الموجودة في resources/views/layouts
         Blade::anonymousComponentPath(resource_path('views/layouts'), 'layouts');
 
-        \App\Models\Order::observe(\App\Observers\OrderObserver::class);
-
         // لغة افتراضية لـ Carbon قبل معالجة الطلب (الأوامر المجدولة مثلًا).
         // داخل الطلب يعيد SetLocale ضبطها على لغة المستخدم، وإلا بقيت التواريخ
         // النسبية («منذ 19 دقيقة») عربية حتى في الواجهة الإنجليزية.

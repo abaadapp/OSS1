@@ -199,7 +199,7 @@ class AdminPanelAuditTest extends TestCase
             'currency' => 'OMR', 'decimals' => '3', 'symbol_pos' => 'after',
             'pay_cash' => true, 'pay_card' => false, 'pay_transfer' => true,
             'inv_prefix' => 'INV-', 'inv_start' => '1',
-            'notify_new_order' => true, 'notify_smart_alerts' => true, 'notify_daily_summary' => false,
+            'notify_smart_alerts' => true, 'notify_daily_summary' => false,
 
             /*
              * ولا مفاتيحَ قوالبَ هنا: `tpl_*` و`paper` انتقلت إلى محرّرها

@@ -26,8 +26,6 @@ class Order extends Model
          * بلا خطأ: `Optional` تستدعي على الكائنات وتصمت على ما سواها. فبقي
          * «طلب التقييم مجددًا» لا يظهر أبدًا، ولا شيء يقول لماذا.
          */
-        'review_request_sent_at' => 'datetime',
-        'status_notice_at' => 'datetime',
     ];
 
     /**

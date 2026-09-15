@@ -125,13 +125,13 @@ class ASwitchThatPromisesMailSaysWhenItCannotTest extends TestCase
 
         $this->post(route('admin.settings.update'), [
             'notify_daily_summary' => true,
-            'notify_new_order' => false,
+            'notify_smart_alerts' => false,
         ])->assertSessionHasNoErrors();
 
         $this->assertSame('1', Setting::where('business_id', $this->business->id)
             ->where('key', 'notify_daily_summary')->value('value'));
         $this->assertSame('0', Setting::where('business_id', $this->business->id)
-            ->where('key', 'notify_new_order')->value('value'));
+            ->where('key', 'notify_smart_alerts')->value('value'));
     }
 
     /* ───────────────── والقاعدة في موضعٍ واحد ───────────────── */

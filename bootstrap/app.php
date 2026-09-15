@@ -28,7 +28,6 @@ return Application::configure(basePath: dirname(__DIR__))
             'ability' => CheckAbility::class,
             // وحارسُ فعلٍ بعينه داخل قسمٍ يُمنح كاملًا — انظر RequireAction
             'may' => RequireAction::class,
-            // قدرات الباقة — أخو 'ability' وليس هو: ذاك يسأل عن الموظّف وهذا عن المشترَك
             'panel' => EntersPanel::class,
             'business' => RequiresBusiness::class,
             'tenant' => CheckTenantStatus::class,
@@ -41,21 +40,12 @@ return Application::configure(basePath: dirname(__DIR__))
             AddLinkHeadersForPreloadedAssets::class,
         ]);
         $middleware->redirectGuestsTo(fn () => route('login'));
-
-        /*
-         * إشعارات ميتا لا تحمل رمز CSRF — وليست متصفّحًا.
-         *
-         * وحارسها ليس غياب الفحص: التوقيع (HMAC بسرّ التطبيق) يُفحص في
-         * المتحكّم، ولا يُقبل شيءٌ بدونه. واستثناءٌ بمسارٍ واحد لا بنمطٍ
-         * واسع — `webhooks/*` غدًا قد تشمل ما لا يُوقَّع.
-         */
-        $middleware->validateCsrfTokens(except: ['webhooks/whatsapp']);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         /*
          * لا توجد مسارات api/* في هذا التطبيق، فقصرُ JSON عليها كان يعني أن
-         * كل نداءات fetch (نقطة البيع خصوصًا) تتلقّى تحويلة 302 إلى صفحة HTML
-         * بدل 422 بأخطائها — فتُبتلع رسالة الخطأ ويبدو الطلب وكأنه نجح.
+         * كل نداءات fetch تتلقّى تحويلة 302 إلى صفحة HTML بدل 422 بأخطائها —
+         * فتُبتلع رسالة الخطأ ويبدو الطلب وكأنه نجح.
          * expectsJson() لا يشمل طلبات Inertia (تقبل text/html)، فتبقى
          * تحويلاتها ورسائلها في الجلسة كما هي.
          */

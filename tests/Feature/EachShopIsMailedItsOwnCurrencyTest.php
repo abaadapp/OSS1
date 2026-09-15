@@ -4,7 +4,6 @@ namespace Tests\Feature;
 
 use App\Mail\DailySummaryMail;
 use App\Mail\MonthlyReportMail;
-use App\Mail\NewOrderMail;
 use App\Models\Branch;
 use App\Models\Business;
 use App\Models\Currency;
@@ -27,8 +26,8 @@ use Tests\TestCase;
  *
  *  • أمرٌ مجدول يمرّ على المتاجر واحدًا واحدًا (الملخّص اليوميّ، التقرير
  *    الشهريّ) — لا جلسةَ فيه أصلًا.
- *  • رسالةٌ `ShouldQueue` تُرسَم في عامل الطابور بعد أن يُغلق الطلب
- *    (`NewOrderMail`) — والعاملُ نفسُه قد يعالج متجرين بالتتابع.
+ *  • ورسالةٌ في الطابور تُرسَم بعد أن يُغلق الطلب — والعاملُ نفسُه
+ *    قد يعالج متجرين بالتتابع.
  *
  * فتاجرُ دبي يصله «‏5.250 ر.ع» عن بيعةٍ بالدرهم، أو ما هو أسوأ: عملةُ
  * المتجر الذي عُولج قبله في الدورة نفسها. ولا يظهر في اختبارٍ بمتجرٍ واحد،
@@ -73,23 +72,6 @@ class EachShopIsMailedItsOwnCurrencyTest extends TestCase
         ]);
 
         return $order->load('items');
-    }
-
-    /** رسالةُ الطلب الجديد تُرسَم في الطابور — فتقرأ متجرَ الطلب لا الجلسة */
-    public function test_the_new_order_mail_reads_the_order_shop(): void
-    {
-        app()->setLocale('ar');
-        [$muscat, $mb] = $this->shop('متجر مسقط', 'muscat@x.om', 'OMR', 'ر.ع');
-        [$dubai, $db] = $this->shop('متجر دبي', 'dubai@x.ae', 'AED', 'د.إ');
-
-        $omani = (new NewOrderMail($this->sale($muscat, $mb, 5.25, 'INV-000001')))->render();
-        $dirham = (new NewOrderMail($this->sale($dubai, $db, 5.25, 'INV-000002')))->render();
-
-        $this->assertStringContainsString('5.250 ر.ع', $omani);
-        $this->assertStringNotContainsString('د.إ', $omani);
-
-        $this->assertStringContainsString('5.25 د.إ', $dirham);
-        $this->assertStringNotContainsString('ر.ع', $dirham);
     }
 
     /**

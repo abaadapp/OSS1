@@ -102,7 +102,6 @@ class SettingController extends Controller
         'staff_sees_performance' => ['sometimes', 'boolean'],
 
         // التنبيهات
-        'notify_new_order' => ['sometimes', 'boolean'],
         'notify_smart_alerts' => ['sometimes', 'boolean'],
         'notify_daily_summary' => ['sometimes', 'boolean'],
 

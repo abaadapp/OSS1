@@ -323,7 +323,6 @@ export default function SettingsIndex() {
 
         staff_sees_performance: on('staff_sees_performance'),
 
-        notify_new_order: on('notify_new_order'),
         notify_smart_alerts: on('notify_smart_alerts'),
         notify_daily_summary: on('notify_daily_summary'),
 
@@ -1045,12 +1044,6 @@ export default function SettingsIndex() {
                                         <span>{t(mail.reason)}</span>
                                     </div>
                                 )}
-                                <Toggle
-                                    on={form.data.notify_new_order}
-                                    onChange={(v) => form.setData('notify_new_order', v)}
-                                    label="إرسال بريد إلكتروني عند كل طلب جديد"
-                                    hint="يُرسل إلى بريد صاحب النشاط عند إتمام أي عملية بيع."
-                                />
                                 <Toggle
                                     on={form.data.notify_smart_alerts}
                                     onChange={(v) => form.setData('notify_smart_alerts', v)}
