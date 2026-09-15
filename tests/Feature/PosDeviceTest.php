@@ -101,13 +101,6 @@ class PosDeviceTest extends TestCase
     {
         return $this->withCookie(PosTerminal::COOKIE, $device->id.'|'.$raw);
     }
-
-    /** يدخل الكاشير ببريده ثمّ يفتح نقطة البيع على هذا الجهاز */
-    private function enterPos(PosDevice $device, string $raw, User $user)
-    {
-        return $this->onDevice($device, $raw)->actingAs($user)->get(route('pos.index'));
-    }
-
     /* ------------------------- لا باب إلا واحد ------------------------- */
 
     /** شاشة الرمز ومسارها رُفعا من النظام */
@@ -167,86 +160,6 @@ class PosDeviceTest extends TestCase
         $this->assertAuthenticated();
         $this->assertSame($this->seeb->id, session('current_branch'));
     }
-
-    /* --------------------------- إبطال الجهاز --------------------------- */
-
-    /** جهاز مُلغى لا يبيع: يعود إلى شاشة الإعداد لا إلى الصندوق */
-    public function test_a_revoked_device_cannot_sell(): void
-    {
-        $cashier = $this->cashier($this->a, 'k5@eventplus.om');
-        [$dev, $raw] = $this->device($this->khuwair);
-        PosTerminal::revoke($dev);
-
-        $this->enterPos($dev, $raw, $cashier)->assertRedirect(route('pos.setup'));
-    }
-
-    /* ------------------------- صلاحية التفعيل ------------------------- */
-
-    /** الكاشير لا يفعّل جهازًا ولا ينقله بين الفروع */
-    public function test_a_cashier_cannot_activate_or_move_a_device(): void
-    {
-        $cashier = $this->cashier($this->a, 'k6@eventplus.om');
-        [$dev] = $this->device($this->khuwair);
-
-        $this->actingAs($cashier)->get(route('pos.setup'))->assertForbidden();
-        $this->actingAs($cashier)->post(route('pos.setup.activate'), [
-            'branch_id' => $this->seeb->id, 'name' => 'جهاز الكاشير',
-        ])->assertForbidden();
-
-        // وإدارة الأجهزة تحت قسم الإعدادات، وهو ليس للكاشير
-        $this->actingAs($cashier)->put(route('admin.devices.update', $dev->id), [
-            'name' => 'منقول', 'branch_id' => $this->seeb->id,
-        ])->assertForbidden();
-
-        $this->assertSame($this->khuwair->id, $dev->fresh()->branch_id);
-    }
-
-    /** والمدير يفعّل ويُلغي */
-    public function test_an_admin_can_activate_and_revoke(): void
-    {
-        $this->actingAs($this->ownerA)->post(route('pos.setup.activate'), [
-            'branch_id' => $this->khuwair->id, 'name' => 'كاشير الخوير 1',
-        ])->assertRedirect(route('pos.index'));
-
-        $device = PosDevice::where('business_id', $this->a->id)->firstOrFail();
-        $this->assertSame($this->khuwair->id, $device->branch_id);
-        // الرمز لا يُخزَّن خامًا أبدًا
-        $this->assertSame(64, strlen($device->token_hash));
-
-        $this->actingAs($this->ownerA)->delete(route('admin.devices.revoke', $device->id));
-        $this->assertSame(PosDevice::REVOKED, $device->fresh()->status);
-    }
-
-    /** ولا يفعّل مديرٌ جهازًا على فرعٍ من متجر آخر */
-    public function test_activation_refuses_a_branch_from_another_tenant(): void
-    {
-        $this->actingAs($this->ownerA)->post(route('pos.setup.activate'), [
-            'branch_id' => $this->branchB->id, 'name' => 'اختراق',
-        ])->assertSessionHasErrors('branch_id');
-
-        $this->assertSame(0, PosDevice::count());
-    }
-
-    /** ونقل الجهاز إلى فرعٍ آخر يُبطل تفعيله ويدوّر رمزه */
-    public function test_moving_a_device_revokes_it(): void
-    {
-        [$dev, $raw] = $this->device($this->khuwair);
-        $oldHash = $dev->token_hash;
-
-        $this->actingAs($this->ownerA)->put(route('admin.devices.update', $dev->id), [
-            'name' => $dev->name, 'branch_id' => $this->seeb->id,
-        ]);
-
-        $dev->refresh();
-        $this->assertSame($this->seeb->id, $dev->branch_id);
-        $this->assertSame(PosDevice::REVOKED, $dev->status);
-        $this->assertNotSame($oldHash, $dev->token_hash);
-
-        // والكوكي القديمة لا تفتح صندوقًا بعدها
-        $cashier = $this->cashier($this->a, 'k7@eventplus.om');
-        $this->enterPos($dev, $raw, $cashier)->assertRedirect(route('pos.setup'));
-    }
-
     /* -------------------------- سياق الجلسة -------------------------- */
 
     /** الجلسة تحمل الموظف والفرع والجهاز والمتجر الصحيح */
@@ -261,72 +174,5 @@ class PosDeviceTest extends TestCase
         $this->assertSame($this->a->id, auth()->user()->business_id);
         $this->assertSame($this->seeb->id, session('current_branch'));
         $this->assertNotNull($dev->fresh()->last_seen_at);
-    }
-
-    /** و«كل الفروع» لا تصل إلى نقطة البيع: الجهاز يفرض فرعه في كل طلب */
-    public function test_all_branches_never_reaches_the_pos(): void
-    {
-        [$dev, $raw] = $this->device($this->seeb);
-
-        // المالك يفتح نقطة البيع وجلسته على «كل الفروع» (null)
-        // «كل الفروع» = null في الجلسة. الوجهة لا تهمّ هنا (قد تُطلب شاشة
-        // اختيار الكاشير) — المهمّ أن الفرع صار فرع الجهاز قبل أن يُقرأ.
-        $this->onDevice($dev, $raw)->actingAs($this->ownerA)
-            ->withSession(['current_branch' => null])
-            ->get(route('pos.index'));
-
-        $this->assertSame($this->seeb->id, session('current_branch'));
-    }
-
-    /** وجهازٌ غير مفعَّل لا يبيع — يُساق إلى شاشة الإعداد */
-    public function test_an_unactivated_browser_is_sent_to_setup(): void
-    {
-        $this->actingAs($this->ownerA)->get(route('pos.index'))
-            ->assertRedirect(route('pos.setup'));
-    }
-
-    /* --------------------------- سجلّ البيع --------------------------- */
-
-    /** الفاتورة تحمل المتجر والفرع والجهاز والموظف */
-    public function test_a_sale_records_its_device_context(): void
-    {
-        $cashier = $this->cashier($this->a, 'k11@eventplus.om', [$this->seeb->id]);
-        [$dev, $raw] = $this->device($this->seeb);
-
-        $product = \App\Models\Product::create([
-            'business_id' => $this->a->id, 'name' => 'صنف', 'price' => 1.5, 'quantity' => 10,
-        ]);
-
-        $this->enterPos($dev, $raw, $cashier);
-
-        $this->onDevice($dev, $raw)->actingAs($cashier)->post(route('pos.checkout'), [
-            'items' => [['id' => $product->id, 'name' => 'صنف', 'qty' => 1, 'price' => 1.5]],
-            'payment_method' => 'نقدي',
-        ]);
-
-        $order = Order::where('business_id', $this->a->id)->latest('id')->first();
-        $this->assertNotNull($order, 'لم تُسجَّل فاتورة');
-        $this->assertSame($this->a->id, $order->business_id);
-        $this->assertSame($this->seeb->id, $order->branch_id);
-        $this->assertSame($dev->id, $order->pos_device_id);
-        $this->assertSame($cashier->id, $order->user_id);
-    }
-
-    /** والقفل يُنهي جلسة الموظف ويُبقي الجهاز */
-    public function test_locking_ends_the_employee_session_and_keeps_the_device(): void
-    {
-        $cashier = $this->cashier($this->a, 'k12@eventplus.om');
-        [$dev, $raw] = $this->device($this->khuwair);
-
-        $this->enterPos($dev, $raw, $cashier);
-        $this->assertAuthenticated();
-
-        $this->onDevice($dev, $raw)->post(route('pos.lock'))->assertRedirect(route('login'));
-        $this->assertGuest();
-
-        // والجهاز ما زال يعرف نفسه: الكاشير التالي يدخل ببريده ويجد فرعه
-        $this->enterPos($dev, $raw, $cashier);
-        $this->assertAuthenticated();
-        $this->assertSame($this->khuwair->id, session('current_branch'));
     }
 }

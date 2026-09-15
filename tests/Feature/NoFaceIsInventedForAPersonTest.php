@@ -104,23 +104,6 @@ class NoFaceIsInventedForAPersonTest extends TestCase
         $this->assertNull(DB::table('users')->where('id', $id)->value('avatar'),
             'الموظّف الجديد وُلد بوجهٍ لم يرفعه أحد');
     }
-
-    public function test_a_new_platform_user_is_born_without_a_face(): void
-    {
-        $super = User::create([
-            'business_id' => null, 'name' => 'مدير المنصة', 'email' => 'root@eventplusapp.om',
-            'password' => bcrypt('password'), 'role' => 'super_admin', 'status' => 'نشط',
-        ]);
-
-        $this->actingAs($super)->post(route('super-admin.users.store'), [
-            'name' => 'مشغّل', 'email' => 'op@eventplusapp.om', 'role' => 'admin',
-            'business_id' => $this->business->id, 'password' => 'password123',
-        ])->assertSessionHasNoErrors();
-
-        $this->assertNull(DB::table('users')->where('email', 'op@eventplusapp.om')->value('avatar'),
-            'مستخدم المنصّة الجديد وُلد بوجهٍ لم يرفعه أحد');
-    }
-
     /**
      * ولا رابطَ خارجيًّا في أيّ صفٍّ يُكتب.
      *

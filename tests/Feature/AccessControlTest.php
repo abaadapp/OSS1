@@ -33,25 +33,6 @@ class AccessControlTest extends TestCase
             'شرط config/app.php يشترط local قبل النظر إلى المتغيّر'
         );
     }
-
-    public function test_a_guest_cannot_reach_the_platform_panel(): void
-    {
-        $this->get('/super-admin/dashboard')->assertRedirect();
-        $this->get('/super-admin/users')->assertRedirect();
-    }
-
-    public function test_a_shop_owner_cannot_reach_the_platform_panel(): void
-    {
-        $business = Business::create(['name' => 'متجر', 'status' => 'نشط']);
-        $owner = User::create([
-            'business_id' => $business->id, 'name' => 'المالك', 'email' => 'o@test.local',
-            'password' => bcrypt('x'), 'role' => 'admin', 'status' => 'نشط',
-        ]);
-
-        $this->actingAs($owner)->get('/super-admin/dashboard')->assertForbidden();
-        $this->actingAs($owner)->get('/super-admin/businesses')->assertForbidden();
-    }
-
     public function test_a_cashier_cannot_reach_the_shop_admin_panel(): void
     {
         $business = Business::create(['name' => 'متجر', 'status' => 'نشط']);

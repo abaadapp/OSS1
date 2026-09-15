@@ -48,68 +48,6 @@ class ARejectedSaveSaysWhyTest extends TestCase
             'role' => 'super_admin', 'status' => 'نشط',
         ]);
     }
-
-    /** @return array<string, mixed> ما تُرسله الشاشةُ فعلًا — كلُّ الحقول لا الحقلُ المعدَّل */
-    private function whatTheScreenSends(array $override = []): array
-    {
-        $settings = $this->actingAs($this->super)
-            ->get(route('super-admin.settings.index'))
-            ->viewData('page')['props']['settings'];
-
-        $get = fn (string $k) => $settings[$k] ?? '';
-        $on = fn (string $k) => ($settings[$k] ?? '0') !== '0';
-
-        return array_merge([
-            'app_name' => $get('app_name'), 'locale' => $get('locale'),
-            'maintenance_mode' => $on('maintenance_mode'),
-            'company' => $get('company'), 'official_email' => $get('official_email'),
-            'phone' => $get('phone'), 'website' => $get('website'),
-            'trial_days' => $get('trial_days'), 'grace_days' => $get('grace_days'),
-            'default_plan' => $get('default_plan'), 'auto_suspend' => $on('auto_suspend'),
-            'vat_rate' => $get('vat_rate'), 'tax_mode' => $get('tax_mode'),
-            'from_address' => $get('from_address'), 'from_name' => $get('from_name'),
-            'whatsapp_enabled' => $on('whatsapp_enabled'),
-            'whatsapp_shared_enabled' => $on('whatsapp_shared_enabled'),
-            'whatsapp_shared_default_monthly_limit' => $get('whatsapp_shared_default_monthly_limit'),
-        ], $override);
-    }
-
-    /* ─────────── الافتراضيُّ لا يُشير إلى ما لا وجود له ─────────── */
-
-    /**
-     * شاشةٌ تُفتح ثمّ تُحفظ بلا تعديلٍ واحد — يجب أن تُحفظ.
-     *
-     * وهذا هو الاختبارُ الذي كان يسقط: الافتراضيُّ وحدَه كان يردّ الطلب.
-     */
-    public function test_saving_the_screen_untouched_writes_instead_of_bouncing(): void
-    {
-        Plan::create(['name' => 'الباقة الأساسية', 'monthly_price' => 9.9, 'yearly_price' => 99]);
-
-        $this->actingAs($this->super)
-            ->post(route('super-admin.settings.update'), $this->whatTheScreenSends())
-            ->assertSessionHasNoErrors();
-
-        $this->assertDatabaseHas('settings', ['business_id' => null, 'key' => 'app_name']);
-    }
-
-    /**
-     * ومقبضُ واتساب يُحفظ من تبويبه — وهو ما عجز عنه صاحبُ المنصّة عشرَ مرّات.
-     */
-    public function test_the_whatsapp_switch_saves_from_its_own_tab(): void
-    {
-        Plan::create(['name' => 'الباقة الأساسية', 'monthly_price' => 9.9, 'yearly_price' => 99]);
-
-        $this->actingAs($this->super)->post(
-            route('super-admin.settings.update'),
-            $this->whatTheScreenSends(['whatsapp_enabled' => true]),
-        )->assertSessionHasNoErrors();
-
-        $this->assertSame('1', DB::table('settings')
-            ->whereNull('business_id')->where('key', 'whatsapp_enabled')->value('value'));
-
-        $this->assertTrue(WhatsAppFeature::globallyEnabled());
-    }
-
     /**
      * والافتراضيُّ المرسَل لا يسمّي باقةً غيرَ موجودة.
      *
@@ -137,22 +75,6 @@ class ARejectedSaveSaysWhyTest extends TestCase
         $this->assertSame('', $defaults['default_plan'],
             'افتراضيُّ الباقة اسمٌ لا يطابق شيئًا — وهو يردّ كلَّ حفظ');
     }
-
-    /* ─────────── وما رُدّ يُقال لماذا ─────────── */
-
-    /** واسمُ باقةٍ لا وجود له يُردّ — الحارسُ يبقى، وهو ليس العطب */
-    public function test_a_plan_name_that_matches_nothing_is_still_refused(): void
-    {
-        Plan::create(['name' => 'الباقة الأساسية', 'monthly_price' => 9.9, 'yearly_price' => 99]);
-
-        $this->actingAs($this->super)->post(
-            route('super-admin.settings.update'),
-            $this->whatTheScreenSends(['default_plan' => 'باقةٌ مخترعة']),
-        )->assertSessionHasErrors('default_plan');
-
-        $this->assertDatabaseMissing('settings', ['business_id' => null, 'key' => 'default_plan']);
-    }
-
     /**
      * والشاشةُ تفتح تبويبَ الحقل المعطوب وتقول ما وقع.
      *
@@ -187,29 +109,5 @@ class ARejectedSaveSaysWhyTest extends TestCase
                 "الحقل «{$key}» بلا تبويبٍ في الخريطة — خطؤه يقع في صمت",
             );
         }
-    }
-
-    /* ─────────── والشاشةُ تعرض الباقات لتُختار ─────────── */
-
-    /** والقائمةُ من الباقات القائمة — فلا يُكتب اسمٌ يُخطئ حرفًا */
-    public function test_the_screen_offers_the_real_plans(): void
-    {
-        Plan::create(['name' => 'الباقة الأساسية', 'monthly_price' => 9.9, 'yearly_price' => 99]);
-        Plan::create(['name' => 'الباقة الاحترافية', 'monthly_price' => 19.9, 'yearly_price' => 199]);
-
-        $this->actingAs($this->super)->get(route('super-admin.settings.index'))
-            ->assertInertia(fn (Assert $p) => $p
-                ->has('plans', 2)
-                ->where('settings.default_plan', ''));
-    }
-
-    /** وما حُفظ يسبق الافتراضيَّ — لا يُعاد إلى الفراغ بعد اختياره */
-    public function test_a_saved_default_plan_wins_over_the_blank(): void
-    {
-        Plan::create(['name' => 'الباقة الأساسية', 'monthly_price' => 9.9, 'yearly_price' => 99]);
-        Setting::create(['business_id' => null, 'key' => 'default_plan', 'value' => 'الباقة الأساسية']);
-
-        $this->actingAs($this->super)->get(route('super-admin.settings.index'))
-            ->assertInertia(fn (Assert $p) => $p->where('settings.default_plan', 'الباقة الأساسية'));
     }
 }

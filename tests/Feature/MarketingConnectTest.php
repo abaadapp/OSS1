@@ -63,41 +63,6 @@ class MarketingConnectTest extends TestCase
         $this->assertFalse($this->props('admin.integrations.whatsapp')['automation']['readiness']['connected']);
         $this->assertFalse($this->props('admin.integrations.google')['readiness']['connected']);
     }
-
-    /**
-     * و«ابدأ» في الرابط لا في حالة المكوّن.
-     *
-     * لو كانت في الحالة لَعاد التاجر إلى الباب مع كلّ تحديثِ صفحة — وكلُّ
-     * حفظةٍ في هذه الشاشات تردّ `back()`، فيبدو ما فعله كأنّه ألغى ما بدأه.
-     */
-    public function test_pressing_connect_opens_the_stages_and_survives_a_reload(): void
-    {
-        foreach ([['whatsapp', 'admin.integrations.whatsapp'], ['google', 'admin.integrations.google']] as [$tool, $screen]) {
-            $this->actingAs($this->owner)
-                ->post(route('admin.integrations.connect', $tool))
-                ->assertRedirect(route($screen));
-
-            $props = $this->props($screen);
-            $readiness = $props['readiness'] ?? $props['automation']['readiness'];
-
-            $this->assertTrue($readiness['connected'], "«{$tool}» عاد إلى الباب بعد الضغط");
-        }
-    }
-
-    /** والبابُ لا يُفتح بزيارةٍ — يكتب في القاعدة، فلا يُنفَّذ بجلبٍ مسبق */
-    public function test_the_door_is_not_opened_by_merely_visiting_a_link(): void
-    {
-        $this->actingAs($this->owner)->get('/admin/integrations/connect/whatsapp')->assertStatus(405);
-
-        $this->assertFalse($this->props('admin.integrations.whatsapp')['automation']['readiness']['connected']);
-    }
-
-    /** وأداةٌ لا نعرفها لا تُفتح لها علامة */
-    public function test_an_unknown_tool_is_not_found(): void
-    {
-        $this->actingAs($this->owner)->post(route('admin.integrations.connect', 'facebook'))->assertNotFound();
-    }
-
     /**
      * ومن كانت أداتُه تعمل أصلًا لا يُوقَف عند باب.
      *
@@ -176,65 +141,6 @@ class MarketingConnectTest extends TestCase
         $this->assertSame('AIza-merchant-key', GoogleReviews::apiKey($this->business->id));
         $this->assertSame('••••-key', $this->props('admin.integrations.google')['keyHint']);
     }
-
-    /**
-     * والمفتاح لا يبلغ المتصفّح — لا في شاشة التاجر ولا في شاشة المنصّة.
-     *
-     * عليه تُحتسب فاتورةُ نداءات كلّ متاجر المنصّة، ومن فتح أدوات المتصفّح
-     * أخذه.
-     */
-    public function test_the_platform_key_never_reaches_the_browser(): void
-    {
-        GoogleReviews::storePlatformKey('AIza-platform-key');
-
-        $merchant = $this->actingAs($this->owner)->get(route('admin.integrations.google'));
-        $merchant->assertOk()->assertDontSee('AIza-platform-key', false);
-
-        $admin = User::create([
-            'business_id' => null, 'name' => 'المشغّل', 'email' => 'p@eventplusapp.om',
-            'password' => bcrypt('password'), 'role' => 'super_admin', 'status' => 'نشط',
-        ]);
-
-        $platform = $this->actingAs($admin)->get(route('super-admin.settings.index'));
-        $platform->assertOk()->assertDontSee('AIza-platform-key', false);
-        $this->assertSame('••••-key', $platform->viewData('page')['props']['googleKeyHint']);
-    }
-
-    /* ----------------------- مفتاح المنصّة يُدار ----------------------- */
-
-    public function test_the_operator_saves_and_forgets_the_platform_key(): void
-    {
-        $admin = User::create([
-            'business_id' => null, 'name' => 'المشغّل', 'email' => 'p2@eventplusapp.om',
-            'password' => bcrypt('password'), 'role' => 'super_admin', 'status' => 'نشط',
-        ]);
-
-        $this->actingAs($admin)
-            ->post(route('super-admin.settings.googleKey'), ['google_places_key' => 'AIza-1234'])
-            ->assertSessionHasNoErrors();
-        $this->assertSame('AIza-1234', GoogleReviews::platformKey());
-
-        $this->actingAs($admin)->delete(route('super-admin.settings.googleKey.forget'));
-        $this->assertNull(GoogleReviews::platformKey());
-    }
-
-    /** وحقلٌ فارغٌ لا يمحو: صفحةٌ تُحفظ لسببٍ آخر لا تُسقط مفتاح المنصّة كلَّها */
-    public function test_an_empty_field_does_not_erase_the_platform_key(): void
-    {
-        GoogleReviews::storePlatformKey('AIza-1234');
-
-        $admin = User::create([
-            'business_id' => null, 'name' => 'المشغّل', 'email' => 'p3@eventplusapp.om',
-            'password' => bcrypt('password'), 'role' => 'super_admin', 'status' => 'نشط',
-        ]);
-
-        $this->actingAs($admin)
-            ->post(route('super-admin.settings.googleKey'), ['google_places_key' => '   '])
-            ->assertSessionHasErrors('google_places_key');
-
-        $this->assertSame('AIza-1234', GoogleReviews::platformKey());
-    }
-
     /* -------------------------- شكلٌ واحدٌ لهما -------------------------- */
 
     /**

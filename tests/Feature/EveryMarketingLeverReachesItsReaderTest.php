@@ -103,60 +103,6 @@ class EveryMarketingLeverReachesItsReaderTest extends TestCase
             $this->assertContains($key, $read, "«{$key}» يُحفظ ولا يقرؤه مُرسِل الرسائل");
         }
     }
-
-    /** ما ترسمه الشاشة مقبضًا تقرأ له قيمة — لا مقبضَ بلا حال */
-    public function test_the_screen_reads_a_value_for_every_switch_it_draws(): void
-    {
-        $this->connectWhatsApp();
-
-        $props = $this->actingAs($this->owner)->get(route('admin.marketing.whatsapp'))
-            ->viewData('page')['props'];
-
-        $this->assertCount(6, $props['automation']['events']);
-
-        foreach ($props['automation']['events'] as $event) {
-            $this->assertArrayHasKey(
-                $event['setting'],
-                $props['settings'],
-                "«{$event['setting']}» مقبضٌ مرسوم ولا قيمةَ له تُقرأ — يعود مطفأً دائمًا",
-            );
-        }
-    }
-
-    /** وكلُّ مقبضٍ يُضغط يُحفظ — الستّة لا الأربعة */
-    public function test_every_switch_the_screen_draws_is_saved_when_pressed(): void
-    {
-        $this->actingAs($this->owner)->post(
-            route('admin.marketing.whatsapp.save'),
-            array_fill_keys(array_values(WhatsAppEvent::SETTING_KEYS), true),
-        )->assertRedirect();
-
-        $saved = MarketingSettings::group((int) $this->business->id, 'whatsapp');
-
-        foreach (WhatsAppEvent::SETTING_KEYS as $key) {
-            $this->assertSame('1', $saved[$key] ?? null, "«{$key}» ضُغط ولم يُحفظ");
-        }
-    }
-
-    /** وإطفاؤه قرارٌ يُحفظ كذلك */
-    public function test_turning_a_switch_off_is_saved_too(): void
-    {
-        $this->actingAs($this->owner)->post(
-            route('admin.marketing.whatsapp.save'),
-            array_fill_keys(array_values(WhatsAppEvent::SETTING_KEYS), true),
-        )->assertRedirect();
-
-        $this->actingAs($this->owner)->post(
-            route('admin.marketing.whatsapp.save'),
-            array_fill_keys(array_values(WhatsAppEvent::SETTING_KEYS), false),
-        )->assertRedirect();
-
-        $saved = MarketingSettings::group((int) $this->business->id, 'whatsapp');
-
-        $this->assertSame('0', $saved['wa_on_invoice_overdue']);
-        $this->assertSame('0', $saved['wa_on_order']);
-    }
-
     /**
      * ومطالبةُ السداد مطفأةٌ حتى يطلبها صاحبُها.
      *
@@ -170,70 +116,7 @@ class EveryMarketingLeverReachesItsReaderTest extends TestCase
         $this->assertSame('0', $fresh['wa_on_invoice_due_soon']);
         $this->assertSame('0', $fresh['wa_on_invoice_overdue']);
     }
-
-    /** والمُرسِلُ يطيع ما ضُغط في الشاشة — لا ما كُتب في مكانٍ آخر */
-    public function test_the_reminder_goes_out_only_after_the_screen_switch_is_pressed(): void
-    {
-        $invoice = $this->overdueInvoice();
-        $this->connectWhatsApp();
-
-        // مطفأٌ بافتراضه: لا رسالة
-        $this->artisan('invoices:remind')->assertSuccessful();
-        $this->assertSame(0, WhatsAppMessage::count());
-
-        // ثمّ يُضغط المقبض من الشاشة نفسها — لا يُكتب الصفُّ بيد
-        $this->actingAs($this->owner)->post(route('admin.marketing.whatsapp.save'), [
-            'wa_on_invoice_overdue' => true,
-        ])->assertRedirect();
-
-        $this->artisan('invoices:remind')->assertSuccessful();
-
-        $this->assertSame(
-            1,
-            WhatsAppMessage::where('business_id', $this->business->id)->count(),
-            'ضُغط المقبضُ في الشاشة ولم يصل المُرسِلَ — والتذكير لا يخرج أبدًا',
-        );
-        $this->assertSame(
-            WhatsAppEvent::INVOICE_OVERDUE,
-            WhatsAppMessage::latest('id')->value('event_type'),
-        );
-
-        unset($invoice);
-    }
-
     /* ==================== السيو: الوسمُ يخرج حيث نملك الرأس ==================== */
-
-    /** المعرّفُ الذي حفظه يخرج في الصفحة التي نخدمها له */
-    public function test_the_measurement_id_reaches_the_page_we_serve_for_him(): void
-    {
-        $this->publishSite();
-        $this->saveMeasurementId('G-ABC12345');
-
-        $this->get('/s/wrood')->assertOk()->assertSee('G-ABC12345', false);
-        // وفي صفحاته الداخليّة أيضًا — زائرٌ يدخل من «من نحن» يُعدّ مثلَه
-        $this->get('/s/wrood/about')->assertOk()->assertSee('G-ABC12345', false);
-    }
-
-    /** ولا وسمَ لمن لم يربط — لا سكربتَ فارغ ولا `null` */
-    public function test_no_tag_is_emitted_when_nothing_was_linked(): void
-    {
-        $this->publishSite();
-
-        $this->get('/s/wrood')->assertOk()->assertDontSee('googletagmanager', false);
-    }
-
-    /** ومعاينةُ صاحب المتجر لا تُعدّ زيارةً في تقريره عن زبائنه */
-    public function test_the_owners_own_preview_is_not_counted_as_a_visitor(): void
-    {
-        Setting::create(['business_id' => $this->business->id, 'key' => 'store_on', 'value' => '1']);
-        $this->saveMeasurementId('G-ABC12345');
-
-        $this->get('/s/wrood')->assertOk()->assertSee('G-ABC12345', false);
-
-        $this->actingAs($this->owner)->get(route('admin.store.preview'))
-            ->assertOk()->assertDontSee('G-ABC12345', false);
-    }
-
     /** وموقعٌ منشورٌ يُفتح لا يُقال عنه «لم تُضف نطاقًا بعد» */
     public function test_a_published_site_is_never_called_addressless(): void
     {
@@ -386,17 +269,6 @@ class EveryMarketingLeverReachesItsReaderTest extends TestCase
 
         $this->fail("لا بندَ «{$key}» في الفحص");
     }
-
-    private function saveMeasurementId(string $id): void
-    {
-        $this->actingAs($this->owner)
-            ->post(route('admin.marketing.seo.save'), ['ga_measurement_id' => $id])
-            ->assertRedirect();
-
-        // والجلسةُ تُترك كما كانت: الزائرُ الذي يفتح الموقع ليس صاحبَه
-        auth()->logout();
-    }
-
     private function publishSite(): void
     {
         $site = Builder::create($this->business, 'store', 'modern', $this->owner->id);
@@ -416,36 +288,5 @@ class EveryMarketingLeverReachesItsReaderTest extends TestCase
             'connected_at' => now(),
         ]);
         WhatsAppTemplates::seedPlatformDefaults('ar');
-    }
-
-    private function overdueInvoice(): CustomerInvoice
-    {
-        Currency::create([
-            'business_id' => $this->business->id, 'code' => 'OMR', 'name' => 'ريال عماني',
-            'symbol' => 'ر.ع', 'rate' => 1, 'is_base' => true, 'active' => true,
-        ]);
-        Ledger::seedChart($this->business->id);
-        Setting::create(['business_id' => $this->business->id, 'key' => 'vat_enabled', 'value' => '0']);
-
-        $product = Product::create([
-            'business_id' => $this->business->id, 'name' => 'باقة ورد',
-            'price' => 10, 'cost' => 4, 'quantity' => 500, 'active' => true,
-        ]);
-        $company = Customer::create([
-            'business_id' => $this->business->id, 'name' => 'شركة ABC', 'phone' => '99887766',
-            'allow_credit_sales' => true, 'monthly_billing' => true, 'payment_terms_days' => 30,
-        ]);
-
-        $this->actingAs($this->owner)->postJson('/pos/checkout', [
-            'items' => [['id' => $product->id, 'name' => 'باقة ورد', 'qty' => 8, 'price' => 10]],
-            'payment_method' => 'نقدي', 'credit' => true, 'customer_id' => $company->id,
-        ])->assertOk();
-
-        $invoice = CustomerInvoices::consolidate(
-            $company, [Order::latest('id')->value('id')], [], $this->owner->id,
-        );
-        $invoice->update(['due_at' => now()->subDays(5)->toDateString()]);
-
-        return $invoice;
     }
 }

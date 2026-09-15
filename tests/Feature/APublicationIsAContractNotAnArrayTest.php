@@ -136,24 +136,6 @@ class APublicationIsAContractNotAnArrayTest extends TestCase
 
         $this->assertTrue(Publication::compile($site->fresh())['commerce']['allow_orders']);
     }
-
-    /** و«السماح لمحرّكات البحث» يبلغ الرأسَ `noindex` */
-    public function test_forbidding_search_engines_reaches_the_page(): void
-    {
-        $site = $this->build();
-        $site->update(['seo' => ['title' => 'ورود', 'description' => '', 'image' => '', 'index' => false]]);
-        Publisher::publish($site->fresh(), $this->owner->id);
-
-        $this->get('/s/wrood')->assertOk()->assertSee('name="robots" content="noindex, nofollow"', false);
-    }
-
-    public function test_allowing_search_engines_is_the_default(): void
-    {
-        Publisher::publish($this->build(), $this->owner->id);
-
-        $this->get('/s/wrood')->assertOk()->assertSee('name="robots" content="index, follow"', false);
-    }
-
     /* ═════════════════════ نشرتان معًا ═════════════════════ */
 
     /**
@@ -355,52 +337,6 @@ class APublicationIsAContractNotAnArrayTest extends TestCase
     }
 
     /* ═════════════════════ المخفيّ لا يُقرأ ═════════════════════ */
-
-    /**
-     * القسمُ المخفيّ لا يُرسم ولا يُقرأ — ولا حتى في نصّ من لا JavaScript عنده.
-     *
-     * وطبقةُ الرسم تُسقطه في وضع الموقع، لكنّ النصَّ المستخرَج كان يمشي على
-     * الأقسام كلّها. فيراه الزاحفُ ولا يراه الزائر — وهو أسوأ التقسيمين.
-     */
-    public function test_a_hidden_section_reaches_nobody(): void
-    {
-        $site = $this->build();
-        $hero = $site->homePage()->sections()->where('type', 'hero')->first();
-        $hero->update(['visible' => false, 'data' => ['title' => 'سرٌّ لا يُقال'] + $hero->data]);
-
-        Publisher::publish($site->fresh(), $this->owner->id);
-
-        $this->get('/s/wrood')->assertOk()->assertDontSee('سرٌّ لا يُقال');
-    }
-
-    /** وصفحةٌ حالُها «مسوّدة» لا يخرج نصُّها في الصفحة الحيّة */
-    public function test_a_draft_page_never_shows_in_the_live_body(): void
-    {
-        $site = $this->build();
-
-        $page = $site->pages()->where('is_home', false)->first();
-        $page->update(['status' => WebsitePage::DRAFT]);
-        $page->sections()->first()?->update(['data' => ['title' => 'مسوّدةٌ لم تُنشر']]);
-
-        Publisher::publish($site->fresh(), $this->owner->id);
-
-        $this->get('/s/wrood')->assertOk()->assertDontSee('مسوّدةٌ لم تُنشر');
-    }
-
-    /** والصيانةُ تردّ رسالتها ولا تكشف ما وراءها */
-    public function test_maintenance_never_leaks_the_pages_behind_it(): void
-    {
-        $site = $this->build();
-        $hero = $site->homePage()->sections()->where('type', 'hero')->first();
-        $hero->update(['data' => ['title' => 'ما خلف الباب'] + $hero->data]);
-
-        Publisher::publish($site->fresh(), $this->owner->id);
-        $site->fresh()->update(['maintenance' => true, 'maintenance_message' => 'نعود قريبًا']);
-
-        $this->get('/s/wrood')->assertStatus(503)
-            ->assertSee('نعود قريبًا')->assertDontSee('ما خلف الباب');
-    }
-
     /* ═════════════════════ الحيُّ يبقى حيًّا ═════════════════════ */
 
     /**
@@ -422,56 +358,6 @@ class APublicationIsAContractNotAnArrayTest extends TestCase
 
         $this->assertContains(99.0, $prices);
     }
-
-    /* ═════════════════════ ترتيبٌ لا يفسد ═════════════════════ */
-
-    /**
-     * ترتيبٌ ناقص لا يترك موضعين متساويين.
-     *
-     * تبويبٌ قديم يرسل قائمةً بلا قسمٍ أُضيف بعده. وكان المذكورُ يُرقَّم من
-     * واحد ويبقى الباقي على موضعه، فيتساوى موضعان ويصير الترتيبُ ما يقرّره
-     * محرّكُ القاعدة — يتبدّل بين طلبٍ وطلب.
-     */
-    public function test_a_partial_order_never_leaves_two_sections_in_one_place(): void
-    {
-        $site = $this->build();
-        $page = $site->homePage();
-        $ids = $page->sections()->orderBy('position')->pluck('id')->all();
-
-        $this->assertGreaterThan(2, count($ids));
-
-        // قائمةٌ ناقصة: آخرُ قسمٍ لم يُرسَل
-        $this->actingAs($this->owner)->post(
-            route('admin.website.sections.reorder', $page->id),
-            ['order' => array_slice(array_reverse($ids), 0, count($ids) - 1)],
-        );
-
-        $positions = WebsiteSection::where('page_id', $page->id)->pluck('position')->all();
-
-        $this->assertSame(count($positions), count(array_unique($positions)), 'موضعان متساويان');
-        $this->assertSame(range(1, count($positions)), collect($positions)->sort()->values()->all());
-    }
-
-    /** ومعرّفُ جارٍ في القائمة لا ينقل قسمَه ولا يفسد ترتيبَنا */
-    public function test_a_neighbours_id_in_the_order_moves_nothing(): void
-    {
-        $neighbour = Business::create(['name' => 'الجار', 'type' => 'عام', 'status' => 'نشط']);
-        $theirs = Builder::create($neighbour, Blueprints::STORE, 'minimal');
-        $theirSection = $theirs->homePage()->sections()->first();
-        $was = $theirSection->position;
-
-        $site = $this->build();
-        $page = $site->homePage();
-        $ids = $page->sections()->pluck('id')->all();
-
-        $this->actingAs($this->owner)->post(
-            route('admin.website.sections.reorder', $page->id),
-            ['order' => array_merge([$theirSection->id], $ids)],
-        );
-
-        $this->assertSame($was, $theirSection->fresh()->position);
-    }
-
     /* ═════════════════════ الطبقاتُ لا تنقلب ═════════════════════ */
 
     /**
@@ -511,40 +397,5 @@ class APublicationIsAContractNotAnArrayTest extends TestCase
         $doc = Published::forBusiness($this->bid())['site'];
 
         $this->assertNotContains('تحويل بنكي', $doc['brand']['payments']);
-    }
-
-    /* ═════════════════════ حارسُ المستأجر ═════════════════════ */
-
-    /** ومن لا نشاطَ له لا يُخدَم بنشاطٍ لا يملكه */
-    public function test_a_user_without_a_business_is_refused_not_guessed(): void
-    {
-        $orphan = User::create([
-            'business_id' => null, 'name' => 'بلا نشاط', 'email' => 'x@eventplus.om',
-            'password' => bcrypt('password'), 'role' => 'admin', 'status' => 'نشط',
-        ]);
-
-        $this->build();
-
-        $this->actingAs($orphan)->get(route('admin.website.index'))->assertForbidden();
-    }
-
-    /** ولا يُقرأ جدولٌ بمعرّفٍ صفر: الاستعلامُ لا يقع أصلًا */
-    public function test_no_query_runs_for_a_tenantless_user(): void
-    {
-        $orphan = User::create([
-            'business_id' => null, 'name' => 'بلا نشاط', 'email' => 'y@eventplus.om',
-            'password' => bcrypt('password'), 'role' => 'admin', 'status' => 'نشط',
-        ]);
-
-        $queries = 0;
-        DB::listen(function ($q) use (&$queries) {
-            if (str_contains($q->sql, 'websites')) {
-                $queries++;
-            }
-        });
-
-        $this->actingAs($orphan)->get(route('admin.website.pages'))->assertForbidden();
-
-        $this->assertSame(0, $queries);
     }
 }

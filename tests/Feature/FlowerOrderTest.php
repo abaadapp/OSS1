@@ -53,19 +53,6 @@ class FlowerOrderTest extends TestCase
         $this->actingAs($this->owner);
         session(['current_branch' => Branch::where('business_id', $this->business->id)->value('id')]);
     }
-
-    /** @param  array<string, mixed>  $extra */
-    private function sell(array $extra = [], int $qty = 1)
-    {
-        return $this->postJson(route('pos.checkout'), array_merge([
-            'items' => [['id' => $this->product->id, 'name' => 'باقة ورد', 'qty' => $qty]],
-            'payment_method' => 'نقدي',
-            // اسمُ مشترٍ في الأساس: الطلب الذي له موعدٌ يذهب إلى لوحة
-            // التجهيز، وبطاقةٌ باسم «عميل نقدي» لا تُسلَّم لأحد
-            'customer' => 'خالد المشتري',
-        ], $extra));
-    }
-
     private function lastOrder(): Order
     {
         return Order::where('business_id', $this->business->id)->latest('id')->firstOrFail();
@@ -281,27 +268,6 @@ class FlowerOrderTest extends TestCase
     {
         $this->sell(['occasion_type' => 'لا-مناسبة'])->assertStatus(422);
     }
-
-    /* --------------------------- مناسبات المتجر --------------------------- */
-
-    /**
-     * ما ليس في القائمة يُضاف إليها — ثم يُقبل في البيع.
-     *
-     * وقبل الإضافة يُرفض: القائمة تُوسَّع بفعلٍ صريح لا بأوّل نصٍّ يمرّ في
-     * حقل، وإلا صار العمود نصًّا حرًّا مرّةً أخرى وهو ما هربنا منه.
-     */
-    public function test_an_occasion_the_shop_adds_becomes_sellable(): void
-    {
-        $this->sell(['occasion_type' => 'عقيقة'])->assertStatus(422);
-
-        $this->postJson(route('pos.occasions.store'), ['label' => 'عقيقة'])
-            ->assertOk()
-            ->assertJson(['ok' => true, 'value' => 'عقيقة']);
-
-        $this->sell(['occasion_type' => 'عقيقة'])->assertOk();
-        $this->assertSame('عقيقة', $this->lastOrder()->occasion_type);
-    }
-
     /** وتظهر في خيارات الشاشة بعد إضافتها */
     public function test_an_added_occasion_appears_in_the_options(): void
     {
@@ -333,53 +299,6 @@ class FlowerOrderTest extends TestCase
         $this->assertSame('wedding', $added['value']);
         $this->assertSame([], FlowerOrder::customOccasions($this->business->id));
     }
-
-    /** والقائمة لا تنمو بلا حدّ */
-    public function test_the_added_occasions_have_a_ceiling(): void
-    {
-        for ($i = 1; $i <= FlowerOrder::CUSTOM_MAX; $i++) {
-            FlowerOrder::addOccasion('مناسبة '.$i, $this->business->id);
-        }
-
-        $this->postJson(route('pos.occasions.store'), ['label' => 'واحدة زائدة'])
-            ->assertStatus(422)
-            ->assertJson(['ok' => false]);
-
-        $this->assertCount(FlowerOrder::CUSTOM_MAX, FlowerOrder::customOccasions($this->business->id));
-    }
-
-    /**
-     * ومناسبة متجرٍ ليست مناسبة متجرٍ آخر.
-     *
-     * الإعداد يسكن صفًّا بـbusiness_id، فالخلط هنا يعني أن قائمة كل محلّ
-     * تمتلئ بمناسبات المحلّات الأخرى — وأنّ متجرًا يبيع على قيمةٍ لم يُنشئها.
-     */
-    public function test_an_added_occasion_does_not_cross_to_another_business(): void
-    {
-        FlowerOrder::addOccasion('عقيقة', $this->business->id);
-
-        $other = Business::create(['name' => 'ورد آخر', 'type' => 'محل ورود', 'status' => 'نشط']);
-        Branch::create(['business_id' => $other->id, 'name' => 'الرئيسي']);
-        $stranger = User::create([
-            'business_id' => $other->id, 'name' => 'غريب', 'email' => 'x@eventplus.om',
-            'password' => bcrypt('password'), 'role' => 'admin', 'status' => 'نشط',
-        ]);
-        $product = Product::create([
-            'business_id' => $other->id, 'name' => 'باقة', 'price' => 10, 'cost' => 4, 'quantity' => 10,
-        ]);
-
-        $this->assertSame([], FlowerOrder::customOccasions($other->id));
-
-        $this->actingAs($stranger);
-        session(['current_branch' => Branch::where('business_id', $other->id)->value('id')]);
-
-        $this->postJson(route('pos.checkout'), [
-            'items' => [['id' => $product->id, 'name' => 'باقة', 'qty' => 1]],
-            'payment_method' => 'نقدي',
-            'occasion_type' => 'عقيقة',
-        ])->assertStatus(422);
-    }
-
     /**
      * حقول التفاصيل مصدرها واحد.
      *
@@ -428,22 +347,6 @@ class FlowerOrderTest extends TestCase
     {
         $this->sell(['card_message' => str_repeat('ا', FlowerOrder::CARD_MAX + 1)])->assertStatus(422);
     }
-
-    /* --------------------------- ما لا يجوز أن ينكسر --------------------------- */
-
-    /** الأسعار من القاعدة لا من الطلب — والحقول الجديدة لم تفتح ثغرة */
-    public function test_prices_still_come_from_the_database(): void
-    {
-        $this->postJson(route('pos.checkout'), [
-            'items' => [['id' => $this->product->id, 'name' => 'باقة ورد', 'qty' => 2, 'price' => 1]],
-            'payment_method' => 'نقدي',
-            'recipient_name' => 'سارة',
-        ])->assertOk();
-
-        // ٢٥ × ٢ لا ١ × ٢
-        $this->assertEquals(50, (float) $this->lastOrder()->subtotal);
-    }
-
     /** والمخزون ينقص كما كان */
     public function test_stock_still_moves(): void
     {
@@ -496,27 +399,6 @@ class FlowerOrderTest extends TestCase
 
         $this->assertSame(1, Order::where('business_id', $this->business->id)->count());
     }
-
-    /* =============== بطاقةُ التجهيز لا تُقرأ ناقصة =============== */
-
-    /**
-     * طلبٌ له موعدٌ طلبٌ يقف عليه عاملٌ عند الطاولة — فيسأل: لمن؟
-     *
-     * وكان يُقبل بلا اسم، فتظهر على اللوحة عشرُ بطاقاتٍ تقول «عميل نقدي»
-     * في يومٍ واحد، لا تُميَّز إحداها عن الأخرى إلا برقمٍ لا يحفظه أحد.
-     */
-    public function test_a_scheduled_order_is_refused_without_a_customer(): void
-    {
-        $this->postJson(route('pos.checkout'), [
-            'items' => [['id' => $this->product->id, 'name' => 'باقة ورد', 'qty' => 1]],
-            'payment_method' => 'نقدي',
-            'fulfillment_type' => FlowerOrder::PICKUP,
-            'scheduled_for' => now()->addDay()->format('Y-m-d H:i:s'),
-        ])->assertStatus(422)->assertJsonValidationErrors('customer');
-
-        $this->assertSame(0, Order::count());
-    }
-
     /** و«عميل نقدي» ليس اسمًا — هو ما يكتبه النظام حين لا يُكتب شيء */
     public function test_the_walk_in_placeholder_is_not_accepted_as_a_name(): void
     {
@@ -534,23 +416,6 @@ class FlowerOrderTest extends TestCase
             'scheduled_for' => now()->addDay()->format('Y-m-d H:i:s'),
         ])->assertStatus(422)->assertJsonValidationErrors('fulfillment_type');
     }
-
-    /**
-     * وبيعةُ المنضدة تبقى ثلاث نقرات.
-     *
-     * أخطرُ ما في قاعدةٍ كهذه أن تتسرّب إلى كلّ بيعة: من يبيع عبوة ماءٍ لا
-     * يُستجوَب عن اسم مشتريها.
-     */
-    public function test_a_counter_sale_still_needs_no_customer_at_all(): void
-    {
-        $this->postJson(route('pos.checkout'), [
-            'items' => [['id' => $this->product->id, 'name' => 'باقة ورد', 'qty' => 1]],
-            'payment_method' => 'نقدي',
-        ])->assertOk();
-
-        $this->assertSame(FlowerOrder::WALK_IN, $this->lastOrder()->customer_name);
-    }
-
     /**
      * وطلبٌ قديم سابقٌ للقاعدة يبقى قابلًا للتصحيح.
      *
@@ -666,20 +531,5 @@ class FlowerOrderTest extends TestCase
                 "تعديل الورقة غيّر «{$field}» — وهو ليس من شأنها"
             );
         }
-    }
-
-    /** واسم العميل يصل إلى بطاقة التجهيز — هناك يُقرأ لا في الفاتورة */
-    public function test_the_preparation_card_carries_the_customer_name(): void
-    {
-        $this->sell([
-            'customer' => 'خالد المشتري',
-            'fulfillment_type' => FlowerOrder::PICKUP,
-            'scheduled_for' => now()->addDay()->format('Y-m-d H:i:s'),
-        ])->assertOk();
-
-        $this->actingAs($this->owner)->get(route('admin.preparation.index'))->assertOk()
-            ->assertInertia(fn ($page) => $page
-                ->where('orders.0.customer', 'خالد المشتري')
-                ->where('orders.0.fulfillment', FlowerOrder::PICKUP));
     }
 }

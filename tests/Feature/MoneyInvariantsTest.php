@@ -53,18 +53,6 @@ class MoneyInvariantsTest extends TestCase
             'active' => true, 'tax' => $tax,
         ]);
     }
-
-    private function sell(array $items, array $extra = []): Order
-    {
-        $this->actingAs($this->owner)->withSession(['current_branch' => $this->branch->id])
-            ->postJson(route('pos.checkout'), array_merge([
-                'items' => $items, 'payment_method' => 'نقدي',
-                'client_uuid' => uniqid('t', true),
-            ], $extra))->assertOk();
-
-        return Order::latest('id')->firstOrFail();
-    }
-
     /** الفاتورة تتوازن: الفرعيّ − الخصم + الضريبة + التوصيل = الإجمالي */
     public function test_every_invoice_adds_up(): void
     {

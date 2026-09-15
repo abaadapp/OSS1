@@ -114,25 +114,6 @@ class SettingsLayoutTest extends TestCase
             $this->assertStringNotContainsString($needle, $tsx, "«{$needle}» مقبضٌ لا يقرؤه شيء وما زال معروضًا");
         }
     }
-
-    /** ولا يُحفظ ما رُفع: مفتاحٌ يصل الخادم فيُكتب في القاعدة يعود شاشةً غدًا */
-    public function test_the_dead_storefront_keys_are_not_written_even_if_sent(): void
-    {
-        $this->actingAs($this->owner)
-            ->post(route('admin.marketing.website.save'), [
-                'site_domain' => 'mystore.om',
-                'site_enabled' => true,
-                'site_tagline' => 'ورودٌ تصل في وقتها',
-            ])->assertSessionHasNoErrors();
-
-        $this->assertDatabaseMissing('settings', [
-            'business_id' => $this->business->id, 'key' => 'site_enabled',
-        ]);
-        $this->assertDatabaseMissing('settings', [
-            'business_id' => $this->business->id, 'key' => 'site_tagline',
-        ]);
-    }
-
     /* ------------------------- ما يصل من الخادم ------------------------- */
 
     public function test_the_settings_page_carries_the_website_keys(): void
@@ -162,29 +143,6 @@ class SettingsLayoutTest extends TestCase
         $this->assertNotEmpty($opened['accounts'], 'الشجرة تُبنى عند أوّل فتح');
         $this->assertArrayHasKey('trial', $opened);
     }
-
-    /* --------------------------- انتقال الموقع --------------------------- */
-
-    /** الرابط القديم يوجّه ولا يسقط: تاجرٌ حفظه لا يُقابَل بـ404 */
-    public function test_the_old_marketing_link_lands_in_the_new_home(): void
-    {
-        $this->actingAs($this->owner)
-            ->get(route('admin.marketing.website'))
-            ->assertRedirect(route('admin.settings.index', ['section' => 'website']));
-    }
-
-    /** والحفظ ما زال يعمل من موضعه الجديد */
-    public function test_the_domain_still_saves_from_settings(): void
-    {
-        $this->actingAs($this->owner)
-            ->post(route('admin.marketing.website.save'), ['site_domain' => 'mystore.om'])
-            ->assertSessionHasNoErrors();
-
-        $this->assertDatabaseHas('settings', [
-            'business_id' => $this->business->id, 'key' => 'site_domain', 'value' => 'mystore.om',
-        ]);
-    }
-
     /* ----------------------------- شكل الشاشة ----------------------------- */
 
     /**

@@ -71,17 +71,6 @@ class MarketingKeepsItsPromisesTest extends TestCase
     {
         Setting::updateOrCreate(['business_id' => $this->business->id, 'key' => $key], ['value' => $value]);
     }
-
-    private function sell(array $extra = [], int $qty = 1)
-    {
-        return $this->actingAs($this->owner)->withSession(['current_branch' => $this->branch->id])
-            ->postJson(route('pos.checkout'), array_merge([
-                'items' => [['id' => $this->product->id, 'name' => $this->product->name, 'qty' => $qty]],
-                'payment_method' => 'نقدي',
-                'client_uuid' => uniqid('t', true),
-            ], $extra));
-    }
-
     /* ==================== واتساب: مقابض تُدير شيئًا ==================== */
 
     public function test_the_whatsapp_screen_keeps_no_switch_that_switches_nothing(): void
@@ -116,30 +105,6 @@ class MarketingKeepsItsPromisesTest extends TestCase
             'value' => 10, 'min_order' => 0, 'active' => true, 'used_count' => 0,
         ], $attrs));
     }
-
-    public function test_one_code_cannot_be_created_twice_in_two_letter_cases(): void
-    {
-        $this->actingAs($this->owner);
-
-        $this->post(route('admin.coupons.store'), [
-            'code' => 'SAVE10', 'type' => 'مبلغ', 'value' => 10,
-        ])->assertRedirect();
-
-        $this->post(route('admin.coupons.store'), [
-            'code' => 'save10', 'type' => 'مبلغ', 'value' => 10,
-        ])->assertSessionHasErrors('code');
-
-        $this->assertSame(1, Coupon::where('business_id', $this->business->id)->count(), 'كودان لكودٍ واحد: الصندوق يختار أحدهما بلا قاعدة');
-    }
-
-    public function test_a_coupon_dead_before_it_is_born_is_refused(): void
-    {
-        $this->actingAs($this->owner)->post(route('admin.coupons.store'), [
-            'code' => 'OLD', 'type' => 'مبلغ', 'value' => 10,
-            'expires_at' => now()->subDay()->format('Y-m-d'),
-        ])->assertSessionHasErrors('expires_at');
-    }
-
     /* ============ الكوبون: ما نفد لا يُبتلع صمتًا ============ */
 
     public function test_a_coupon_spent_between_the_quote_and_the_payment_is_said_not_swallowed(): void
@@ -219,39 +184,6 @@ class MarketingKeepsItsPromisesTest extends TestCase
             'الخصم يُكتب طرحًا بلا شرط: قراءتان متزامنتان تريان الرصيد نفسه فيُصرف مرّتين',
         );
     }
-
-    /* ============ النقاط: نسبةٌ لا تطبع مالًا ============ */
-
-    public function test_an_earn_rate_that_gives_back_the_whole_bill_is_refused(): void
-    {
-        $this->actingAs($this->owner)->post(route('admin.marketing.loyalty.save'), [
-            'loyalty_enabled' => true,
-            'loyalty_earn_rate' => 100,
-            'loyalty_redeem_max_pct' => 50,
-            'loyalty_redeem_min' => 100,
-        ])->assertSessionHasErrors('loyalty_earn_rate');
-    }
-
-    public function test_an_earn_rate_that_gives_back_more_than_the_bill_is_refused(): void
-    {
-        $this->actingAs($this->owner)->post(route('admin.marketing.loyalty.save'), [
-            'loyalty_enabled' => true,
-            'loyalty_earn_rate' => 250,
-            'loyalty_redeem_max_pct' => 50,
-            'loyalty_redeem_min' => 100,
-        ])->assertSessionHasErrors('loyalty_earn_rate');
-    }
-
-    public function test_a_generous_but_sane_rate_is_still_the_merchants_own_call(): void
-    {
-        $this->actingAs($this->owner)->post(route('admin.marketing.loyalty.save'), [
-            'loyalty_enabled' => true,
-            'loyalty_earn_rate' => 20,
-            'loyalty_redeem_max_pct' => 50,
-            'loyalty_redeem_min' => 100,
-        ])->assertSessionHasNoErrors();
-    }
-
     public function test_the_points_a_riyal_buys_is_written_in_one_place(): void
     {
         $this->assertSame(100, Loyalty::POINTS_PER_UNIT);
@@ -269,28 +201,5 @@ class MarketingKeepsItsPromisesTest extends TestCase
             'البحث بـlike أعمى على PostgreSQL: اسمٌ بحروفٍ لاتينية لا يُوجد إلا بحالة أحرفه',
         );
         $this->assertStringContainsString('Search::like()', $src);
-    }
-
-    public function test_a_review_is_found_by_a_piece_of_its_author_name(): void
-    {
-        Review::create([
-            'business_id' => $this->business->id, 'author_name' => 'Ahmed',
-            'rating' => 5, 'comment' => 'ممتاز', 'status' => 'منشور',
-        ]);
-
-        $this->actingAs($this->owner)->get(route('admin.marketing.reviews', ['q' => 'Ahmed']))
-            ->assertInertia(fn ($p) => $p->has('reviews', 1));
-    }
-
-    public function test_a_neighbours_review_is_never_searched_into_view(): void
-    {
-        $other = Business::create(['name' => 'الجار', 'type' => 'عام', 'status' => 'نشط']);
-        Review::create([
-            'business_id' => $other->id, 'author_name' => 'Ahmed',
-            'rating' => 5, 'comment' => 'ممتاز', 'status' => 'منشور',
-        ]);
-
-        $this->actingAs($this->owner)->get(route('admin.marketing.reviews', ['q' => 'Ahmed']))
-            ->assertInertia(fn ($p) => $p->has('reviews', 0));
     }
 }

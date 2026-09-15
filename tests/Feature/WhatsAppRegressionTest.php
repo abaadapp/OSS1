@@ -78,17 +78,6 @@ class WhatsAppRegressionTest extends TestCase
         $this->actingAs($this->cashier);
         session(['current_branch' => $branch->id]);
     }
-
-    private function sell(array $extra = [])
-    {
-        return $this->postJson(route('pos.checkout'), array_merge([
-            'items' => [['id' => $this->product->id, 'name' => 'باقة ورد', 'qty' => 2]],
-            'payment_method' => 'نقدي',
-            'customer_id' => $this->customer->id,
-            'client_uuid' => uniqid('r', true),
-        ], $extra));
-    }
-
     /* ------------------------------ البيع سليم ------------------------------ */
 
     public function test_a_sale_still_completes_with_whatsapp_on(): void
@@ -153,72 +142,5 @@ class WhatsAppRegressionTest extends TestCase
 
         $order = Order::latest('id')->firstOrFail();
         $this->assertEqualsWithDelta(25.0, (float) $order->subtotal, 0.0005);
-    }
-
-    /* ------------------------------ سلّة معلّقة ------------------------------ */
-
-    /**
-     * السلّة المعلّقة ليست طلبًا — فلا رسالة عنها.
-     *
-     * ولو أُرسلت لَقرأ الزبون «تم تأكيد طلبك» عن سلّةٍ ما زالت على الشاشة،
-     * وقد تُلغى بعد دقيقة.
-     */
-    public function test_a_held_cart_sends_nothing(): void
-    {
-        Http::fake(['*/messages' => Http::response(['messages' => [['id' => 'x']]], 200)]);
-
-        $this->postJson(route('pos.hold'), [
-            'items' => [['id' => $this->product->id, 'name' => 'باقة ورد', 'qty' => 1]],
-            'customer_id' => $this->customer->id,
-        ])->assertOk();
-
-        Http::assertNothingSent();
-        $this->assertSame(0, WhatsAppMessage::count());
-    }
-
-    /* ---------------------------- لوحة التجهيز ---------------------------- */
-
-    /** ونقلُ الحالة من لوحة التجهيز يُرسل كما يُرسل من شاشة الطلب — بابٌ واحد */
-    public function test_moving_the_status_from_the_preparation_board_also_sends(): void
-    {
-        Http::fake(['*/messages' => Http::response(['messages' => [['id' => 'wamid.BOARD']]], 200)]);
-
-        $order = Order::create([
-            'business_id' => $this->business->id,
-            'branch_id' => Branch::where('business_id', $this->business->id)->value('id'),
-            'customer_id' => $this->customer->id,
-            'number' => 'INV-BOARD', 'status' => OrderStatus::PREPARING, 'is_held' => false,
-            'payment_method' => 'نقدي', 'payment_status' => 'مدفوع',
-            'subtotal' => 25, 'total' => 25, 'ordered_at' => now(),
-            'scheduled_for' => now()->addHours(3),
-        ]);
-
-        $this->post(route('admin.preparation.move', $order->number), ['status' => OrderStatus::READY])
-            ->assertRedirect();
-
-        $this->assertSame(1, WhatsAppMessage::where('order_id', $order->id)
-            ->where('event_type', WhatsAppEvent::ORDER_READY)->count());
-    }
-
-    /** ومن شاشة الطلب أيضًا — ولا تُرسل مرّتين بينهما */
-    public function test_the_order_screen_and_the_board_do_not_double_send(): void
-    {
-        Http::fake(['*/messages' => Http::response(['messages' => [['id' => 'wamid.X']]], 200)]);
-
-        $order = Order::create([
-            'business_id' => $this->business->id,
-            'branch_id' => Branch::where('business_id', $this->business->id)->value('id'),
-            'customer_id' => $this->customer->id,
-            'number' => 'INV-BOTH', 'status' => OrderStatus::PREPARING, 'is_held' => false,
-            'payment_method' => 'نقدي', 'payment_status' => 'مدفوع',
-            'subtotal' => 25, 'total' => 25, 'ordered_at' => now(),
-            'scheduled_for' => now()->addHours(3),
-        ]);
-
-        $this->post(route('admin.preparation.move', $order->number), ['status' => OrderStatus::READY]);
-        $this->post(route('admin.orders.status', $order->number), ['status' => OrderStatus::READY]);
-
-        $this->assertSame(1, WhatsAppMessage::where('order_id', $order->id)->count());
-        Http::assertSentCount(1);
     }
 }

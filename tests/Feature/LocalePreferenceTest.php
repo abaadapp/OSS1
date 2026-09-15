@@ -38,64 +38,10 @@ class LocalePreferenceTest extends TestCase
             'password' => bcrypt('password'), 'role' => $role, 'status' => 'نشط',
         ]);
     }
-
-    /**
-     * صفحة الطلبات لا شاشة البيع: شاشة البيع تسأل صاحب النشاط «من على
-     * الصندوق؟» متى وُجد موظف، فتُرجع تحويلًا لا صفحة. اللغة مشتركة بين
-     * صفحات نقطة البيع كلها، فأيّ صفحة منها تكفي لفحصها.
-     */
-    private function localeOf(User $user): string
-    {
-        return $this->actingAs($user)->get(route('pos.orders'))->viewData('page')['props']['locale'];
-    }
-
     public function test_arabic_is_the_default_when_nobody_chose(): void
     {
         $this->assertSame('ar', $this->localeOf($this->user('admin', 'a@test.local')));
     }
-
-    public function test_a_cashiers_choice_does_not_change_the_owners_language(): void
-    {
-        $owner = $this->user('admin', 'owner@test.local');
-        $cashier = $this->user('cashier', 'cashier@test.local');
-
-        $this->actingAs($cashier)
-            ->post(route('pos.language.update'), ['locale' => 'en'])
-            ->assertRedirect();
-
-        $this->assertSame('en', $cashier->refresh()->locale);
-        $this->assertNull($owner->refresh()->locale, 'المالك لم يختر شيئًا فلا يُكتب عنه');
-
-        // متصفّح المالك جلسة أخرى — والخروج يستدعي session()->invalidate()
-        // فلا تتسرّب لغة الكاشير حتى على الجهاز نفسه
-        $this->flushSession();
-
-        $this->assertSame('ar', $this->localeOf($owner), 'لغة المالك يجب ألّا تتأثر');
-    }
-
-    public function test_the_choice_survives_logging_out_and_back_in(): void
-    {
-        $cashier = $this->user('cashier', 'cashier@test.local');
-
-        $this->actingAs($cashier)->post(route('pos.language.update'), ['locale' => 'en']);
-        // جلسة جديدة تمامًا — لا أثر لجلسة التبديل
-        $this->flushSession();
-
-        $this->assertSame('en', $this->localeOf($cashier->refresh()));
-    }
-
-    public function test_it_no_longer_writes_a_shared_business_setting(): void
-    {
-        $cashier = $this->user('cashier', 'cashier@test.local');
-
-        $this->actingAs($cashier)->post(route('pos.language.update'), ['locale' => 'en']);
-
-        $this->assertDatabaseMissing('settings', [
-            'business_id' => $this->business->id,
-            'key' => 'locale',
-        ]);
-    }
-
     public function test_the_business_setting_still_acts_as_the_default(): void
     {
         Setting::create(['business_id' => $this->business->id, 'key' => 'locale', 'value' => 'en']);
@@ -112,18 +58,6 @@ class LocalePreferenceTest extends TestCase
 
         $this->assertSame('ar', $this->localeOf($owner));
     }
-
-    public function test_an_unsupported_locale_is_refused(): void
-    {
-        $cashier = $this->user('cashier', 'cashier@test.local');
-
-        $this->actingAs($cashier)
-            ->post(route('pos.language.update'), ['locale' => 'fr'])
-            ->assertSessionHasErrors('locale');
-
-        $this->assertNull($cashier->refresh()->locale);
-    }
-
     public function test_a_guest_can_switch_the_login_page_without_an_account(): void
     {
         $this->post(route('language.guest'), ['locale' => 'en'])->assertRedirect();

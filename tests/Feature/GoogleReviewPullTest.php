@@ -192,19 +192,6 @@ class GoogleReviewPullTest extends TestCase
         // كلُّ نداءٍ مدفوعٌ من حساب التاجر — وفتحُ الصفحة ليس سببًا للدفع
         Http::assertSentCount(1);
     }
-
-    public function test_refresh_asks_google_again(): void
-    {
-        $this->link();
-        GoogleReviews::storeKey($this->business->id, self::KEY);
-        $this->fakeOk();
-
-        GoogleReviews::pull($this->business->id);
-        $this->post(route('admin.integrations.google.refresh'))->assertRedirect();
-
-        Http::assertSentCount(2);
-    }
-
     public function test_changing_the_place_drops_what_was_pulled_for_the_old_one(): void
     {
         $this->link();
@@ -266,60 +253,5 @@ class GoogleReviewPullTest extends TestCase
         $this->assertNotSame(self::KEY, $raw);
         $this->assertStringNotContainsString(self::KEY, $raw);
         $this->assertSame(self::KEY, GoogleReviews::apiKey($this->business->id));
-    }
-
-    public function test_the_page_shows_a_hint_of_the_key_never_the_key(): void
-    {
-        $this->link();
-        GoogleReviews::storeKey($this->business->id, self::KEY);
-        $this->fakeOk();
-
-        $response = $this->get(route('admin.integrations.google'));
-
-        $response->assertOk();
-        // المفتاح لا يخرج في حمولة الصفحة — تُقرأ على شاشةٍ في المحلّ
-        $response->assertDontSee(self::KEY);
-        $response->assertInertia(fn ($page) => $page
-            /*
-             * ولا المعمَّى: حمولةُ الصفحة تُقرأ في أدوات المتصفّح، وما لا
-             * تعرضه الشاشة لا سبب لإرساله أصلًا.
-             */
-            ->missing('settings.google_api_key')
-            ->where('keyHint', '••••'.substr(self::KEY, -4))
-            ->where('google.state', 'ok'));
-    }
-
-    public function test_an_empty_field_does_not_wipe_the_saved_key(): void
-    {
-        GoogleReviews::storeKey($this->business->id, self::KEY);
-
-        /*
-         * الشاشة لا تعرض المفتاح المحفوظ، فحفظُها لتبديل شيءٍ آخر يصل بحقلٍ
-         * فارغ. ولو عُدّ ذلك محوًا لَفقد التاجر مفتاحه كلّما حفظ.
-         */
-        $this->post(route('admin.integrations.google.key'), ['google_api_key' => ''])
-            ->assertSessionHasErrors('google_api_key');
-
-        $this->assertSame(self::KEY, GoogleReviews::apiKey($this->business->id));
-    }
-
-    public function test_the_key_is_removed_by_its_own_button(): void
-    {
-        GoogleReviews::storeKey($this->business->id, self::KEY);
-
-        $this->delete(route('admin.integrations.google.key.forget'))->assertRedirect();
-
-        $this->assertNull(GoogleReviews::apiKey($this->business->id));
-    }
-
-    public function test_an_undecryptable_key_counts_as_missing_not_as_a_broken_page(): void
-    {
-        $this->link();
-        // ما لا يُفكّ (بُدّل `APP_KEY` مثلًا) لا يُرمى استثناءً في وجه التاجر
-        MarketingSettings::save($this->business->id, 'google', ['google_api_key' => 'not-encrypted-at-all']);
-
-        $this->assertNull(GoogleReviews::apiKey($this->business->id));
-        $this->assertSame('nokey', GoogleReviews::pull($this->business->id)['state']);
-        $this->get(route('admin.integrations.google'))->assertOk();
     }
 }

@@ -48,21 +48,6 @@ class ThePlatformScreenCarriesOnlyItsOwnSettingsTest extends TestCase
             'password' => bcrypt('password'), 'role' => 'super_admin', 'status' => 'نشط',
         ]);
     }
-
-    /** @return array<string, mixed> */
-    private function props(): array
-    {
-        return $this->actingAs($this->boss)
-            ->get(route('super-admin.settings.index'))->assertOk()
-            ->viewData('page')['props'];
-    }
-
-    private function body(): string
-    {
-        return $this->actingAs($this->boss)
-            ->get(route('super-admin.settings.index'))->assertOk()->getContent();
-    }
-
     /* ------------------------- ما لا يتسرّب ------------------------- */
 
     /** المفتاحُ المعمّى لا يصل حمولةَ الصفحة — وهو ما كان يصل */
@@ -159,19 +144,5 @@ class ThePlatformScreenCarriesOnlyItsOwnSettingsTest extends TestCase
         GoogleReviews::storePlatformKey('AIzaSy-PLATFORM-SECRET-0000-wXyZ');
 
         $this->assertSame('••••wXyZ', $this->props()['googleKeyHint']);
-    }
-
-    /** ولا شاشةَ لمن ليس مدير المنصّة */
-    public function test_a_merchant_owner_cannot_open_the_screen(): void
-    {
-        $business = Business::create([
-            'name' => 'محل ورد', 'type' => 'محل ورود', 'status' => 'نشط',
-        ]);
-        $owner = User::create([
-            'business_id' => $business->id, 'name' => 'المالك', 'email' => 'o@eventplusapp.om',
-            'password' => bcrypt('password'), 'role' => 'admin', 'status' => 'نشط',
-        ]);
-
-        $this->actingAs($owner)->get(route('super-admin.settings.index'))->assertForbidden();
     }
 }

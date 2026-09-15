@@ -29,22 +29,6 @@ class BusinessExpiryColumnTest extends TestCase
             'password' => bcrypt('password'), 'role' => 'super_admin', 'status' => 'نشط',
         ]);
     }
-
-    private function row(array $attrs): array
-    {
-        $b = Business::create(array_merge(
-            ['name' => 'متجر', 'type' => 'عام', 'status' => 'نشط'],
-            $attrs,
-        ));
-        Branch::create(['business_id' => $b->id, 'name' => 'الرئيسي']);
-
-        $rows = $this->actingAs($this->platform)
-            ->get(route('super-admin.businesses.index'))
-            ->viewData('page')['props']['businesses'];
-
-        return collect($rows)->firstWhere('id', $b->id);
-    }
-
     public function test_the_row_carries_the_expiry_date(): void
     {
         $row = $this->row(['ends_at' => '2027-03-01']);

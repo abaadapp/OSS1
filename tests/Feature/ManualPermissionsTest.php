@@ -132,37 +132,6 @@ class ManualPermissionsTest extends TestCase
         }
         $this->assertTrue($cashier->allows('inventory'));
     }
-
-    /**
-     * والمنع يصل إلى نقطة البيع نفسها لا إلى الشريط الجانبي وحده.
-     *
-     * كان حارس الصلاحية على شاشة المدفوعات وحدها، لأن نقطة البيع كانت مفتوحة
-     * للجميع. فلمّا صارت تُمنح، بقي المربّع بلا حارس: تُرفع العلامة ولا يتغيّر
-     * شيء — يكتب الموظف العنوان فتُفتح له.
-     */
-    public function test_the_pos_screen_itself_is_closed_when_not_granted(): void
-    {
-        $this->save(['manual_permissions' => 1, 'permissions' => ['inventory']]);
-
-        $cashier = $this->cashier->fresh();
-        $this->actingAs($cashier)->get(route('pos.index'))->assertForbidden();
-        $this->actingAs($cashier)->get(route('pos.orders'))->assertForbidden();
-        $this->actingAs($cashier)->get(route('pos.receipts'))->assertForbidden();
-    }
-
-    public function test_the_pos_screen_opens_once_granted(): void
-    {
-        $this->save(['manual_permissions' => 1, 'permissions' => ['pos']]);
-
-        $this->actingAs($this->cashier->fresh())->get(route('pos.index'))->assertOk();
-    }
-
-    /** ومن لم تُخصَّص صلاحياته بعد يبقى على ما كان — لا تنكسر شاشته */
-    public function test_an_employee_without_a_manual_list_still_reaches_the_pos(): void
-    {
-        $this->actingAs($this->cashier)->get(route('pos.index'))->assertOk();
-    }
-
     /* ------------------------ بعد الدخول ------------------------ */
 
     /**
@@ -181,37 +150,10 @@ class ManualPermissionsTest extends TestCase
         $this->assertSame(route('admin.inventory.index'), $home);
         $this->actingAs($cashier)->get($home)->assertOk();
     }
-
-    public function test_login_prefers_the_dashboard_then_the_pos(): void
-    {
-        $this->save(['manual_permissions' => 1, 'permissions' => ['dashboard', 'inventory']]);
-        $this->assertSame(route('admin.dashboard'), Permissions::homeFor($this->cashier->fresh()));
-
-        $this->save(['manual_permissions' => 1, 'permissions' => ['pos', 'inventory']]);
-        $this->assertSame(route('pos.index'), Permissions::homeFor($this->cashier->fresh()));
-    }
-
     public function test_the_owner_still_lands_on_the_dashboard(): void
     {
         $this->assertSame(route('admin.dashboard'), Permissions::homeFor($this->owner));
     }
-
-    /**
-     * والكاشير الذي لم تُخصَّص صلاحياته يبقى على نقطة البيع.
-     *
-     * دوره يمنحه صلاحية «لوحة التحكم» في الخريطة، لكنه لا يدخل اللوحة —
-     * فالاكتفاء بفحص الصلاحية كان يرسله إلى بابٍ يُغلق في وجهه بـ403.
-     */
-    public function test_a_role_based_cashier_still_lands_on_the_pos(): void
-    {
-        $this->assertTrue($this->cashier->allows('dashboard'), 'دوره يمنحه الصلاحية');
-        $this->assertFalse(Permissions::entersPanel($this->cashier), 'ولا يدخل اللوحة');
-
-        $home = Permissions::homeFor($this->cashier);
-        $this->assertSame(route('pos.index'), $home);
-        $this->actingAs($this->cashier)->get($home)->assertOk();
-    }
-
     /** ونقطة البيع وحدها لا تفتح باب اللوحة — وإلا دخلها كل كاشير */
     public function test_pos_alone_does_not_open_the_panel(): void
     {

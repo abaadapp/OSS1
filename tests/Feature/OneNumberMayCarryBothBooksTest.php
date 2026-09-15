@@ -404,14 +404,4 @@ class OneNumberMayCarryBothBooksTest extends TestCase
             ]],
         ]]]]]]);
     }
-
-    private function signed(array $payload)
-    {
-        $body = json_encode($payload, JSON_UNESCAPED_UNICODE);
-
-        return $this->call('POST', route('webhooks.whatsapp'), [], [], [], [
-            'CONTENT_TYPE' => 'application/json',
-            'HTTP_X_HUB_SIGNATURE_256' => 'sha256='.hash_hmac('sha256', $body, 'test-app-secret'),
-        ], $body);
-    }
 }

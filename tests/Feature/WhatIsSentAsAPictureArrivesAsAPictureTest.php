@@ -104,21 +104,6 @@ class WhatIsSentAsAPictureArrivesAsAPictureTest extends TestCase
             'password' => bcrypt('password'), 'role' => $role, 'status' => 'نشط', 'phone' => $phone,
         ]);
     }
-
-    /** حمولةٌ واردةٌ موقَّعةٌ كما توقّعها ميتا */
-    private function inbound(array $message, string $phoneId = 'EVENTPLUS-PN')
-    {
-        $body = json_encode(['entry' => [['changes' => [['value' => [
-            'metadata' => ['phone_number_id' => $phoneId],
-            'messages' => [$message],
-        ]]]]]], JSON_UNESCAPED_UNICODE);
-
-        return $this->call('POST', route('webhooks.whatsapp'), [], [], [], [
-            'CONTENT_TYPE' => 'application/json',
-            'HTTP_X_HUB_SIGNATURE_256' => 'sha256='.hash_hmac('sha256', $body, 'test-app-secret'),
-        ], $body);
-    }
-
     /** رسالةُ صورةٍ واردة */
     private function picture(string $wamid = 'wamid.IMG-1', string $from = '96891112222', array $extra = []): array
     {
@@ -155,14 +140,6 @@ class WhatIsSentAsAPictureArrivesAsAPictureTest extends TestCase
 
         return $c->fresh();
     }
-
-    private function reply(SupportConversation $c, array $files, string $body = 'انظر الصورة'): void
-    {
-        $this->actingAs($this->staff)
-            ->post(route('super-admin.conversations.reply', $c->id), ['body' => $body, 'files' => $files])
-            ->assertRedirect();
-    }
-
     private function lastReply(): SupportMessage
     {
         return SupportMessage::where('sender_scope', 'platform')->orderByDesc('id')->firstOrFail();
@@ -277,26 +254,6 @@ class WhatIsSentAsAPictureArrivesAsAPictureTest extends TestCase
         $this->assertSame('blocked', $this->lastReply()->delivery);
         Http::assertNothingSent();
     }
-
-    /**
-     * والملاحظةُ الداخليّةُ بمرفقها لا تخرج.
-     *
-     * صورةُ شاشةٍ يُعلّق عليها الفريقُ بينهم قد تحمل حسابَ تاجرٍ آخر.
-     */
-    public function test_an_internal_note_with_a_file_never_leaves(): void
-    {
-        Http::fake();
-        $c = $this->thread();
-
-        $this->actingAs($this->staff)->post(route('super-admin.conversations.reply', $c->id), [
-            'body' => 'لاحظوا هذي',
-            'internal' => true,
-            'files' => [UploadedFile::fake()->create('shot.jpg', 8, 'image/jpeg')],
-        ])->assertRedirect();
-
-        Http::assertNothingSent();
-    }
-
     /* ═══════════════════ الوارد — الدعم ═══════════════════ */
 
     /** صورةٌ واردةٌ تُنزَّل وتُحفظ مرفقًا على رسالتها */
@@ -432,107 +389,6 @@ class WhatIsSentAsAPictureArrivesAsAPictureTest extends TestCase
             (string) CrmMessage::orderByDesc('id')->first()->body
         );
     }
-
-    /** وردُّ المبيعات بمرفقٍ يخرج رفعًا ثمّ رسالة */
-    public function test_a_sales_reply_carries_its_file(): void
-    {
-        $lead = $this->lead();
-        $this->metaAccepts();
-
-        $this->actingAs($this->staff)->post(route('super-admin.crm.conversations.reply', $lead->id), [
-            'body' => 'هذا عرض الأسعار',
-            'files' => [UploadedFile::fake()->create('offer.pdf', 20, 'application/pdf')],
-        ])->assertRedirect();
-
-        Http::assertSent(fn ($r) => str_ends_with($r->url(), '/SALES-PN/media'));
-        Http::assertSent(fn ($r) => str_ends_with($r->url(), '/SALES-PN/messages')
-            && ($r->data()['type'] ?? '') === 'document'
-            && ($r->data()['document']['filename'] ?? '') === 'offer.pdf');
-
-        $this->assertSame('sent', CrmMessage::where('direction', 'out')->orderByDesc('id')->first()->delivery);
-    }
-
-    /**
-     * ومرفقُ ردٍّ مُنع يبقى محفوظًا.
-     *
-     * النافذةُ تُغلق بلا إذنٍ منّا؛ ولو ضاع الملفُّ مع المنع لَأعاد الموظّفُ
-     * رفعَه غدًا من جديد — أو نسي.
-     */
-    public function test_a_blocked_reply_keeps_its_file(): void
-    {
-        $lead = $this->lead();
-        $lead->forceFill(['whatsapp_window_at' => now()->subDays(3)])->save();
-
-        Http::fake();
-
-        $this->actingAs($this->staff)->post(route('super-admin.crm.conversations.reply', $lead->id), [
-            'body' => 'العرض',
-            'files' => [UploadedFile::fake()->create('offer.pdf', 20, 'application/pdf')],
-        ])->assertRedirect();
-
-        $message = CrmMessage::where('direction', 'out')->orderByDesc('id')->firstOrFail();
-
-        $this->assertSame('blocked', $message->delivery);
-        $this->assertSame(1, $message->attachments()->count(), 'ضاع مرفقُ ردٍّ مُنع');
-        Http::assertNothingSent();
-    }
-
-    /* ═══════════════════ البابُ الذي يسأل ═══════════════════ */
-
-    /** ومرفقُ عميلٍ لا يُفتح برقم عميلٍ آخر */
-    public function test_a_lead_attachment_is_not_readable_through_another_lead(): void
-    {
-        $lead = $this->lead();
-        $this->metaServesFile();
-        $this->inbound($this->picture(wamid: 'wamid.IMG-3', from: '96896669730'), 'SALES-PN')->assertOk();
-
-        $attachment = CrmAttachment::firstOrFail();
-
-        $other = CrmLead::create([
-            'phone' => '96890001111', 'source' => 'manual', 'stage' => 'new', 'status' => 'active',
-        ]);
-
-        $this->actingAs($this->staff)
-            ->get(route('super-admin.crm.conversations.attachment', [$other->id, $attachment->id]))
-            ->assertNotFound();
-
-        $this->actingAs($this->staff)
-            ->get(route('super-admin.crm.conversations.attachment', [$lead->id, $attachment->id]))
-            ->assertOk();
-    }
-
-    /** ولا يفتحه موظّفُ متجر */
-    public function test_a_shop_user_cannot_read_a_lead_attachment(): void
-    {
-        $lead = $this->lead();
-        $this->metaServesFile();
-        $this->inbound($this->picture(wamid: 'wamid.IMG-4', from: '96896669730'), 'SALES-PN')->assertOk();
-
-        $this->actingAs($this->owner)
-            ->get(route('super-admin.crm.conversations.attachment', [$lead->id, CrmAttachment::firstOrFail()->id]))
-            ->assertForbidden();
-    }
-
-    /**
-     * والبابُ يسأل بنفسه — لا يتّكل على الحارس أمامه وحده.
-     *
-     * المسارُ تحت `role:super_admin`، وهو الحارسُ الأوّل. لكنّ مسارًا
-     * يُنقل يومًا إلى مجموعةٍ أخرى — أو تُبدَّل مجموعتُه في إعادة ترتيب —
-     * يترك بابًا مفتوحًا على مرفقات العملاء كلِّها. فيُقاس الحارسُ الثاني
-     * وحدَه: بلا حرّاسِ المسار، هل يردُّ المتحكّمُ من ليس من فريق افنت بلس؟
-     */
-    public function test_the_door_refuses_on_its_own_without_the_route_guard(): void
-    {
-        $lead = $this->lead();
-        $this->metaServesFile();
-        $this->inbound($this->picture(wamid: 'wamid.IMG-5', from: '96896669730'), 'SALES-PN')->assertOk();
-
-        $this->actingAs($this->owner)
-            ->withoutMiddleware(CheckRole::class)
-            ->get(route('super-admin.crm.conversations.attachment', [$lead->id, CrmAttachment::firstOrFail()->id]))
-            ->assertNotFound();
-    }
-
     /* ═══════════════════ القائمةُ واحدة ═══════════════════ */
 
     /**

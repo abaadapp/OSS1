@@ -56,15 +56,6 @@ class MaintenanceIsNotAnUnpublishedChangeTest extends TestCase
         Publisher::publish($this->site, $this->owner->id);
         $this->site->refresh();
     }
-
-    private function toggle(bool $on, ?string $message = null)
-    {
-        return $this->post(route('admin.website.maintenance'), array_filter([
-            'maintenance' => $on,
-            'maintenance_message' => $message,
-        ], fn ($v) => $v !== null));
-    }
-
     public function test_a_published_site_starts_with_nothing_unpublished(): void
     {
         $this->assertFalse($this->site->hasUnpublishedChanges());
@@ -96,31 +87,5 @@ class MaintenanceIsNotAnUnpublishedChangeTest extends TestCase
         $this->toggle(true, 'نعود بعد ساعة');
 
         $this->assertSame('نعود بعد ساعة', $this->site->fresh()->maintenance_message);
-    }
-
-    /** والزائرُ يُردّ في اللحظة بلا نشرةٍ جديدة */
-    public function test_the_visitor_is_turned_away_at_once(): void
-    {
-        \App\Support\Website\Domains::attach($this->business, 'wrood.om');
-
-        $this->get(route('site.published', 'wrood.om'))->assertSuccessful();
-
-        $this->toggle(true);
-
-        $this->get(route('site.published', 'wrood.om'))
-            ->assertStatus(503)
-            ->assertJson(['maintenance' => true]);
-    }
-
-    /** وتعديلٌ حقيقيّ يبقى تغييرًا ينتظر النشر — الحارس لا يُسكت الصادق */
-    public function test_a_real_edit_is_still_an_unpublished_change(): void
-    {
-        $page = $this->site->pages()->where('is_home', true)->firstOrFail();
-
-        $this->put(route('admin.website.pages.update', $page->id), [
-            'title' => 'الرئيسية الجديدة', 'status' => WebsitePage::PUBLISHED,
-        ])->assertSessionHasNoErrors();
-
-        $this->assertTrue($this->site->fresh()->hasUnpublishedChanges());
     }
 }

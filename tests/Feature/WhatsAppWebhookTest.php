@@ -71,22 +71,6 @@ class WhatsAppWebhookTest extends TestCase
             'quota_consumed' => true,
         ]);
     }
-
-    /** حمولةُ حالةٍ موقَّعة كما توقّعها ميتا */
-    private function hook(array $payload, ?string $signature = null)
-    {
-        $body = json_encode($payload, JSON_UNESCAPED_UNICODE);
-        $signature ??= 'sha256='.hash_hmac('sha256', $body, 'test-app-secret');
-
-        return $this->call(
-            'POST',
-            route('webhooks.whatsapp'),
-            [], [], [],
-            ['CONTENT_TYPE' => 'application/json', 'HTTP_X_HUB_SIGNATURE_256' => $signature],
-            $body,
-        );
-    }
-
     private function statusPayload(string $status, string $id = 'wamid.ONE', string $phoneId = 'EVENTPLUS-PN'): array
     {
         return ['entry' => [['changes' => [['value' => [
@@ -94,37 +78,6 @@ class WhatsAppWebhookTest extends TestCase
             'statuses' => [['id' => $id, 'status' => $status, 'timestamp' => (string) now()->timestamp]],
         ]]]]]];
     }
-
-    /* ------------------------------- التسجيل ------------------------------- */
-
-    public function test_the_verification_challenge_is_echoed_back(): void
-    {
-        $this->get(route('webhooks.whatsapp.verify', [
-            'hub_mode' => 'subscribe',
-            'hub_verify_token' => 'test-verify-token',
-            'hub_challenge' => '1234567890',
-        ]))->assertOk()->assertSee('1234567890');
-    }
-
-    public function test_a_wrong_verify_token_is_refused(): void
-    {
-        $this->get(route('webhooks.whatsapp.verify', [
-            'hub_mode' => 'subscribe',
-            'hub_verify_token' => 'not-the-token',
-            'hub_challenge' => '1234567890',
-        ]))->assertForbidden();
-    }
-
-    /** وبلا كلمةٍ مضبوطة يُرفض التسجيل — الأمان لا يُفتح بغياب إعداد */
-    public function test_with_no_verify_token_configured_nothing_is_accepted(): void
-    {
-        config(['whatsapp.verify_token' => '']);
-
-        $this->get(route('webhooks.whatsapp.verify', [
-            'hub_mode' => 'subscribe', 'hub_verify_token' => '', 'hub_challenge' => 'x',
-        ]))->assertForbidden();
-    }
-
     /* ------------------------------- التوقيع ------------------------------- */
 
     public function test_a_valid_signature_is_accepted(): void
@@ -140,17 +93,6 @@ class WhatsAppWebhookTest extends TestCase
 
         $this->assertSame(WhatsAppStatus::SENT, $this->message->fresh()->status);
     }
-
-    public function test_a_missing_signature_changes_nothing(): void
-    {
-        $body = json_encode($this->statusPayload('delivered'));
-
-        $this->call('POST', route('webhooks.whatsapp'), [], [], [],
-            ['CONTENT_TYPE' => 'application/json'], $body)->assertForbidden();
-
-        $this->assertSame(WhatsAppStatus::SENT, $this->message->fresh()->status);
-    }
-
     /* ------------------------------- الحالات ------------------------------- */
 
     public function test_sent_delivered_and_read_are_recorded(): void

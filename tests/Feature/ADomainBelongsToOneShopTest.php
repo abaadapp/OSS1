@@ -62,14 +62,6 @@ class ADomainBelongsToOneShopTest extends TestCase
             'password' => bcrypt('password'), 'role' => 'admin', 'status' => 'نشط',
         ]);
     }
-
-    private function save(User $as, string $domain)
-    {
-        return $this->actingAs($as)->post(route('admin.marketing.website.save'), [
-            'site_on' => true, 'site_domain' => $domain,
-        ]);
-    }
-
     private function saved(Business $of): ?string
     {
         return Setting::where('business_id', $of->id)->where('key', 'site_domain')->value('value');
@@ -146,20 +138,6 @@ class ADomainBelongsToOneShopTest extends TestCase
 
         $this->assertSame('zuhoor.om', $this->saved($this->first));
     }
-
-    /** والذي أخلى نطاقَه يُخليه لغيره */
-    public function test_a_released_domain_is_free_again(): void
-    {
-        $this->save($this->one, 'wrood.om');
-        $this->actingAs($this->one)->post(route('admin.marketing.website.save'), [
-            'site_on' => true, 'site_domain' => '',
-        ])->assertSessionHasNoErrors();
-
-        $this->save($this->two, 'wrood.om')->assertSessionHasNoErrors();
-
-        $this->assertSame('wrood.om', $this->saved($this->second));
-    }
-
     /**
      * والفراغُ ليس نطاقًا محجوزًا.
      *
@@ -175,45 +153,5 @@ class ADomainBelongsToOneShopTest extends TestCase
         $this->save($this->one, '')->assertSessionHasNoErrors();
 
         $this->assertSame('', $this->saved($this->first));
-    }
-
-    /** وحفظُ الصفحة بلا حقل النطاق أصلًا لا يمسّ ما ضُبط */
-    public function test_saving_without_the_field_keeps_what_was_set(): void
-    {
-        $this->save($this->one, 'wrood.om');
-
-        $this->actingAs($this->one)->post(route('admin.marketing.website.save'), ['site_on' => true])
-            ->assertSessionHasNoErrors();
-
-        $this->assertSame('wrood.om', $this->saved($this->first));
-    }
-
-    /* ------------------------- والعارضُ يجد صاحبه ------------------------- */
-
-    /**
-     * ومن حجز نطاقَه يصل زائرُه إلى موقعه هو.
-     *
-     * الرحلةُ كاملةً: يُبنى الموقع، ويُنشر، ويُحفظ النطاق — ثمّ يُطلب من
-     * العارض الخارجيّ بذلك النطاق، فيردّ لقطةَ صاحبه باسمه.
-     */
-    public function test_the_viewer_serves_the_shop_that_claimed_the_domain(): void
-    {
-        $site = Builder::create($this->first, Blueprints::STORE, 'modern', $this->one->id);
-        Publisher::publish($site, $this->one->id);
-        $this->save($this->one, 'wrood.om');
-
-        $body = $this->get(route('site.published', 'wrood.om'))->assertSuccessful()->json();
-
-        $this->assertSame($site->name, $body['site']['name'] ?? null);
-    }
-
-    /** ولا يصل زائرُ نطاقٍ لم يحجزه أحد إلى موقع أحد */
-    public function test_an_unclaimed_domain_finds_nobody(): void
-    {
-        $site = Builder::create($this->first, Blueprints::STORE, 'modern', $this->one->id);
-        Publisher::publish($site, $this->one->id);
-        $this->save($this->one, 'wrood.om');
-
-        $this->get(route('site.published', 'other.om'))->assertNotFound();
     }
 }

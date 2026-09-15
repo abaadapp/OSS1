@@ -58,18 +58,6 @@ class ProductPricingTest extends TestCase
             'price' => 100, 'cost' => 60, 'quantity' => 50, 'alert_qty' => 5, 'active' => true,
         ], $over));
     }
-
-    private function sell(Product $p, int $qty = 1): Order
-    {
-        $this->postJson(route('pos.checkout'), [
-            'items' => [['id' => $p->id, 'name' => $p->name, 'qty' => $qty]],
-            'payment_method' => 'نقدي',
-            'client_uuid' => uniqid('t', true),
-        ])->assertOk();
-
-        return Order::latest('id')->first();
-    }
-
     /* ------------------------------- الخصم ------------------------------- */
 
     public function test_the_product_discount_reaches_the_receipt(): void
@@ -125,27 +113,6 @@ class ProductPricingTest extends TestCase
         $this->assertSame(0.0, (float) $order->tax);
         $this->assertSame(100.0, (float) $order->total);
     }
-
-    public function test_each_line_is_taxed_at_its_own_rate(): void
-    {
-        $bread = $this->product(['name' => 'خبز', 'price' => 100, 'tax' => 0]);
-        $juice = $this->product(['name' => 'عصير', 'price' => 100, 'tax' => 5]);
-
-        $this->postJson(route('pos.checkout'), [
-            'items' => [
-                ['id' => $bread->id, 'name' => 'خبز', 'qty' => 1],
-                ['id' => $juice->id, 'name' => 'عصير', 'qty' => 1],
-            ],
-            'payment_method' => 'نقدي',
-            'client_uuid' => uniqid('t', true),
-        ])->assertOk();
-
-        $order = Order::latest('id')->first();
-
-        $this->assertSame(5.0, (float) $order->tax, 'ضريبة العصير وحده');
-        $this->assertSame(205.0, (float) $order->total);
-    }
-
     public function test_a_higher_product_rate_beats_the_store_rate(): void
     {
         $order = $this->sell($this->product(['price' => 100, 'tax' => 10]));

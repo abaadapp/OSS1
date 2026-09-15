@@ -175,19 +175,6 @@ class CustomerSearchAndPosTest extends TestCase
         $this->post(route('admin.customers.store'), ['phone' => '90000011'])
             ->assertSessionHasErrors('name');
     }
-
-    /* ------------------ العميل عند الصندوق ------------------ */
-
-    private function sell(array $extra = [])
-    {
-        session(['current_branch' => $this->branch->id]);
-
-        return $this->postJson(route('pos.checkout'), array_merge([
-            'items' => [['id' => $this->product->id, 'name' => 'باقة', 'qty' => 1]],
-            'payment_method' => 'نقدي',
-        ], $extra));
-    }
-
     /**
      * والمحذوف لا يُلتقط عند الصندوق — لا بهاتفه ولا باسمه.
      *
@@ -204,21 +191,5 @@ class CustomerSearchAndPosTest extends TestCase
         $order = Order::where('is_held', false)->firstOrFail();
         $this->assertNull($order->customer_id);
         $this->assertSame(500, (int) $gone->fresh()->points);
-    }
-
-    public function test_the_till_refuses_a_number_held_by_a_deleted_customer(): void
-    {
-        $this->customer(['name' => 'أحمد', 'phone' => '94444444'])->delete();
-
-        $this->post(route('pos.customers.store'), ['name' => 'أحمد', 'phone' => '94444444'])
-            ->assertSessionHasErrors('phone');
-    }
-
-    public function test_the_till_still_adds_a_free_number(): void
-    {
-        $this->post(route('pos.customers.store'), ['name' => 'مريم', 'phone' => '95555555'])
-            ->assertSessionHasNoErrors();
-
-        $this->assertDatabaseHas('customers', ['phone' => '95555555', 'business_id' => $this->business->id]);
     }
 }

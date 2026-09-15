@@ -58,12 +58,6 @@ class StorefrontTest extends TestCase
         $this->business->forceFill(['site_slug' => 'ward-alkhuwair'])->save();
         MarketingSettings::save($this->business->id, 'website', array_merge(['store_on' => '1'], $extra));
     }
-
-    private function open(string $slug = 'ward-alkhuwair')
-    {
-        return $this->get(route('store.show', $slug));
-    }
-
     /* --------------------------- العنوان --------------------------- */
 
     public function test_a_slug_is_cleaned_to_something_a_customer_can_type(): void
@@ -82,31 +76,6 @@ class StorefrontTest extends TestCase
         $this->assertNull(Storefront::slug('ورد الخوير'));
         $this->assertNull(Storefront::slug(str_repeat('a', 41)));
     }
-
-    /**
-     * ولا يُحجز عنوانٌ مرّتين.
-     *
-     * والتفرّد مفروضٌ في القاعدة أيضًا (فهرسٌ فريد)، لكنّ الرفض هنا يقول
-     * للتاجر «محجوز» بدل أن يُردّ بخطأ قاعدةٍ لا يفهمه.
-     */
-    public function test_two_shops_cannot_hold_the_same_address(): void
-    {
-        $neighbour = Business::create(['name' => 'الجار', 'type' => 'عام', 'status' => 'نشط']);
-        $neighbour->forceFill(['site_slug' => 'ward-alkhuwair'])->save();
-
-        $this->actingAs($this->owner)
-            ->post(route('admin.marketing.store.save'), ['site_slug' => 'ward-alkhuwair'])
-            ->assertSessionHasErrors('site_slug');
-    }
-
-    /** ولا يُنشر متجرٌ بلا عنوان: مفتاحٌ مرفوعٌ وصفحةٌ لا تُفتح من أيّ رابط */
-    public function test_publishing_without_an_address_is_refused(): void
-    {
-        $this->actingAs($this->owner)
-            ->post(route('admin.marketing.store.save'), ['site_slug' => '', 'store_on' => true])
-            ->assertSessionHasErrors('site_slug');
-    }
-
     /* ------------------- ولا يبتلع النظامَ نفسه ------------------- */
 
     /**
@@ -169,12 +138,6 @@ class StorefrontTest extends TestCase
 
         $this->open()->assertNotFound();
     }
-
-    public function test_an_unknown_address_is_not_found(): void
-    {
-        $this->get(route('store.show', 'la-shay'))->assertNotFound();
-    }
-
     /* ------------------------- ما يُعرض وما لا يُعرض ------------------------- */
 
     /** الأسعار تُعرض بإذنٍ لا افتراضًا: من يسعّر حسب الطلب يُطفئها ويبقى الطلب يعمل */

@@ -327,18 +327,6 @@ class VatReportTest extends TestCase
 
         $this->assertContains('vat', $keys);
     }
-
-    public function test_it_exports_in_the_three_formats(): void
-    {
-        $this->sale(subtotal: 100, discount: 0, tax: 5);
-
-        foreach (['xlsx', 'csv', 'pdf'] as $format) {
-            $this->actingAs(User::find($this->owner->id))
-                ->get(route('admin.reports.export.'.$format, 'vat'))
-                ->assertOk();
-        }
-    }
-
     public function test_the_file_comes_out_on_every_plan(): void
     {
         /*

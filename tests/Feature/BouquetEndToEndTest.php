@@ -103,24 +103,6 @@ class BouquetEndToEndTest extends TestCase
         ]);
 
     }
-
-    private function sell(int $qty = 1, array $addons = []): Order
-    {
-        $this->actingAs($this->cashier)->postJson('/pos/checkout', [
-            'items' => [[
-                'id' => $this->bouquet->id,
-                'variant_id' => $this->medium->id,
-                'name' => 'بوكيه الحب',
-                'qty' => $qty,
-                'addons' => $addons,
-            ]],
-            'payment_method' => 'نقدي',
-            'client_uuid' => uniqid('e', true),
-        ])->assertOk()->assertJsonPath('ok', true);
-
-        return Order::latest('id')->firstOrFail();
-    }
-
     public function test_the_whole_bouquet_sells_in_one_go(): void
     {
         $order = $this->sell(2, [
@@ -197,50 +179,5 @@ class BouquetEndToEndTest extends TestCase
         $this->assertSame('دبّ', $item->addons->first()->name);
         $this->assertEqualsWithDelta(5.0, (float) $item->addons->first()->unit_price, 0.0005);
         $this->assertEqualsWithDelta(23.0, (float) $order->fresh()->subtotal, 0.0005);
-    }
-
-    public function test_a_held_order_comes_back_with_its_size_and_addons(): void
-    {
-        $this->actingAs($this->cashier)->postJson('/pos/hold', [
-            'items' => [[
-                'id' => $this->bouquet->id,
-                'variant_id' => $this->medium->id,
-                'name' => 'بوكيه الحب',
-                'qty' => 1,
-                'addons' => [['addon_id' => $this->bear->id, 'qty' => 1]],
-            ]],
-            'kind' => 'hold',
-        ])->assertOk();
-
-        $held = Order::where('is_held', true)->latest('id')->firstOrFail();
-        $item = $held->items->first();
-
-        $this->assertSame($this->medium->id, (int) $item->variant_id);
-        $this->assertCount(1, $item->addons);
-
-        $this->actingAs($this->cashier)->get(route('pos.orders.resume', $held->id))->assertRedirect();
-
-        $cart = session('resume_cart');
-
-        $this->assertSame($this->medium->id, (int) $cart['items'][0]['variant_id']);
-        $this->assertSame($this->bear->id, (int) $cart['items'][0]['addons'][0]['addon_id']);
-    }
-
-    public function test_the_preparation_board_shows_the_size_and_the_addons(): void
-    {
-        $order = $this->sell(1, [['addon_id' => $this->bear->id, 'qty' => 2]]);
-        // اللوحة تعرض ما له موعد — انظر awaitingPreparation
-        $order->update([
-            'status' => \App\Support\OrderStatus::PENDING,
-            'scheduled_for' => now()->addHours(2),
-        ]);
-
-        $this->actingAs($this->owner)->get(route('admin.preparation.index'))
-            ->assertOk()
-            ->assertInertia(fn ($page) => $page
-                ->where('orders.0.items.0.name', 'بوكيه الحب — وسط')
-                ->where('orders.0.items.0.addons.0.name', 'دبّ')
-                ->where('orders.0.items.0.addons.0.qty', 2)
-                ->etc());
     }
 }

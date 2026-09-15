@@ -213,68 +213,6 @@ class PublicDocumentTest extends TestCase
         $this->assertNotContains('تحويل بنكي', $doc['brand']['payments']);
         $this->assertContains('نقدي', $doc['brand']['payments']);
     }
-
-    public function test_the_published_route_answers_the_external_renderer(): void
-    {
-        $this->seedShop();
-        $site = Builder::create($this->business, 'store', 'modern', $this->owner->id);
-        Publisher::publish($site, $this->owner->id);
-
-        $this->post(route('logout'));
-
-        $response = $this->getJson('/site/wrood.om');
-
-        $response->assertOk()
-            ->assertJsonPath('site.brand.name', 'ورود مسقط')
-            ->assertJsonPath('site.currency.code', 'OMR')
-            ->assertJsonPath('site.dir', 'rtl')
-            ->assertJsonStructure(['version', 'published_at', 'site' => ['pages', 'globals', 'tokens', 'brand']]);
-    }
-
-    /**
-     * والحجزُ يُقرأ من موضعه الحيّ — `businesses.site_slug`.
-     *
-     * كان يُقرأ من إعدادٍ اسمه `site_subdomain` لا يكتبه شيءٌ في النظام، فكان
-     * هذا الاختبار يكتبه بيده ويمرّ — يحرس فرعًا لا يسلكه تاجر. والاسمُ الذي
-     * يحجزه التاجر فعلًا هو `site_slug`.
-     */
-    public function test_a_shop_with_no_domain_of_its_own_is_reached_by_its_reserved_subdomain(): void
-    {
-        $this->seedShop();
-        Setting::where('business_id', $this->business->id)->where('key', 'site_domain')->delete();
-        $this->business->forceFill(['site_slug' => 'wrood'])->save();
-
-        $site = Builder::create($this->business, 'store', 'modern', $this->owner->id);
-        Publisher::publish($site, $this->owner->id);
-
-        $this->post(route('logout'));
-
-        $host = \App\Support\DomainOptions::host('wrood');
-
-        $this->getJson('/site/'.$host)->assertOk()->assertJsonPath('site.brand.name', 'ورود مسقط');
-
-        // ولا يُقرأ اسمٌ مركّب على أنّه حجز: `a.wrood.eventplusapp.om` ليس أحدًا
-        $this->getJson('/site/a.'.$host)->assertNotFound();
-        $this->getJson('/site/wrood.example.com')->assertNotFound();
-    }
-
-    public function test_maintenance_answers_with_identity_so_the_page_is_not_blank(): void
-    {
-        $this->seedShop();
-        $site = Builder::create($this->business, 'store', 'modern', $this->owner->id);
-        Publisher::publish($site, $this->owner->id);
-        $site->update(['maintenance' => true, 'maintenance_message' => 'نجدّد المحل — نعود الأحد']);
-
-        $this->post(route('logout'));
-
-        $this->getJson('/site/wrood.om')
-            ->assertStatus(503)
-            ->assertJsonPath('message', 'نجدّد المحل — نعود الأحد')
-            ->assertJsonPath('brand.name', 'ورود مسقط')
-            ->assertJsonPath('brand.whatsapp', '96890000000')
-            ->assertJsonMissingPath('site');
-    }
-
     /**
      * ويُولَّد من هذا الاختبار ما تقرؤه اختبارات العارض.
      *

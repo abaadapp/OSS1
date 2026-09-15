@@ -67,16 +67,6 @@ class ACreditSaleOwesWithoutDoublePostingTest extends TestCase
             'customer_type' => 'شركة', 'allow_credit_sales' => true, 'payment_terms_days' => 30,
         ]);
     }
-
-    /** @param array<string, mixed> $extra */
-    private function checkout(array $extra = [], ?User $as = null)
-    {
-        return $this->actingAs($as ?? $this->owner)->postJson('/pos/checkout', [
-            'items' => [['id' => $this->product->id, 'name' => 'باقة ورد', 'qty' => 1, 'price' => 100]],
-            'payment_method' => 'نقدي',
-        ] + $extra);
-    }
-
     // ————— البيعُ النقديُّ كما كان —————
 
     public function test_a_cash_sale_is_untouched(): void

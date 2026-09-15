@@ -87,16 +87,6 @@ class ProductRecipeTest extends TestCase
             'name' => $name, 'price' => $price, 'active' => true,
         ]);
     }
-
-    private function sell(array $items, int $expect = 200): \Illuminate\Testing\TestResponse
-    {
-        return $this->actingAs($this->cashier)->postJson('/pos/checkout', [
-            'items' => $items,
-            'payment_method' => 'نقدي',
-            'client_uuid' => uniqid('r', true),
-        ])->assertStatus($expect);
-    }
-
     private function line(int $qty = 1, ?ProductVariant $variant = null): array
     {
         return [

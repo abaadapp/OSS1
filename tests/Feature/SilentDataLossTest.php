@@ -213,31 +213,6 @@ class SilentDataLossTest extends TestCase
         $this->assertTrue($coupon->isExpired());
         $this->assertFalse($coupon->isValid());
     }
-
-    public function test_the_coupon_cost_is_recorded_apart_from_loyalty(): void
-    {
-        // `discount` يجمع الاثنين، فلا يُعرف كم كلّف كوبونٌ بعينه
-        $product = Product::create([
-            'business_id' => $this->business->id, 'name' => 'كيس أرز',
-            'price' => 100, 'cost' => 60, 'quantity' => 50, 'active' => true,
-        ]);
-        Coupon::create([
-            'business_id' => $this->business->id, 'code' => 'خصم', 'type' => 'مبلغ',
-            'value' => 20, 'min_order' => 0, 'active' => true,
-        ]);
-
-        $this->actingAs($this->owner)->postJson(route('pos.checkout'), [
-            'items' => [['id' => $product->id, 'name' => $product->name, 'qty' => 1]],
-            'coupon_code' => 'خصم',
-            'payment_method' => 'نقدي',
-        ])->assertOk();
-
-        $order = Order::latest('id')->first();
-
-        $this->assertSame(20.0, (float) $order->coupon_discount);
-        $this->assertSame('خصم', $order->coupon_code);
-    }
-
     /* =========================== المالية =========================== */
 
     public function test_an_expense_booked_in_finance_actually_counts(): void

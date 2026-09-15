@@ -52,20 +52,6 @@ class PosStartsCleanTest extends TestCase
 
         $this->actingAs($this->cashier);
     }
-
-    private function sell(Customer $customer): Order
-    {
-        $this->postJson(route('pos.checkout'), [
-            'client_uuid' => uniqid('s', true),
-            'payment_method' => 'نقدي',
-            'customer' => $customer->name,
-            'customer_id' => $customer->id,
-            'items' => [['id' => $this->product->id, 'name' => 'وردة', 'price' => 10, 'qty' => 1]],
-        ])->assertOk()->assertJsonPath('ok', true);
-
-        return Order::latest('id')->firstOrFail();
-    }
-
     private function customer(string $name): Customer
     {
         return Customer::create(['business_id' => $this->business->id, 'name' => $name]);
@@ -163,30 +149,5 @@ class PosStartsCleanTest extends TestCase
         $numbers = collect(Demo::customers())->pluck('last_invoice')->filter()->all();
 
         $this->assertNotContains('JAAR-1', $numbers);
-    }
-
-    /**
-     * وتفصيلُ الطلب يردّ إلى الصندوق — لا إلى «الطلبات المعلّقة».
-     *
-     * كان يردّ إلى شاشة المعلّقة أيًّا كان الطريق: يفتح الكاشير فاتورةً من
-     * «العملاء» أو من «المدفوعات» فيجد نفسه في قائمةِ سلالٍ لم تُبَع بعد،
-     * ولا شيء يقول له كيف وصل. ولا يفتح هذه الصفحةَ أحدٌ من المعلّقة أصلًا،
-     * فالوجهة كانت خطأً لكلّ من يصلها.
-     */
-    public function test_the_order_details_screen_returns_to_the_register(): void
-    {
-        $screen = file_get_contents(resource_path('js/Pages/Pos/OrderDetails.tsx'));
-
-        $this->assertStringContainsString("route('pos.index')", $screen);
-        $this->assertStringNotContainsString("route('pos.orders')", $screen);
-    }
-
-    /** والشاشة تفتحها بضغطة — لا تعرض رقمًا لا يُفتح */
-    public function test_the_screen_links_the_number_to_the_invoice(): void
-    {
-        $screen = file_get_contents(resource_path('js/Pages/Pos/Customers.tsx'));
-
-        $this->assertStringContainsString("route('pos.order-details', c.last_invoice)", $screen);
-        $this->assertNotNull(Route::getRoutes()->getByName('pos.order-details'));
     }
 }

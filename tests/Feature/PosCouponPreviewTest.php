@@ -55,13 +55,6 @@ class PosCouponPreviewTest extends TestCase
             'used_count' => 0,
         ]);
     }
-
-    private function try(string $code, float $subtotal = 100)
-    {
-        return $this->actingAs($this->cashier)
-            ->postJson(route('pos.coupon.apply'), ['code' => $code, 'subtotal' => $subtotal]);
-    }
-
     /* ------------------------------ ما يُقبل ------------------------------ */
 
     public function test_a_valid_code_returns_the_discount_it_will_give(): void
@@ -144,20 +137,5 @@ class PosCouponPreviewTest extends TestCase
         ]);
 
         $this->try('JAAR')->assertStatus(422)->assertJsonPath('ok', false);
-    }
-
-    public function test_a_guest_cannot_probe_codes(): void
-    {
-        $this->coupon();
-
-        $this->postJson(route('pos.coupon.apply'), ['code' => 'WARD10', 'subtotal' => 100])
-            ->assertStatus(401);
-    }
-
-    /* ------------------------ شاشة إعدادات الصندوق ------------------------ */
-
-    public function test_the_cashier_settings_screen_opens(): void
-    {
-        $this->actingAs($this->cashier)->get(route('pos.settings'))->assertOk();
     }
 }

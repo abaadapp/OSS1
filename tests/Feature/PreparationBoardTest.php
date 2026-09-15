@@ -80,14 +80,6 @@ class PreparationBoardTest extends TestCase
     {
         return $this->props($query)['orders'];
     }
-
-    /** خصائص الصفحة كاملةً — للعدّادات لا للبطاقات */
-    private function props(array $query = []): array
-    {
-        return $this->get(route('admin.preparation.index', $query))
-            ->viewData('page')['props'];
-    }
-
     /* ------------------------------ ما يظهر ------------------------------ */
 
     public function test_a_live_scheduled_order_appears(): void
@@ -321,42 +313,5 @@ class PreparationBoardTest extends TestCase
 
         $this->assertLessThanOrEqual($few + 2, $many,
             "استعلامات اللوحة نمت من {$few} إلى {$many} حين نمت الطلبات من ٣ إلى ٢٤");
-    }
-
-    private function countQueries(): int
-    {
-        DB::flushQueryLog();
-        DB::enableQueryLog();
-        $this->get(route('admin.preparation.index'))->assertSuccessful();
-        $n = count(DB::getQueryLog());
-        DB::disableQueryLog();
-
-        return $n;
-    }
-
-    /* ------------------------------ الأفعال ------------------------------ */
-
-    public function test_start_preparing_and_mark_ready(): void
-    {
-        $order = $this->order(['status' => OrderStatus::CONFIRMED]);
-
-        $this->post(route('admin.preparation.move', $order->number), ['status' => OrderStatus::PREPARING])
-            ->assertSessionHasNoErrors();
-        $this->assertSame(OrderStatus::PREPARING, $order->fresh()->status);
-
-        $this->post(route('admin.preparation.move', $order->number), ['status' => OrderStatus::READY])
-            ->assertSessionHasNoErrors();
-        $this->assertSame(OrderStatus::READY, $order->fresh()->status);
-    }
-
-    /** والحارس هنا هو حارسُ شاشة المبيعات نفسه — لا حارسان يفترقان */
-    public function test_an_illegal_move_is_refused_on_the_board_too(): void
-    {
-        $order = $this->order(['status' => OrderStatus::DELIVERED]);
-
-        $this->post(route('admin.preparation.move', $order->number), ['status' => OrderStatus::PREPARING])
-            ->assertSessionHasErrors('status');
-
-        $this->assertSame(OrderStatus::DELIVERED, $order->fresh()->status);
     }
 }

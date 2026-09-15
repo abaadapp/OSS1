@@ -53,15 +53,6 @@ class SaleHappensOnceTest extends TestCase
         $this->actingAs($this->owner);
         session(['current_branch' => $this->branch->id]);
     }
-
-    private function checkout(array $extra = [])
-    {
-        return $this->postJson(route('pos.checkout'), array_merge([
-            'items' => [['id' => $this->product->id, 'name' => 'وردة', 'qty' => 2]],
-            'payment_method' => 'نقدي',
-        ], $extra));
-    }
-
     /* ------------------- مفتاحُ الصمود ------------------- */
 
     public function test_the_same_key_twice_returns_the_first_invoice(): void
@@ -118,18 +109,6 @@ class SaleHappensOnceTest extends TestCase
         $this->assertStringContainsString("'duplicate' => true", $catch);
         $this->assertStringContainsString('throw $e;', $catch);
     }
-
-    /* ------------------- السلّة المعلّقة ------------------- */
-
-    private function hold(): int
-    {
-        $this->postJson(route('pos.hold'), [
-            'items' => [['id' => $this->product->id, 'name' => 'وردة', 'qty' => 2]],
-        ])->assertOk();
-
-        return (int) Order::where('is_held', true)->value('id');
-    }
-
     public function test_a_held_cart_cannot_become_two_invoices(): void
     {
         $held = $this->hold();

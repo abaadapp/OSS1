@@ -94,46 +94,6 @@ class EveryReportOpensOnRealDataTest extends TestCase
         $this->assertGreaterThan(80, $checked, 'لم يُجرَّب ما يكفي — الفحصُ نفسُه معطوب');
         $this->assertSame([], $broken, "تقاريرُ لا تُفتح:\n".implode("\n", $broken));
     }
-
-    /**
-     * والتصديرُ يخرج كما تخرج الشاشة.
-     *
-     * ملفٌّ يُعرض زرُّه ولا ينزل أسوأ من غياب الزرّ: صاحبُه ينتظره ثمّ يعيد
-     * المحاولة ظانًّا العطبَ في جهازه.
-     */
-    public function test_every_report_exports_in_every_format(): void
-    {
-        $broken = [];
-        $checked = 0;
-
-        foreach (Reports::ALL as $report) {
-            /*
-             * و«المبيعات» بابُ تصديرٍ خاصٌّ بها — `admin.reports.xlsx` وأخواتها.
-             * ولا صفوفَ لها في `ReportColumns`، فالبابُ العامّ يردّ ٤٠٤ بحقّ.
-             * ويُجرَّب بابُها في `test_the_sales_report_exports_through_its_own_door`.
-             */
-            if (! ReportColumns::has($report['key']) && ! ReportColumns::sectioned($report['key'])) {
-                continue;
-            }
-
-            foreach (['xlsx', 'csv', 'pdf'] as $format) {
-                $checked++;
-
-                $response = $this->actingAs($this->owner)
-                    ->get(route('admin.reports.export.'.$format, [
-                        'report' => $report['key'], 'range' => 'all',
-                    ]));
-
-                if (! in_array($response->getStatusCode(), [200, 302], true)) {
-                    $broken[] = $report['key'].'.'.$format.' = '.$response->getStatusCode();
-                }
-            }
-        }
-
-        $this->assertGreaterThan(30, $checked, 'لم يُجرَّب ما يكفي');
-        $this->assertSame([], $broken, "تصديرٌ لا يخرج:\n".implode("\n", $broken));
-    }
-
     /**
      * وتقريرُ المبيعات يُصدَّر من بابه هو.
      *

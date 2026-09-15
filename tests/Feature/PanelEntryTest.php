@@ -94,15 +94,4 @@ class PanelEntryTest extends TestCase
 
         $this->assertSame(route('admin.inventory.index'), $props['auth']['panelUrl']);
     }
-
-    public function test_a_till_only_employee_gets_no_destination_in_the_props(): void
-    {
-        $user = $this->staff(['pos']);
-
-        // لا لوحة له، فتُقرأ من شاشة اختيار الكاشير التي يقف عليها
-        $props = $this->actingAs($user)
-            ->get(route('pos.cashier'))->viewData('page')['props'];
-
-        $this->assertNull($props['auth']['panelUrl']);
-    }
 }

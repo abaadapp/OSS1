@@ -172,19 +172,6 @@ class SearchWorksForEveryRoleTest extends TestCase
             'الكاشير لا يجد فاتورةً يفتحها بنفسه من الإيصالات',
         );
     }
-
-    /** وتقوده إلى بابه هو لا إلى شاشةٍ مُنع منها */
-    public function test_the_invoice_leads_the_cashier_to_his_own_screen(): void
-    {
-        $this->sale('INV-888888');
-
-        $res = $this->actingAs($this->onFloor)->getJson(route('admin.search', ['q' => '888888']));
-        $url = $res->json('groups.0.items.0.url');
-
-        $this->assertStringContainsString('/pos/', (string) $url, 'الوجهة شاشةٌ لا يملكها الكاشير');
-        $this->assertStringNotContainsString('/admin/orders', (string) $url);
-    }
-
     /** ومن يملك شاشة الطلبات يُقاد إليها لا إلى نقطة البيع */
     public function test_the_owner_still_lands_on_the_orders_screen(): void
     {
@@ -195,25 +182,6 @@ class SearchWorksForEveryRoleTest extends TestCase
 
         $this->assertStringContainsString('/admin/orders', (string) $url);
     }
-
-    /**
-     * والكاشير الخالص لا يدخل اللوحة أصلًا — فلا ترويسةَ له ولا صندوق.
-     *
-     * `Permissions::MAP['cashier']` لوحةٌ ونقطةُ بيع، و`EntersPanel` يردّه.
-     * وبابُه إلى الفواتير شاشةُ «الإيصالات» في نقطة البيع، وفيها بحثُها
-     * الخاصّ يسأل الطلبات كلَّها لا الثلاثين المعروضة.
-     */
-    public function test_a_pure_cashier_never_reaches_the_panel(): void
-    {
-        $this->actingAs($this->cashier)
-            ->get(route('admin.search', ['q' => 'ورد']))
-            ->assertForbidden();
-
-        $this->actingAs($this->cashier)
-            ->getJson(route('pos.receipts.search', ['q' => 'ورد']))
-            ->assertOk();
-    }
-
     /* -------------------------- مدير المنصّة -------------------------- */
 
     public function test_the_platform_admin_searches_companies_and_users(): void
@@ -242,15 +210,6 @@ class SearchWorksForEveryRoleTest extends TestCase
             $this->assertStringNotContainsString('/admin/', (string) $res->headers->get('Location'));
         }
     }
-
-    /** والتاجر لا يدخل بحث المنصّة */
-    public function test_a_merchant_cannot_search_the_platform(): void
-    {
-        $this->actingAs($this->owner)
-            ->getJson(route('super-admin.search', ['q' => 'متجر']))
-            ->assertForbidden();
-    }
-
     /* ---------------------------- والحدود ---------------------------- */
 
     /** ولا يعبر البحث بين متجرين */

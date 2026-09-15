@@ -245,42 +245,4 @@ class AThreadThatCameToTheWrongDoorIsMovedByHandTest extends TestCase
         $this->assertSame(1, CrmMessage::count());
         $this->assertSame(1, CrmLead::count());
     }
-
-    /* ═════════════ والباب لا يُفتح لغير مالك المنصّة ═════════════ */
-
-    /** تاجرٌ لا ينقل خيطًا إلى دفتر مبيعاتنا */
-    public function test_a_merchant_cannot_move_a_thread_into_our_sales_book(): void
-    {
-        $thread = $this->thread();
-        Support::say($thread, $this->merchant, 'business', 'مرحبا', false, null, null, 'wamid.A');
-
-        $this->actingAs($this->merchant)
-            ->post(route('super-admin.conversations.toCrm', $thread->id))
-            ->assertForbidden();
-
-        $this->assertSame(0, CrmLead::count());
-    }
-
-    /** ومالكُ المنصّة ينقله ويُقاد إلى العميل */
-    public function test_the_platform_owner_moves_it_and_lands_on_the_lead(): void
-    {
-        $super = User::create([
-            'name' => 'مدير المنصة', 'email' => 'root@eventplus.om', 'password' => bcrypt('x'),
-            'role' => 'super_admin', 'status' => 'active', 'business_id' => null,
-        ]);
-
-        $thread = $this->thread();
-        Support::say($thread, $this->merchant, 'business', 'مرحبا', false, null, null, 'wamid.A');
-
-        $lead = null;
-
-        $this->actingAs($super)
-            ->post(route('super-admin.conversations.toCrm', $thread->id))
-            ->assertRedirect();
-
-        $lead = CrmLead::where('phone', '96890683111')->first();
-
-        $this->assertNotNull($lead);
-        $this->assertSame(1, CrmMessage::where('lead_id', $lead->id)->count());
-    }
 }

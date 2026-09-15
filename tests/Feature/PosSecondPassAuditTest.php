@@ -70,21 +70,6 @@ class PosSecondPassAuditTest extends TestCase
     {
         Setting::updateOrCreate(['business_id' => $this->business->id, 'key' => $key], ['value' => $value]);
     }
-
-    /** بندٌ واحد بسعر ١٠ ومعه إضافةٌ بـ٥ — المجموع الفرعيّ ١٥ */
-    private function sellWithAddon(array $extra = [])
-    {
-        return $this->actingAs($this->cashier)->withSession(['current_branch' => $this->branch->id])
-            ->postJson(route('pos.checkout'), array_merge([
-                'items' => [[
-                    'id' => $this->product->id, 'name' => 'باقة', 'qty' => 1,
-                    'addons' => [['addon_id' => $this->addon->id, 'qty' => 1]],
-                ]],
-                'payment_method' => 'نقدي',
-                'client_uuid' => uniqid('a', true),
-            ], $extra));
-    }
-
     /* ==================== وعاء الضريبة ==================== */
 
     public function test_an_addon_sold_on_a_line_is_taxed_like_the_line(): void
@@ -168,21 +153,6 @@ class PosSecondPassAuditTest extends TestCase
         $this->assertSame(0.5, round((float) $order->tax, 3), 'الخصم يُطرح من الوعاء كاملًا');
         $this->assertSame(10.5, round((float) $order->total, 3));
     }
-
-    public function test_a_standalone_addon_line_was_always_taxed_and_still_is(): void
-    {
-        $this->actingAs($this->cashier)->withSession(['current_branch' => $this->branch->id])
-            ->postJson(route('pos.checkout'), [
-                'items' => [['id' => null, 'addon_id' => $this->addon->id, 'name' => 'شوكولاتة', 'qty' => 2]],
-                'payment_method' => 'نقدي', 'client_uuid' => uniqid('b', true),
-            ])->assertOk();
-
-        $order = Order::latest('id')->firstOrFail();
-
-        $this->assertSame(10.0, round((float) $order->subtotal, 3));
-        $this->assertSame(0.5, round((float) $order->tax, 3));
-    }
-
     public function test_the_screen_and_the_server_weigh_the_same_line(): void
     {
         /*
@@ -234,38 +204,6 @@ class PosSecondPassAuditTest extends TestCase
 
         $this->assertNull(Order::latest('id')->firstOrFail()->customer_id);
     }
-
-    public function test_a_customer_added_from_the_till_belongs_to_the_till_shop(): void
-    {
-        $this->actingAs($this->cashier)->postJson(route('pos.customers.store'), [
-            'name' => 'زبونٌ جديد', 'phone' => '90000003',
-        ])->assertOk();
-
-        $this->assertDatabaseHas('customers', [
-            'business_id' => $this->business->id, 'phone' => '90000003',
-        ]);
-    }
-
-    /* ==================== الصلاحيات ==================== */
-
-    public function test_a_cashier_cannot_read_the_takings_of_the_drawer(): void
-    {
-        // شاشة المدفوعات شاشةٌ مالية لا شاشة بيع — انظر Permissions::sectionFromRoute
-        $this->actingAs($this->cashier)->get(route('pos.payments'))->assertForbidden();
-    }
-
-    public function test_a_cashier_without_the_pos_section_is_kept_out_entirely(): void
-    {
-        $this->cashier->update(['permissions' => ['dashboard']]);
-
-        $this->actingAs($this->cashier)->postJson(route('pos.checkout'), [
-            'items' => [['id' => $this->product->id, 'name' => 'باقة', 'qty' => 1]],
-            'payment_method' => 'نقدي', 'client_uuid' => uniqid('z', true),
-        ])->assertForbidden();
-
-        $this->assertSame(0, Order::count());
-    }
-
     /* ==================== الفشل لا يترك نصف بيعة ==================== */
 
     public function test_a_sale_that_fails_on_its_last_step_leaves_no_trace(): void

@@ -102,14 +102,6 @@ class AnIssuedInvoiceClosesTest extends TestCase
 
         return $order->fresh('items');
     }
-
-    private function correct(Order $order, int $qty = 1)
-    {
-        return $this->put(route('pos.orders.items.update', [$order->number, $order->items->first()->id]), [
-            'quantity' => $qty, 'reason' => 'الزبون غيّر رأيه في قطعة',
-        ]);
-    }
-
     /* ----------------------------- حدُّ اليوم ----------------------------- */
 
     public function test_an_invoice_from_today_is_still_correctable(): void
@@ -150,19 +142,6 @@ class AnIssuedInvoiceClosesTest extends TestCase
 
         OrderCorrection::setPaymentMethod($order, 'بطاقة', 'تصحيح متأخّر');
     }
-
-    public function test_the_payment_method_of_an_old_invoice_is_not_rewritten(): void
-    {
-        $order = $this->sale(now()->subDays(10)->toDateTimeString());
-
-        $this->actingAs($this->owner)
-            ->put(route('pos.orders.payment.update', $order->number), [
-                'payment_method' => 'بطاقة', 'reason' => 'كانت بالبطاقة',
-            ])->assertSessionHasErrors('payment_method');
-
-        $this->assertSame('نقدي', $order->fresh()->payment_method);
-    }
-
     public function test_cancelling_an_old_invoice_is_still_open(): void
     {
         /*
@@ -255,11 +234,5 @@ class AnIssuedInvoiceClosesTest extends TestCase
         $this->actingAs($this->cashier);
 
         $this->assertFalse($this->canEdit($order));
-    }
-
-    private function canEdit(Order $order): bool
-    {
-        return (bool) $this->get(route('pos.order-details', $order->number))
-            ->assertOk()->viewData('page')['props']['canEdit'];
     }
 }

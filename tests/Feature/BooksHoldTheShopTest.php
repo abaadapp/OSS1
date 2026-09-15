@@ -59,15 +59,6 @@ class BooksHoldTheShopTest extends TestCase
         $this->actingAs($this->owner);
         session(['current_branch' => $this->branch->id]);
     }
-
-    private function sell(array $extra = [])
-    {
-        return $this->postJson(route('pos.checkout'), array_merge([
-            'items' => [['id' => $this->product->id, 'name' => 'وردة', 'qty' => 3]],
-            'payment_method' => 'نقدي',
-        ], $extra));
-    }
-
     /** رصيدُ حسابٍ بمفتاحه النظاميّ من ميزان المراجعة */
     private function balance(string $key): float
     {

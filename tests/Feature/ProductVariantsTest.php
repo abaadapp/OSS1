@@ -66,16 +66,6 @@ class ProductVariantsTest extends TestCase
             'active' => true,
         ], $attributes));
     }
-
-    private function sell(array $items, int $expect = 200): \Illuminate\Testing\TestResponse
-    {
-        return $this->actingAs($this->cashier)->postJson('/pos/checkout', [
-            'items' => $items,
-            'payment_method' => 'نقدي',
-            'client_uuid' => uniqid('v', true),
-        ])->assertStatus($expect);
-    }
-
     /* ------------------------------ الإنشاء ------------------------------ */
 
     public function test_a_business_can_add_a_size_to_its_product(): void

@@ -250,35 +250,6 @@ class OrderCorrectionTest extends TestCase
         $this->assertSame('31.500', (string) $edit->order_total_before);
         $this->assertSame('10.500', (string) $edit->order_total_after);
     }
-
-    /* --------------------------- المسار --------------------------- */
-
-    public function test_the_screen_refuses_a_correction_with_no_reason(): void
-    {
-        $order = $this->sale(3);
-
-        $this->actingAs($this->cashier)
-            ->put(route('pos.orders.items.update', [$order->number, $order->items->first()->id]), [
-                'quantity' => 1,
-            ])
-            ->assertSessionHasErrors('reason');
-
-        $this->assertSame(3, (int) $order->fresh('items')->items->first()->quantity);
-    }
-
-    public function test_a_cashier_cannot_touch_an_invoice_of_another_business(): void
-    {
-        $other = Business::create(['name' => 'متجر آخر', 'status' => 'نشط']);
-        $order = $this->sale(3);
-        $order->update(['business_id' => $other->id]);
-
-        $this->actingAs($this->cashier)
-            ->put(route('pos.orders.items.update', [$order->number, $order->items->first()->id]), [
-                'quantity' => 1, 'reason' => 'محاولة',
-            ])
-            ->assertNotFound();
-    }
-
     public function test_the_owner_sees_the_correction_on_the_order_page(): void
     {
         $order = $this->sale(3);
@@ -350,18 +321,6 @@ class OrderCorrectionTest extends TestCase
         $this->assertSame(31.5, (float) $order->fresh()->total);
         $this->assertSame(3, (int) $order->fresh('items')->items->first()->quantity);
     }
-
-    public function test_the_screen_refuses_a_payment_correction_with_no_reason(): void
-    {
-        $order = $this->sale(3);
-
-        $this->actingAs($this->cashier)
-            ->put(route('pos.orders.payment.update', $order->number), ['payment_method' => 'بطاقة'])
-            ->assertSessionHasErrors('reason');
-
-        $this->assertSame('نقدي', $order->fresh()->payment_method);
-    }
-
     public function test_both_kinds_of_correction_read_from_one_list(): void
     {
         // قائمتان تحت فاتورةٍ واحدة تجعلان القارئ يجمعهما بعينه

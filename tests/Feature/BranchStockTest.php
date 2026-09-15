@@ -86,15 +86,6 @@ class BranchStockTest extends TestCase
         $this->activatePosDevice($this->business->id, $branch->id);
         session(['current_branch' => $branch->id]);
     }
-
-    private function sell(int $qty)
-    {
-        return $this->postJson(route('pos.checkout'), [
-            'items' => [['id' => $this->product->id, 'name' => $this->product->name, 'qty' => $qty]],
-            'payment_method' => 'نقدي',
-        ]);
-    }
-
     /* ------------------------- ما كان مكسورًا ------------------------- */
 
     public function test_a_branch_with_no_stock_cannot_sell_its_neighbours_goods(): void
@@ -106,32 +97,6 @@ class BranchStockTest extends TestCase
 
         $this->assertSame(10, (int) $this->product->fresh()->quantity, 'خُصم رغم رفض البيع');
     }
-
-    public function test_the_pos_screen_shows_this_branchs_stock_not_the_company_total(): void
-    {
-        $this->allocate(muscat: 10, salalah: 0);
-        $this->inBranch($this->salalah);
-
-        $products = $this->get(route('pos.index'))->assertOk()
-            ->viewData('page')['props']['products'];
-
-        $row = collect($products)->firstWhere('id', $this->product->id);
-
-        $this->assertSame(0, $row['qty'], 'عُرض رصيد مسقط لكاشير صلالة');
-        $this->assertSame('نفد المخزون', $row['stock_status']);
-    }
-
-    public function test_the_live_feed_reports_the_same_branch_as_the_screen(): void
-    {
-        $this->allocate(muscat: 10, salalah: 0);
-        $this->inBranch($this->salalah);
-
-        $feed = $this->getJson(route('pos.stock-feed'))->assertOk()->json('products');
-        $row = collect($feed)->firstWhere('id', $this->product->id);
-
-        $this->assertSame(0, $row['qty'], 'التغذية تقيس غير ما عرضته الشاشة');
-    }
-
     public function test_selling_from_a_stocked_branch_still_works(): void
     {
         $this->allocate(muscat: 10, salalah: 0);

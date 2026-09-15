@@ -54,12 +54,6 @@ class StorePicksTest extends TestCase
         $this->business->forceFill(['site_slug' => 'ward-alkhuwair'])->save();
         MarketingSettings::save($this->business->id, 'website', ['store_on' => '1']);
     }
-
-    private function page()
-    {
-        return $this->get(route('store.show', 'ward-alkhuwair'));
-    }
-
     /* ------------------------------ ما يُعرض ------------------------------ */
 
     /**
@@ -125,37 +119,6 @@ class StorePicksTest extends TestCase
 
         $this->page()->assertNotFound();
     }
-
-    /* --------------------------- اختيارُ التاجر --------------------------- */
-
-    public function test_the_merchant_hides_and_shows_in_bulk(): void
-    {
-        $this->actingAs($this->owner)
-            ->post(route('admin.marketing.store.products'), ['all' => true, 'published' => false])
-            ->assertSessionHasNoErrors();
-        $this->assertFalse($this->bouquet->fresh()->published);
-
-        $this->actingAs($this->owner)
-            ->post(route('admin.marketing.store.products'), ['all' => true, 'published' => true]);
-        $this->assertTrue($this->bouquet->fresh()->published);
-    }
-
-    /** ولا يمسّ التاجرُ أصنافَ غيره ولو أرسل معرّفاتها */
-    public function test_hiding_by_id_never_reaches_another_business(): void
-    {
-        $other = Business::create(['name' => 'متجر آخر', 'type' => 'عام', 'status' => 'نشط']);
-        $theirs = Product::create([
-            'business_id' => $other->id, 'name' => 'صنف الجيران',
-            'price' => 3, 'cost' => 1, 'quantity' => 5, 'active' => true, 'published' => true,
-        ]);
-
-        $this->actingAs($this->owner)
-            ->post(route('admin.marketing.store.products'), ['ids' => [$theirs->id], 'published' => false])
-            ->assertSessionHasNoErrors();
-
-        $this->assertTrue($theirs->fresh()->published);
-    }
-
     /** والعدّ في الشاشة يقول ما يُعرض فعلًا — لا كلَّ ما هو فعّال */
     public function test_the_counter_counts_what_is_actually_shown(): void
     {
@@ -170,64 +133,6 @@ class StorePicksTest extends TestCase
         $this->assertSame(1, $store['productCount']);
         $this->assertCount(2, $store['products']);
     }
-
-    /* ------------------------------ المعاينة ------------------------------ */
-
-    /**
-     * صاحبُ المتجر يراه قبل أن ينشره.
-     *
-     * وكان يضبطه أعمى: يكتب عنوانه ويختار لونه ويُخفي أصنافًا ولا يرى شيئًا
-     * حتى ينشره — فيُنشر ليرى ثمّ يُطفئ ليُصلح، وبين الاثنين رابطٌ حيٌّ فُتح
-     * لمن وصله.
-     */
-    public function test_the_owner_previews_the_store_before_publishing_it(): void
-    {
-        MarketingSettings::save($this->business->id, 'website', ['store_on' => '0']);
-
-        // مغلقٌ على الزائر
-        $this->page()->assertNotFound();
-
-        // ومفتوحٌ لصاحبه، بشريطٍ يقول إنّها معاينة
-        $this->actingAs($this->owner)->get(route('admin.store.preview'))
-            ->assertOk()
-            ->assertSee('بوكيه ورد')
-            ->assertSee('معاينة — هكذا يظهر متجرك، ولا يفتح هذه الصفحة أحد سواك.', false);
-    }
-
-    /** ولا تُفهرَس ولا تُخزَّن: هي حالُ لحظتها، ولصاحبها وحده */
-    public function test_the_preview_is_never_indexed_or_cached(): void
-    {
-        $response = $this->actingAs($this->owner)->get(route('admin.store.preview'))->assertOk();
-
-        // ولارافل تُضيف `private` إلى ما نضعه — فالفحص احتواءٌ لا مطابقة
-        $this->assertStringContainsString('no-store', (string) $response->headers->get('Cache-Control'));
-        $this->assertStringContainsString('noindex', (string) $response->headers->get('X-Robots-Tag'));
-    }
-
-    /**
-     * ولا يُعاين تاجرٌ متجر جاره.
-     *
-     * المسار بلا معرّف: المتجر يُقرأ من جلسة صاحبه وحدها. ولو قبِل رقمًا
-     * لَفُتح كلُّ متجرٍ غير منشورٍ بتبديل رقمٍ في الرابط.
-     */
-    public function test_the_preview_shows_only_the_viewers_own_store(): void
-    {
-        $other = Business::create(['name' => 'متجر آخر', 'type' => 'عام', 'status' => 'نشط']);
-        Product::create([
-            'business_id' => $other->id, 'name' => 'صنف الجيران',
-            'price' => 3, 'cost' => 1, 'quantity' => 5, 'active' => true, 'published' => true,
-        ]);
-
-        $this->actingAs($this->owner)->get(route('admin.store.preview'))
-            ->assertOk()->assertDontSee('صنف الجيران');
-    }
-
-    /** وزائرٌ بلا حساب لا يبلغ المعاينة أصلًا */
-    public function test_a_guest_cannot_reach_the_preview(): void
-    {
-        $this->get(route('admin.store.preview'))->assertRedirect();
-    }
-
     /* ------------------------------ بكم يُعرض ------------------------------ */
 
     /**

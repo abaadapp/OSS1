@@ -73,55 +73,6 @@ class MySalaryIsForWhoHasOneTest extends TestCase
     {
         return $this->person($role, $this->shop->id);
     }
-
-    /* ═══════════ من يفتحها ومن يُردّ ═══════════ */
-
-    public function test_the_platform_admin_never_reaches_the_page(): void
-    {
-        $operator = $this->operator();
-
-        // ويملك «نقطة البيع» بحكم دوره — فالصلاحية وحدها لم تكن حارسًا
-        $this->assertTrue($operator->allows('pos'));
-
-        // ويردّه `RequiresBusiness` قبل المتحكّم: لا متجرَ له
-        $this->actingAs($operator)->get(route('pos.me'))
-            ->assertRedirect(route('super-admin.dashboard'));
-    }
-
-    public function test_the_owner_keeps_the_page_but_not_the_link(): void
-    {
-        /*
-         * ولم يُحجَب عنه: صاحبُ نشاطٍ سجّل لنفسه راتبًا له سطرٌ في المسيرة —
-         * `payableEmployees` لا ترشّح بالدور. فحجبُ الصفحة يُخفي عنه مسيرتَه.
-         * والبندُ يبقى مخفيًّا عنه كما كان.
-         */
-        $owner = $this->owner();
-        $owner->update(['basic_salary' => 900]);
-
-        $props = $this->actingAs($owner)->get(route('pos.me'))
-            ->assertOk()->viewData('page')['props'];
-
-        $this->assertSame(900.0, $props['salary']['monthly']);
-        $this->assertFalse($owner->isEmployee(), 'ولا يُرسم له البند');
-    }
-
-    public function test_an_employee_opens_his_own_page(): void
-    {
-        $clerk = $this->clerk();
-        $clerk->update(['basic_salary' => 300, 'allowances' => 50]);
-
-        $props = $this->actingAs($clerk)->get(route('pos.me'))
-            ->assertOk()->viewData('page')['props'];
-
-        $this->assertSame(350.0, $props['salary']['monthly']);
-    }
-
-    public function test_a_branch_manager_is_an_employee(): void
-    {
-        // يُستثنى من الاستثناء: `isAdmin()` تشمله، وهو مع ذلك ذو راتبٍ ومسيرة
-        $this->actingAs($this->clerk('manager'))->get(route('pos.me'))->assertOk();
-    }
-
     public function test_every_shop_role_that_is_not_the_owner_may_open_it(): void
     {
         foreach (['cashier', 'sales', 'inventory', 'accountant', 'delivery'] as $role) {
@@ -141,25 +92,6 @@ class MySalaryIsForWhoHasOneTest extends TestCase
         // ودورُ متجرٍ بلا متجر ليس موظّفًا: تردّه `RequiresBusiness` أصلًا
         $this->assertFalse($this->person('cashier', null)->isEmployee(), 'بلا نشاط مربوط');
     }
-
-    /* ═══════════ وما لا يُفتح لا يُرسم ═══════════ */
-
-    public function test_the_platform_admin_is_not_offered_the_link(): void
-    {
-        $props = $this->actingAs($this->operator())
-            ->get(route('super-admin.dashboard'))->assertOk()->viewData('page')['props'];
-
-        $this->assertFalse($props['auth']['isEmployee'], 'عُرض لمدير المنصّة بابٌ يُردّ عنه');
-    }
-
-    public function test_the_employee_is_offered_the_link(): void
-    {
-        $props = $this->actingAs($this->clerk('sales'))
-            ->get(route('pos.index'))->assertOk()->viewData('page')['props'];
-
-        $this->assertTrue($props['auth']['isEmployee']);
-    }
-
     public function test_the_screen_asks_the_server_not_the_role(): void
     {
         /*

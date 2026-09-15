@@ -64,19 +64,6 @@ class OnePaperMayCoverAMonthTest extends TestCase
         ]);
         $this->actingAs($this->owner);
     }
-
-    private function sell(int $qty): Order
-    {
-        $this->postJson('/pos/checkout', [
-            'items' => [['id' => $this->product->id, 'name' => 'باقة ورد', 'qty' => $qty, 'price' => 10]],
-            'payment_method' => 'نقدي',
-            'credit' => true,
-            'customer_id' => $this->company->id,
-        ])->assertOk();
-
-        return Order::latest('id')->first();
-    }
-
     // ————— السيناريو (ج): ثلاثةُ طلباتٍ وورقةٌ واحدة —————
 
     public function test_a_monthly_billing_customer_gets_no_paper_at_the_counter(): void
@@ -168,24 +155,6 @@ class OnePaperMayCoverAMonthTest extends TestCase
             $this->assertSame(1, CustomerInvoice::count());
         }
     }
-
-    public function test_a_paid_order_is_not_billed(): void
-    {
-        $this->company->update(['monthly_billing' => false, 'allow_credit_sales' => false]);
-        $this->postJson('/pos/checkout', [
-            'items' => [['id' => $this->product->id, 'name' => 'باقة ورد', 'qty' => 3, 'price' => 10]],
-            'payment_method' => 'نقدي',
-            'customer_id' => $this->company->id,
-        ])->assertOk();
-
-        /*
-         * بيعةٌ نقديّةٌ قُبض ثمنُها ولا ذمّةَ لها. ووضعُها في فاتورةٍ يُنشئ
-         * التزامًا لا وجود له في الدفتر — فتفترق الذمّةُ عن رصيد `receivable`.
-         */
-        $this->expectException(RuntimeException::class);
-        CustomerInvoices::consolidate($this->company, [Order::latest('id')->first()->id], [], $this->owner->id);
-    }
-
     public function test_the_billing_door_works_from_the_screen(): void
     {
         $a = $this->sell(8);

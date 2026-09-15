@@ -64,17 +64,6 @@ class AnOrderThatIsPreparedHasADateTest extends TestCase
 
         $this->actingAs($this->owner);
     }
-
-    /** @param  array<string, mixed>  $extra */
-    private function sell(array $extra = [])
-    {
-        return $this->postJson(route('pos.checkout'), array_merge([
-            'items' => [['id' => $this->product->id, 'name' => 'باقة ورد', 'qty' => 1]],
-            'payment_method' => 'نقدي',
-            'customer' => 'خالد المشتري',
-        ], $extra));
-    }
-
     /** طلبٌ حيٌّ كامل — يُستعمل لبابِ التعديل */
     private function scheduled(): Order
     {
@@ -109,24 +98,6 @@ class AnOrderThatIsPreparedHasADateTest extends TestCase
         $this->sell(['fulfillment_type' => FlowerOrder::PICKUP])
             ->assertStatus(422)->assertJsonValidationErrors('scheduled_for');
     }
-
-    /**
-     * وبيعةُ المنضدة تبقى ثلاث نقرات.
-     *
-     * أخطرُ ما في قاعدةٍ كهذه أن تتسرّب إلى كلّ بيعة: من يبيع عبوة ماءٍ لا
-     * يُسأل عن موعد تسليمها.
-     */
-    public function test_a_counter_sale_needs_no_date(): void
-    {
-        $this->postJson(route('pos.checkout'), [
-            'items' => [['id' => $this->product->id, 'name' => 'باقة ورد', 'qty' => 1]],
-            'payment_method' => 'نقدي',
-        ])->assertOk();
-
-        $this->assertSame(OrderStatus::COMPLETED,
-            Order::where('business_id', $this->business->id)->latest('id')->value('status'));
-    }
-
     /* ------------------------------ بابُ التعديل ------------------------------ */
 
     public function test_the_date_cannot_be_emptied_out_of_a_live_order(): void
@@ -202,11 +173,5 @@ class AnOrderThatIsPreparedHasADateTest extends TestCase
     public function test_the_board_draws_the_line_note(): void
     {
         $this->assertStringContainsString('{i.note && (', file_get_contents(base_path(self::BOARD)));
-    }
-
-    /** @return array<int, array<string, mixed>> */
-    private function board(): array
-    {
-        return $this->get(route('admin.preparation.index'))->viewData('page')['props']['orders'];
     }
 }

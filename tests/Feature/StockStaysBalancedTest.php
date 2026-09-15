@@ -77,24 +77,6 @@ class StockStaysBalancedTest extends TestCase
         $this->assertSame($total, $sum,
             "«{$door}» كسر التوازن: الإجماليّ {$total} ومجموع الفروع {$sum}");
     }
-
-    public function test_a_pos_sale_keeps_it_balanced(): void
-    {
-        $before = (int) $this->p->fresh()->quantity;
-
-        $this->actingAs($this->owner)->withSession(['current_branch' => $this->b->id])
-            ->postJson(route('pos.checkout'), [
-                // عقد الدفع الحقيقي: id/name/qty. كان المُرسَل product_id/quantity
-                // بلا name، فيُردّ الطلب ٤٢٢ ولا يبلغ المتحكّم — ثمّ يقارن
-                // الاختبار مئةً بمئة وينجح على بيعةٍ لم تقع
-                'items' => [['id' => $this->p->id, 'name' => 'صنف', 'qty' => 3, 'price' => 10]],
-                'payment_method' => 'نقدي', 'paid' => 30,
-            ])->assertOk();
-
-        $this->assertDidSomething($before, 'بيعة نقطة البيع');
-        $this->assertBalanced('بيعة نقطة البيع');
-    }
-
     public function test_receiving_a_purchase_order_keeps_it_balanced(): void
     {
         $supplier = Supplier::create(['business_id' => $this->business->id, 'name' => 'مورّد']);

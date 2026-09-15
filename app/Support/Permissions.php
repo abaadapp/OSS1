@@ -31,13 +31,12 @@ class Permissions
          * لا يعتمد ما قيّده.
          */
         'accountant' => ['dashboard', 'orders', 'customers', 'finance', 'expenses',
-            'employees', 'pos', 'reports', 'suppliers', 'purchases'],
-        // من يجهّز البضاعة يرى لوحة التجهيز — وهي عملُه لا زينةٌ فوقه
-        'inventory' => ['dashboard', 'products', 'inventory', 'suppliers', 'purchases', 'pos', 'preparation'],
-        'sales' => ['dashboard', 'orders', 'customers', 'products', 'pos', 'preparation'],
-        'cashier' => ['dashboard', 'pos'],
+            'employees', 'reports', 'suppliers', 'purchases'],
+        'inventory' => ['dashboard', 'products', 'inventory', 'suppliers', 'purchases'],
+        'sales' => ['dashboard', 'orders', 'customers', 'products'],
+        'cashier' => ['dashboard'],
         // والسائق يقرأ ما سيحمله: العنوان والموعد والمستلِم
-        'delivery' => ['dashboard', 'orders', 'pos', 'preparation'],
+        'delivery' => ['dashboard', 'orders'],
     ];
 
     /**
@@ -457,34 +456,9 @@ class Permissions
 
     /** كل الأقسام التي تظهر في لوحة النشاط — مصدر واحد تقرأ منه الواجهة */
     public const SECTIONS = [
-        'dashboard', 'customers', 'products', 'orders', 'marketing',
+        'dashboard', 'customers', 'products', 'orders',
         'inventory', 'finance', 'expenses', 'settings',
-        /*
-         * الموقع الإلكتروني قسمٌ مستقلّ عن «الإعدادات».
-         *
-         * من مُنح الإعدادات ليضبط ضريبةً أو يضيف فرعًا كان يُمنح معها نشرَ
-         * موقع المتجر على الإنترنت وتبديلَ ما يقرؤه كلّ زائر. وهما عملان لا
-         * يفعلهما الشخص نفسه في أكثر المتاجر.
-         */
-        'website',
-        /*
-         * التطبيقات التكاملية قسمٌ مستقلّ عن «أدوات التسويق».
-         *
-         * ربطُ أداةٍ خارجية يعني تسليمَ مفتاحٍ يُنفِق على حساب المتجر، أو
-         * فتحَ قناةٍ تخاطب زبائنه باسمه. وهذا قرارُ صاحبِ المتجر، لا قرارُ
-         * من يكتب كوبونًا أو يردّ على تقييم — وكلاهما كان يُمنح «التسويق»
-         * فيُمنح معه مفتاحُ Places ووصلةُ واتساب.
-         */
-        'integrations',
-        'suppliers', 'purchases', 'employees', 'pos', 'reports',
-        /*
-         * التجهيز قسمٌ مستقلّ لا جزءٌ من «المبيعات».
-         *
-         * «المبيعات» تفتح الفواتير وإجماليّاتها ومجموعَ ما رُشّح — وهي أوسع
-         * بكثير ممّا يحتاجه من يصنع الباقة. ومنحُها لعامل التجهيز يعني أنّ
-         * كلّ من يقف عند الطاولة يقرأ مبيعات المحلّ.
-         */
-        'preparation',
+        'suppliers', 'purchases', 'employees', 'reports',
     ];
 
     /**
@@ -508,12 +482,12 @@ class Permissions
     public const ALWAYS_OPEN = [];
 
     /**
-     * أقسام خارج لوحة النشاط: تُمنح ولا تفتح بابها.
+     * أقسام تُمنح ولا تفتح باب اللوحة.
      *
-     * نقطة البيع شاشةٌ قائمة بذاتها، فمنحُها وحدها لا يجعل صاحبها يدخل
-     * اللوحة — وإلا لصار كل كاشير في اللوحة بمجرّد أن يبيع.
+     * فارغةٌ اليوم: كلُّ قسمٍ قائمٍ بابُه في اللوحة. وتبقى لأنّ `entersPanel`
+     * تقرؤها، فقسمٌ يُضاف خارجها غدًا يُكتب هنا لا في شرطٍ متفرّق.
      */
-    public const OUTSIDE_PANEL = ['pos'];
+    public const OUTSIDE_PANEL = [];
 
     /**
      * هل يدخل هذا المستخدم لوحة النشاط؟
@@ -579,18 +553,14 @@ class Permissions
     public const ROUTES = [
         'dashboard' => 'admin.dashboard', 'customers' => 'admin.customers.index',
         'products' => 'admin.products.index', 'orders' => 'admin.orders.index',
-        'marketing' => 'admin.marketing.loyalty', 'inventory' => 'admin.inventory.index',
+        'inventory' => 'admin.inventory.index',
         'finance' => 'admin.finance.index', 'expenses' => 'admin.expenses.index',
-        'website' => 'admin.website.index',
-        'integrations' => 'admin.integrations.index',
         'settings' => 'admin.settings.index', 'suppliers' => 'admin.suppliers.index',
         'purchases' => 'admin.purchases.index', 'employees' => 'admin.employees.index',
-        'pos' => 'pos.index',
         // «التقارير» كانت في SECTIONS ولا مسار لها هنا: من أوّلُ ما مُنح له
         // التقاريرُ يسقط على `ROUTES['reports']` غير الموجود، فيرتفع خطأ
         // مفتاحٍ ناقص داخل HandleInertiaRequests — أي ٥٠٠ على كل صفحةٍ يفتحها
         'reports' => 'admin.reports.index',
-        'preparation' => 'admin.preparation.index',
     ];
 
     /**
@@ -629,10 +599,6 @@ class Permissions
             return route(self::ROUTES['dashboard']);
         }
 
-        if ($user->allows('pos')) {
-            return route(self::ROUTES['pos']);
-        }
-
         // بلا صلاحية واحدة: تُرفض الآن عند الحفظ، لكن حسابًا قديمًا قد يسبقها
         return ($panel ? self::panelEntry($user) : null) ?? route('login');
     }
@@ -642,15 +608,12 @@ class Permissions
     {
         $labels = [
             'dashboard' => 'لوحة التحكم', 'customers' => 'العملاء', 'products' => 'المنتجات',
-            'orders' => 'المبيعات', 'marketing' => 'أدوات التسويق', 'inventory' => 'المخزون',
+            'orders' => 'المبيعات', 'inventory' => 'المخزون',
             'finance' => 'المالية', 'expenses' => 'مصاريف شهرية', 'settings' => 'الإعدادات',
-            'website' => 'الموقع الإلكتروني',
-            'integrations' => 'التطبيقات التكاملية',
             'suppliers' => 'الموردين', 'purchases' => 'المشتريات',
-            'employees' => 'الرواتب والموظفين', 'pos' => 'نقطة البيع',
+            'employees' => 'الرواتب والموظفين',
             // كانت ساقطةً فتُعرض «reports» بحروفٍ لاتينية في قائمة صلاحيات عربية
             'reports' => 'التقارير',
-            'preparation' => 'لوحة التجهيز',
         ];
 
         return collect(self::SECTIONS)
@@ -739,7 +702,6 @@ class Permissions
         'jobTitles' => 'employees',
         // مسيرة الرواتب وصرفها من قسم «الرواتب والموظفين» — لا مفتاح ثالث لها
         'payroll' => 'employees',
-        'coupons' => 'marketing',
         'bank' => 'finance',
         'expenseTypes' => 'expenses',
         'goals' => 'dashboard',
@@ -788,15 +750,6 @@ class Permissions
     {
         if (! $route) {
             return 'dashboard';
-        }
-        // شاشة المدفوعات داخل نقطة البيع شاشة مالية لا شاشة بيع: تعرض
-        // تحصيلات اليوم وطرق الدفع. الكاشير يبيع ولا يطّلع على حصيلة
-        // الصندوق، فتتبع صلاحية «finance» لا صلاحية «pos» المفتوحة للجميع.
-        if ($route === 'pos.payments') {
-            return 'finance';
-        }
-        if (str_starts_with($route, 'pos.')) {
-            return 'pos';
         }
         $parts = explode('.', $route);
         $section = $parts[1] ?? 'dashboard';

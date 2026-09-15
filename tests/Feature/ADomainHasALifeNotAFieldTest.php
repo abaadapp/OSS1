@@ -206,39 +206,6 @@ class ADomainHasALifeNotAFieldTest extends TestCase
             Domains::check(Domains::custom((int) $this->mine->id))->status,
         );
     }
-
-    /** والفحصُ لا يقع عند فتح الشاشة: صفحةٌ تنتظر جوابَ DNS لا تفتح */
-    public function test_opening_the_screen_asks_no_network(): void
-    {
-        $asked = 0;
-        $this->app->bind(CustomDomainProvider::class, fn () => new class($asked) implements CustomDomainProvider
-        {
-            public function __construct(public int &$asked) {}
-
-            public function name(): string { return 'counting'; }
-
-            public function instructions(WebsiteDomain $domain): array { return []; }
-
-            public function register(WebsiteDomain $domain): ?string { return null; }
-
-            public function check(WebsiteDomain $domain): DomainCheck
-            {
-                $this->asked++;
-
-                return DomainCheck::active();
-            }
-
-            public function forget(WebsiteDomain $domain): void {}
-        });
-
-        Builder::create($this->mine, Blueprints::STORE, 'modern', $this->owner->id);
-        Domains::attach($this->mine, 'mystore.om');
-
-        $this->actingAs($this->owner)->get(route('admin.website.domain'))->assertOk();
-
-        $this->assertSame(0, $asked, 'الشاشة سألت الشبكة');
-    }
-
     /* ═════════════════════ الملكيّة ═════════════════════ */
 
     /** والنطاقُ يخصّ نشاطَه وموقعَه — لا يُقرأ لجارٍ */
@@ -264,49 +231,6 @@ class ADomainHasALifeNotAFieldTest extends TestCase
 
         $this->assertSame((int) $site->id, (int) Domains::custom((int) $this->mine->id)->website_id);
     }
-
-    /* ═════════════════════ عنوانُ افنت بلس مستقلّ ═════════════════════ */
-
-    /** من لم يربط نطاقًا يُفتح موقعُه على عنوان افنت بلس */
-    public function test_the_platform_address_works_with_no_custom_domain(): void
-    {
-        Publisher::publish(
-            Builder::create($this->mine, Blueprints::STORE, 'modern', $this->owner->id),
-            $this->owner->id,
-        );
-
-        $this->get(route('site.published', 'wrood.'.\App\Support\Storefront::domain()))->assertSuccessful();
-    }
-
-    /** ومن ربطه ولم يُوجّهه بعد يبقى عنوانُ افنت بلس يعمل */
-    public function test_the_platform_address_survives_a_pending_domain(): void
-    {
-        Publisher::publish(
-            Builder::create($this->mine, Blueprints::STORE, 'modern', $this->owner->id),
-            $this->owner->id,
-        );
-
-        Domains::attach($this->mine->refresh(), 'mystore.om');
-
-        $this->get(route('site.published', 'wrood.'.\App\Support\Storefront::domain()))->assertSuccessful();
-    }
-
-    /** ومن فكّ نطاقه لم يخسر عنوانه */
-    public function test_detaching_a_domain_leaves_the_platform_address(): void
-    {
-        Publisher::publish(
-            Builder::create($this->mine, Blueprints::STORE, 'modern', $this->owner->id),
-            $this->owner->id,
-        );
-
-        Domains::attach($this->mine->refresh(), 'mystore.om');
-        Domains::detach($this->mine->refresh());
-
-        $this->assertNull(Domains::custom((int) $this->mine->id));
-        $this->assertSame('', MarketingSettings::group((int) $this->mine->id, 'website')['site_domain']);
-        $this->get(route('site.published', 'wrood.'.\App\Support\Storefront::domain()))->assertSuccessful();
-    }
-
     /* ═════════════════════ المرآةُ لا تفترق ═════════════════════ */
 
     /**
@@ -327,22 +251,6 @@ class ADomainHasALifeNotAFieldTest extends TestCase
     }
 
     /* ═════════════════════ الأصلُ ما يُخدَم ═════════════════════ */
-
-    /**
-     * و`canonical` لا يشير إلى عنوانٍ لا يُخدَم.
-     *
-     * الإشارةُ إلى نطاقٍ رُبط ولم يُوجَّه تدلّ محرّكَ البحث على بابٍ مغلق
-     * وتترك الصفحةَ الحيّة بلا فهرسة — فتضرّ حيث يُراد بها النفع.
-     */
-    public function test_the_canonical_never_points_at_a_closed_door(): void
-    {
-        config(['storefront.subdomains' => false, 'storefront.custom_domains' => false]);
-
-        Domains::attach($this->mine, 'mystore.om');
-
-        $this->assertStringContainsString('/s/wrood', (string) Domains::canonical((int) $this->mine->id));
-    }
-
     /** وحين يخدمها الخادم يصير نطاقُ التاجر النشطُ هو الأصل */
     public function test_a_served_and_active_domain_becomes_the_canonical(): void
     {

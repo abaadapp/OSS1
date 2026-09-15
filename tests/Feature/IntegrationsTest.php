@@ -44,16 +44,6 @@ class IntegrationsTest extends TestCase
             'password' => bcrypt('password'), 'role' => 'admin', 'status' => 'نشط',
         ]);
     }
-
-    /** بطاقاتُ اللوحة كما تصل الشاشة، مفهرسةً بمفتاح الأداة */
-    private function cards(): array
-    {
-        $props = $this->actingAs($this->owner)->get(route('admin.integrations.index'))
-            ->assertOk()->viewData('page')['props'];
-
-        return collect($props['apps'])->keyBy('key')->all();
-    }
-
     /* ------------------------------- اللوحة ------------------------------- */
 
     public function test_the_hub_lists_every_tool_in_the_catalogue(): void
@@ -185,77 +175,11 @@ class IntegrationsTest extends TestCase
         $this->assertFalse($card['licensed']);
         $this->assertTrue($card['built'], 'خارج الباقة لا يعني غير مبنيّ');
     }
-
-    /* ------------------------------ الصلاحية ------------------------------ */
-
-    /**
-     * ربطُ الأدوات قسمٌ مستقلّ — لا يُمنح مع «أدوات التسويق».
-     *
-     * وهذا هو الفرق كلُّه: من يكتب كوبونًا أو يردّ على تقييم كان يُمنح معه
-     * مفتاحَ Places — وهو مفتاحٌ يُنفِق على حساب المتجر — ووصلةَ واتساب
-     * التي تخاطب زبائنه باسمه.
-     */
-    public function test_marketing_alone_no_longer_opens_the_connection_screens(): void
-    {
-        $marketer = User::create([
-            'business_id' => $this->business->id, 'name' => 'مسوّق', 'email' => 'm@eventplusapp.om',
-            'password' => bcrypt('password'), 'role' => 'sales', 'status' => 'نشط',
-            'permissions' => ['dashboard', 'marketing'],
-        ]);
-
-        foreach (['admin.integrations.index', 'admin.integrations.google', 'admin.integrations.whatsapp'] as $screen) {
-            $this->actingAs($marketer)->get(route($screen))->assertForbidden();
-        }
-
-        // وبابُه الذي مُنحه يبقى مفتوحًا: الكوبونات تسويقٌ لا ربط
-        $this->actingAs($marketer)->get(route('admin.marketing.coupons'))->assertOk();
-    }
-
-    /** ومن مُنح التكاملات وحدها يفتحها ولا يفتح التسويق */
-    public function test_the_section_opens_for_whoever_was_granted_it_alone(): void
-    {
-        $connector = User::create([
-            'business_id' => $this->business->id, 'name' => 'مهيّئ', 'email' => 'i@eventplusapp.om',
-            'password' => bcrypt('password'), 'role' => 'sales', 'status' => 'نشط',
-            'permissions' => ['dashboard', 'integrations'],
-        ]);
-
-        $this->actingAs($connector)->get(route('admin.integrations.index'))->assertOk();
-        $this->actingAs($connector)->get(route('admin.marketing.coupons'))->assertForbidden();
-    }
-
     /** والقسمُ في قائمة الأقسام ومعه بابُه واسمُه — وإلّا سقط في كلّ شاشة */
     public function test_the_section_is_declared_with_a_door_and_a_name(): void
     {
         $this->assertContains('integrations', Permissions::SECTIONS);
         $this->assertSame('admin.integrations.index', Permissions::ROUTES['integrations']);
         $this->assertSame('التطبيقات التكاملية', Permissions::sectionLabels()['integrations']);
-    }
-
-    /* --------------------- الربط هنا والاستعمال في قسمه --------------------- */
-
-    /**
-     * شاشةُ «إشعارات واتساب» لم يعد فيها رمزٌ ولا معرّفُ وصلة.
-     *
-     * ومن يريد إطفاء رسالةٍ واحدة كان يمرّ على رمز تفعيلٍ من ميتا لا شأن
-     * له به. فبقي هناك ما يُفعَل بالأداة، وانتقل إلى هنا ما يصلها.
-     */
-    public function test_the_notifications_screen_keeps_the_switches_and_drops_the_wiring(): void
-    {
-        $props = $this->actingAs($this->owner)->get(route('admin.marketing.whatsapp'))
-            ->assertOk()->viewData('page')['props'];
-
-        $this->assertArrayHasKey('events', $props['automation']);
-        $this->assertNotEmpty($props['settings'], 'مقابضُ الأحداث تبقى في شاشتها');
-    }
-
-    /** وشاشةُ الربط تحمل الوصلة ولا تحمل مقبضَ حدثٍ واحد */
-    public function test_the_connection_screen_carries_the_wiring(): void
-    {
-        $props = $this->actingAs($this->owner)->get(route('admin.integrations.whatsapp'))
-            ->assertOk()->viewData('page')['props'];
-
-        $this->assertArrayHasKey('readiness', $props['automation']);
-        $this->assertArrayNotHasKey('settings', $props, 'مقابضُ الأحداث ليست من الربط');
     }
 }

@@ -265,30 +265,6 @@ class TheMapAnswersForTheBranchThatSoldTest extends TestCase
 
         $this->fail('لا خطوةَ اسمُها place');
     }
-
-    /* ═══════════════════ ٣ · السببُ يُقال بنصّه ═══════════════════ */
-
-    /**
-     * رفضُ Google يصل التاجرَ بحرفه — لا «تعذّر الاتّصال».
-     *
-     * «٤٠٣» وحدها لا تُصلح شيئًا؛ و«فعِّل Places API واربط الفوترة» تُصلح.
-     */
-    public function test_googles_own_reason_reaches_the_merchant(): void
-    {
-        $this->platformKey();
-        $place = $this->linked($this->khoud, self::A);
-        $place->forceFill(['synced_at' => now()->subDay()])->save();
-
-        Http::fake(['places.googleapis.com/*' => Http::response([
-            'error' => ['message' => 'Places API has not been used in project 123'],
-        ], 403)]);
-
-        $this->post(route('admin.integrations.google.branch.refresh', $this->khoud->id))
-            ->assertRedirect()
-            ->assertSessionHas('toast', fn ($toast) => $toast['type'] === 'danger'
-                && str_contains((string) $toast['msg'], 'Places API'));
-    }
-
     /** وغيابُ المفتاح يُقال غيابًا لا عطلَ شبكة */
     public function test_a_missing_key_is_not_reported_as_a_network_failure(): void
     {

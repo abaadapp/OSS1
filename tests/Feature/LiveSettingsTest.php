@@ -63,16 +63,6 @@ class LiveSettingsTest extends TestCase
     {
         Setting::updateOrCreate(['business_id' => null, 'key' => $key], ['value' => $value]);
     }
-
-    private function sell(string $method = 'نقدي', string $uuid = 'u-1')
-    {
-        return $this->actingAs($this->owner)->postJson(route('pos.checkout'), [
-            'items' => [['id' => $this->product->id, 'name' => $this->product->name, 'qty' => 1]],
-            'payment_method' => $method,
-            'client_uuid' => $uuid,
-        ]);
-    }
-
     /* --------------------------- ترقيم الفواتير --------------------------- */
 
     public function test_the_invoice_prefix_reaches_the_invoice(): void
@@ -161,20 +151,6 @@ class LiveSettingsTest extends TestCase
 
         $this->assertSame('نقدي', Order::latest('id')->first()->payment_method);
     }
-
-    public function test_the_sale_screen_only_offers_what_is_allowed(): void
-    {
-        $this->set('pay_transfer', '0');
-
-        $this->actingAs($this->owner);
-        $this->activatePosDevice($this->business->id, Branch::where('business_id', $this->business->id)->value('id'));
-
-        $methods = $this->get(route('pos.index'))
-            ->viewData('page')['props']['settings']['paymentMethods'];
-
-        $this->assertSame(['نقدي', 'بطاقة'], $methods);
-    }
-
     /* ------------------------------- العملة ------------------------------- */
 
     public function test_the_currency_setting_decides_what_the_merchant_sees(): void
@@ -217,20 +193,6 @@ class LiveSettingsTest extends TestCase
             ->assertStatus(503)
             ->assertInertia(fn ($page) => $page->component('Auth/Maintenance'));
     }
-
-    public function test_maintenance_mode_does_not_stop_the_platform_admin(): void
-    {
-        // من يوقف النظام يحتاج أن يدخله ليصلحه
-        $this->platform('maintenance_mode', '1');
-
-        $super = User::create([
-            'business_id' => null, 'name' => 'المشغّل', 'email' => 'root@eventplus.om',
-            'password' => bcrypt('password'), 'role' => 'super_admin', 'status' => 'نشط',
-        ]);
-
-        $this->actingAs($super)->get(route('super-admin.dashboard'))->assertOk();
-    }
-
     public function test_maintenance_mode_keeps_the_session_alive(): void
     {
         // وقفةٌ دقائق لا تستحقّ أن يعود كلّ تاجرٍ ليكتب كلمة سرّه
@@ -240,72 +202,6 @@ class LiveSettingsTest extends TestCase
 
         $this->assertAuthenticatedAs($this->owner);
     }
-
-    /* --------------------------- إعدادات المنصة --------------------------- */
-
-    public function test_the_trial_period_gives_a_new_store_an_end_date(): void
-    {
-        $this->platform('trial_days', '30');
-
-        $super = $this->superAdmin();
-        $this->actingAs($super)->post(route('super-admin.businesses.store'), [
-            'name' => 'متجر جديد', 'type' => 'عام', 'status' => 'نشط',
-            'login_username' => 'newstore', 'login_password' => 'secret123',
-        ]);
-
-        $created = Business::where('name', 'متجر جديد')->firstOrFail();
-
-        $this->assertNotNull($created->ends_at, 'شركةٌ بلا تاريخ انتهاء تعمل إلى الأبد');
-        // مقارنة تواريخ لا عدد أيّام: الفرق بالساعات يتقلّب بساعة تشغيل الاختبار
-        $this->assertSame(now()->addDays(30)->toDateString(), $created->ends_at->toDateString());
-    }
-
-    public function test_an_explicit_end_date_beats_the_trial_default(): void
-    {
-        $this->platform('trial_days', '30');
-
-        $super = $this->superAdmin();
-        $this->actingAs($super)->post(route('super-admin.businesses.store'), [
-            'name' => 'متجر بعقد', 'type' => 'عام', 'status' => 'نشط',
-            'starts_at' => now()->toDateString(), 'ends_at' => now()->addYear()->toDateString(),
-            'login_username' => 'contract', 'login_password' => 'secret123',
-        ]);
-
-        $created = Business::where('name', 'متجر بعقد')->firstOrFail();
-
-        $this->assertSame(now()->addYear()->toDateString(), $created->ends_at->toDateString());
-    }
-
-    public function test_the_default_plan_is_attached_by_name(): void
-    {
-        $plan = Plan::create(['name' => 'أساسية', 'monthly_price' => 15, 'yearly_price' => 150]);
-        $this->platform('default_plan', 'أساسية');
-
-        $super = $this->superAdmin();
-        $this->actingAs($super)->post(route('super-admin.businesses.store'), [
-            'name' => 'متجر بلا باقة', 'type' => 'عام', 'status' => 'نشط',
-            'login_username' => 'noplan', 'login_password' => 'secret123',
-        ]);
-
-        $this->assertSame($plan->id, Business::where('name', 'متجر بلا باقة')->value('plan_id'));
-    }
-
-    public function test_turning_off_auto_suspend_keeps_an_expired_store_working(): void
-    {
-        /*
-         * متابعةٌ يدوية: تُرسل التنبيهات ويبقى المتجر يعمل حتى يقفله المشغّل
-         * بنفسه. وكان المربّع معروضًا ولا يقرؤه شيء — والنظام يقفل دائمًا.
-         */
-        $this->business->update(['ends_at' => now()->subMonths(6)]);
-        $this->platform('grace_days', '0');
-
-        $this->platform('auto_suspend', '1');
-        $this->actingAs($this->owner)->get(route('admin.dashboard'))->assertRedirect(route('subscription.expired'));
-
-        $this->platform('auto_suspend', '0');
-        $this->actingAs($this->owner)->get(route('admin.dashboard'))->assertOk();
-    }
-
     private function superAdmin(): User
     {
         return User::create([

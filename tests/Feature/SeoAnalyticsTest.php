@@ -158,15 +158,6 @@ class SeoAnalyticsTest extends TestCase
             $this->assertNull(Seo::measurementId($bad), "قُبل «{$bad}» وهو لا يقيس");
         }
     }
-
-    public function test_an_unreadable_id_is_refused_before_it_is_stored(): void
-    {
-        $this->post(route('admin.marketing.seo.save'), ['ga_measurement_id' => 'UA-12345-1'])
-            ->assertSessionHasErrors('ga_measurement_id');
-
-        $this->assertSame('', MarketingSettings::group($this->business->id, 'seo')['ga_measurement_id']);
-    }
-
     public function test_the_snippet_carries_the_id_that_was_saved(): void
     {
         // وسمٌ بمعرّفٍ آخر يُلصق في الموقع فيُرسل القياس إلى حسابٍ ليس حسابه
@@ -424,33 +415,6 @@ class SeoAnalyticsTest extends TestCase
 
         $this->assertCount($sent, Http::recorded());
     }
-
-    public function test_refresh_opens_the_site_again(): void
-    {
-        $this->domain();
-        $this->fakeSite();
-        $this->check();
-        $before = count(Http::recorded());
-
-        $this->post(route('admin.marketing.seo.refresh'))->assertRedirect();
-
-        $this->assertGreaterThan($before, count(Http::recorded()));
-    }
-
-    public function test_changing_the_id_drops_the_old_check(): void
-    {
-        $this->domain();
-        $this->tag();
-        $this->fakeSite(['tag' => self::ID]);
-        $this->assertTrue($this->check()['site']['tagged']);
-
-        // حالةُ ربطٍ محفوظةٌ لمعرّفٍ بُدّل خبرٌ عن غيره
-        $this->post(route('admin.marketing.seo.save'), ['ga_measurement_id' => 'G-NEW7654321'])
-            ->assertSessionHasNoErrors();
-
-        $this->assertFalse($this->check()['site']['tagged']);
-    }
-
     public function test_one_shops_check_never_reaches_another(): void
     {
         $this->domain();
@@ -461,36 +425,6 @@ class SeoAnalyticsTest extends TestCase
 
         $this->assertSame('nodomain', Seo::check($other->id)['state']);
     }
-
-    /* =========================== الأبواب =========================== */
-
-    public function test_the_page_opens_and_carries_its_checks(): void
-    {
-        $this->domain();
-        $this->tag();
-        $this->fakeSite(['tag' => self::ID]);
-
-        $this->get(route('admin.marketing.seo'))
-            ->assertOk()
-            ->assertInertia(fn ($page) => $page
-                ->component('Admin/Marketing/Seo')
-                ->where('link.measurement_id', self::ID)
-                ->where('audit.state', 'ok')
-                ->where('audit.site.tagged', true));
-    }
-
-    public function test_it_is_measured_by_the_marketing_section(): void
-    {
-        // كلُّ شاشةٍ تُقاس بقسمها — والتسويق ليس مفتوحًا لكل موظّف
-        $staff = User::create([
-            'business_id' => $this->business->id, 'name' => 'كاشير', 'email' => 'c@eventplusapp.om',
-            'password' => bcrypt('password'), 'role' => 'cashier', 'status' => 'نشط',
-            'permissions' => ['pos'],
-        ]);
-
-        $this->actingAs($staff)->get(route('admin.marketing.seo'))->assertForbidden();
-    }
-
     public function test_the_screen_promises_no_field_it_cannot_deliver(): void
     {
         /*

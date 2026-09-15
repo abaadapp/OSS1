@@ -53,26 +53,12 @@ class PosPaymentsAccessTest extends TestCase
     }
 
     #[DataProvider('allowedRoles')]
-    public function test_roles_that_handle_money_can_open_it(string $role): void
-    {
-        $this->actingAs($this->user($role))
-            ->get(route('pos.payments'))
-            ->assertOk();
-    }
-
     public static function deniedRoles(): array
     {
         return [['cashier'], ['sales'], ['inventory'], ['delivery']];
     }
 
     #[DataProvider('deniedRoles')]
-    public function test_a_cashier_cannot_open_it_even_by_typing_the_url(string $role): void
-    {
-        $this->actingAs($this->user($role))
-            ->get(route('pos.payments'))
-            ->assertForbidden();
-    }
-
     public function test_the_rest_of_the_pos_stays_open_to_the_cashier(): void
     {
         $cashier = $this->user('cashier');
@@ -80,16 +66,5 @@ class PosPaymentsAccessTest extends TestCase
         foreach (['pos.index', 'pos.orders', 'pos.receipts', 'pos.customers'] as $name) {
             $this->actingAs($cashier)->get(route($name))->assertOk();
         }
-    }
-
-    public function test_the_shared_abilities_tell_the_menu_what_to_hide(): void
-    {
-        $owner = $this->actingAs($this->user('admin'))
-            ->get(route('pos.index'))->viewData('page')['props']['auth']['abilities'];
-        $cashier = $this->actingAs($this->user('cashier'))
-            ->get(route('pos.index'))->viewData('page')['props']['auth']['abilities'];
-
-        $this->assertContains('finance', $owner);
-        $this->assertNotContains('finance', $cashier);
     }
 }

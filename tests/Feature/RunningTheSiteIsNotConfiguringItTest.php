@@ -69,36 +69,6 @@ class RunningTheSiteIsNotConfiguringItTest extends TestCase
             'permissions' => $permissions,
         ]);
     }
-
-    /* ==================== التشغيل مفتوحٌ لمن مُنح القسم ==================== */
-
-    public function test_an_operator_opens_the_hub(): void
-    {
-        $this->actingAs($this->operator(['website']));
-
-        $this->assertSame(
-            'Admin/Website/Hub',
-            $this->get(route('admin.website.index'))->assertOk()->viewData('page')['component'],
-        );
-    }
-
-    /** ويرى منتجاتِ موقعه وحالَها — وهي منتجات افنت بلس نفسُها */
-    public function test_the_hub_lists_the_shops_own_products(): void
-    {
-        Product::create([
-            'business_id' => $this->business->id, 'name' => 'باقة ورد',
-            'price' => 12.5, 'active' => true, 'published' => true, 'quantity' => 4,
-        ]);
-
-        $this->actingAs($this->operator(['website']));
-
-        $props = $this->get(route('admin.website.index'))->assertOk()->viewData('page')['props'];
-
-        $this->assertSame('باقة ورد', $props['products'][0]['name']);
-        $this->assertTrue($props['products'][0]['in_stock']);
-        $this->assertSame(1, $props['counts']['shown']);
-    }
-
     /* ==================== والضبطُ مغلقٌ دونه ==================== */
 
     /** @return array<int, array{0: string}> */
@@ -121,55 +91,5 @@ class RunningTheSiteIsNotConfiguringItTest extends TestCase
         $this->actingAs($this->operator(['website']));
 
         $this->get(route($name))->assertForbidden();
-    }
-
-    /** ولا يكتب: المنعُ على الفعل لا على الشاشة وحدها */
-    public function test_an_operator_cannot_write_configuration(): void
-    {
-        $this->actingAs($this->operator(['website']));
-
-        $this->put(route('admin.website.design.update'), ['template' => 'bold'])->assertForbidden();
-        $this->post(route('admin.website.publish'))->assertForbidden();
-        $this->put(route('admin.website.domain.save'), ['host' => 'x.om'])->assertForbidden();
-    }
-
-    /* ==================== ومن مُنح الفعل يفتحها ==================== */
-
-    public function test_an_operator_granted_the_action_configures(): void
-    {
-        $this->actingAs($this->operator(['website', Permissions::WEBSITE_CONFIGURE]));
-
-        $this->get(route('admin.website.site'))->assertOk();
-        $this->get(route('admin.website.design'))->assertRedirect();
-    }
-
-    /**
-     * وصاحبُ المتجر ومديرُه يرثانه — فلا يُقفل بابٌ كان مفتوحًا أمس.
-     *
-     * وهذا شرطُ إضافةِ فعلٍ إلى نظامٍ يعمل: الوراثةُ بالدور تُبقي الحال على
-     * ما هو، والمنعُ يقع على من لم يكن يملكه أصلًا.
-     */
-    public function test_the_owner_and_the_manager_inherit_it(): void
-    {
-        $this->actingAs($this->owner);
-        $this->get(route('admin.website.site'))->assertOk();
-
-        $manager = User::create([
-            'business_id' => $this->business->id, 'name' => 'مدير', 'email' => 'm@eventplus.om',
-            'password' => bcrypt('password'), 'role' => 'manager', 'status' => 'نشط',
-        ]);
-
-        $this->actingAs($manager);
-        $this->get(route('admin.website.site'))->assertOk();
-    }
-
-    /** ومن لا موقع له ولا يملك ضبطَه لا يُعرض عليه إنشاؤه */
-    public function test_an_operator_is_not_offered_a_site_he_cannot_create(): void
-    {
-        Website::query()->delete();
-
-        $this->actingAs($this->operator(['website']));
-
-        $this->get(route('admin.website.index'))->assertForbidden();
     }
 }

@@ -68,12 +68,6 @@ class PreparationFlowAuditTest extends TestCase
 
         return $order;
     }
-
-    private function move(Order $order, string $to)
-    {
-        return $this->post(route('admin.preparation.move', $order->number), ['status' => $to]);
-    }
-
     /* ------------------- الرفض يُرى ------------------- */
 
     /**
@@ -233,25 +227,6 @@ class PreparationFlowAuditTest extends TestCase
 
         $this->assertSame(OrderStatus::PREPARING, $theirs->fresh()->status);
     }
-
-    public function test_an_order_of_another_branch_is_not_on_this_board(): void
-    {
-        $second = Branch::create(['business_id' => $this->business->id, 'name' => 'صلالة']);
-        $mine = $this->order();
-        $elsewhere = $this->order(['branch_id' => $second->id]);
-
-        session(['current_branch' => $this->branch->id]);
-
-        $numbers = [];
-        $this->get(route('admin.preparation.index'))
-            ->assertInertia(function ($p) use (&$numbers) {
-                $numbers = array_column($p->toArray()['props']['orders'], 'number');
-            });
-
-        $this->assertContains($mine->number, $numbers);
-        $this->assertNotContains($elsewhere->number, $numbers);
-    }
-
     public function test_a_branch_bound_board_refuses_to_move_another_branchs_order(): void
     {
         $second = Branch::create(['business_id' => $this->business->id, 'name' => 'صلالة']);
@@ -271,42 +246,5 @@ class PreparationFlowAuditTest extends TestCase
             'password' => bcrypt('password'), 'role' => $role, 'status' => 'نشط',
             'permissions' => $permissions,
         ]);
-    }
-
-    public function test_the_board_belongs_to_whoever_prepares(): void
-    {
-        $this->actingAs($this->staff('sales', ['preparation']));
-
-        $this->get(route('admin.preparation.index'))->assertOk();
-    }
-
-    /**
-     * والتجهيز قسمٌ مستقلّ لا جزءٌ من «المبيعات».
-     *
-     * «المبيعات» تفتح الفواتير وإجماليّاتها ومجموع ما رُشّح — وهي أوسع بكثير
-     * ممّا يحتاجه من يصنع الباقة.
-     */
-    public function test_sales_alone_does_not_open_the_board(): void
-    {
-        $this->actingAs($this->staff('sales', ['orders']));
-
-        $this->get(route('admin.preparation.index'))->assertForbidden();
-        $this->move($this->order(), OrderStatus::READY)->assertForbidden();
-    }
-
-    /* ------------------- ما لا يُعرض على الطاولة ------------------- */
-
-    public function test_the_card_never_carries_money(): void
-    {
-        $this->order();
-
-        $this->get(route('admin.preparation.index'))
-            ->assertInertia(function ($p) {
-                $card = $p->toArray()['props']['orders'][0];
-                foreach (['price', 'cost', 'total', 'subtotal'] as $money) {
-                    $this->assertArrayNotHasKey($money, $card);
-                    $this->assertArrayNotHasKey($money, $card['items'][0]);
-                }
-            });
     }
 }

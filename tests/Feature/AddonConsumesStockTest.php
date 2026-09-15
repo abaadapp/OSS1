@@ -94,16 +94,6 @@ class AddonConsumesStockTest extends TestCase
             'inventory_quantity' => $stockId ? $each : null,
         ]);
     }
-
-    private function sell(array $items, int $expect = 200): \Illuminate\Testing\TestResponse
-    {
-        return $this->actingAs($this->cashier)->postJson('/pos/checkout', [
-            'items' => $items,
-            'payment_method' => 'نقدي',
-            'client_uuid' => uniqid('k', true),
-        ])->assertStatus($expect);
-    }
-
     private function line(array $addons, int $qty = 1): array
     {
         return [[
@@ -354,24 +344,6 @@ class AddonConsumesStockTest extends TestCase
 
         $this->assertEqualsWithDelta(0.900, (float) OrderItemAddon::firstOrFail()->cost, 0.0005);
     }
-
-    /* ------------------------- التصحيح والإلغاء ------------------------- */
-
-    private function correct(int $itemId, int $addonId, int $qty): \Illuminate\Testing\TestResponse
-    {
-        $order = Order::latest('id')->firstOrFail();
-
-        /*
-         * والمصحِّح هنا المالك لا الكاشير: تصحيحُ فاتورةٍ صدرت صار يحتاج
-         * صلاحية `order.edit` (انظر AnIssuedInvoiceClosesTest). وما يُحرَس
-         * في هذا الملفّ المخزونُ لا البوّابة.
-         */
-        return $this->actingAs($this->owner)->put(
-            route('pos.orders.items.addons.update', [$order->number, $itemId, $addonId]),
-            ['quantity' => $qty, 'reason' => 'الزبون غيّر رأيه'],
-        );
-    }
-
     public function test_reducing_the_addon_returns_what_it_ate(): void
     {
         $this->sell($this->line([['addon_id' => $this->extraRoses->id, 'qty' => 2]]));

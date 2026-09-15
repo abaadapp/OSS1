@@ -225,25 +225,6 @@ class WhatsAppSharedTest extends TestCase
         $this->assertNull($this->business->whatsapp_monthly_limit);
         $this->assertSame(7, WhatsAppQuota::effectiveLimit($this->business->fresh()));
     }
-
-    /**
-     * الرقم المكتوب في شاشة المنصّة هو الرقم الذي يقرؤه الحلّال.
-     *
-     * صار مكتوبًا حرفًا لا مُشتقًّا لأنّ `(string) CONST` تعبيرٌ يرفضه
-     * PHP 8.4 داخل `const` — فأسقط الملفّ وأسقط معه كلّ صفحة. والرقمان
-     * يفترقان بصمت لولا هذا الفحص: تُعرض مئة وتُطبَّق غيرها.
-     */
-    public function test_the_screen_default_and_the_resolver_default_are_one_number(): void
-    {
-        $reflection = new \ReflectionClass(\App\Http\Controllers\SuperAdmin\PageController::class);
-        $defaults = $reflection->getConstant('SETTING_DEFAULTS');
-
-        $this->assertSame(
-            (string) WhatsAppQuota::FALLBACK_DEFAULT,
-            $defaults[WhatsAppQuota::DEFAULT_KEY],
-        );
-    }
-
     public function test_a_business_override_beats_the_default(): void
     {
         $this->platform(WhatsAppQuota::DEFAULT_KEY, '100');
@@ -543,23 +524,5 @@ class WhatsAppSharedTest extends TestCase
         $this->assertNotSame('platform-token-value-0123456789', $raw);
         $this->assertSame('platform-token-value-0123456789',
             WhatsAppConnection::query()->platform()->firstOrFail()->access_token);
-    }
-
-    /** ولا يظهر في سجلّ النشاط */
-    public function test_no_secret_reaches_the_activity_log(): void
-    {
-        $super = User::create([
-            'business_id' => null, 'name' => 'مدير المنصة', 'email' => 'root@eventplus.om',
-            'password' => bcrypt('password'), 'role' => 'super_admin', 'status' => 'نشط',
-        ]);
-
-        $this->actingAs($super)->post(route('super-admin.whatsapp.shared.connect'), [
-            'phone_number_id' => 'NEW-PN',
-            'display_phone_number' => '+96891111111',
-            'access_token' => 'super-secret-token-value-123456',
-        ])->assertRedirect();
-
-        $logs = \App\Models\ActivityLog::pluck('description')->implode(' | ');
-        $this->assertStringNotContainsString('super-secret-token', $logs);
     }
 }

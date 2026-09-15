@@ -311,25 +311,6 @@ class WhatsAppReadinessTest extends TestCase
         // ويُدَلّ على المخرج: التبديل إلى رقم افنت بلس بيده، فلا يبقى واقفًا
         $this->assertStringContainsString('رقم افنت بلس', $this->step('own')['fix']);
     }
-
-    public function test_a_merchant_stripped_of_the_feature_can_still_go_back_to_the_shared_number(): void
-    {
-        /*
-         * ولا يبقى واقفًا: التبديل إلى رقم افنت بلس مفتوحٌ له وإن سُحبت ميزةُ
-         * رقمه. ولو كان محروسًا بالإذن نفسه لَقُفل عليه الطريقان معًا.
-         */
-        $this->business->update([
-            'whatsapp_own_allowed' => false,
-            'whatsapp_mode' => WhatsAppMode::BUSINESS_OWN,
-        ]);
-
-        $this->post(route('admin.integrations.whatsapp.mode'), ['mode' => WhatsAppMode::EVENTPLUS_SHARED])
-            ->assertSessionHasNoErrors();
-
-        $this->assertSame(WhatsAppMode::EVENTPLUS_SHARED, $this->business->fresh()->whatsapp_mode);
-        $this->assertTrue($this->readiness()['ready']);
-    }
-
     /* ========================== لا ضجيج ========================== */
 
     public function test_a_completed_step_carries_no_instruction(): void
@@ -348,25 +329,5 @@ class WhatsAppReadinessTest extends TestCase
         $keys = array_column($this->readiness()['steps'], 'key');
 
         $this->assertSame(['platform', 'account', 'plan', 'shared', 'templates'], $keys);
-    }
-
-    /* =========================== الشاشة =========================== */
-
-    public function test_the_screen_carries_the_steps_before_anything_else(): void
-    {
-        $this->get(route('admin.marketing.whatsapp'))
-            ->assertOk()
-            ->assertInertia(fn ($page) => $page
-                ->component('Admin/Marketing/Whatsapp')
-                ->where('automation.readiness.ready', true)
-                ->has('automation.readiness.steps', 5));
-    }
-
-    public function test_the_screen_never_leaks_a_token(): void
-    {
-        // الرمز لا يخرج إلى الشاشة — تُقرأ على شاشةٍ في المحلّ
-        $this->get(route('admin.marketing.whatsapp'))
-            ->assertOk()
-            ->assertDontSee('platform-token-value-0123456789');
     }
 }

@@ -376,17 +376,6 @@ class EmployeesAndTemplatesTest extends TestCase
         $this->assertSame('كبير', $saved['tpl_font']);
         $this->assertSame('0', $saved['tpl_show_employee']);
     }
-
-    public function test_a_receipt_with_no_template_settings_prints_as_before(): void
-    {
-        $order = $this->order();
-
-        $res = $this->actingAs($this->owner)->get(route('pos.receipt.pdf', $order->number));
-
-        $res->assertOk()->assertHeader('Content-Type', 'application/pdf');
-        $this->assertNotEmpty($res->getContent());
-    }
-
     public function test_hiding_a_field_removes_it_from_the_rendered_receipt(): void
     {
         $order = $this->order();

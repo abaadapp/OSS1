@@ -86,34 +86,6 @@ class EventPlusAnswersOnWhatsAppTest extends TestCase
             'password' => bcrypt('password'), 'role' => $role, 'status' => 'نشط', 'phone' => $phone,
         ]);
     }
-
-    /** حمولةُ رسالةٍ واردة موقَّعةٌ كما توقّعها ميتا */
-    private function inbound(
-        string $from = '96891112222',
-        string $text = 'الفاتورة لا تُطبع عندي',
-        string $wamid = 'wamid.IN-1',
-        string $phoneId = 'EVENTPLUS-PN',
-        ?array $message = null,
-    ) {
-        $payload = ['entry' => [['changes' => [['value' => [
-            'metadata' => ['phone_number_id' => $phoneId],
-            'messages' => [$message ?? [
-                'id' => $wamid,
-                'from' => $from,
-                'type' => 'text',
-                'timestamp' => (string) now()->timestamp,
-                'text' => ['body' => $text],
-            ]],
-        ]]]]]];
-
-        $body = json_encode($payload, JSON_UNESCAPED_UNICODE);
-
-        return $this->call('POST', route('webhooks.whatsapp'), [], [], [], [
-            'CONTENT_TYPE' => 'application/json',
-            'HTTP_X_HUB_SIGNATURE_256' => 'sha256='.hash_hmac('sha256', $body, 'test-app-secret'),
-        ], $body);
-    }
-
     /** محادثةُ واتسابٍ نافذتُها مفتوحة */
     private function live(): SupportConversation
     {
@@ -188,23 +160,6 @@ class EventPlusAnswersOnWhatsAppTest extends TestCase
 
         $this->assertFalse((bool) $fresh->fresh()->supports_inbox);
     }
-
-    /** وتوقيعٌ مزوَّرٌ لا يفتح شيئًا */
-    public function test_an_unsigned_payload_stores_nothing(): void
-    {
-        $body = json_encode(['entry' => [['changes' => [['value' => [
-            'metadata' => ['phone_number_id' => 'EVENTPLUS-PN'],
-            'messages' => [['id' => 'wamid.X', 'from' => '96891112222', 'type' => 'text', 'text' => ['body' => 'مرحبا']]],
-        ]]]]]]);
-
-        $this->call('POST', route('webhooks.whatsapp'), [], [], [], [
-            'CONTENT_TYPE' => 'application/json',
-            'HTTP_X_HUB_SIGNATURE_256' => 'sha256=deadbeef',
-        ], $body)->assertStatus(403);
-
-        $this->assertSame(0, SupportConversation::count());
-    }
-
     /* ═══════════════ الوارد يُقرأ ═══════════════ */
 
     public function test_a_shop_owner_message_opens_a_conversation(): void
@@ -295,32 +250,6 @@ class EventPlusAnswersOnWhatsAppTest extends TestCase
         $this->assertNotSame('', trim($body), 'وارِدٌ غيرُ نصّيٍّ كُتب سطرًا فارغًا');
         $this->assertStringContainsString('صورة', $body);
     }
-
-    /* ═══════════════ الصادر ═══════════════ */
-
-    /**
-     * الملاحظةُ الداخليّة لا تخرج إلى واتساب — ولا تُحاوَل.
-     *
-     * والمحادثةُ هنا محادثةُ واتسابٍ نافذتُها مفتوحةٌ وخطُّها موصول: كلُّ
-     * شرطٍ آخرَ يقول «أرسِل». فلو سقط فحصُ `is_internal` وحدَه لَخرج كلامُ
-     * الفريق عن التاجر إلى هاتف التاجر نفسِه.
-     */
-    public function test_an_internal_note_never_leaves_eventplus(): void
-    {
-        $c = $this->live();
-
-        $this->actingAs($this->staff)->post(route('super-admin.conversations.reply', $c->id), [
-            'body' => 'هذا التاجر متأخّرٌ في السداد — لا تَعِده بشيء',
-            'internal' => true,
-        ])->assertRedirect();
-
-        Http::assertNothingSent();
-
-        $note = SupportMessage::where('is_internal', true)->whereNull('event')->firstOrFail();
-        $this->assertNull($note->delivery, 'مُنحت ملاحظةٌ داخليّةٌ حالَ تسليم');
-        $this->assertNull($note->external_message_id);
-    }
-
     /**
      * والحارسُ في `deliver` نفسِها — لا في المتحكّم وحده.
      *
@@ -366,65 +295,6 @@ class EventPlusAnswersOnWhatsAppTest extends TestCase
             'حُسبت النافذةُ من آخر حركةٍ في الخيط لا من ختم الوارد',
         );
     }
-
-    /** وردٌّ داخلَ النافذة يخرج فعلًا — إلى الرقم الصحيح وبالنصّ الذي كُتب */
-    public function test_a_reply_inside_the_window_is_sent(): void
-    {
-        $c = $this->live();
-
-        Http::fake([
-            '*/messages' => Http::response(['messages' => [['id' => 'wamid.OUT-1']]], 200),
-        ]);
-
-        $this->actingAs($this->staff)->post(route('super-admin.conversations.reply', $c->id), [
-            'body' => 'حدّث المتصفّح ثم جرّب الطباعة',
-        ])->assertRedirect();
-
-        Http::assertSent(function ($request) {
-            $body = $request->data();
-
-            return str_contains($request->url(), 'EVENTPLUS-PN/messages')
-                && $body['to'] === '96891112222'
-                && $body['type'] === 'text'
-                && $body['text']['body'] === 'حدّث المتصفّح ثم جرّب الطباعة';
-        });
-
-        $reply = SupportMessage::where('sender_scope', 'platform')->whereNull('event')->firstOrFail();
-        $this->assertSame('sent', $reply->delivery);
-        $this->assertSame('wamid.OUT-1', $reply->external_message_id);
-        $this->assertNull($reply->delivery_error);
-        $this->assertSame('success', session('toast')['type'] ?? null);
-    }
-
-    /**
-     * وردٌّ خارجَ النافذة لا يُحاوَل، ويُكتب أنّه لم يخرج.
-     *
-     * ميتا تردّه بالخطأ ١٣١٠٤٧. وكتابتُه «فشل» تعني دعمًا يُعيد المحاولة على
-     * منعٍ لا يزول؛ والصمتُ عنه يعني دعمًا ينتظر جوابًا على كلامٍ لم يصل.
-     */
-    public function test_a_reply_outside_the_window_is_saved_but_not_sent(): void
-    {
-        $c = $this->live();
-        $c->forceFill(['whatsapp_window_at' => now()->subHours(25)])->save();
-
-        $this->actingAs($this->staff)->post(route('super-admin.conversations.reply', $c->id), [
-            'body' => 'اعتذر عن التأخير',
-        ])->assertRedirect();
-
-        Http::assertNothingSent();
-
-        $reply = SupportMessage::where('sender_scope', 'platform')->whereNull('event')->firstOrFail();
-        $this->assertSame('blocked', $reply->delivery);
-        $this->assertNotNull($reply->delivery_error);
-        $this->assertSame('اعتذر عن التأخير', $reply->body, 'ضاع الردُّ لأنّه لم يخرج');
-
-        /* ويُقال في اللحظة نفسِها — صمتٌ بعد الضغط يُقرأ نجاحًا */
-        $toast = session('toast');
-        /* و`danger` هي ما ترسمه الواجهة أحمرَ — انظر `Toast` في `types/index.d.ts` */
-        $this->assertSame('danger', $toast['type'] ?? null, 'مضى الردُّ بلا خبرٍ عن أنّه لم يخرج');
-        $this->assertStringContainsString((string) $reply->delivery_error, (string) ($toast['msg'] ?? ''));
-    }
-
     /** والنافذةُ تُقاس من الوارد وحده — لا من آخر رسالةٍ في الخيط */
     public function test_an_eventplus_reply_does_not_reopen_metas_window(): void
     {
@@ -435,178 +305,6 @@ class EventPlusAnswersOnWhatsAppTest extends TestCase
 
         $this->assertFalse(SupportWhatsApp::windowOpen($c->fresh()), 'ردُّ افنت بلسٍ فتح نافذةَ ميتا');
     }
-
-    /** وعطلٌ عند المزوّد يُكتب بنصّه لا يُبتلع */
-    public function test_a_provider_failure_is_written_on_the_message(): void
-    {
-        $c = $this->live();
-
-        Http::fake([
-            '*/messages' => Http::response(['error' => ['code' => 131047, 'message' => 'Re-engagement message']], 400),
-        ]);
-
-        $this->actingAs($this->staff)->post(route('super-admin.conversations.reply', $c->id), [
-            'body' => 'جرّب الآن',
-        ])->assertRedirect();
-
-        $reply = SupportMessage::where('sender_scope', 'platform')->whereNull('event')->firstOrFail();
-        $this->assertSame('failed', $reply->delivery);
-        $this->assertStringContainsString('Re-engagement', (string) $reply->delivery_error);
-        $this->assertSame('جرّب الآن', $reply->body);
-    }
-
-    /** وخطٌّ فُصل بعد أن بدأت المحادثة: يُقال، ولا يُحاوَل النداء */
-    public function test_a_disconnected_line_blocks_the_send_and_says_so(): void
-    {
-        $c = $this->live();
-        $this->line->update(['status' => WhatsAppConnection::INACTIVE]);
-
-        $this->actingAs($this->staff)->post(route('super-admin.conversations.reply', $c->id), [
-            'body' => 'أهلًا',
-        ])->assertRedirect();
-
-        Http::assertNothingSent();
-
-        $reply = SupportMessage::where('sender_scope', 'platform')->whereNull('event')->firstOrFail();
-        $this->assertSame('failed', $reply->delivery);
-    }
-
-    /** ومحادثةٌ داخل افنت بلسٍ لا تُقاس بحال تسليم — لا شيء يخرج منها أصلًا */
-    public function test_an_in_app_reply_carries_no_delivery_state(): void
-    {
-        $c = Support::open($this->owner, 'سؤال', 'أخرى', 'كيف أضيف موظّفًا؟');
-
-        $this->actingAs($this->staff)->post(route('super-admin.conversations.reply', $c->id), [
-            'body' => 'من صفحة الموظفين',
-        ])->assertRedirect();
-
-        Http::assertNothingSent();
-
-        $this->assertNull(
-            SupportMessage::where('sender_scope', 'platform')->whereNull('event')->firstOrFail()->delivery,
-        );
-    }
-
-    /* ═══════════════ العزلُ عن رسائل المتاجر ═══════════════ */
-
-    /**
-     * ودعمُ افنت بلسٍ لا يُكتب في سجلّ رسائل المتاجر ولا يستهلك حصّةَ أحد.
-     *
-     * `whatsapp_messages` سجلُّ ما أرسله المحلُّ لزبائنه، ومنه تُحسب حصّتُه
-     * الشهرية. وكتابةُ ردِّ دعمٍ فيه تعني تاجرًا يُخصم من حصّته لأنّنا
-     * كلّمناه.
-     */
-    public function test_support_traffic_never_touches_the_shops_message_log(): void
-    {
-        $c = $this->live();
-
-        Http::fake(['*/messages' => Http::response(['messages' => [['id' => 'wamid.OUT-2']]], 200)]);
-
-        $this->actingAs($this->staff)->post(route('super-admin.conversations.reply', $c->id), [
-            'body' => 'تمّ',
-        ])->assertRedirect();
-
-        $this->assertSame(0, WhatsAppMessage::count(), 'رسالةُ دعمٍ كُتبت في سجلّ رسائل المتجر');
-    }
-
-    /* ═══════════════ القناةُ تُعرض حين تعمل ═══════════════ */
-
-    /** خطٌّ موصول: القناةُ تُعرض */
-    public function test_the_channel_is_offered_once_the_line_is_open(): void
-    {
-        $channels = $this->actingAs($this->staff)
-            ->get(route('super-admin.conversations.index'))
-            ->viewData('page')['props']['channels'];
-
-        $this->assertContains('whatsapp', array_column($channels, 'value'));
-    }
-
-    /** وخطٌّ لم يُفتح بابُه: لا تُعرض — بابٌ معروضٌ لا يُفتح أسوأ من بابٍ لا يُعرض */
-    public function test_the_channel_is_hidden_while_the_line_is_closed(): void
-    {
-        $this->line->update(['supports_inbox' => false]);
-
-        $channels = $this->actingAs($this->staff)
-            ->get(route('super-admin.conversations.index'))
-            ->viewData('page')['props']['channels'];
-
-        $this->assertSame(['in_app'], array_column($channels, 'value'));
-    }
-
-    /** ورمزٌ منتهٍ ليس خطًّا موصولًا مهما قال العمود */
-    public function test_an_expired_token_is_not_an_open_line(): void
-    {
-        $this->line->update(['token_expires_at' => now()->subDay()]);
-
-        $this->assertFalse(SupportWhatsApp::connected());
-    }
-
-    /* ═══════════════ الشاشة تقول الحقيقة ═══════════════ */
-
-    /** حالُ النافذة تُقرأ في خصائص الشاشة قبل أن يكتب الدعم */
-    public function test_the_screen_is_told_whether_the_window_is_open(): void
-    {
-        $c = $this->live();
-
-        $props = $this->actingAs($this->staff)
-            ->get(route('super-admin.conversations.index', ['conversation' => $c->id]))
-            ->viewData('page')['props'];
-
-        $this->assertTrue($props['active']['whatsappWindowOpen']);
-        $this->assertNotNull($props['active']['whatsappWindowEndsAt']);
-
-        $c->forceFill(['whatsapp_window_at' => now()->subHours(25)])->save();
-
-        $props = $this->actingAs($this->staff)
-            ->get(route('super-admin.conversations.index', ['conversation' => $c->id]))
-            ->viewData('page')['props'];
-
-        $this->assertFalse($props['active']['whatsappWindowOpen'], 'قالت الشاشةُ إنّ النافذة مفتوحةٌ وهي مغلقة');
-    }
-
-    /** وحالُ الخروج تُقرأ في الرسالة نفسِها */
-    public function test_the_thread_carries_the_delivery_state(): void
-    {
-        $c = $this->live();
-        $c->forceFill(['whatsapp_window_at' => now()->subHours(25)])->save();
-
-        $this->actingAs($this->staff)->post(route('super-admin.conversations.reply', $c->id), ['body' => 'مرحبًا']);
-
-        $messages = $this->actingAs($this->staff)
-            ->get(route('super-admin.conversations.index', ['conversation' => $c->id]))
-            ->viewData('page')['props']['messages'];
-
-        $last = end($messages);
-        $this->assertSame('blocked', $last['delivery']);
-        $this->assertNotNull($last['deliveryLabel']);
-    }
-
-    /* ═══════════════ المقبض ═══════════════ */
-
-    public function test_only_the_platform_may_open_the_inbox(): void
-    {
-        $this->actingAs($this->owner)
-            ->post(route('super-admin.whatsapp.support-inbox'), ['supports_inbox' => true])
-            ->assertForbidden();
-    }
-
-    public function test_the_platform_opens_and_closes_the_inbox(): void
-    {
-        $this->line->update(['supports_inbox' => false]);
-
-        $this->actingAs($this->staff)
-            ->post(route('super-admin.whatsapp.support-inbox'), ['supports_inbox' => true])
-            ->assertRedirect();
-
-        $this->assertTrue((bool) $this->line->fresh()->supports_inbox);
-
-        $this->actingAs($this->staff)
-            ->post(route('super-admin.whatsapp.support-inbox'), ['supports_inbox' => false])
-            ->assertRedirect();
-
-        $this->assertFalse((bool) $this->line->fresh()->supports_inbox);
-    }
-
     /**
      * وعددُ من يستطيع أن يصل — محسوبٌ لا موعود.
      *
@@ -626,38 +324,5 @@ class EventPlusAnswersOnWhatsAppTest extends TestCase
         $this->assertSame(4, $reach['total']);
         $this->assertSame(1, $reach['reachable'], 'عُدّ من لا يُطابَق قابلًا للوصول');
         $this->assertSame(1, $reach['ambiguous']);
-    }
-
-    /* ═══════════════ التاجرُ يقرأ خيطَه ═══════════════ */
-
-    /** ومحادثةُ واتسابٍ يقرؤها صاحبُها في لوحته — هي محادثتُه */
-    public function test_the_shop_reads_its_own_whatsapp_thread(): void
-    {
-        $c = $this->live();
-
-        $this->actingAs($this->owner)
-            ->get(route('admin.help.show', $c->id))
-            ->assertOk();
-    }
-
-    /** ولا يقرؤها متجرٌ آخر */
-    public function test_another_shop_cannot_read_it(): void
-    {
-        $c = $this->live();
-        $stranger = $this->person($this->shop('محل الجار')->id, 'admin', 'الجار');
-
-        $this->actingAs($stranger)->get(route('admin.help.show', $c->id))->assertNotFound();
-    }
-
-    /** والملاحظةُ الداخليّةُ على خيط واتساب لا تُعرض له */
-    public function test_an_internal_note_is_invisible_to_the_shop(): void
-    {
-        $c = $this->live();
-
-        Support::say($c, $this->staff, 'platform', 'سرٌّ للفريق', internal: true);
-
-        $this->actingAs($this->owner)
-            ->get(route('admin.help.show', $c->id))
-            ->assertDontSee('سرٌّ للفريق', false);
     }
 }

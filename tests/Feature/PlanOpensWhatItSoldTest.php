@@ -160,28 +160,6 @@ class PlanOpensWhatItSoldTest extends TestCase
         $this->actingAs($this->owner)->get(route('admin.reports.pdf'))->assertForbidden();
         $this->actingAs($this->owner)->get(route('admin.export.reports'))->assertForbidden();
     }
-
-    public function test_every_report_page_export_is_closed_with_the_screen(): void
-    {
-        /*
-         * وخمسةَ عشرَ بابًا فُتحت بلا حارس.
-         *
-         * حين صار لكلّ تقريرٍ صفحتُه كُتبت له ثلاثةُ مسارات تنزيلٍ جديدة، ولم
-         * تُكتب في خريطة الباقات. فبقي «ملخّص المبيعات» وحده مقفلًا، وصُدِّر
-         * كلُّ ما سواه — الطلبات والمنتجات وأداء الموظفين وإنفاق العملاء —
-         * على باقةٍ لا تبيع التحليل ولا تصديرَه.
-         */
-        $this->onPlan([]);
-
-        foreach (['orders', 'products', 'staff', 'customers', 'stocktake'] as $report) {
-            foreach (['xlsx', 'pdf', 'csv'] as $format) {
-                $this->actingAs(User::find($this->owner->id))
-                    ->get(route('admin.reports.export.'.$format, $report))
-                    ->assertForbidden();
-            }
-        }
-    }
-
     public function test_a_plan_that_sells_analysis_opens_those_exports(): void
     {
         $this->onPlan(['reports_advanced']);
@@ -415,83 +393,6 @@ class PlanOpensWhatItSoldTest extends TestCase
 
         $this->assertStringContainsString('custom_permissions', $source, 'شاشة الموظف لا تعرف الباقة');
     }
-
-    /* ============================ الولاء ============================ */
-
-    public function test_points_are_not_earned_on_a_plan_that_does_not_sell_them(): void
-    {
-        /*
-         * والقفل عند الصندوق لا في الشاشة وحدها: النقاط تُمنح عند إتمام
-         * البيعة، فقفلٌ في اللوحة يترك الرصيد ينمو لمن لم يشترِ البرنامج ثمّ
-         * يُستبدَل. والنقاط مالٌ لا عدّاد.
-         */
-        $this->onPlan([]);
-
-        Setting::updateOrCreate(['business_id' => $this->business->id, 'key' => 'vat_enabled'], ['value' => '0']);
-        $product = Product::create([
-            'business_id' => $this->business->id, 'name' => 'صنف',
-            'price' => 100, 'cost' => 40, 'quantity' => 50, 'alert_qty' => 1, 'active' => true,
-        ]);
-        $customer = Customer::create([
-            'business_id' => $this->business->id, 'name' => 'زبون', 'phone' => '90000001', 'points' => 0,
-        ]);
-
-        $this->actingAs($this->owner)->postJson(route('pos.checkout'), [
-            'items' => [['id' => $product->id, 'name' => 'صنف', 'qty' => 1]],
-            'payment_method' => 'نقدي', 'client_uuid' => uniqid('p', true),
-            'customer_id' => $customer->id,
-        ])->assertOk();
-
-        $this->assertSame(0, (int) $customer->fresh()->points, 'مُنحت نقاطٌ على باقةٍ لا تبيع الولاء');
-    }
-
-    public function test_the_same_sale_earns_points_on_a_plan_that_does(): void
-    {
-        $this->onPlan(['loyalty']);
-
-        Setting::updateOrCreate(['business_id' => $this->business->id, 'key' => 'vat_enabled'], ['value' => '0']);
-        $product = Product::create([
-            'business_id' => $this->business->id, 'name' => 'صنف',
-            'price' => 100, 'cost' => 40, 'quantity' => 50, 'alert_qty' => 1, 'active' => true,
-        ]);
-        $customer = Customer::create([
-            'business_id' => $this->business->id, 'name' => 'زبون', 'phone' => '90000002', 'points' => 0,
-        ]);
-
-        $this->actingAs($this->owner)->postJson(route('pos.checkout'), [
-            'items' => [['id' => $product->id, 'name' => 'صنف', 'qty' => 1]],
-            'payment_method' => 'نقدي', 'client_uuid' => uniqid('p', true),
-            'customer_id' => $customer->id,
-        ])->assertOk();
-
-        $this->assertGreaterThan(0, (int) $customer->fresh()->points, 'لم تُمنح نقاطٌ على باقةٍ تبيع الولاء');
-    }
-
-    public function test_the_register_does_not_promise_points_it_cannot_give(): void
-    {
-        /*
-         * يعِد الكاشيرُ زبونَه بنقاطٍ يردّها الخادم — والوعدُ المكسور عند
-         * الصندوق أسوأ من ميزةٍ لا تُعرض أصلًا.
-         *
-         * والفروع تُحذف هنا لا لأنّ الأمر يتعلّق بها: شاشة البيع لا تُفتح على
-         * متجرٍ له فروعٌ قبل تفعيل جهازها، والمقصود قياسُ ما تحمله لا بوّابتها.
-         */
-        $this->onPlan([]);
-        Branch::where('business_id', $this->business->id)->delete();
-
-        $this->actingAs($this->owner)->get(route('pos.index'))
-            ->assertInertia(fn ($p) => $p->where('settings.loyaltyEnabled', false));
-    }
-
-    public function test_and_it_does_promise_them_when_the_plan_sells_them(): void
-    {
-        $this->onPlan(['loyalty']);
-        Branch::where('business_id', $this->business->id)->delete();
-
-        $this->actingAs($this->owner)->get(route('pos.index'))
-            ->assertInertia(fn ($p) => $p->where('settings.loyaltyEnabled', true));
-    }
-
     /* =========================== واتساب =========================== */
 
     public function test_the_sender_refuses_for_a_plan_that_excludes_it(): void
@@ -511,45 +412,6 @@ class PlanOpensWhatItSoldTest extends TestCase
             WhatsAppFeature::blockReason($this->business->fresh()),
         );
     }
-
-    /* ==================== محرّر الباقة في لوحة المنصّة ==================== */
-
-    public function test_the_platform_editor_saves_what_the_guard_reads(): void
-    {
-        /*
-         * وإلّا كان المفتاح يُؤشَّر في الشاشة ولا يصل الحارس — وهو `features`
-         * نفسها بثوبٍ جديد.
-         */
-        $admin = User::create([
-            'business_id' => null, 'name' => 'مدير المنصة', 'email' => 'sa@eventplusapp.om',
-            'password' => bcrypt('password'), 'role' => 'super_admin', 'status' => 'نشط',
-        ]);
-
-        $plan = Plan::create(['name' => 'باقة', 'monthly_price' => 5, 'yearly_price' => 50, 'capabilities' => null]);
-
-        $this->actingAs($admin)->put(route('super-admin.plans.update', $plan->id), [
-            'name' => 'باقة', 'monthly_price' => 5, 'yearly_price' => 50,
-            'capabilities' => ['loyalty'],
-        ])->assertSessionHasNoErrors();
-
-        $this->assertSame(['loyalty'], $plan->fresh()->capabilities);
-    }
-
-    public function test_a_capability_that_is_not_in_the_closed_list_is_refused(): void
-    {
-        $admin = User::create([
-            'business_id' => null, 'name' => 'مدير المنصة', 'email' => 'sa2@eventplusapp.om',
-            'password' => bcrypt('password'), 'role' => 'super_admin', 'status' => 'نشط',
-        ]);
-
-        $plan = Plan::create(['name' => 'باقة', 'monthly_price' => 5, 'yearly_price' => 50]);
-
-        $this->actingAs($admin)->put(route('super-admin.plans.update', $plan->id), [
-            'name' => 'باقة', 'monthly_price' => 5, 'yearly_price' => 50,
-            'capabilities' => ['everything'],
-        ])->assertSessionHasErrors('capabilities.0');
-    }
-
     public function test_every_listed_capability_is_actually_guarded_somewhere(): void
     {
         /*

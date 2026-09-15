@@ -108,19 +108,6 @@ class ProductSectionAuditTest extends TestCase
 
         $this->assertNull($p->fresh()->category_id);
     }
-
-    /* ------------------- الموقوف لا يُباع ------------------- */
-
-    private function sell(Product $p)
-    {
-        session(['current_branch' => $this->branch->id]);
-
-        return $this->postJson(route('pos.checkout'), [
-            'items' => [['id' => $p->id, 'name' => $p->name, 'qty' => 1]],
-            'payment_method' => 'نقدي',
-        ]);
-    }
-
     public function test_a_stopped_product_cannot_be_sold(): void
     {
         $p = $this->product(['active' => false]);

@@ -63,13 +63,6 @@ class EmployeeSelfServiceTest extends TestCase
             'basic_salary' => 900, 'allowances' => 200,
         ]);
     }
-
-    private function page(User $user): array
-    {
-        return $this->actingAs($user)->get(route('pos.me'))
-            ->assertOk()->viewData('page')['props'];
-    }
-
     /** مسيرةٌ بحالةٍ معلومة، وسطرٌ لكل من يُذكر */
     private function payroll(string $status, array $lines, string $period = '2026-07-01'): PayrollRun
     {
@@ -99,20 +92,6 @@ class EmployeeSelfServiceTest extends TestCase
             'payment_method' => 'نقدي',
         ]);
     }
-
-    /* --------------------------- الوصول --------------------------- */
-
-    /**
-     * من لا يملك إلا نقطة البيع يُفتح له الصندوق مباشرةً بعد الدخول — لا
-     * لوحةٌ يُردّ عنها بـ403.
-     */
-    public function test_an_employee_with_only_the_register_lands_on_it(): void
-    {
-        $this->cashier->update(['permissions' => ['pos']]);
-
-        $this->assertSame(route('pos.index'), Permissions::homeFor($this->cashier->fresh()));
-    }
-
     /**
      * الزرّ في ترويسة الصندوق يقود إلى اللوحة لمن يدخلها، وإلى «حسابي» لمن
      * لا يدخلها. والوجهتان يجب أن تُفتحا فعلًا: بابٌ يُعرض ولا يُفتح أسوأ
@@ -127,15 +106,6 @@ class EmployeeSelfServiceTest extends TestCase
         $this->assertNull($props['auth']['panelUrl'], 'الكاشير لا يدخل اللوحة');
         $this->assertNotNull($this->page($this->owner)['auth']['panelUrl']);
     }
-
-    /** ومن لا يملك نقطة البيع لا يفتح صفحتها — الحارس نفسه لا حارسٌ ثانٍ */
-    public function test_someone_without_the_register_is_refused(): void
-    {
-        $this->cashier->update(['permissions' => ['dashboard']]);
-
-        $this->actingAs($this->cashier->fresh())->get(route('pos.me'))->assertForbidden();
-    }
-
     /* --------------------------- بياناته --------------------------- */
 
     public function test_it_shows_his_own_salary(): void

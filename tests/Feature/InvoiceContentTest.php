@@ -87,17 +87,6 @@ class InvoiceContentTest extends TestCase
         $this->assertStringContainsString('OM9900112233', $html, 'رقم المشتري');
         $this->assertStringContainsString('(5%)', $html, 'نسبة الضريبة');
     }
-
-    private function sell(int $qty = 2): \App\Models\Order
-    {
-        $this->actingAs($this->owner)->postJson(route('pos.checkout'), [
-            'items' => [['id' => $this->product->id, 'name' => $this->product->name, 'qty' => $qty]],
-            'payment_method' => 'نقدي',
-        ])->assertOk();
-
-        return \App\Models\Order::where('business_id', $this->business->id)->latest('id')->firstOrFail();
-    }
-
     public function test_the_totals_stored_on_the_order_add_up(): void
     {
         $order = $this->sell(2);

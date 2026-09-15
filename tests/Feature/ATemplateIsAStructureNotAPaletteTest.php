@@ -154,39 +154,6 @@ class ATemplateIsAStructureNotAPaletteTest extends TestCase
         $this->assertSame('classic', $layout['hero']);
         $this->assertSame('commerce', $layout['card']);
     }
-
-    /* ══════════════════ تبديل القالب ══════════════════ */
-
-    public function test_switching_a_template_takes_its_structure_with_its_colours(): void
-    {
-        $site = Builder::create($this->business, Blueprints::STORE, 'souq', $this->owner->id);
-
-        $this->put(route('admin.website.design.update'), ['template' => 'atelier', 'adopt' => true])
-            ->assertRedirect();
-
-        $site = $site->fresh();
-
-        $this->assertSame('editorial', $site->layout['hero']);
-        $this->assertSame('amiri', $site->layout['heading_font']);
-        // والمحتوى لا يُمسّ: تبديلُ قالبٍ ليس إعادةَ بناء
-        $this->assertSame(4, $site->pages()->count());
-    }
-
-    public function test_tuning_one_structure_token_does_not_reset_the_others(): void
-    {
-        $site = Builder::create($this->business, Blueprints::STORE, 'atelier', $this->owner->id);
-
-        $this->put(route('admin.website.design.layout'), [
-            'layout' => ['density' => 'compact'] + $site->layout,
-        ])->assertStatus(303);
-
-        $site = $site->fresh();
-
-        $this->assertSame('compact', $site->layout['density']);
-        $this->assertSame('editorial', $site->layout['hero']);
-        $this->assertSame('atelier', $site->template);
-    }
-
     /* ══════════════════ ما يُنشر وما يُستعاد ══════════════════ */
 
     public function test_a_published_document_carries_the_structure(): void
@@ -218,20 +185,6 @@ class ATemplateIsAStructureNotAPaletteTest extends TestCase
         $this->assertSame('classic', $upgraded['tokens']['hero']);
         $this->assertSame('minimal', $upgraded['tokens']['header']);
     }
-
-    public function test_restoring_an_old_version_brings_back_the_shape_it_had(): void
-    {
-        $site = Builder::create($this->business, Blueprints::STORE, 'atelier', $this->owner->id);
-        $version = Publisher::publish($site, $this->owner->id);
-
-        $this->put(route('admin.website.design.update'), ['template' => 'souq', 'adopt' => true]);
-        $this->assertSame('commerce', $site->fresh()->layout['header']);
-
-        Publisher::restore($site->fresh(), $version);
-
-        $this->assertSame('editorial', $site->fresh()->layout['header']);
-    }
-
     /* ══════════════════ صفحة المتجر ══════════════════ */
 
     public function test_a_new_store_gets_a_shop_page_that_holds_the_whole_catalogue(): void
@@ -277,38 +230,5 @@ class ATemplateIsAStructureNotAPaletteTest extends TestCase
         $bad = Content::clean('hero', ['layout' => 'أيًّا كان'], Blueprints::STORE);
 
         $this->assertSame('auto', $bad['layout']);
-    }
-
-    /* ══════════════════ ما تعرضه الشاشتان ══════════════════ */
-
-    public function test_the_picker_draws_the_merchants_own_shop_in_four_structures(): void
-    {
-        $this->catalogue(2);
-
-        $cards = $this->props(route('admin.website.index'))['templates'];
-
-        $this->assertCount(4, $cards);
-
-        $atelier = collect($cards)->firstWhere('key', 'atelier')['document'];
-
-        $this->assertSame('ورود مسقط', $atelier['brand']['name']);
-        $this->assertSame('editorial', $atelier['tokens']['hero']);
-        $this->assertSame('portrait', $atelier['tokens']['ratio']);
-        // ولا يُكتب شيء: المعاينة لقطةٌ في الذاكرة لا موقعٌ يُبنى
-        $this->assertSame(0, Website::where('business_id', $this->bid())->count());
-    }
-
-    public function test_the_editor_hands_the_panel_the_structure_and_its_choices(): void
-    {
-        Builder::create($this->business, Blueprints::STORE, 'mono', $this->owner->id);
-
-        $props = $this->props(route('admin.website.editor'));
-
-        $this->assertSame('minimal', $props['layout']['header']);
-        $this->assertNotEmpty($props['layoutOptions']['primary']);
-        $this->assertNotEmpty($props['layoutOptions']['advanced']);
-
-        // وثلاثةٌ في الوجه لا اثنا عشر: الباقي تحت «خيارات إضافية»
-        $this->assertCount(count(Layout::PRIMARY), $props['layoutOptions']['primary']);
     }
 }

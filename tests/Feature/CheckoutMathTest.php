@@ -59,24 +59,6 @@ class CheckoutMathTest extends TestCase
         Setting::create(['business_id' => $this->business->id, 'key' => 'vat_rate', 'value' => '5']);
 
     }
-
-    private function sell(array $payload): Order
-    {
-        $this->actingAs($this->cashier)
-            ->postJson('/pos/checkout', $payload + ['client_uuid' => uniqid('m', true), 'payment_method' => 'نقدي'])
-            ->assertOk()
-            ->assertJsonPath('ok', true);
-
-        return Order::latest('id')->firstOrFail();
-    }
-
-    /** بيعةٌ تُردّ عند الباب — وتُقال علّتها */
-    private function refusedSale(array $payload): \Illuminate\Testing\TestResponse
-    {
-        return $this->actingAs($this->cashier)
-            ->postJson('/pos/checkout', $payload + ['client_uuid' => uniqid('m', true), 'payment_method' => 'نقدي']);
-    }
-
     private function line(int $qty = 1): array
     {
         return ['id' => $this->product->id, 'name' => $this->product->name, 'qty' => $qty];

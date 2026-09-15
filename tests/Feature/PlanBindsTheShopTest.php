@@ -54,15 +54,6 @@ class PlanBindsTheShopTest extends TestCase
         // حسابُ دخولٍ قائم — وإلّا طالب `syncAccount` باسمٍ وكلمةِ مرور
         \App\Support\MerchantAccount::create($this->business, 'mataji', 'secret-pass');
     }
-
-    private function save(array $extra = []): \Illuminate\Testing\TestResponse
-    {
-        return $this->actingAs($this->platform)->put(
-            route('super-admin.businesses.update', $this->business->id),
-            array_merge(['name' => 'متجري', 'type' => 'عام', 'status' => 'نشط'], $extra),
-        );
-    }
-
     /* --------------------------- السقف عند الإنشاء --------------------------- */
 
     public function test_a_shop_cannot_pass_its_branch_cap(): void

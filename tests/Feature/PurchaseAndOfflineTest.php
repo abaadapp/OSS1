@@ -146,18 +146,6 @@ class PurchaseAndOfflineTest extends TestCase
 
         $this->assertSame('مطلوب', $po->fresh()->status);
     }
-
-    /* ------------------------- صمود الانقطاع ------------------------- */
-
-    private function sell(string $uuid, int $qty = 1)
-    {
-        return $this->actingAs($this->owner)->postJson(route('pos.checkout'), [
-            'items' => [['id' => $this->product->id, 'name' => $this->product->name, 'qty' => $qty]],
-            'payment_method' => 'نقدي',
-            'client_uuid' => $uuid,
-        ]);
-    }
-
     public function test_a_queued_sale_replayed_after_reconnect_is_not_billed_twice(): void
     {
         $first = $this->sell('offline-1')->assertOk()->json();
@@ -188,38 +176,6 @@ class PurchaseAndOfflineTest extends TestCase
         $this->assertNotSame($a['invoice'], $b['invoice']);
         $this->assertSame(2, Order::where('business_id', $this->business->id)->count());
     }
-
-    public function test_one_businesses_replay_key_cannot_collide_with_anothers(): void
-    {
-        // المفتاح يأتي من متصفّح العميل: تصادمه بين مستأجرين لا يجوز أن
-        // يُرجع فاتورة متجرٍ لمتجرٍ آخر
-        $theirs = Business::create(['name' => 'الجار', 'type' => 'عام', 'status' => 'نشط']);
-        Branch::create(['business_id' => $theirs->id, 'name' => 'فرعهم']);
-        Currency::create([
-            'business_id' => $theirs->id, 'code' => 'OMR', 'name' => 'ريال',
-            'symbol' => 'ر.ع', 'rate' => 1, 'is_base' => true, 'active' => true,
-        ]);
-        $theirProduct = Product::create([
-            'business_id' => $theirs->id, 'name' => 'منتجهم',
-            'price' => 10, 'quantity' => 5, 'active' => true,
-        ]);
-        $theirOwner = User::create([
-            'business_id' => $theirs->id, 'name' => 'جارهم', 'email' => 'n@eventplus.om',
-            'password' => bcrypt('x'), 'role' => 'admin', 'status' => 'نشط',
-        ]);
-
-        $mine = $this->sell('same-uuid')->assertOk()->json();
-
-        $theirs_ = $this->actingAs($theirOwner)->postJson(route('pos.checkout'), [
-            'items' => [['id' => $theirProduct->id, 'name' => $theirProduct->name, 'qty' => 1]],
-            'payment_method' => 'نقدي', 'client_uuid' => 'same-uuid',
-        ])->assertOk()->json();
-
-        $this->assertFalse($theirs_['duplicate'] ?? false, 'حُسب بيع الجار تكرارًا لبيعي');
-        $this->assertSame(1, Order::where('business_id', $theirs->id)->count());
-        $this->assertSame(1, Order::where('business_id', $this->business->id)->count());
-    }
-
     /* --------------------- متانة ترقيم الفواتير --------------------- */
 
     public function test_a_stray_non_numeric_invoice_number_does_not_break_the_till(): void

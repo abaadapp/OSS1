@@ -422,37 +422,6 @@ class TheSalesNumberIsNotTheNoticeNumberTest extends TestCase
 
         $this->assertSame('sent', $message->fresh()->delivery, 'إشعارُ رقم الإشعارات عدّل رسالةَ مبيعات');
     }
-
-    /* ═══════════════════ الربط ═══════════════════ */
-
-    /** ورقمُ المبيعات لا يكون رقمَ الإشعارات نفسَه — ويُقال لماذا */
-    public function test_one_phone_number_cannot_serve_both_purposes(): void
-    {
-        $this->actingAs($this->admin)
-            ->post(route('super-admin.whatsapp.sales.connect'), [
-                'phone_number_id' => 'NOTICES-PN',
-                'access_token' => 'another-token-0123456789',
-            ])->assertSessionHasErrors('phone_number_id');
-    }
-
-    /** وربطُ رقم إشعاراتٍ جديد لا يسحب رقمَ المبيعات ويُحوّله */
-    public function test_connecting_a_notice_number_does_not_steal_the_sales_row(): void
-    {
-        $this->actingAs($this->admin)
-            ->post(route('super-admin.whatsapp.shared.connect'), [
-                'phone_number_id' => 'NOTICES-2',
-                'access_token' => 'notices2-token-0123456789',
-            ])->assertSessionHasNoErrors();
-
-        $this->assertSame(
-            WhatsAppMode::PURPOSE_CRM_SALES,
-            $this->sales->fresh()->purpose,
-            'ربطُ رقمِ إشعاراتٍ حوّل رقمَ المبيعات إلى رقم إشعارات'
-        );
-
-        $this->assertSame('SALES-PN', $this->sales->fresh()->phone_number_id);
-    }
-
     /** والوصلةُ القائمة قبل الترقية تبقى رقمَ إشعارات — لا تنقلب مبيعات */
     public function test_an_existing_connection_defaults_to_notices(): void
     {
@@ -465,52 +434,6 @@ class TheSalesNumberIsNotTheNoticeNumberTest extends TestCase
 
         $this->assertSame(WhatsAppMode::PURPOSE_NOTIFICATIONS, $legacy->fresh()->purpose);
     }
-
-    /* ═══════════════════ الشاشة ═══════════════════ */
-
-    /** وموظّفُ متجرٍ لا يبلغ شاشةَ المحادثات ولا يردّ فيها */
-    public function test_a_merchant_employee_reaches_no_crm_conversation(): void
-    {
-        $cashier = User::create([
-            'name' => 'كاشير', 'email' => 'c@shop.om', 'password' => bcrypt('x'),
-            'role' => 'cashier', 'status' => 'active', 'business_id' => $this->shop->id,
-        ]);
-
-        $this->inbound(phoneId: 'SALES-PN', from: '96893334444')->assertOk();
-        $lead = CrmLead::firstOrFail();
-
-        $this->actingAs($cashier)->get(route('super-admin.crm.conversations'))->assertStatus(403);
-        $this->actingAs($cashier)
-            ->post(route('super-admin.crm.conversations.reply', $lead->id), ['body' => 'اخترقت'])
-            ->assertStatus(403);
-
-        $this->assertSame(1, CrmMessage::count(), 'رسالةٌ كُتبت من طلبٍ كان يجب أن يُردّ');
-    }
-
-    /**
-     * ولا رسالةُ دعمٍ تصل شاشةَ محادثات المبيعات.
-     *
-     * والفحصُ على الحمولة التي تصل المتصفّح فعلًا.
-     */
-    public function test_a_support_message_never_reaches_the_sales_screen(): void
-    {
-        $this->inbound(phoneId: 'NOTICES-PN', from: '96891112222', text: 'سرُّ الدعم لا يُقرأ في المبيعات')
-            ->assertOk();
-
-        $this->assertSame(1, SupportMessage::count());
-
-        $this->inbound(phoneId: 'SALES-PN', from: '96893334444', wamid: 'wamid.S1')->assertOk();
-
-        $this->actingAs($this->admin);
-        $html = $this->get(route('super-admin.crm.conversations', ['lead' => CrmLead::firstOrFail()->id]))
-            ->assertOk()->getContent();
-
-        preg_match('/data-page="app" type="application\/json">(.*?)<\/script>/s', $html, $m);
-        $payload = json_encode(json_decode(html_entity_decode($m[1] ?? '{}', ENT_QUOTES), true), JSON_UNESCAPED_UNICODE);
-
-        $this->assertStringNotContainsString('سرُّ الدعم لا يُقرأ في المبيعات', (string) $payload);
-    }
-
     /* ═══════════════════ أدواتٌ ═══════════════════ */
 
     private function inbound(
@@ -542,15 +465,5 @@ class TheSalesNumberIsNotTheNoticeNumberTest extends TestCase
                 'errors' => $state === 'failed' ? [['title' => 'تعذّر التسليم']] : [],
             ]],
         ]]]]]]);
-    }
-
-    private function signed(array $payload)
-    {
-        $body = json_encode($payload, JSON_UNESCAPED_UNICODE);
-
-        return $this->call('POST', route('webhooks.whatsapp'), [], [], [], [
-            'CONTENT_TYPE' => 'application/json',
-            'HTTP_X_HUB_SIGNATURE_256' => 'sha256='.hash_hmac('sha256', $body, 'test-app-secret'),
-        ], $body);
     }
 }

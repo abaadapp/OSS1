@@ -106,26 +106,6 @@ class OneNumberAndNoBookReadsAnothersTest extends TestCase
             'status' => WhatsAppStatus::SENT,
         ], $attrs));
     }
-
-    /** واردٌ على الرقم — من الباب الحقيقيّ بتوقيعه، لا بنداءٍ داخليّ */
-    private function inbound(string $from, string $text = 'مرحبا', string $wamid = 'wamid.IN-1')
-    {
-        $payload = ['entry' => [['changes' => [['value' => [
-            'metadata' => ['phone_number_id' => 'NOTICES-PN'],
-            'messages' => [[
-                'id' => $wamid, 'from' => $from, 'type' => 'text',
-                'timestamp' => (string) now()->timestamp, 'text' => ['body' => $text],
-            ]],
-        ]]]]]];
-
-        $body = json_encode($payload, JSON_UNESCAPED_UNICODE);
-
-        return $this->call('POST', route('webhooks.whatsapp'), [], [], [], [
-            'CONTENT_TYPE' => 'application/json',
-            'HTTP_X_HUB_SIGNATURE_256' => 'sha256='.hash_hmac('sha256', $body, 'test-app-secret'),
-        ], $body);
-    }
-
     /**
      * الدفاترُ الثلاثة تُعدّ معًا — لا دفترٌ وحده.
      *
@@ -142,23 +122,6 @@ class OneNumberAndNoBookReadsAnothersTest extends TestCase
             'trader' => WhatsAppMessage::where('business_id', $this->shop->id)->count(),
         ];
     }
-
-    /** ما يراه التاجرُ في شاشته فعلًا — لا ما في الجدول */
-    private function traderSees(): array
-    {
-        $response = $this->actingAs($this->merchant)
-            ->get(route('admin.marketing.whatsapp.log'));
-
-        $response->assertOk();
-
-        $rows = [];
-        $response->assertInertia(function (Assert $page) use (&$rows) {
-            $rows = $page->toArray()['props']['rows'] ?? [];
-        });
-
-        return $rows;
-    }
-
     /* ═════════════ الوارد يذهب إلى دفترٍ واحد — والباقي صفر ═════════════ */
 
     /** تاجرٌ يكتب: الدعمُ وحدَه يزيد */

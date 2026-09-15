@@ -58,28 +58,6 @@ class VatSwitchesTest extends TestCase
             ['value' => $value],
         );
     }
-
-    /** ما تُخبَر به شاشة الكاشير فعلًا عن الضريبة */
-    private function posScreenVat(): array
-    {
-        $branch = Branch::where('business_id', $this->business->id)->first();
-        $this->activatePosDevice($this->business->id, $branch->id);
-        session(['pos_cashier_id' => $this->cashier->id, 'current_branch' => $branch->id]);
-
-        return $this->get(route('pos.index'))->assertOk()
-            ->viewData('page')['props']['settings']['vat'];
-    }
-
-    private function sell(): Order
-    {
-        $this->postJson(route('pos.checkout'), [
-            'items' => [['id' => $this->product->id, 'name' => 'صنف', 'qty' => 1]],
-            'payment_method' => 'نقدي',
-        ])->assertOk();
-
-        return Order::latest('id')->first();
-    }
-
     /* ------------------------ تفعيل الضريبة ------------------------ */
 
     public function test_by_default_vat_is_applied(): void

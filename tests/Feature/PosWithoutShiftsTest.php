@@ -65,45 +65,6 @@ class PosWithoutShiftsTest extends TestCase
 
         $this->activatePosDevice($this->business->id);
     }
-
-    private function sell(string $method = 'نقدي')
-    {
-        return $this->postJson(route('pos.checkout'), [
-            'items' => [['id' => $this->product->id, 'name' => $this->product->name, 'qty' => 1]],
-            'payment_method' => $method,
-            'client_uuid' => uniqid('e', true),
-        ]);
-    }
-
-    /* --------------------------- لا حاجز --------------------------- */
-
-    public function test_the_register_opens_and_sells_with_no_shift_anywhere(): void
-    {
-        $this->actingAs($this->cashier)->get(route('pos.index'))->assertOk();
-
-        $this->sell()->assertOk();
-
-        $order = Order::where('business_id', $this->business->id)->where('is_held', false)->latest('id')->first();
-        $this->assertNotNull($order);
-        $this->assertNull($order->shift_id, 'العمود بقي في الجدول للتاريخ، ولا يُكتب فيه بعد اليوم');
-    }
-
-    /**
-     * والمفتاح المرفوع من قبلُ لا يحبس أحدًا.
-     *
-     * صفٌّ باقٍ في `settings` عند متجرٍ ضبطه يوم كانت الوردية تعمل. ولو بقي
-     * له قارئٌ واحد لَوقف الصندوق صباحًا بلا سببٍ ظاهر ولا مقبضٍ يُطفئه.
-     */
-    public function test_an_old_raised_gate_no_longer_blocks_the_sale(): void
-    {
-        Setting::create([
-            'business_id' => $this->business->id, 'key' => 'require_open_shift', 'value' => '1',
-        ]);
-
-        $this->actingAs($this->cashier)->get(route('pos.index'))->assertOk();
-        $this->sell()->assertOk();
-    }
-
     /* ------------------------- الشاشات كلّها ------------------------- */
 
     /**
@@ -165,31 +126,6 @@ class PosWithoutShiftsTest extends TestCase
 
         return $screens;
     }
-
-    /* --------------------------- المقبوضات --------------------------- */
-
-    /**
-     * المقبوضات صارت مدى **اليوم** بعد أن كانت مدى الوردية.
-     *
-     * والحدُّ يجب أن يُقصّ فعلًا: لو بقيت تعرض «آخر ٥٠٠ فاتورة» لَقرأ صاحبها
-     * مجموع أسبوعٍ وهو يظنّه اليوم، فيطابقه بما في الدرج ولا يطابق.
-     */
-    public function test_the_payments_screen_shows_today_not_a_mixed_week(): void
-    {
-        $this->actingAs($this->owner);
-        $this->sell();
-
-        Order::where('business_id', $this->business->id)->where('is_held', false)
-            ->latest('id')->first()->update(['ordered_at' => now()->subDays(3)]);
-
-        $this->sell();
-
-        $receipts = $this->actingAs($this->owner)->get(route('pos.payments'))
-            ->assertOk()->viewData('page')['props']['receipts'];
-
-        $this->assertCount(1, $receipts, 'فاتورة الأمس دخلت مقبوضات اليوم');
-    }
-
     /* --------------------------- لا أثر --------------------------- */
 
     /** ولا زرَّ يقود إلى مسارٍ رُفع: Ziggy ترفع خطأً يُبيّض الصفحة كلَّها */

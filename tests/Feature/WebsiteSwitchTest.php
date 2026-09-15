@@ -45,12 +45,6 @@ class WebsiteSwitchTest extends TestCase
             'password' => bcrypt('password'), 'role' => 'admin', 'status' => 'نشط',
         ]);
     }
-
-    private function save(array $data)
-    {
-        return $this->actingAs($this->owner)->post(route('admin.marketing.website.save'), $data);
-    }
-
     /* --------------------------- الحفظ --------------------------- */
 
     public function test_the_switch_and_the_domain_are_saved_together(): void

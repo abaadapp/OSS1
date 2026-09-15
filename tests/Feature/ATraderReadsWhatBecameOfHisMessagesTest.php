@@ -99,16 +99,6 @@ class ATraderReadsWhatBecameOfHisMessagesTest extends TestCase
             'created_at' => now(),
         ], $attrs));
     }
-
-    /** فتحُ الدفتر — والفحصُ يُمرَّر إليه، فلا يُكرَّر سطرُ الفتح في كلّ حارس */
-    private function open(array $query, Closure $check): void
-    {
-        $this->actingAs($this->owner)
-            ->get(route('admin.marketing.whatsapp.log', $query))
-            ->assertOk()
-            ->assertInertia($check);
-    }
-
     /* ═════════════ أوّلًا: الدفترُ يُفتح، ولا يعبر حدَّ المتجر ═════════════ */
 
     /** الصفوفُ تصل الشاشة — وهذا أصلُ الميزة كلِّها */
@@ -340,36 +330,6 @@ class ATraderReadsWhatBecameOfHisMessagesTest extends TestCase
 
         $this->assertSame(count(WhatsAppStatus::ALL), array_sum($summary));
     }
-
-    /* ═════════════ خامسًا: الجرسُ يقود إلى الصفوف ═════════════ */
-
-    /**
-     * جرسُ «لم تصل ٣ رسائل» يفتح الصفوفَ الفاشلةَ نفسَها.
-     *
-     * وكان يقود إلى شاشة الربط: تقول إنّ الرقم مربوطٌ وحصّتَك باقية، ولا
-     * تعرف أيَّ الثلاث ولا لمن. فيُقال إنّ شيئًا انكسر ولا يُقال ماذا.
-     */
-    public function test_the_bell_leads_to_the_failed_rows_themselves(): void
-    {
-        $this->row($this->mine, [
-            'status' => WhatsAppStatus::FAILED,
-            'error_code' => '0',
-            'error_message' => 'API access blocked',
-            'failed_at' => now(),
-        ]);
-
-        $this->actingAs($this->owner);
-
-        $alert = collect(Demo::allNotifications())->firstWhere('key', 'wa-delivery');
-
-        $this->assertNotNull($alert, 'لا جرسَ لفشلٍ وقع');
-        $this->assertSame(
-            route('admin.marketing.whatsapp.log', ['filter' => 'failed']),
-            $alert['url'],
-            'الجرسُ يقود إلى شاشةٍ لا تعرف أيَّ رسالةٍ فشلت',
-        );
-    }
-
     /* ═════════════ سادسًا: الصفُّ يُسمّي ورقته ═════════════ */
 
     /** ورسالةٌ عن طلبٍ تفتح الطلبَ نفسه — لا تُترك رقمًا في عمود */

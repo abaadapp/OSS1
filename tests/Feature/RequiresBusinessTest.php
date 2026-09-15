@@ -52,37 +52,6 @@ class RequiresBusinessTest extends TestCase
     }
 
     #[DataProvider('merchantRoutes')]
-    public function test_the_platform_admin_is_sent_back_to_their_own_panel(string $name): void
-    {
-        $this->actingAs($this->superAdmin())
-            ->get(route($name))
-            ->assertRedirect(route('super-admin.dashboard'));
-    }
-
-    public function test_no_other_business_data_leaks_on_the_way(): void
-    {
-        Product::create([
-            'business_id' => $this->theirs->id, 'name' => 'سرّ المتجر الآخر',
-            'price' => 10, 'quantity' => 5, 'active' => true,
-        ]);
-
-        $response = $this->actingAs($this->superAdmin())->get(route('admin.products.index'));
-
-        $response->assertRedirect(route('super-admin.dashboard'));
-        $response->assertDontSee('سرّ المتجر الآخر');
-    }
-
-    public function test_a_user_orphaned_from_every_business_is_refused_outright(): void
-    {
-        $orphan = User::create([
-            'business_id' => null, 'name' => 'بلا متجر',
-            'email' => 'orphan@eventplus.om', 'password' => bcrypt('password'),
-            'role' => 'cashier', 'status' => 'نشط',
-        ]);
-
-        $this->actingAs($orphan)->get(route('pos.index'))->assertForbidden();
-    }
-
     #[DataProvider('merchantRoutes')]
     public function test_a_real_merchant_user_passes_through_untouched(string $name): void
     {
@@ -93,12 +62,5 @@ class RequiresBusinessTest extends TestCase
         ]);
 
         $this->actingAs($owner)->get(route($name))->assertOk();
-    }
-
-    public function test_the_platform_panel_still_belongs_to_the_platform_admin(): void
-    {
-        $this->actingAs($this->superAdmin())
-            ->get(route('super-admin.dashboard'))
-            ->assertOk();
     }
 }

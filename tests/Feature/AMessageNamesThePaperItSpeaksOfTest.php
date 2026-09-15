@@ -196,17 +196,6 @@ class AMessageNamesThePaperItSpeaksOfTest extends TestCase
             ['business_id' => $this->business->id, 'key' => $key], ['value' => $value],
         );
     }
-
-    private function order(): Order
-    {
-        $this->actingAs($this->owner)->postJson('/pos/checkout', [
-            'items' => [['id' => $this->product->id, 'name' => 'باقة', 'qty' => 8, 'price' => 10]],
-            'payment_method' => 'نقدي', 'credit' => true, 'customer_id' => $this->company->id,
-        ])->assertOk();
-
-        return Order::latest('id')->first();
-    }
-
     private function overdue(): CustomerInvoice
     {
         $this->set('wa_on_invoice_overdue', '1');

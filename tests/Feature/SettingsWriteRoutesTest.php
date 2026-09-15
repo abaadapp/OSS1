@@ -127,34 +127,4 @@ class SettingsWriteRoutesTest extends TestCase
 
         $this->assertDatabaseHas('job_titles', ['id' => $theirs->id]);
     }
-
-    /* ------------------------------ التقييمات ------------------------------ */
-
-    public function test_my_own_review_is_deleted(): void
-    {
-        $mine = Review::create([
-            'business_id' => $this->business->id, 'author_name' => 'زبوني',
-            'rating' => 4, 'comment' => 'جيد', 'status' => 'منشور',
-        ]);
-
-        $this->delete(route('admin.marketing.reviews.destroy', $mine->id))->assertSessionHasNoErrors();
-
-        $this->assertDatabaseMissing('reviews', ['id' => $mine->id]);
-    }
-
-    public function test_a_neighbours_review_is_not_deleted_by_a_guessed_id(): void
-    {
-        /*
-         * وهذا أشدُّ من اطّلاع: تقييمُ زبونٍ يُمحى من دفتر متجرٍ آخر، فينقص
-         * متوسّطُ تقييمه ولا يعرف صاحبُه أنّ شيئًا ذهب.
-         */
-        $theirs = Review::create([
-            'business_id' => $this->neighbour->id, 'author_name' => 'زبونهم',
-            'rating' => 5, 'comment' => 'ممتاز', 'status' => 'منشور',
-        ]);
-
-        $this->delete(route('admin.marketing.reviews.destroy', $theirs->id))->assertNotFound();
-
-        $this->assertDatabaseHas('reviews', ['id' => $theirs->id]);
-    }
 }

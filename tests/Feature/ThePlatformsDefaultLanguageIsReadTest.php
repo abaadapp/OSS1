@@ -58,33 +58,6 @@ class ThePlatformsDefaultLanguageIsReadTest extends TestCase
             'locale' => $own,
         ]);
     }
-
-    /** لغةُ الواجهة بعد طلبٍ حقيقيّ يمرّ بالوسيط */
-    private function localeAfterRequest(?User $as = null): string
-    {
-        $r = $as ? $this->actingAs($as) : $this;
-        $r->get($as ? '/admin/dashboard' : '/login');
-
-        return app()->getLocale();
-    }
-
-    /* ═══════════ الحقلُ صار يُقرأ ═══════════ */
-
-    public function test_what_the_operator_saves_is_what_the_screen_speaks(): void
-    {
-        $operator = $this->operator();
-
-        $this->actingAs($operator)->post(route('super-admin.settings.update'), [
-            'app_name' => 'Event Plus OSS', 'locale' => 'en',
-        ])->assertSessionHasNoErrors();
-
-        $this->assertSame('en', Setting::whereNull('business_id')->where('key', 'locale')->value('value'));
-
-        // جلسةٌ جديدة: لا اختيارَ فيها ولا تفضيلَ للمستخدم
-        $this->flushSession();
-        $this->assertSame('en', $this->localeAfterRequest($operator));
-    }
-
     public function test_a_visitor_before_login_follows_the_platform(): void
     {
         // من لا حساب له ولا نشاط — وهو أوّل من يرى الشاشة

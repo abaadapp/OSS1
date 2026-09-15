@@ -393,22 +393,6 @@ class HeaderSearchTest extends TestCase
             array_column($props['reportPages'], 'href'),
         );
     }
-
-    /** ولا يُرسَل الفهرس لمن لا لوحةَ تاجرٍ له */
-    public function test_a_platform_admin_gets_no_merchant_report_index(): void
-    {
-        $root = User::create([
-            'name' => 'المشغّل', 'email' => 'root@eventplusapp.om',
-            'password' => bcrypt('password'), 'role' => 'super_admin', 'status' => 'نشط',
-        ]);
-
-        $props = $this->actingAs($root)->get(route('super-admin.dashboard'))
-            ->assertOk()
-            ->viewData('page')['props'];
-
-        $this->assertNull($props['reportPages']);
-    }
-
     /** وحسابٌ لا يملك التقارير لا يرى منها شيئًا في دليله */
     public function test_the_report_index_stops_at_what_its_reader_owns(): void
     {

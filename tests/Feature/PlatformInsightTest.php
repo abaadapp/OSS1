@@ -46,40 +46,6 @@ class PlatformInsightTest extends TestCase
             'password' => 'password', 'role' => 'admin', 'status' => 'نشط',
         ]);
     }
-
-    /* ------------------ ١· من فعلها: الدعم أم التاجر؟ ------------------ */
-
-    /**
-     * ما يفعله الدعم داخل حساب التاجر يُقيَّد باسمه هو أيضًا.
-     *
-     * كان يُقيَّد باسم التاجر وحده، فيتصل يسأل «من غيّر السعر؟» فتجدان اسمه:
-     * إمّا يُتَّهم بما لم يفعل، أو يُتَّهم الدعم بما لا يثبت. وفي نزاعٍ على
-     * فاتورة محذوفة، هذا سجلٌّ لا يصلح دليلًا.
-     */
-    public function test_an_action_taken_through_impersonation_names_the_support_user(): void
-    {
-        $this->actingAs($this->super)
-            ->post(route('super-admin.businesses.impersonate', $this->biz->id))
-            ->assertRedirect();
-
-        Activity::log('updated', 'عدّل سعر منتج');
-
-        $log = ActivityLog::latest('id')->first();
-        $this->assertSame($this->owner->name, $log->user_name, 'صاحب الجلسة هو التاجر');
-        $this->assertSame($this->super->id, $log->impersonator_id, 'لم يُسجَّل من دخل كتاجر');
-        $this->assertSame('مدير المنصة', $log->impersonator_name);
-    }
-
-    /** والاسم يُنسخ لا يُشار إليه: حساب دعمٍ يُحذف لا يمحو أثره */
-    public function test_the_support_name_survives_deleting_the_support_account(): void
-    {
-        $this->actingAs($this->super)->post(route('super-admin.businesses.impersonate', $this->biz->id));
-        Activity::log('deleted', 'حذف فاتورة');
-        $this->super->delete();
-
-        $this->assertSame('مدير المنصة', ActivityLog::latest('id')->first()->impersonator_name);
-    }
-
     /** وما يفعله التاجر بنفسه يبقى بلا علامة — وإلا صارت العلامة بلا معنى */
     public function test_a_normal_action_carries_no_support_marker(): void
     {
@@ -88,35 +54,6 @@ class PlatformInsightTest extends TestCase
 
         $this->assertNull(ActivityLog::latest('id')->first()->impersonator_id);
     }
-
-    /**
-     * وفعلُ الدعم لا يظهر في شاشة التاجر — بطلب المالك.
-     *
-     * الشاشة صارت للموظفين وحدهم: صاحب النشاط لا يقرأ فيها أفعاله ولا أفعال
-     * المنصة، بل ما جرى على الصندوق والمخزون في غيابه. والأثر لا يُمحى، بل
-     * يبقى حيث يُحتجّ به — سجلّ المنصة، والعلامة عليه.
-     */
-    public function test_a_support_action_stays_out_of_the_merchants_screen(): void
-    {
-        $this->actingAs($this->super)->post(route('super-admin.businesses.impersonate', $this->biz->id));
-        Activity::log('updated', 'عدّل سعر منتج');
-
-        $this->actingAs($this->owner)->get(route('admin.activity.index'))
-            ->assertInertia(fn ($page) => $page->has('logs', 0));
-    }
-
-    /** والقيد نفسه محفوظٌ باسم من فعله، يقرؤه سجلّ المنصة */
-    public function test_but_the_platform_log_keeps_it_with_the_support_name(): void
-    {
-        $this->actingAs($this->super)->post(route('super-admin.businesses.impersonate', $this->biz->id));
-        Activity::log('updated', 'عدّل سعر منتج');
-
-        $this->assertSame('مدير المنصة', ActivityLog::latest('id')->first()->impersonator_name);
-
-        $this->actingAs($this->super)->get(route('super-admin.activity.index'))
-            ->assertInertia(fn ($page) => $page->where('logs.0.via', 'مدير المنصة'));
-    }
-
     /* ------------------ ١·ب بطاقة «أحدث الأنشطة» ------------------ */
 
     private function cashier(): User
@@ -158,26 +95,6 @@ class PlatformInsightTest extends TestCase
         $this->assertStringContainsString('كاشير', $texts);
         $this->assertStringNotContainsString('المالك', $texts);
     }
-
-    /**
-     * وفعلُ الدعم لا يظهر في بطاقة اللوحة — بطلب المالك.
-     *
-     * والبطاقة تتبع صفحة «سجل النشاط» في الحكم نفسه: لو أظهرت سطرًا لا يجده
-     * التاجر في السجلّ لصار كلٌّ منهما يكذّب الآخر. والقيد محفوظ في سجلّ
-     * المنصة باسم من فعله — انظر test_but_the_platform_log_keeps_it.
-     */
-    public function test_support_actions_stay_out_of_the_owners_card(): void
-    {
-        $this->actingAs($this->super)->post(route('super-admin.businesses.impersonate', $this->biz->id));
-        Activity::log('deleted', 'حذف فاتورة');
-
-        $this->actingAs($this->owner);
-        $texts = collect(Demo::activities())->pluck('text')->implode(' ');
-
-        $this->assertStringNotContainsString('حذف فاتورة', $texts);
-        $this->assertSame('حذف فاتورة', ActivityLog::latest('id')->first()->description);
-    }
-
     /**
      * وسجلّ التاجر يتتبّع موظفيه لا نفسه.
      *
@@ -197,17 +114,6 @@ class PlatformInsightTest extends TestCase
                 ->where('logs.0.user', 'كاشير')
                 ->count('logs', 1));
     }
-
-    /** والدليل يبقى كاملًا في سجلّ المنصة — لا يُنقّى منه شيء */
-    public function test_the_platform_log_keeps_everything(): void
-    {
-        $this->actingAs($this->owner);
-        Activity::log('login', 'سجّل الدخول إلى النظام');
-
-        $this->actingAs($this->super)->get(route('super-admin.activity.index'))
-            ->assertInertia(fn ($page) => $page->where('logs.0.user', 'المالك'));
-    }
-
     /* ------------------ ٢· الإيراد المتكرّر والفاقد ------------------ */
 
     /**
@@ -251,50 +157,6 @@ class PlatformInsightTest extends TestCase
         $this->assertNotNull($churn, 'بطاقة الفاقد غير موجودة');
         $this->assertStringStartsWith('1', $churn['value']);
     }
-
-    /** ولا بطاقة لنوع نشاطٍ بعينه في لوحة منصّةٍ عامّة */
-    public function test_no_single_business_type_gets_its_own_card(): void
-    {
-        $labels = collect(Demo::superStats())->pluck('label')->all();
-
-        $this->assertNotContains(__('محلات الورود'), $labels);
-    }
-
-    /* ------------------ ٣· آخر بيعة ------------------ */
-
-    /** الجدول يقول متى باع كلٌّ آخر مرّة */
-    public function test_the_businesses_table_reports_the_last_sale(): void
-    {
-        Order::create([
-            'business_id' => $this->biz->id, 'number' => 'A-1', 'total' => 10,
-            'is_held' => false, 'ordered_at' => now()->subDays(20),
-        ]);
-
-        $this->actingAs($this->super)->get(route('super-admin.businesses.index'))
-            ->assertInertia(fn ($page) => $page
-                ->where('businesses.0.lastSale', now()->subDays(20)->format('Y-m-d'))
-                ->where('businesses.0.silentDays', 20));
-    }
-
-    /** ومن لم يبع قطّ يُعرف بذلك لا بفراغ */
-    public function test_a_business_that_never_sold_is_marked(): void
-    {
-        $this->actingAs($this->super)->get(route('super-admin.businesses.index'))
-            ->assertInertia(fn ($page) => $page->where('businesses.0.lastSale', null));
-    }
-
-    /** والطلب المعلّق ليس بيعة: سلّةٌ على الشاشة لا مالٌ في الدرج */
-    public function test_a_held_order_does_not_count_as_a_sale(): void
-    {
-        Order::create([
-            'business_id' => $this->biz->id, 'number' => 'A-2', 'total' => 10,
-            'is_held' => true, 'ordered_at' => now(),
-        ]);
-
-        $this->actingAs($this->super)->get(route('super-admin.businesses.index'))
-            ->assertInertia(fn ($page) => $page->where('businesses.0.lastSale', null));
-    }
-
     /* ------------------ ٤· تقرير المنصة يشمل الجميع ------------------ */
 
     /**

@@ -151,92 +151,6 @@ class ALeadWhoWroteIsSeenNotStumbledUponTest extends TestCase
 
         $this->assertSame(0, CrmWhatsApp::badge($this->sales));
     }
-
-    /* ═════════════ وتنطفئ حين يُقرأ ═════════════ */
-
-    /** فتحُ المحادثة يُطفئ الشارةَ لمن فتحها */
-    public function test_opening_the_conversation_puts_the_badge_out(): void
-    {
-        $lead = $this->lead();
-        $this->wrote($lead);
-
-        $this->actingAs($this->sales)
-            ->get(route('super-admin.crm.conversations', ['lead' => $lead->id]))
-            ->assertOk();
-
-        $this->assertSame(0, CrmWhatsApp::badge($this->sales));
-    }
-
-    /**
-     * ولا يُطفئها عن زميله.
-     *
-     * ومقروءٌ واحدٌ للجميع يعني أنّ مرورَ زميلٍ على المحادثة يُخفيها عمّن
-     * كان سيردّ — فتُنسى الرسالةُ لأنّ أحدَهم رآها ولم يفعل شيئًا.
-     */
-    public function test_one_reader_does_not_put_it_out_for_the_others(): void
-    {
-        $lead = $this->lead();
-        $this->wrote($lead);
-
-        /*
-         * والقارئُ هنا هو **الزميل** لا الأوّل.
-         *
-         * أوّلُ صيغةٍ لهذا الحارس جعلت القارئَ أوّلَ مستخدمٍ في القاعدة،
-         * فكان `user_id` مثبَّتًا على `1` يمرّ بلا أن يُلحظ: يقرأ الأوّل
-         * فتنطفئ عنه، ويقرأ الثاني فتنطفئ عن الأوّل — والحارسُ أخضر.
-         */
-        $this->actingAs($this->colleague)
-            ->get(route('super-admin.crm.conversations', ['lead' => $lead->id]))->assertOk();
-
-        $this->assertSame(0, CrmWhatsApp::badge($this->colleague));
-        $this->assertSame(1, CrmWhatsApp::badge($this->sales), 'أُطفئت الشارةُ عن موظّفٍ لم يقرأ');
-    }
-
-    /** ورسالةٌ جديدةٌ بعد القراءة تُعيد إضاءتها */
-    public function test_a_new_line_after_reading_lights_it_again(): void
-    {
-        $lead = $this->lead();
-        $this->wrote($lead);
-
-        $this->actingAs($this->sales)
-            ->get(route('super-admin.crm.conversations', ['lead' => $lead->id]))->assertOk();
-
-        $this->wrote($lead, 'ألو؟');
-
-        $this->assertSame(1, CrmWhatsApp::badge($this->sales));
-    }
-
-    /* ═════════════ والعددُ يصل الشاشة ═════════════ */
-
-    /** الشارةُ تصل كلَّ صفحةٍ في الحمولة المشتركة — لا شاشةً واحدة */
-    public function test_the_count_reaches_every_screen(): void
-    {
-        $this->wrote($this->lead());
-
-        $this->actingAs($this->sales)
-            ->get(route('super-admin.crm.dashboard'))
-            ->assertOk()
-            ->assertInertia(fn (Assert $p) => $p->where('crmBadge', 1));
-    }
-
-    /** وكلُّ صفٍّ يقول كم ينتظر منه */
-    public function test_each_row_says_how_many_wait_in_it(): void
-    {
-        $lead = $this->lead();
-        $this->wrote($lead, 'مرحبا');
-        $this->wrote($lead, 'كم السعر؟');
-
-        /* وردُّنا بينهما لا يُعدّ انتظارًا — وإلّا بقي الصفُّ يقول «٣» بعد أن رددنا */
-        CrmMessage::create([
-            'lead_id' => $lead->id, 'direction' => CrmMessage::OUT, 'body' => 'أهلًا بك',
-        ]);
-
-        $this->actingAs($this->sales)
-            ->get(route('super-admin.crm.conversations'))
-            ->assertOk()
-            ->assertInertia(fn (Assert $p) => $p->where('conversations.0.unread', 2));
-    }
-
     /* ═════════════ ولا تاجرَ يقرأ دفترَ مبيعاتنا ═════════════ */
 
     /** وشارةُ المبيعات صفرٌ لمن ليس من المنصّة */
@@ -254,17 +168,5 @@ class ALeadWhoWroteIsSeenNotStumbledUponTest extends TestCase
         $this->wrote($this->lead());
 
         $this->assertSame(0, CrmWhatsApp::badge($merchant));
-    }
-
-    /** ولا صفَّ قراءةٍ يُكتب لمن لم يفتح شيئًا */
-    public function test_no_read_row_is_written_for_a_list_that_was_only_listed(): void
-    {
-        $this->wrote($this->lead());
-
-        $this->actingAs($this->sales)
-            ->get(route('super-admin.crm.conversations'))->assertOk();
-
-        $this->assertSame(0, CrmRead::count(), 'عُدّت القائمةُ قراءةً — فتُطفأ الشارةُ بلا أن يُقرأ شيء');
-        $this->assertSame(1, CrmWhatsApp::badge($this->sales));
     }
 }

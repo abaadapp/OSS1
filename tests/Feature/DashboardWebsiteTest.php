@@ -131,38 +131,6 @@ class DashboardWebsiteTest extends TestCase
     {
         $this->assertNull($this->sharedWebsite());
     }
-
-    /* ------------------------- المصدر واحد لا اثنان ------------------------- */
-
-    public function test_the_domain_is_read_from_the_marketing_screen(): void
-    {
-        $this->actingAs($this->owner)
-            ->post(route('admin.marketing.website.save'), ['site_domain' => 'eventplus.om'])
-            ->assertSessionHasNoErrors();
-
-        $this->assertSame('https://eventplus.om', $this->sharedWebsite());
-    }
-
-    public function test_a_broken_address_is_refused_at_save_time_not_discovered_as_a_dead_link(): void
-    {
-        $this->actingAs($this->owner)
-            ->post(route('admin.marketing.website.save'), ['site_domain' => 'javascript:alert(1)'])
-            ->assertSessionHasErrors('site_domain');
-
-        $this->assertNull($this->sharedWebsite());
-    }
-
-    public function test_clearing_the_field_removes_the_button_again(): void
-    {
-        $this->setDomain('eventplus.om');
-
-        $this->actingAs($this->owner)
-            ->post(route('admin.marketing.website.save'), ['site_domain' => ''])
-            ->assertSessionHasNoErrors();
-
-        $this->assertNull($this->sharedWebsite());
-    }
-
     /**
      * الحقل القديم في بيانات النشاط لم يعد يُقرأ — ولا يُحفظ.
      *

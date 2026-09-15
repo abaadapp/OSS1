@@ -65,13 +65,6 @@ class ACouponSaysWhatTheRegisterWillDoTest extends TestCase
             'max_uses' => null, 'used_count' => 0, 'expires_at' => null, 'active' => true,
         ], $over));
     }
-
-    /** @return array<string, mixed> */
-    private function props(): array
-    {
-        return $this->get(route('admin.marketing.coupons'))->viewData('page')['props'];
-    }
-
     /* ------------------------------ الشارة ------------------------------ */
 
     public function test_an_exhausted_coupon_says_so(): void

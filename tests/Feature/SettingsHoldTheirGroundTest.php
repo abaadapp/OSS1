@@ -58,17 +58,6 @@ class SettingsHoldTheirGroundTest extends TestCase
     {
         Setting::updateOrCreate(['business_id' => $this->business->id, 'key' => $key], ['value' => $value]);
     }
-
-    private function sell(array $extra = [])
-    {
-        return $this->actingAs($this->owner)->withSession(['current_branch' => $this->branch->id])
-            ->postJson(route('pos.checkout'), array_merge([
-                'items' => [['id' => $this->product->id, 'name' => 'صنف', 'qty' => 1]],
-                'payment_method' => 'نقدي',
-                'client_uuid' => uniqid('s', true),
-            ], $extra));
-    }
-
     /* ============ العملة: ذاكرةٌ ساكنة لا تخدم جارًا ============ */
 
     public function test_one_shops_currency_never_reaches_another(): void

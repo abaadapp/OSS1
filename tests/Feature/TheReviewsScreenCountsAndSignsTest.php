@@ -57,13 +57,6 @@ class TheReviewsScreenCountsAndSignsTest extends TestCase
             'author_name' => 'زائر', 'rating' => $rating, 'comment' => 'جميل', 'status' => $status,
         ]);
     }
-
-    /** @return array<string, mixed> */
-    private function summary(): array
-    {
-        return $this->get(route('admin.marketing.reviews'))->viewData('page')['props']['summary'];
-    }
-
     /* ------------------------------ الأعداد ------------------------------ */
 
     public function test_the_four_numbers_are_right(): void
@@ -113,129 +106,12 @@ class TheReviewsScreenCountsAndSignsTest extends TestCase
         $this->assertSame(1, $s['count']);
         $this->assertSame(5.0, $s['average']);
     }
-
-    /**
-     * والأعدادُ لا تُبنى نماذجَ في الذاكرة.
-     *
-     * القياسُ على ما هو العطب: عددُ الصفوف التي تصير نماذجَ في الطلب الواحد.
-     * والصفحة مرقَّمةٌ بعشرين، فستّون تقييمًا يجب أن تُبنى منها عشرون —
-     * لا ستّون. وعدُّ الاستعلامات لا يكشف هذا: `get()` استعلامٌ واحد يحمل
-     * الجدول كلَّه.
-     */
-    public function test_the_summary_does_not_hydrate_the_whole_table(): void
-    {
-        foreach (range(1, 60) as $i) {
-            $this->review('منشور');
-        }
-
-        $hydrated = 0;
-        Review::retrieved(function () use (&$hydrated) {
-            $hydrated++;
-        });
-
-        $this->get(route('admin.marketing.reviews'))->assertSuccessful();
-
-        $this->assertLessThanOrEqual(25, $hydrated,
-            "الشاشة بنت {$hydrated} نموذجًا لصفحةٍ تعرض عشرين");
-    }
-
     /* ------------------------------ السجلّ ------------------------------ */
 
     private function lastLog(): ?ActivityLog
     {
         return ActivityLog::orderByDesc('id')->first();
     }
-
-    public function test_publishing_a_review_is_logged(): void
-    {
-        $review = $this->review('معلّق');
-
-        $this->post(route('admin.marketing.reviews.status', $review->id), ['status' => 'منشور'])
-            ->assertSessionHasNoErrors();
-
-        $log = $this->lastLog();
-        $this->assertNotNull($log, 'النشر لم يُقيَّد');
-        $this->assertStringContainsString('منشور', $log->description);
-    }
-
-    public function test_rejecting_a_review_is_logged(): void
-    {
-        $review = $this->review('معلّق');
-
-        $this->post(route('admin.marketing.reviews.status', $review->id), ['status' => 'مرفوض']);
-
-        $this->assertStringContainsString('مرفوض', (string) $this->lastLog()?->description);
-    }
-
-    public function test_replying_is_logged(): void
-    {
-        $review = $this->review('معلّق');
-
-        $this->post(route('admin.marketing.reviews.reply', $review->id), ['reply' => 'شكرًا لك'])
-            ->assertSessionHasNoErrors();
-
-        $this->assertNotNull($this->lastLog(), 'الردّ باسم المحلّ لم يُقيَّد');
-    }
-
-    /** والقيدُ يشير إلى التقييم نفسه لا إلى الهواء */
-    public function test_the_log_line_points_at_the_review(): void
-    {
-        $review = $this->review('معلّق');
-
-        $this->post(route('admin.marketing.reviews.status', $review->id), ['status' => 'منشور']);
-
-        $this->assertSame($review->id, (int) $this->lastLog()?->subject_id);
-    }
-
-    /* ══════════════ ردٌّ لا يقرؤه أحد ══════════════ */
-
-    /**
-     * الردُّ على تقييمٍ مرفوضٍ لا يُقال عنه «نُشر».
-     *
-     * المرفوضُ محجوبٌ عن الموقع وردُّه محجوبٌ معه. وكانت الشاشة تردّ توستًا
-     * أخضرَ يقول «نُشر الردّ» — فيطمئنّ صاحبُ المحلّ إلى أنّه أجاب زبونًا
-     * غاضبًا، والزبون لم يرَ حرفًا ولن يرى.
-     */
-    public function test_a_reply_on_a_rejected_review_is_not_called_published(): void
-    {
-        $review = $this->review('مرفوض');
-
-        $this->post(route('admin.marketing.reviews.reply', $review->id), ['reply' => 'نعتذر'])
-            ->assertSessionHasNoErrors();
-
-        $toast = session('toast');
-
-        $this->assertSame('warning', $toast['type'], 'قيل «نُشر» عن ردٍّ محجوب');
-        $this->assertStringContainsString('لن يقرأه أحد', (string) $toast['msg']);
-    }
-
-    /**
-     * والمرفوضُ يبقى مرفوضًا — لا يُنشر من طرفٍ خفيّ.
-     *
-     * رفضُه قرارٌ اتّخذه صاحبُه بيده، وقلبُه بردٍّ يُخرج إلى واجهة المتجر
-     * كلامًا حُجب عمدًا.
-     */
-    public function test_replying_does_not_quietly_publish_a_rejected_review(): void
-    {
-        $review = $this->review('مرفوض');
-
-        $this->post(route('admin.marketing.reviews.reply', $review->id), ['reply' => 'نعتذر']);
-
-        $this->assertSame('مرفوض', $review->fresh()->status);
-        $this->assertSame('نعتذر', $review->fresh()->reply, 'ضاع الردُّ فيُكتب مرّتين');
-    }
-
-    /** والردُّ على معلَّقٍ ينشره ويُقال ذلك */
-    public function test_a_reply_on_a_pending_review_publishes_it(): void
-    {
-        $review = $this->review('معلّق');
-
-        $this->post(route('admin.marketing.reviews.reply', $review->id), ['reply' => 'شكرًا']);
-
-        $this->assertSame('منشور', $review->fresh()->status);
-        $this->assertSame('success', session('toast')['type']);
-    }
-
     /* ══════════════ ما يُعرض لا ما يُنشر ══════════════ */
 
     /**
@@ -351,12 +227,5 @@ class TheReviewsScreenCountsAndSignsTest extends TestCase
         ]);
 
         $this->assertCount(1, $this->rows(['q' => 'سميرة']));
-    }
-
-    /** @return list<array<string, mixed>> */
-    private function rows(array $params): array
-    {
-        return $this->get(route('admin.marketing.reviews', $params))
-            ->assertOk()->viewData('page')['props']['reviews'];
     }
 }

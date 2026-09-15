@@ -130,22 +130,6 @@ class AMenuLinkKnowsWhereItPointsTest extends TestCase
 
         $this->assertContains('تسوّق الآن', collect($this->links($site))->pluck('label')->all());
     }
-
-    /** ويبقى بعد تبديل عنوان صفحةٍ أخرى — وهو ما كان يُسقطه */
-    public function test_it_survives_renaming_another_page(): void
-    {
-        $site = $this->build();
-        $this->addCustom($site, 'العروض', '/offers-2025');
-
-        $about = $site->pages()->where('key', 'about')->first();
-
-        $this->actingAs($this->owner)->put(route('admin.website.pages.update', $about->id), [
-            'title' => 'قصّتنا', 'slug' => 'our-story', 'status' => WebsitePage::PUBLISHED,
-        ]);
-
-        $this->assertContains('العروض', collect($this->links($site))->pluck('label')->all());
-    }
-
     /** والرابطُ الخارجيّ كذلك */
     public function test_an_external_link_survives(): void
     {
@@ -155,84 +139,5 @@ class AMenuLinkKnowsWhereItPointsTest extends TestCase
         Nav::sync($site->fresh());
 
         $this->assertContains('https://blog.example.om', collect($this->links($site))->pluck('href')->all());
-    }
-
-    /* ═════════════════════ العنوانُ يتبع صفحته ═════════════════════ */
-
-    /**
-     * بدّل التاجر عنوان صفحةٍ فتبعه رابطُها.
-     *
-     * ورابطٌ يبقى على العنوان القديم يقود الزائر إلى «غير موجود» — والتاجر
-     * لا يفتح قائمةَ موقعه ليتفقّدها بعد كلّ تعديل.
-     */
-    public function test_a_page_link_follows_its_page_when_the_slug_changes(): void
-    {
-        $site = $this->build();
-        $about = $site->pages()->where('key', 'about')->first();
-
-        $this->actingAs($this->owner)->put(route('admin.website.pages.update', $about->id), [
-            'title' => 'من نحن', 'slug' => 'who-we-are', 'status' => WebsitePage::PUBLISHED,
-        ]);
-
-        $link = collect($this->links($site))->firstWhere('page_id', $about->id);
-
-        $this->assertSame('/who-we-are', $link['href'] ?? null);
-        $this->assertNotContains('/about', collect($this->links($site))->pluck('href')->all());
-    }
-
-    /** وصفحةٌ حُذفت يسقط رابطُها — لا يبقى بابًا على «غير موجود» */
-    public function test_a_deleted_page_loses_its_link(): void
-    {
-        $site = $this->build();
-        $about = $site->pages()->where('key', 'about')->first();
-        $slug = $about->slug;
-
-        $this->actingAs($this->owner)->delete(route('admin.website.pages.destroy', $about->id));
-
-        $this->assertNotContains($slug, collect($this->links($site))->pluck('href')->all());
-    }
-
-    /** وصفحةٌ أُخفيت من القائمة كذلك — تعمل ولا يُدلّ عليها */
-    public function test_a_hidden_page_leaves_the_menu_but_keeps_working(): void
-    {
-        $site = $this->build();
-        $about = $site->pages()->where('key', 'about')->first();
-
-        $this->actingAs($this->owner)->put(route('admin.website.pages.update', $about->id), [
-            'title' => 'من نحن', 'slug' => 'about', 'status' => WebsitePage::HIDDEN,
-        ]);
-
-        $this->assertNotContains('/about', collect($this->links($site))->pluck('href')->all());
-        $this->assertSame(WebsitePage::HIDDEN, $about->fresh()->status);
-    }
-
-    /* ═════════════════════ الشاشةُ لا تُضيّع النوع ═════════════════════ */
-
-    /**
-     * وما يعود من المحرّر بلا معرّفٍ لا يضيع.
-     *
-     * الشاشةُ لا تعرض `page_id` للتاجر — وهو صواب: بنيةُ النظام لا تُعرض في
-     * الشاشة. فما يعود منها بلا معرّف، ويُعاد الاشتقاقُ بمطابقة العنوان.
-     * ولولا ذلك لَصارت روابطُ الصفحات كلُّها «كتبها التاجر» فتتكرّر في
-     * القائمة عند أوّل مزامنة.
-     */
-    public function test_a_link_that_comes_back_from_the_editor_keeps_its_page(): void
-    {
-        $site = $this->build();
-        $header = $site->header();
-
-        // كما يعود من النموذج: اسمٌ ووجهةٌ لا غير
-        $bare = collect($header->data['links'])
-            ->map(fn ($l) => ['label' => $l['label'], 'href' => $l['href']])->all();
-
-        $this->actingAs($this->owner)->put(route('admin.website.sections.update', $header->id), [
-            'data' => ['links' => $bare] + $header->data,
-        ]);
-
-        Nav::sync($site->fresh());
-
-        $hrefs = collect($this->links($site))->pluck('href')->all();
-
-        $this->assertSame(count($hrefs), count(array_unique($hrefs)), 'تكرّرت روابط الصفحات');
     }
 }

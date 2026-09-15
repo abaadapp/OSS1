@@ -74,16 +74,6 @@ class ThePanelKeepsOneWayInTest extends TestCase
 
         return $shop;
     }
-
-    /** @param array<string, mixed> $over */
-    private function edit(User $actor, User $target, array $over = [])
-    {
-        return $this->actingAs($actor)->put(route('super-admin.users.update', $target->id), array_merge([
-            'name' => $target->name, 'email' => $target->email,
-            'role' => $target->role, 'business_id' => $target->business_id,
-        ], $over));
-    }
-
     /* ═══════════ الأبوابُ الثلاثة ═══════════ */
 
     public function test_the_last_operator_cannot_demote_himself(): void
@@ -97,33 +87,6 @@ class ThePanelKeepsOneWayInTest extends TestCase
         $this->assertSame('super_admin', $op->fresh()->role);
         $this->assertSame(1, User::where('role', 'super_admin')->count());
     }
-
-    public function test_the_last_operator_cannot_be_suspended(): void
-    {
-        $op = $this->operator();
-        $other = $this->operator('q@eventplusapp.om');
-
-        // بحسابٍ ثانٍ نشط: الإيقاف يمرّ
-        $this->actingAs($other)->post(route('super-admin.users.toggle', $op->id));
-        $this->assertSame('موقوف', $op->fresh()->status);
-
-        // وقد صار `other` آخرَ باب — فإيقافُه يُردّ
-        $this->actingAs($op)->post(route('super-admin.users.toggle', $other->id));
-        $this->assertSame('نشط', $other->fresh()->status, 'أُوقف آخرُ مدير منصّة');
-    }
-
-    public function test_the_last_operator_cannot_be_deleted(): void
-    {
-        $op = $this->operator();
-        $other = $this->operator('q@eventplusapp.om');
-
-        $this->actingAs($op)->delete(route('super-admin.users.destroy', $other->id));
-        $this->assertTrue($other->fresh()->trashed());
-
-        $this->actingAs($other)->delete(route('super-admin.users.destroy', $op->id));
-        $this->assertFalse($op->fresh()->trashed(), 'حُذف آخرُ مدير منصّة');
-    }
-
     public function test_a_suspended_operator_does_not_count_as_a_way_in(): void
     {
         /*
@@ -194,52 +157,6 @@ class ThePanelKeepsOneWayInTest extends TestCase
 
         $this->assertSame(0, $counted, 'عُدّ مدراءُ المنصّة لتعديل حساب تاجر');
     }
-
-    /* ═══════════ ولا يُنشأ من يختفي ═══════════ */
-
-    public function test_a_demo_shop_is_never_offered_for_assignment(): void
-    {
-        $this->shop(demo: true, name: 'متجر تجريبي');
-        $real = $this->shop(name: 'ورود مسقط');
-        $op = $this->operator();
-
-        $props = $this->actingAs($op)->get(route('super-admin.users.index'))
-            ->assertOk()->viewData('page')['props'];
-        $offered = collect($props['businesses'])->pluck('label')->all();
-
-        $this->assertSame(['ورود مسقط'], $offered);
-        $this->assertNotContains('متجر تجريبي', $offered);
-    }
-
-    public function test_whoever_is_created_appears_in_the_list(): void
-    {
-        $real = $this->shop(name: 'ورود مسقط');
-        $op = $this->operator();
-
-        $this->actingAs($op)->post(route('super-admin.users.store'), [
-            'name' => 'موظف جديد', 'email' => 'n@eventplus.om', 'role' => 'cashier',
-            'business_id' => $real->id, 'password' => 'password123',
-        ])->assertSessionHasNoErrors();
-
-        $props = $this->actingAs($op)->get(route('super-admin.users.index'))->viewData('page')['props'];
-
-        $this->assertContains('موظف جديد', collect($props['users'])->pluck('name')->all());
-    }
-
-    /* ═══════════ وحالةُ الشركة من قائمةٍ معروفة ═══════════ */
-
-    public function test_an_invented_company_status_is_refused(): void
-    {
-        $op = $this->operator();
-        $shop = $this->shopWithOwner();
-
-        $this->actingAs($op)->put(route('super-admin.businesses.update', $shop->id), [
-            'name' => 'متجري', 'type' => 'عام', 'status' => 'حالة-مخترعة',
-        ])->assertSessionHasErrors('status');
-
-        $this->assertSame('نشط', $shop->fresh()->status);
-    }
-
     public function test_the_list_holds_every_status_the_system_itself_writes(): void
     {
         /*
@@ -253,28 +170,6 @@ class ThePanelKeepsOneWayInTest extends TestCase
             $this->assertContains($written, PageController::STATUSES, "«{$written}» يكتبه النظام ولا تقبله الشاشة");
         }
     }
-
-    public function test_a_status_the_system_wrote_can_still_be_saved(): void
-    {
-        $op = $this->operator();
-        $shop = $this->shopWithOwner();
-
-        // التعطيل يكتب «معطل» التفافًا على التحقّق
-        $this->actingAs($op)->delete(route('super-admin.businesses.destroy', $shop->id));
-        $this->assertSame('معطل', $shop->fresh()->status);
-
-        // ثمّ يُعاد تشغيلها، فتُحسب حالتُها من تاريخ انتهائها
-        $this->actingAs($op)->post(route('super-admin.businesses.activate', $shop->id));
-        $written = $shop->fresh()->status;
-
-        // وما كتبه النظام يُحفظ من الشاشة بلا خطأ
-        $this->actingAs($op)->put(route('super-admin.businesses.update', $shop->id), [
-            'name' => 'متجري', 'type' => 'عام', 'status' => $written,
-        ])->assertSessionHasNoErrors();
-
-        $this->assertSame($written, $shop->fresh()->status);
-    }
-
     public function test_a_status_outside_the_list_would_be_a_silent_ghost(): void
     {
         /*

@@ -69,16 +69,6 @@ class ProductAddonsTest extends TestCase
         ]);
 
     }
-
-    private function sell(array $items, int $expect = 200): \Illuminate\Testing\TestResponse
-    {
-        return $this->actingAs($this->cashier)->postJson('/pos/checkout', [
-            'items' => $items,
-            'payment_method' => 'نقدي',
-            'client_uuid' => uniqid('a', true),
-        ])->assertStatus($expect);
-    }
-
     private function allow(array $addonIds): void
     {
         $this->actingAs($this->owner)
@@ -316,23 +306,6 @@ class ProductAddonsTest extends TestCase
 
         $this->assertEqualsWithDelta(18.0, (float) $order->fresh()->subtotal, 0.0005);
     }
-
-    public function test_the_receipt_shows_the_addons_under_their_item(): void
-    {
-        $this->sell([[
-            'id' => $this->bouquet->id, 'name' => 'بوكيه', 'qty' => 1,
-            'addons' => [['addon_id' => $this->chocolate->id, 'qty' => 1]],
-        ]]);
-
-        $order = Order::latest('id')->firstOrFail();
-        $details = $this->actingAs($this->cashier)->withSession(['pos_cashier_id' => $this->cashier->id])
-            ->get(route('pos.order-details', $order->number))->assertOk();
-
-        $details->assertInertia(fn ($page) => $page
-            ->where('order.items.0.addons.0.name', 'شوكولاتة')
-            ->where('order.items.0.addons.0.qty', 1));
-    }
-
     /* ==================== الإضافة الخاصّة بمنتجٍ واحد ==================== */
 
     /**

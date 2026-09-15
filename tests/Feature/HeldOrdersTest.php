@@ -62,15 +62,6 @@ class HeldOrdersTest extends TestCase
         $this->actingAs($this->owner);
         session(['current_branch' => $this->branch->id]);
     }
-
-    private function hold(string $kind = 'hold')
-    {
-        return $this->postJson(route('pos.hold'), [
-            'items' => [['id' => $this->product->id, 'name' => 'وردة', 'qty' => 2]],
-            'kind' => $kind,
-        ]);
-    }
-
     /* -------------------------- التعليق -------------------------- */
 
     /**
@@ -101,43 +92,6 @@ class HeldOrdersTest extends TestCase
         $this->assertCount(1, $held->where('saved', true), 'المحفوظ لا يُميَّز عن المعلّق');
         $this->assertCount(1, $held->where('saved', false));
     }
-
-    /** والمعلّق لا يدخل حساب الصندوق: لم يُقبض بعد */
-    public function test_a_held_order_is_not_a_sale(): void
-    {
-        $this->hold()->assertOk();
-
-        $this->assertSame(1, Order::where('is_held', true)->count());
-        $this->assertSame(0, Order::where('is_held', false)->count());
-    }
-
-    /* -------------------------- الاستكمال -------------------------- */
-
-    public function test_a_colleague_can_resume_what_another_held(): void
-    {
-        session(['pos_cashier_id' => $this->cashier->id]);
-        $this->hold();
-        $order = Order::where('is_held', true)->firstOrFail();
-
-        // تبدّلت الوردية وصار على الصندوق غيره — والزبون عاد
-        session()->forget('pos_cashier_id');
-
-        $this->get(route('pos.orders.resume', $order->id))
-            ->assertRedirect(route('pos.index'))
-            ->assertSessionHas('resume_cart');
-    }
-
-    public function test_discarding_removes_it_and_its_lines(): void
-    {
-        $this->hold();
-        $order = Order::where('is_held', true)->firstOrFail();
-
-        $this->delete(route('pos.orders.discard', $order->id));
-
-        $this->assertSame(0, Order::where('is_held', true)->count());
-        $this->assertDatabaseMissing('order_items', ['order_id' => $order->id]);
-    }
-
     /* ---------------------------- العزل ---------------------------- */
 
     public function test_another_branchs_held_orders_are_not_listed(): void

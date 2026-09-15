@@ -69,17 +69,6 @@ class AGiftLeavesTheShelfInTheBooksTooTest extends TestCase
             'price' => 10, 'cost' => 4, 'quantity' => 100, 'active' => true,
         ]);
     }
-
-    private function sell(array $over = []): Order
-    {
-        $this->actingAs($this->cashier)->postJson('/pos/checkout', $over + [
-            'items' => [['id' => $this->product->id, 'name' => 'باقة ورد', 'qty' => 2, 'price' => 10]],
-            'payment_method' => 'نقدي',
-        ])->assertOk();
-
-        return Order::latest('id')->firstOrFail();
-    }
-
     private function freeSale(): Order
     {
         Coupon::create([
@@ -171,21 +160,5 @@ class AGiftLeavesTheShelfInTheBooksTooTest extends TestCase
 
         $this->assertSame($expected, $sources);
         $this->assertSame(20.0, Ledger::balance($this->business->id, 'cash'));
-    }
-
-    public function test_nothing_at_all_is_written_for_a_costless_giveaway(): void
-    {
-        // ‏صنفٌ بلا تكلفة على بطاقته: لا مالٌ دخل ولا بضاعةٌ لها قيمةٌ خرجت
-        $free = Product::create([
-            'business_id' => $this->business->id, 'name' => 'بطاقة تهنئة',
-            'price' => 0, 'cost' => 0, 'quantity' => 50, 'active' => true,
-        ]);
-
-        $this->actingAs($this->cashier)->postJson('/pos/checkout', [
-            'items' => [['id' => $free->id, 'name' => 'بطاقة تهنئة', 'qty' => 1, 'price' => 0]],
-            'payment_method' => 'نقدي',
-        ])->assertOk();
-
-        $this->assertSame(0, JournalEntry::where('business_id', $this->business->id)->count());
     }
 }

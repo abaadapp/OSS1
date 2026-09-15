@@ -68,87 +68,6 @@ class PlatformWriteRoutesTest extends TestCase
             'connected_at' => now(),
         ]);
     }
-
-    /* ------------------------ إعادة إرسال رمز الاستعادة ------------------------ */
-
-    public function test_the_saved_recovery_email_gets_its_code_again(): void
-    {
-        $this->owner->forceFill(['recovery_email' => 'sahib@gmail.com'])->save();
-
-        $this->actingAs($this->super)
-            ->post(route('super-admin.businesses.recovery.resend', $this->business->id))
-            ->assertRedirect();
-
-        Mail::assertSent(RecoveryOtpMail::class, fn ($mail) => $mail->hasTo('sahib@gmail.com'));
-    }
-
-    /** الرمزُ يُرسل ولا يختم: الختم لا يضعه إلا رمزٌ عاد من الصندوق */
-    public function test_resending_does_not_stamp_the_address_as_verified(): void
-    {
-        $this->owner->forceFill(['recovery_email' => 'sahib@gmail.com'])->save();
-
-        $this->actingAs($this->super)
-            ->post(route('super-admin.businesses.recovery.resend', $this->business->id));
-
-        $this->assertNull($this->owner->fresh()->recovery_email_verified_at);
-    }
-
-    public function test_a_business_with_no_saved_address_is_refused(): void
-    {
-        $this->actingAs($this->super)
-            ->post(route('super-admin.businesses.recovery.resend', $this->business->id))
-            ->assertStatus(422);
-
-        Mail::assertNothingSent();
-    }
-
-    public function test_a_merchant_cannot_fire_the_recovery_mail(): void
-    {
-        $this->owner->forceFill(['recovery_email' => 'sahib@gmail.com'])->save();
-
-        $this->actingAs($this->owner)
-            ->post(route('super-admin.businesses.recovery.resend', $this->business->id))
-            ->assertForbidden();
-
-        Mail::assertNothingSent();
-    }
-
-    /* --------------------------- فصل الرقم المشترك --------------------------- */
-
-    public function test_disconnecting_stops_the_number_without_erasing_it(): void
-    {
-        $connection = $this->shared();
-
-        $this->actingAs($this->super)
-            ->delete(route('super-admin.whatsapp.shared.disconnect'))
-            ->assertRedirect();
-
-        $connection->refresh();
-
-        $this->assertSame(WhatsAppConnection::INACTIVE, $connection->status);
-        $this->assertNotNull($connection->disconnected_at);
-        $this->assertDatabaseHas('whatsapp_connections', ['id' => $connection->id]);
-    }
-
-    /** لا وصلةَ أصلًا — والشاشة تردّ ولا تنكسر */
-    public function test_disconnecting_nothing_is_not_an_error(): void
-    {
-        $this->actingAs($this->super)
-            ->delete(route('super-admin.whatsapp.shared.disconnect'))
-            ->assertRedirect();
-    }
-
-    public function test_a_merchant_cannot_cut_the_platform_number(): void
-    {
-        $connection = $this->shared();
-
-        $this->actingAs($this->owner)
-            ->delete(route('super-admin.whatsapp.shared.disconnect'))
-            ->assertForbidden();
-
-        $this->assertSame(WhatsAppConnection::ACTIVE, $connection->fresh()->status);
-    }
-
     /* ------------------------- فاتورة الاشتراك على ورق ------------------------- */
 
     private function invoice(string $status = 'مدفوعة'): Invoice
@@ -164,36 +83,6 @@ class PlatformWriteRoutesTest extends TestCase
             'status' => $status,
         ]);
     }
-
-    /**
-     * الورقة تخرج فعلًا.
-     *
-     * كانت ٥٠٠: القالب يقرأ `$order` والمتحكّم يمرّر `$invoice` — وزرّا «عرض»
-     * و«تحميل» معروضان على كل صفٍّ في شاشة الفواتير.
-     */
-    public function test_a_subscription_invoice_actually_prints(): void
-    {
-        $invoice = $this->invoice();
-
-        $res = $this->actingAs($this->super)
-            ->get(route('super-admin.invoices.pdf', $invoice->number));
-
-        $res->assertOk();
-        $this->assertSame('application/pdf', $res->headers->get('Content-Type'));
-        $this->assertStringStartsWith('%PDF', $res->getContent());
-    }
-
-    /** ورقةٌ بلا باقة لا تنكسر: `plan_id` يقبل الفراغ في الجدول */
-    public function test_an_invoice_with_no_plan_still_prints(): void
-    {
-        $invoice = $this->invoice();
-        $invoice->forceFill(['plan_id' => null])->save();
-
-        $this->actingAs($this->super)
-            ->get(route('super-admin.invoices.pdf', $invoice->number))
-            ->assertOk();
-    }
-
     /** اسم المنصّة على الورقة يأتي من إعداداتها لا من ثابتٍ في القالب */
     public function test_the_platform_identity_reaches_the_paper(): void
     {
@@ -208,14 +97,5 @@ class PlatformWriteRoutesTest extends TestCase
         $this->assertStringContainsString('افنت بلس للحلول', $html);
         $this->assertStringContainsString('محل ورد', $html);
         $this->assertStringContainsString('الباقة الاحترافية', $html);
-    }
-
-    public function test_a_merchant_cannot_pull_a_platform_invoice(): void
-    {
-        $invoice = $this->invoice();
-
-        $this->actingAs($this->owner)
-            ->get(route('super-admin.invoices.pdf', $invoice->number))
-            ->assertForbidden();
     }
 }

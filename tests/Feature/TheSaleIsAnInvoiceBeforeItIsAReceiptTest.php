@@ -117,23 +117,6 @@ class TheSaleIsAnInvoiceBeforeItIsAReceiptTest extends TestCase
         $strip->assertOk();
         $this->assertSame(80.0, $this->pageWidth($strip->getContent()));
     }
-
-    /**
-     * وصندوقُ البيع يطبع شريطَه لا فاتورةَ A4.
-     *
-     * فاتورةٌ بعرض ٢١ سنتيمترًا على طابعةٍ حراريّةٍ تخرج مقصوصةً من الحافّة
-     * — أو لا تخرج. والزبونُ واقفٌ ينتظر ورقته.
-     */
-    public function test_the_till_prints_the_strip(): void
-    {
-        $order = $this->order();
-
-        $receipt = $this->actingAs($this->owner)->get(route('pos.receipt.pdf', $order->number));
-
-        $receipt->assertOk();
-        $this->assertSame(80.0, $this->pageWidth($receipt->getContent()));
-    }
-
     /* ═══════════════════ ولا إعدادَ يُمحى ═══════════════════ */
 
     /**

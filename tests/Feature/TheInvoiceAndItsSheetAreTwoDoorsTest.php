@@ -65,19 +65,6 @@ class TheInvoiceAndItsSheetAreTwoDoorsTest extends TestCase
         $this->actingAs($this->owner);
         session(['current_branch' => $this->branch->id]);
     }
-
-    /** بيعةٌ حقيقيّة من الصندوق — لا صفٌّ يُركَّب باليد */
-    private function sell(int $qty = 3): Order
-    {
-        $this->postJson(route('pos.checkout'), [
-            'items' => [['id' => $this->product->id, 'name' => 'باقة ورد', 'qty' => $qty]],
-            'payment_method' => 'نقدي',
-            'customer' => 'خالد',
-        ])->assertOk();
-
-        return Order::where('business_id', $this->business->id)->latest('id')->firstOrFail();
-    }
-
     /** موظّفٌ بدورٍ بعينه وصلاحياتٍ مكتوبةٍ بيدها */
     private function staff(string $role, ?array $permissions = null): User
     {
@@ -87,88 +74,6 @@ class TheInvoiceAndItsSheetAreTwoDoorsTest extends TestCase
             'permissions' => $permissions,
         ]);
     }
-
-    /* ==================== البابُ يُدير شيئًا ==================== */
-
-    /**
-     * تُصحَّح الكميّة من شاشة المبيعات — والفاتورةُ والرفُّ والأثر تتحرّك معًا.
-     *
-     * وهذا هو الفعلُ الذي لم يكن له بابٌ من هنا أصلًا.
-     */
-    public function test_a_line_is_corrected_from_the_sales_screen(): void
-    {
-        $order = $this->sell(3);
-        $item = $order->items()->firstOrFail();
-        $stockAfterSale = (int) $this->product->fresh()->quantity;
-
-        $this->put(route('admin.orders.items.update', [$order->number, $item->id]), [
-            'quantity' => 1,
-            'reason' => 'أدخلتُ الكمية خطأً',
-        ])->assertRedirect();
-
-        $this->assertSame(1, (int) $item->fresh()->quantity);
-        // وقطعتان تعودان إلى الرفّ — لا الفاتورةُ وحدها تُكتب
-        $this->assertSame($stockAfterSale + 2, (int) $this->product->fresh()->quantity);
-        // والأثرُ يبقى باسم من صحّح وبسببه
-        $edit = OrderEdit::where('order_id', $order->id)->firstOrFail();
-        $this->assertSame('أدخلتُ الكمية خطأً', $edit->reason);
-        $this->assertSame(3, (int) $edit->qty_before);
-        $this->assertSame(1, (int) $edit->qty_after);
-    }
-
-    /** وتُصحَّح وسيلةُ الدفع من الشاشة نفسها */
-    public function test_the_payment_method_is_corrected_from_the_sales_screen(): void
-    {
-        $order = $this->sell();
-
-        $this->put(route('admin.orders.payment.update', $order->number), [
-            'payment_method' => 'بطاقة',
-            'reason' => 'دفع بالبطاقة وسجّلتُها نقدًا',
-        ])->assertRedirect();
-
-        $this->assertSame('بطاقة', $order->fresh()->payment_method);
-    }
-
-    /**
-     * وسببٌ مكتوبٌ شرطُ التصحيح — لا يُصحَّح رقمٌ بلا جوابٍ عن «لماذا؟».
-     *
-     * وحارسُه في الخادم لا في النموذج: من نادى المسار دون الشاشة يُردّ.
-     */
-    public function test_a_correction_without_a_reason_is_refused(): void
-    {
-        $order = $this->sell(3);
-        $item = $order->items()->firstOrFail();
-
-        $this->put(route('admin.orders.items.update', [$order->number, $item->id]), [
-            'quantity' => 1,
-            'reason' => '',
-        ])->assertSessionHasErrors('reason');
-
-        $this->assertSame(3, (int) $item->fresh()->quantity);
-    }
-
-    /* ==================== وحكمُه حكمُ الكاشير لا أوسع ==================== */
-
-    /**
-     * من لا يملك `order.edit` يُردّ — ولو ملك قسم المبيعات كلَّه.
-     *
-     * وهذا هو الخطرُ الذي يجرّه بابٌ جديد: قسمُ «المبيعات» يُمنح لمن يتابع
-     * الطلبات، وصلاحيةُ إعادة كتابة فاتورةٍ صدرت شيءٌ آخر.
-     */
-    public function test_the_sales_section_alone_does_not_rewrite_an_issued_invoice(): void
-    {
-        $order = $this->sell(3);
-        $item = $order->items()->firstOrFail();
-
-        $this->actingAs($this->staff('cashier', ['orders']))
-            ->put(route('admin.orders.items.update', [$order->number, $item->id]), [
-                'quantity' => 1,
-                'reason' => 'محاولةُ من لا يملكها',
-            ])->assertSessionHasErrors('permission');
-
-        $this->assertSame(3, (int) $item->fresh()->quantity);
-    }
-
     /** ولا يراه في شاشته أصلًا: بابٌ لا يُعرض خيرٌ من بابٍ يُقال لصاحبه «ليست لك» */
     public function test_the_door_is_not_drawn_for_who_may_not_open_it(): void
     {
@@ -189,54 +94,6 @@ class TheInvoiceAndItsSheetAreTwoDoorsTest extends TestCase
         $this->get(route('admin.orders.show', $order->number))
             ->assertInertia(fn ($page) => $page->where('invoiceEdit.can', true));
     }
-
-    /**
-     * وفاتورةُ أمسٍ تُقرأ ولا تُصحَّح — والزرُّ يقول لمَ قبل الضغط.
-     *
-     * وطرفا الحدّ يُحرسان معًا: الشاشةُ تقوله، والخادمُ يردّ من نادى المسار.
-     */
-    public function test_yesterdays_invoice_says_why_before_the_click_and_refuses_after(): void
-    {
-        $order = $this->sell(3);
-        $item = $order->items()->firstOrFail();
-        $order->forceFill(['ordered_at' => now()->subDay()])->save();
-
-        $this->get(route('admin.orders.show', $order->number))
-            ->assertInertia(fn ($page) => $page
-                ->where('invoiceEdit.can', false)
-                // ونصٌّ مكتوب لا `null`: زرٌّ معطَّلٌ بلا سببٍ بابٌ معروضٌ لا يُفتح
-                ->where('invoiceEdit.reason', 'تعديل الفاتورة — انتهى يومها'));
-
-        $this->put(route('admin.orders.items.update', [$order->number, $item->id]), [
-            'quantity' => 1,
-            'reason' => 'محاولةٌ بعد اليوم',
-        ])->assertSessionHasErrors('quantity');
-
-        $this->assertSame(3, (int) $item->fresh()->quantity);
-    }
-
-    /** وفاتورةُ متجرٍ آخر لا تُفتح بمعرّفٍ مُخمَّن */
-    public function test_another_shops_invoice_is_not_corrected(): void
-    {
-        $order = $this->sell(3);
-        $item = $order->items()->firstOrFail();
-
-        $other = Business::create(['name' => 'محل آخر', 'status' => 'نشط']);
-        Branch::create(['business_id' => $other->id, 'name' => 'الرئيسي']);
-        $stranger = User::create([
-            'business_id' => $other->id, 'name' => 'غريب', 'email' => 'x@eventplus.om',
-            'password' => bcrypt('password12345'), 'role' => 'admin', 'status' => 'نشط',
-        ]);
-
-        $this->actingAs($stranger)
-            ->put(route('admin.orders.items.update', [$order->number, $item->id]), [
-                'quantity' => 1,
-                'reason' => 'من متجرٍ آخر',
-            ])->assertNotFound();
-
-        $this->assertSame(3, (int) $item->fresh()->quantity);
-    }
-
     /* ==================== والبابان لم يختلطا ==================== */
 
     /**
@@ -263,24 +120,6 @@ class TheInvoiceAndItsSheetAreTwoDoorsTest extends TestCase
         $this->assertSame('سارة', $order->recipient_name);
         $this->assertSame($before, (float) $order->total);
     }
-
-    /** وتصحيحُ الفاتورة لا يمسّ ورقتَها */
-    public function test_correcting_the_invoice_leaves_the_sheet_alone(): void
-    {
-        $order = $this->sell(3);
-        $order->forceFill(['recipient_name' => 'سارة', 'card_message' => 'كل عام وأنتِ بخير'])->save();
-        $item = $order->items()->firstOrFail();
-
-        $this->put(route('admin.orders.items.update', [$order->number, $item->id]), [
-            'quantity' => 1,
-            'reason' => 'أدخلتُ الكمية خطأً',
-        ])->assertRedirect();
-
-        $order->refresh();
-        $this->assertSame('سارة', $order->recipient_name);
-        $this->assertSame('كل عام وأنتِ بخير', $order->card_message);
-    }
-
     /* ==================== وما تحتاجه الشاشة ليُنادى الباب ==================== */
 
     /**

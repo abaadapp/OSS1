@@ -60,47 +60,6 @@ class SweptDefectsTest extends TestCase
             ]);
         }
     }
-
-    public function test_a_board_that_fits_says_nothing_about_a_cap(): void
-    {
-        // لافتةٌ تظهر بلا سبب تُدرَّب العينُ على تجاهلها، فلا تُرى يوم تلزم
-        $this->awaiting(3);
-
-        $this->actingAs($this->owner)->get(route('admin.preparation.index'))
-            ->assertInertia(fn ($p) => $p->has('orders', 3)->where('truncated', null));
-    }
-
-    public function test_a_board_cut_at_its_cap_says_how_many_it_hid(): void
-    {
-        /*
-         * كانت تنتهي صامتة: العدّاد فوقها يقول «٢٥٠» والقائمة تحته تنتهي عند
-         * المئتين، فيقرأ من يجهّز آخرَ بطاقةٍ ويظنّ أنّه فرغ. والفرق بين
-         * «فرغتُ» و«بقي خمسون» هو الفرق بين باقةٍ تصل وباقةٍ لا تصل.
-         */
-        $this->awaiting(205);
-
-        $this->actingAs($this->owner)->get(route('admin.preparation.index'))
-            ->assertInertia(fn ($p) => $p
-                ->has('orders', 200)
-                ->where('truncated.shown', 200)
-                ->where('truncated.total', 205)
-                ->etc());
-    }
-
-    public function test_the_count_follows_the_filter_the_board_is_showing(): void
-    {
-        /*
-         * والعدّ على الاستعلام نفسه بنافذته لا على «الكلّ» فوقه: رقمٌ يقول
-         * «بقي خمسون» تحت تبويبٍ فيه ثلاثة يُرسل من يجهّز يبحث عمّا ليس هناك.
-         */
-        $this->awaiting(205, daysAhead: 3);
-        $this->awaiting(2, daysAhead: 1);
-
-        $this->actingAs($this->owner)
-            ->get(route('admin.preparation.index', ['when' => 'tomorrow']))
-            ->assertInertia(fn ($p) => $p->has('orders', 2)->where('truncated', null));
-    }
-
     /* ==================== البحث يعرف محرّكه ==================== */
 
     public function test_the_operator_follows_the_engine_not_the_test_bench(): void

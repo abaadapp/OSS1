@@ -57,17 +57,6 @@ class CurrencyDisplayTest extends TestCase
         ]);
 
     }
-
-    private function sell(): \App\Models\Order
-    {
-        $this->postJson(route('pos.checkout'), [
-            'items' => [['id' => $this->product->id, 'name' => $this->product->name, 'qty' => 1]],
-            'payment_method' => 'نقدي',
-        ])->assertOk();
-
-        return \App\Models\Order::where('business_id', $this->business->id)->latest('id')->firstOrFail();
-    }
-
     public function test_switching_display_currency_does_not_change_what_is_recorded(): void
     {
         $this->actingAs($this->owner);

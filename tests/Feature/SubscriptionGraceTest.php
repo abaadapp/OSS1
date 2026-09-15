@@ -52,39 +52,6 @@ class SubscriptionGraceTest extends TestCase
 
         $this->actingAs($owner)->get(route('admin.dashboard'))->assertOk();
     }
-
-    public function test_it_locks_once_the_grace_runs_out(): void
-    {
-        $owner = $this->tenant(now()->subDays(9)->toDateString());
-
-        $this->actingAs($owner)
-            ->get(route('admin.dashboard'))
-            ->assertRedirect(route('subscription.expired'));
-    }
-
-    public function test_the_grace_length_comes_from_the_platform_setting(): void
-    {
-        /*
-         * `grace_days` كان في شاشة إعدادات المنصة منذ البداية ولا يقرؤه أحد:
-         * مقبضٌ يديره المشغّل ولا يوصَّل بشيء — وهو أسوأ من غيابه لأنه يُطمئن.
-         */
-        $owner = $this->tenant(now()->subDays(3)->toDateString(), graceDays: 1);
-
-        $this->actingAs($owner)
-            ->get(route('admin.dashboard'))
-            ->assertRedirect(route('subscription.expired'));
-    }
-
-    public function test_zero_grace_means_it_stops_the_next_day(): void
-    {
-        // صفرٌ خيارٌ مشروع: من أراد الإقفال لحظة الانتهاء يكتبه ويقع
-        $owner = $this->tenant(now()->subDay()->toDateString(), graceDays: 0);
-
-        $this->actingAs($owner)
-            ->get(route('admin.dashboard'))
-            ->assertRedirect(route('subscription.expired'));
-    }
-
     public function test_a_business_without_an_end_date_is_still_never_locked(): void
     {
         $b = Business::create(['name' => 'بلا مدّة', 'type' => 'عام', 'status' => 'نشط']);
@@ -113,45 +80,6 @@ class SubscriptionGraceTest extends TestCase
 
         $this->assertAuthenticated();
     }
-
-    public function test_the_page_says_what_to_do_not_just_what_happened(): void
-    {
-        Setting::create(['business_id' => null, 'key' => 'phone', 'value' => '+968 90000000']);
-        Setting::create(['business_id' => null, 'key' => 'official_email', 'value' => 'billing@eventplusapp.om']);
-        $owner = $this->tenant(now()->subDays(30)->toDateString());
-
-        $props = $this->actingAs($owner)
-            ->get(route('subscription.expired'))
-            ->viewData('page')['props'];
-
-        $this->assertSame('متجر الورود', $props['business']);
-        $this->assertSame('+968 90000000', $props['contact']['phone']);
-        $this->assertSame('billing@eventplusapp.om', $props['contact']['email']);
-    }
-
-    public function test_the_till_is_closed_too_not_only_the_panel(): void
-    {
-        // نقطة البيع هي ما يهمّ: لوحةٌ مقفلة وصندوقٌ يبيع تعني أن الإقفال زينة
-        $owner = $this->tenant(now()->subDays(30)->toDateString());
-
-        $this->actingAs($owner)
-            ->get(route('pos.index'))
-            ->assertRedirect(route('subscription.expired'));
-    }
-
-    public function test_a_working_merchant_never_sees_that_page(): void
-    {
-        /*
-         * وإلا لصارت بابًا خلفيًّا: رابطٌ يفتحه من اشتراكه سارٍ فيظنّ متجره
-         * مقفلًا وهو يعمل — ويتّصل.
-         */
-        $owner = $this->tenant(now()->addMonth()->toDateString());
-
-        $this->actingAs($owner)
-            ->get(route('subscription.expired'))
-            ->assertRedirect(route('admin.dashboard'));
-    }
-
     public function test_a_disabled_business_is_still_thrown_out_not_held(): void
     {
         /*

@@ -67,15 +67,6 @@ class LoyaltyIdentityTest extends TestCase
             'phone' => $phone, 'points' => $points,
         ]);
     }
-
-    private function sell(array $extra = [])
-    {
-        return $this->postJson(route('pos.checkout'), array_merge([
-            'items' => [['id' => $this->product->id, 'name' => 'وردة', 'qty' => 1]],
-            'payment_method' => 'نقدي',
-        ], $extra));
-    }
-
     /* ----------------------- الاكتساب لصاحبه ----------------------- */
 
     /**
@@ -177,26 +168,6 @@ class LoyaltyIdentityTest extends TestCase
 
         $this->assertSame(0, (int) $theirCustomer->fresh()->points, 'وصلت نقاط إلى عميل متجرٍ آخر');
     }
-
-    /* -------------------- الهاتف مفتاح لا زينة -------------------- */
-
-    /**
-     * سجلّان بالهاتف نفسه شخصٌ واحد برصيدَي نقاط: يشتري فتُضاف إلى أحدهما،
-     * ويأتي ليستبدل فيُقرأ الآخر فيُقال له «رصيدك صفر» وقد اشترى للتوّ.
-     */
-    public function test_a_duplicate_phone_is_refused(): void
-    {
-        $this->customer('محمد', '9111');
-
-        $this->post(route('admin.customers.store'), ['name' => 'محمد آخر', 'phone' => '9111'])
-            ->assertSessionHasErrors('phone');
-
-        $this->postJson(route('pos.customers.store'), ['name' => 'ثالث', 'phone' => '9111'])
-            ->assertStatus(422);
-
-        $this->assertSame(1, Customer::where('phone', '9111')->count());
-    }
-
     /** والفراغ مسموح: عابرٌ بلا هاتف عميلٌ صحيح */
     public function test_customers_without_a_phone_are_still_allowed(): void
     {

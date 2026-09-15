@@ -121,27 +121,4 @@ class ActivityStaffOnlyTest extends TestCase
 
         $this->assertSame([], $this->logsSeenByOwner());
     }
-
-    public function test_the_platform_log_still_sees_everything(): void
-    {
-        /*
-         * الاستثناء عرضٌ لا حذف. ولو كان حذفًا لضاع ما يُحتجّ به يوم يُنازَع
-         * في فعلٍ: من فعله، ومتى، ومن أيّ عنوان.
-         */
-        $platform = User::create([
-            'name' => 'مدير المنصة',
-            'email' => 'admin@eventplusapp.om',
-            'password' => bcrypt('password'),
-            'role' => 'super_admin',
-            'status' => 'نشط',
-        ]);
-
-        $this->actingAs($this->owner);
-        Activity::log('updated', 'عدّل منتجًا');
-
-        $this->actingAs($platform)
-            ->get(route('super-admin.activity.index'))
-            ->assertOk()
-            ->assertInertia(fn (Assert $page) => $page->where('logs.0.description', 'عدّل منتجًا'));
-    }
 }

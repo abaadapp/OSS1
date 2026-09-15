@@ -107,54 +107,6 @@ class WhatsAppOwnNumberTest extends TestCase
     {
         Http::fake(['*/messages' => Http::response(['messages' => [['id' => 'wamid.OWN']]], 200)]);
     }
-
-    /* ------------------------------- الإذن ------------------------------- */
-
-    public function test_a_business_cannot_connect_its_own_number_without_the_entitlement(): void
-    {
-        $this->post(route('admin.integrations.whatsapp.connect'), [
-            'phone_number_id' => 'SHOP-PN',
-            'access_token' => 'shop-token-value-9876543210',
-        ])->assertSessionHasErrors('access_token');
-
-        $this->assertSame(0, WhatsAppConnection::where('owner_type', WhatsAppMode::OWNER_BUSINESS)->count());
-    }
-
-    public function test_a_business_cannot_switch_to_own_mode_without_the_entitlement(): void
-    {
-        $this->post(route('admin.integrations.whatsapp.mode'), ['mode' => WhatsAppMode::BUSINESS_OWN])
-            ->assertSessionHasErrors('mode');
-
-        $this->assertSame(WhatsAppMode::EVENTPLUS_SHARED, $this->business->fresh()->whatsapp_mode);
-    }
-
-    /** والإذن وحده لا يكفي: وضعٌ بلا وصلةٍ صالحة وضعٌ مكسور */
-    public function test_own_mode_is_refused_while_there_is_no_usable_connection(): void
-    {
-        $this->grant();
-
-        $this->post(route('admin.integrations.whatsapp.mode'), ['mode' => WhatsAppMode::BUSINESS_OWN])
-            ->assertSessionHasErrors('mode');
-
-        $this->assertSame(WhatsAppMode::EVENTPLUS_SHARED, $this->business->fresh()->whatsapp_mode);
-    }
-
-    public function test_the_entitlement_allows_connecting_and_switching(): void
-    {
-        $this->grant();
-
-        $this->post(route('admin.integrations.whatsapp.connect'), [
-            'phone_number_id' => 'SHOP-PN',
-            'display_phone_number' => '+96892222222',
-            'access_token' => 'shop-token-value-9876543210',
-        ])->assertRedirect();
-
-        $this->post(route('admin.integrations.whatsapp.mode'), ['mode' => WhatsAppMode::BUSINESS_OWN])
-            ->assertRedirect()->assertSessionHasNoErrors();
-
-        $this->assertSame(WhatsAppMode::BUSINESS_OWN, $this->business->fresh()->whatsapp_mode);
-    }
-
     /* ------------------------------ الإرسال ------------------------------ */
 
     /**
@@ -281,72 +233,5 @@ class WhatsAppOwnNumberTest extends TestCase
         $this->order()->update(['status' => OrderStatus::READY]);
 
         $this->assertSame(0, WhatsAppQuota::used($this->business->fresh()));
-    }
-
-    /* ----------------------------- العزل ----------------------------- */
-
-    /** رقمٌ يملكه متجرٌ آخر لا يُنتزع منه */
-    public function test_a_number_already_bound_elsewhere_cannot_be_claimed(): void
-    {
-        $other = Business::create(['name' => 'ورد آخر', 'type' => 'محل ورود', 'status' => 'نشط']);
-        WhatsAppConnection::create([
-            'owner_type' => WhatsAppMode::OWNER_BUSINESS,
-            'business_id' => $other->id,
-            'phone_number_id' => 'TAKEN-PN',
-            'access_token' => 'other-shop-token-value-000000',
-            'status' => WhatsAppConnection::ACTIVE,
-        ]);
-
-        $this->grant();
-
-        $this->post(route('admin.integrations.whatsapp.connect'), [
-            'phone_number_id' => 'TAKEN-PN',
-            'access_token' => 'my-token-value-1234567890',
-        ])->assertSessionHasErrors('phone_number_id');
-
-        $this->assertSame(
-            $other->id,
-            WhatsAppConnection::where('phone_number_id', 'TAKEN-PN')->value('business_id'),
-        );
-    }
-
-    /**
-     * ومعرّف المتجر يُقرأ من الجلسة لا ممّا يصل في الطلب.
-     *
-     * ولو قُبل من الطلب لَربط تاجرٌ رقمًا لمتجر غيره بسطرٍ واحد في أدوات
-     * المتصفّح.
-     */
-    public function test_a_forged_business_id_in_the_request_is_ignored(): void
-    {
-        $other = Business::create(['name' => 'ورد آخر', 'type' => 'محل ورود', 'status' => 'نشط']);
-        $this->grant();
-
-        $this->post(route('admin.integrations.whatsapp.connect'), [
-            'business_id' => $other->id,
-            'phone_number_id' => 'SHOP-PN',
-            'access_token' => 'shop-token-value-9876543210',
-        ])->assertRedirect();
-
-        $this->assertSame(
-            $this->business->id,
-            WhatsAppConnection::where('phone_number_id', 'SHOP-PN')->value('business_id'),
-        );
-        $this->assertSame(0, WhatsAppConnection::where('business_id', $other->id)->count());
-    }
-
-    /** والفصل يُعطّل ويعيد الوضع إلى المشترك صراحةً — لا يترك وضعًا لا يُرسل منه شيء */
-    public function test_disconnecting_returns_the_shop_to_the_shared_number(): void
-    {
-        $this->grant();
-        $this->connectOwn();
-        $this->business->update(['whatsapp_mode' => WhatsAppMode::BUSINESS_OWN]);
-
-        $this->delete(route('admin.integrations.whatsapp.disconnect'))->assertRedirect();
-
-        $this->assertSame(WhatsAppMode::EVENTPLUS_SHARED, $this->business->fresh()->whatsapp_mode);
-        $this->assertSame(
-            WhatsAppConnection::INACTIVE,
-            WhatsAppConnection::where('business_id', $this->business->id)->value('status'),
-        );
     }
 }

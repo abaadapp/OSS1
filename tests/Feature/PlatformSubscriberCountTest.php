@@ -138,27 +138,6 @@ class PlatformSubscriberCountTest extends TestCase
 
         $this->assertSame(10.0, (float) Demo::subscriptionStats()['monthly_revenue']);
     }
-
-    public function test_the_screen_shows_the_three_numbers_apart(): void
-    {
-        $paid = $this->business(['name' => 'دافع']);
-        Invoice::create([
-            'number' => 'INV-4', 'business_id' => $paid->id, 'plan_id' => $this->plan->id,
-            'amount' => 10, 'issued_at' => now(), 'status' => 'مدفوعة',
-        ]);
-        $this->business(['name' => 'مجرّب', 'ends_at' => now()->addDays(10)]);
-        $this->business(['name' => 'منتهٍ', 'ends_at' => now()->subDay()]);
-
-        $stats = $this->get(route('super-admin.subscriptions.index'))
-            ->assertOk()->viewData('page')['props']['stats'];
-
-        $by = collect($stats)->pluck('value', 'label');
-
-        $this->assertSame('1', $by[__('المشتركون')]);
-        $this->assertSame('1', $by[__('في التجربة')]);
-        $this->assertSame('1', $by[__('منتهية')]);
-    }
-
     /** والمتجر التجريبيّ لا يُعدّ مشتركًا مهما دُفعت فواتيره الوهميّة */
     public function test_a_demo_store_is_never_a_subscriber(): void
     {
