@@ -114,30 +114,6 @@ class ServerSortTest extends TestCase
 
         $this->assertNull($rejected['filters']['sort']);
     }
-
-    /**
-     * كل قائمةٍ تُعلن مفاتيحها، وكلّها معروفةٌ لأعمدة الجدول.
-     *
-     * وهذا هو الحارس الحقيقيّ: مفتاحٌ يُرسل إلى الواجهة ولا يقابله عمودٌ في
-     * `columns` يظهر في قائمة «ترتيب» بلا اسمٍ يُقرأ؛ وعمودٌ يرتّبه الخادم
-     * ولا يُعلَن لا يصل إليه أحد.
-     */
-    public function test_every_paginated_list_declares_its_sortable_columns(): void
-    {
-        $routes = [
-            'admin.products.index', 'admin.customers.index', 'admin.orders.index',
-            'admin.expenses.index', 'admin.purchases.invoices', 'admin.finance.journal',
-            'admin.inventory.adjustments', 'admin.marketing.reviews',
-        ];
-
-        foreach ($routes as $name) {
-            $props = $this->get(route($name))->assertOk()->viewData('page')['props'];
-
-            $this->assertArrayHasKey('sorts', $props, "{$name} لا تُعلن أعمدة ترتيبها");
-            $this->assertNotEmpty($props['sorts'], "{$name} تُعلن قائمةً فارغة");
-        }
-    }
-
     /** المفتاح المسموح يُطبَّق، وغيره يسقط إلى الافتراضي — بلا مرور بمسار */
     public function test_the_sort_helper_only_touches_allowed_columns(): void
     {

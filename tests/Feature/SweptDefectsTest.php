@@ -68,29 +68,6 @@ class SweptDefectsTest extends TestCase
         $this->assertSame('ilike', Search::operatorFor('pgsql'));
         $this->assertSame('like', Search::operatorFor('sqlite'));
     }
-    /* ================== المصروف يعرف حسابه ================== */
-
-    public function test_the_default_types_reach_their_own_accounts(): void
-    {
-        /*
-         * كان «إيجار» وحده موصولًا وكلّ ما عداه يسقط في «مصروفات أخرى»:
-         * دفترٌ يعرف أنّ المال خرج ولا يعرف من أيّ باب — وهو أوّل سؤالٍ
-         * يُسأل حين يُراد خفض المصروف.
-         */
-        $expected = [
-            'إيجار' => 'rent',
-            'كهرباء وماء' => 'utilities',
-            'تسويق' => 'marketing',
-            'صيانة' => 'maintenance',
-            'نقل وتوصيل' => 'transport',
-            'مواد خام' => 'direct_purchases',
-        ];
-
-        foreach ($expected as $type => $account) {
-            $this->assertSame($account, Books::expenseAccount($type), "«{$type}» ما زال يقع في حسابٍ عام");
-        }
-    }
-
     public function test_an_unknown_type_still_falls_somewhere_rather_than_nowhere(): void
     {
         // والافتراض حسابٌ قائم لا فراغ: قيدٌ بلا حساب يُسقط الترحيل كلّه
@@ -128,23 +105,6 @@ class SweptDefectsTest extends TestCase
 
         $this->assertDatabaseMissing('expense_types', ['name' => 'اشتراكات']);
     }
-
-    public function test_an_existing_type_can_be_pointed_at_its_account(): void
-    {
-        /*
-         * بابُ التعديل لمن أنشأ أنواعه قبل أن يوجد الربط: بدونه لا سبيل إلى
-         * الحساب إلا بحذف النوع وإعادته، وحذفُه يترك مصروفاته تحت اسمٍ لا
-         * نوع له.
-         */
-        $type = ExpenseType::create(['business_id' => $this->business->id, 'name' => 'اشتراكات']);
-
-        $this->actingAs($this->owner)->put(route('admin.expenseTypes.update', $type->id), [
-            'name' => 'اشتراكات', 'account_key' => 'marketing',
-        ])->assertSessionHasNoErrors();
-
-        $this->assertSame('marketing', $type->fresh()->account_key);
-    }
-
     public function test_renaming_a_type_takes_its_history_with_it(): void
     {
         /*

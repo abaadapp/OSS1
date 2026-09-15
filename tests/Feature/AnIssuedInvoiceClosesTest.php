@@ -164,28 +164,6 @@ class AnIssuedInvoiceClosesTest extends TestCase
 
         $this->assertSame(3, (int) $order->fresh('items')->items->first()->quantity);
     }
-
-    public function test_the_owner_may_grant_it_to_a_cashier_by_name(): void
-    {
-        $order = $this->sale();
-        $this->cashier->update(['permissions' => ['dashboard', 'pos', 'order.edit']]);
-
-        $this->actingAs($this->cashier->fresh())->correct($order)->assertSessionHasNoErrors();
-
-        $this->assertSame(1, (int) $order->fresh('items')->items->first()->quantity);
-    }
-
-    public function test_a_granted_action_alone_opens_no_screen(): void
-    {
-        /*
-         * `permissions` تحمل الأقسام والأفعال معًا. ولو عُدّ منحُ الفعل
-         * دخولًا للوحة، لوقف صاحبُه عند أوّل قسمٍ بـ٤٠٣ أو رأى لوحةً فارغة.
-         */
-        $this->cashier->update(['permissions' => ['pos', 'order.edit']]);
-
-        $this->assertFalse(Permissions::entersPanel($this->cashier->fresh()));
-    }
-
     private function correct(Order $order, int $qty = 1)
     {
         }

@@ -19,9 +19,7 @@ class LoginController extends Controller
 {
     /** حسابات الدخول التجريبي السريع */
     private array $demoAccounts = [
-        'super-admin' => 'super@eventpluspos.com',
         'admin' => 'admin@eventpluspos.com',
-        'pos' => 'cashier@eventpluspos.com',
     ];
 
     /** محاولة تسجيل الدخول العادية */

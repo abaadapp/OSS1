@@ -348,10 +348,6 @@ class ARestoreReturnsTheShopTest extends TestCase
             'quantity' => 20, 'created_at' => now(), 'updated_at' => now(),
         ]);
 
-        DB::table('pos_devices')->insert([
-            'business_id' => $bid, 'branch_id' => $branch, 'name' => 'الصندوق الأول',
-            'token_hash' => hash('sha256', 'device-'.$bid), 'created_at' => now(), 'updated_at' => now(),
-        ]);
 
         $customer = DB::table('customers')->insertGetId([
             'business_id' => $bid, 'name' => 'زبون', 'phone' => '9000000'.$bid,

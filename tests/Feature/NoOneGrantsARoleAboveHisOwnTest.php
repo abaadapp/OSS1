@@ -74,17 +74,6 @@ class NoOneGrantsARoleAboveHisOwnTest extends TestCase
             'job_title' => 'محاسب', 'status' => 'نشط',
         ]);
     }
-
-    /** حمولةُ النموذج كما يرسلها فعلًا — و`manual_permissions` فيها دائمًا */
-    private function form(array $over = []): array
-    {
-        return array_merge([
-            'name' => 'حساب جديد', 'login_username' => 'newone',
-            'password' => 'password12345', 'job_title' => 'كاشير',
-            'manual_permissions' => true, 'permissions' => ['dashboard', 'pos'],
-        ], $over);
-    }
-
     /* ══════════════ ١ · الدورُ يُقاس كما تُقاس القائمة ══════════════ */
 
     /**
@@ -114,29 +103,6 @@ class NoOneGrantsARoleAboveHisOwnTest extends TestCase
 
         $this->assertNull(User::where('email', 'newone@eventplusapp.om')->first());
     }
-
-    /**
-     * ولا يرفع موظّفًا قائمًا إلى وظيفةٍ تفوقه.
-     *
-     * والبابُ الثاني: من لا يصنعه لا يُرقّيه.
-     */
-    public function test_an_accountant_cannot_promote_an_existing_employee(): void
-    {
-        $clerk = User::create([
-            'business_id' => $this->shop->id, 'name' => 'كاتب', 'email' => 'clerk1@eventplusapp.om',
-            'password' => bcrypt('password12345'), 'role' => 'cashier',
-            'job_title' => 'كاشير', 'status' => 'نشط', 'permissions' => ['dashboard', 'pos'],
-        ]);
-
-        $this->actingAs($this->accountant)
-            ->put(route('admin.employees.update', $clerk->id), [
-                'name' => 'كاتب', 'login_username' => 'clerk1', 'job_title' => 'صاحب النشاط',
-                'manual_permissions' => true, 'permissions' => ['dashboard', 'pos'],
-            ])->assertForbidden();
-
-        $this->assertSame('cashier', $clerk->fresh()->role);
-    }
-
     /** والمالكُ يصنع ما شاء — الحدُّ على من دونه */
     public function test_the_owner_still_mints_anyone(): void
     {

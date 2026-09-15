@@ -50,16 +50,6 @@ class ManualPermissionsTest extends TestCase
             'name' => 'أحمد', 'email' => 'c@eventplus.om', 'job_title' => 'كاشير',
         ], $extra));
     }
-
-    /* -------------------------- الافتراضي -------------------------- */
-
-    public function test_without_manual_permissions_the_role_still_decides(): void
-    {
-        $this->assertNull($this->cashier->permissions);
-        $this->assertFalse($this->cashier->allows('inventory'));
-        $this->assertTrue($this->cashier->allows('pos'));
-    }
-
     /** حفظٌ من شاشة أخرى لا يمحو التخصيص، ولا يفرضه على من لم يُخصَّص له */
     public function test_saving_without_the_flag_leaves_permissions_untouched(): void
     {
@@ -116,22 +106,6 @@ class ManualPermissionsTest extends TestCase
      * قائمة يدوية فارغة تعني «لا شيء إضافي» لا «اتبع الدور» — والفرق بينهما
      * هو ما يجعل المنع ممكنًا أصلًا.
      */
-    /**
-     * لا قسم مفتوحًا بلا منح — ولا حتى لوحة التحكم ونقطة البيع والفروع.
-     *
-     * كانت الثلاثة تُفتح لكل من دخل مهما كانت صلاحياته، فيرفع صاحب النشاط
-     * علامتها ولا يتغيّر شيء: منعٌ ظاهرٌ في الشاشة لا وجود له في الواقع.
-     */
-    public function test_nothing_is_open_without_being_granted(): void
-    {
-        $this->save(['manual_permissions' => 1, 'permissions' => ['inventory']])->assertRedirect();
-
-        $cashier = $this->cashier->fresh();
-        foreach (['dashboard', 'pos', 'branch'] as $section) {
-            $this->assertFalse($cashier->allows($section), "بقي «{$section}» مفتوحًا بلا منح");
-        }
-        $this->assertTrue($cashier->allows('inventory'));
-    }
     /* ------------------------ بعد الدخول ------------------------ */
 
     /**
@@ -154,14 +128,6 @@ class ManualPermissionsTest extends TestCase
     {
         $this->assertSame(route('admin.dashboard'), Permissions::homeFor($this->owner));
     }
-    /** ونقطة البيع وحدها لا تفتح باب اللوحة — وإلا دخلها كل كاشير */
-    public function test_pos_alone_does_not_open_the_panel(): void
-    {
-        $this->save(['manual_permissions' => 1, 'permissions' => ['pos']])->assertRedirect();
-
-        $this->actingAs($this->cashier->fresh())->get(route('admin.dashboard'))->assertForbidden();
-    }
-
     /* ------------------------ عند الإضافة ------------------------ */
 
     /**

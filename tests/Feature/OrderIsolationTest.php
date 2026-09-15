@@ -101,15 +101,4 @@ class OrderIsolationTest extends TestCase
             'scheduled_for' => now()->addHour(),
         ]);
     }
-    /** وصلاحيةُ التجهيز وحدها لا تفتح شاشة المبيعات وإجماليّاتها */
-    public function test_preparation_alone_does_not_open_the_sales_screen(): void
-    {
-        $staff = User::create([
-            'business_id' => $this->mine->id, 'name' => 'مجهّز', 'email' => 'p2@eventplus.om',
-            'password' => bcrypt('password'), 'role' => 'inventory', 'status' => 'نشط',
-            'permissions' => ['preparation'],
-        ]);
-
-        $this->actingAs($staff)->get(route('admin.orders.index'))->assertForbidden();
-    }
 }

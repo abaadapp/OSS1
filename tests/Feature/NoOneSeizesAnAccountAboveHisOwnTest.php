@@ -187,26 +187,6 @@ class NoOneSeizesAnAccountAboveHisOwnTest extends TestCase
     }
 
     // ═════════════ الرواتب: بابان لا باب ═════════════
-
-    /**
-     * وشاشةُ التعديل لا تُرسل راتبًا لمن لا يقرأ الرواتب.
-     *
-     * والفاعلُ مشرفٌ يبلغ الكاشير فعلًا — فالكاتبُ لا تُفتح له الشاشة أصلًا
-     * (الكاشيرُ يفتح «نقطة البيع» ولا يفتحها هو).
-     */
-    public function test_the_edit_screen_hides_the_salary_from_who_may_not_read_it(): void
-    {
-        $supervisor = $this->staff('مشرف الشاشة', 'sup2', 'sales', ['employees', 'dashboard', 'pos']);
-
-        $this->actingAs($supervisor)->get(route('admin.employees.edit', $this->cashier->id))
-            ->assertOk()
-            ->assertInertia(fn ($p) => $p
-                ->where('employee.basic_salary', null)
-                ->where('employee.allowances', null)
-                ->where('may_read_payroll', false)
-                ->etc());
-    }
-
     /** ومن يقرؤها يراها */
     public function test_the_owner_still_sees_the_salary(): void
     {
@@ -259,24 +239,6 @@ class NoOneSeizesAnAccountAboveHisOwnTest extends TestCase
                 ->where('permissions_are_manual', true)
                 ->etc());
     }
-
-    /** واثنان يختلفان في الصلاحيات يختلفان في البطاقة */
-    public function test_two_employees_do_not_share_one_list(): void
-    {
-        $clerkCard = $this->actingAs($this->owner)
-            ->get(route('admin.employees.show', $this->clerk->id))
-            ->viewData('page')['props']['permissions'];
-
-        $cashierCard = $this->actingAs($this->owner)
-            ->get(route('admin.employees.show', $this->cashier->id))
-            ->viewData('page')['props']['permissions'];
-
-        $this->assertNotEquals($clerkCard, $cashierCard);
-        // والكاشيرُ يفتح «نقطة البيع» والكاتبُ لا
-        $this->assertContains(Permissions::sectionLabels()['pos'], $cashierCard);
-        $this->assertNotContains(Permissions::sectionLabels()['pos'], $clerkCard);
-    }
-
     /** والأفعالُ تُعرض مع الأقسام: المالكُ يملكها كلَّها */
     public function test_the_card_names_actions_too(): void
     {

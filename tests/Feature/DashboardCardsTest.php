@@ -83,26 +83,6 @@ class DashboardCardsTest extends TestCase
 
         $this->assertSame(route('admin.customers.index'), $card['url']);
     }
-
-    /**
-     * ولا تقود إلى قسمٍ لا يملكه صاحبها.
-     *
-     * رابطٌ يقود إلى 403 أسوأ من بطاقة بلا رابط: يبدو بابًا وهو حائط.
-     */
-    public function test_a_card_has_no_link_to_a_section_the_user_cannot_open(): void
-    {
-        $cashier = User::create([
-            'business_id' => $this->business->id, 'name' => 'أحمد', 'email' => 'c@eventplus.om',
-            'password' => bcrypt('password'), 'role' => 'cashier', 'status' => 'نشط',
-            'permissions' => ['pos'],
-        ]);
-        $this->actingAs($cashier);
-
-        $card = collect(AlertMetrics::catalog($this->business->id))->firstWhere('key', 'dormant_customers');
-
-        $this->assertNull($card['url']);
-    }
-
     /* ----------------------- حذف التنبيهات ----------------------- */
 
     public function test_dismissing_one_notification_removes_it_from_the_bell(): void

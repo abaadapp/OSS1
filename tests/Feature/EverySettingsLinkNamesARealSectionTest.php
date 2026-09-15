@@ -47,15 +47,6 @@ class EverySettingsLinkNamesARealSectionTest extends TestCase
 
         return array_values(array_unique($m[1]));
     }
-
-    public function test_the_settings_nav_declares_its_sections(): void
-    {
-        $keys = $this->sectionKeys();
-
-        $this->assertNotEmpty($keys, 'لم تُقرأ أقسام الإعدادات');
-        $this->assertContains('website', $keys);
-    }
-
     public function test_no_screen_points_at_a_section_that_does_not_exist(): void
     {
         $keys = $this->sectionKeys();

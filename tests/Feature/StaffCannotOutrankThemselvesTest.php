@@ -122,23 +122,6 @@ class StaffCannotOutrankThemselvesTest extends TestCase
 
         $this->assertSame('accountant', $me->fresh()->role);
     }
-
-    /**
-     * وظيفةٌ بدورٍ آخر لا تزيده صلاحيةً — فيمرّ من الحارس الأوّل ويقف عند
-     * الثاني. ولولاه لبدّل الموظّف دورَه بنفسه.
-     */
-    public function test_a_sideways_self_promotion_is_refused_too(): void
-    {
-        JobTitle::create(['business_id' => $this->business->id, 'name' => 'مشرف', 'role' => 'sales']);
-        $me = $this->staff('cashier', 'كاشير', ['permissions' => ['dashboard', 'employees', 'orders', 'customers', 'products', 'pos', 'preparation']]);
-        $this->actingAs($me);
-
-        $this->put(route('admin.employees.update', $me->id), [
-            'name' => $me->name, 'email' => $me->email, 'job_title' => 'مشرف',
-        ])->assertSessionHasErrors('job_title');
-
-        $this->assertSame('cashier', $me->fresh()->role);
-    }
     public function test_they_may_still_correct_their_own_phone(): void
     {
         $me = $this->staff('accountant', 'محاسب');

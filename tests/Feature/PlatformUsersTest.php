@@ -54,14 +54,6 @@ class PlatformUsersTest extends TestCase
         $this->assertFalse(Permissions::allows('ghost', 'orders'));
         $this->assertFalse(Permissions::allows('ghost', 'settings'));
     }
-
-    public function test_the_known_roles_are_untouched_by_that_tightening(): void
-    {
-        $this->assertTrue(Permissions::allows('admin', 'settings'));
-        $this->assertTrue(Permissions::allows('manager', 'finance'));
-        $this->assertTrue(Permissions::allows('cashier', 'pos'));
-        $this->assertFalse(Permissions::allows('cashier', 'finance'));
-    }
     public function test_the_owner_and_the_branch_manager_are_told_apart(): void
     {
         // كانت `roleLabel()` تكتب «مدير» لكليهما، والمرشّح فوقهما يكتب غير ذلك

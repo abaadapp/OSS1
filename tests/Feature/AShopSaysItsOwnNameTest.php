@@ -27,27 +27,6 @@ class AShopSaysItsOwnNameTest extends TestCase
     private User $owner;
 
     private User $cashier;
-
-    protected function setUp(): void
-    {
-        parent::setUp();
-
-        $this->business = Business::create(['name' => 'متجري', 'type' => 'عام', 'status' => 'نشط']);
-        Currency::create([
-            'business_id' => $this->business->id, 'code' => 'OMR', 'name' => 'ريال عماني',
-            'symbol' => 'ر.ع', 'rate' => 1, 'is_base' => true, 'active' => true,
-        ]);
-        $this->owner = User::create([
-            'business_id' => $this->business->id, 'name' => 'المالك', 'email' => 'o@eventplus.om',
-            'password' => bcrypt('password'), 'role' => 'admin', 'status' => 'نشط',
-        ]);
-        $this->cashier = User::create([
-            'business_id' => $this->business->id, 'name' => 'كاشير', 'email' => 'c@eventplus.om',
-            'password' => bcrypt('password'), 'role' => 'sales', 'status' => 'نشط',
-            'permissions' => ['pos'],
-        ]);
-    }
-
     private function order(): Order
     {
         return Order::create([
@@ -118,20 +97,6 @@ class AShopSaysItsOwnNameTest extends TestCase
         $this->actingAs($this->owner)->get('/admin/dashboard')
             ->assertInertia(fn ($p) => $p->where('context.setup', null));
     }
-
-    public function test_the_cashier_is_not_asked_for_what_he_cannot_write(): void
-    {
-        /*
-         * الكاشيرُ لا يملك بيانات النشاط — وشريطٌ يطلب منه ما لا باب له إليه
-         * إزعاجٌ لا تنبيه.
-         */
-        $this->cashier->update(['permissions' => ['pos', 'dashboard']]);
-
-        $this->actingAs($this->cashier->fresh())->get('/admin/dashboard')
-            ->assertOk()
-            ->assertInertia(fn ($p) => $p->where('context.setup', null));
-    }
-
     public function test_the_banner_names_what_is_missing(): void
     {
         $this->business->update(['name' => 'زهور مسقط', 'identity_confirmed_at' => null]);

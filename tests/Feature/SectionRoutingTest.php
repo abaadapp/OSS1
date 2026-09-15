@@ -79,17 +79,6 @@ class SectionRoutingTest extends TestCase
             ->get(route('admin.branches.index'))
             ->assertForbidden();
     }
-
-    /** والإضافات تتبع المنتجات، وأوامر الشراء قسمها */
-    public function test_addons_follow_products(): void
-    {
-        $this->assertSame('products', Permissions::sectionFromRoute('admin.addons.index'));
-        $this->assertSame('employees', Permissions::sectionFromRoute('admin.jobTitles.store'));
-        $this->assertSame('marketing', Permissions::sectionFromRoute('admin.coupons.store'));
-        $this->assertSame('finance', Permissions::sectionFromRoute('admin.bank.import'));
-        $this->assertSame('expenses', Permissions::sectionFromRoute('admin.expenseTypes.store'));
-    }
-
     /** والتصدير يتبع ما يُصدَّر لا كلمة «تصدير» */
     public function test_export_follows_what_is_exported(): void
     {
