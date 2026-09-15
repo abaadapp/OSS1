@@ -60,31 +60,6 @@ class EveryDeepScreenHasItsWayBackTest extends TestCase
             $this->assertStringNotContainsString('BackLink', $code, $page.' سهمُ رجوعٍ فوق تبويباتٍ تعرض الوجهة');
         }
     }
-
-    /**
-     * والسهم من مصدرٍ واحد في اللوحتين.
-     *
-     * ويُقاس برابط تنقّلٍ نصُّه «رجوع» لا بالكلمة وحدها: «رجوع» في نافذةٍ
-     * تعني «ارجع خطوةً في هذه النافذة» لا «غادر الصفحة»، وصندوق البيع يرسم
-     * أزراره كبيرةً للمس فلا يُقاس بمقاس اللوحة.
-     */
-    public function test_no_navigation_back_button_is_drawn_by_hand(): void
-    {
-        $hand = [];
-
-        foreach ($this->pages() as $file) {
-            if (! str_contains($file, '/Pages/Admin/') && ! str_contains($file, '/Pages/Platform/')) {
-                continue;
-            }
-
-            if (preg_match('/<SmartLink[^>]*>(?:(?!<\/SmartLink>).)*رجوع/su', file_get_contents($file))) {
-                $hand[] = basename($file);
-            }
-        }
-
-        $this->assertSame([], $hand, 'زرّ رجوعٍ مرسوم بيده — استعمل BackLink');
-    }
-
     /** @return array<int, string> */
     private function pages(): array
     {

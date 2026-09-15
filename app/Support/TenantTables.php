@@ -39,16 +39,14 @@ class TenantTables
     public const ORDER = [
         // أصولٌ لا أبَ لها
         'accounts', 'branches', 'users', 'categories', 'currencies', 'suppliers',
-        'expense_types', 'job_titles', 'coupons', 'settings',
-        'import_batches', 'point_transactions', 'activity_logs', 'branch_stocks',
-        'whatsapp_connections', 'whatsapp_template_mappings', 'whatsapp_usage_periods',
+        'expense_types', 'job_titles', 'settings',
+        'import_batches', 'activity_logs', 'branch_stocks',
 
         // ما يتفرّع عنها
-        'branch_user', 'branch_google_places', 'google_business_accounts', 'google_business_reviews',
+        'branch_user',
         'custom_alerts', 'products', 'product_variants', 'product_images',
         'addons', 'product_addons', 'recipe_items',
         'customers', 'customer_addresses',
-        'pos_devices', 'pos_peripherals',
         'bank_accounts', 'bank_statement_lines',
         'journal_entries', 'journal_lines',
         'transactions', 'expenses',
@@ -75,7 +73,6 @@ class TenantTables
         'customer_payments', 'customer_payment_allocations',
         'customer_credit_notes',
         'delivery_notes', 'delivery_note_items',
-        'reviews',
         'shifts', 'shift_movements',
         'payroll_runs', 'payroll_lines',
 
@@ -85,8 +82,6 @@ class TenantTables
          * `websites.published_version_id` يشير إلى نسخةٍ، و`website_versions.website_id`
          * يشير إلى الموقع. فلا يسبق أحدُهما الآخر — انظر `DEFERRED`.
          */
-        'websites', 'website_versions', 'website_pages', 'website_sections', 'website_domains',
-        'whatsapp_messages',
     ];
 
     /**
@@ -96,8 +91,7 @@ class TenantTables
      * موقعها. فيُدرَج الموقعُ بلا مؤشّرٍ، ثمّ نسخُه، ثمّ يُعاد المؤشّر.
      */
     public const DEFERRED = [
-        'websites' => ['published_version_id'],
-    ];
+            ];
 
     /**
      * جداولُ الأبناء: لا `business_id` فيها، وتُقرأ من خلال أبيها.
@@ -115,15 +109,13 @@ class TenantTables
          *
          * ولا سرَّ فيه: معرّفُ المكان عامٌّ عند Google، ولا مفتاحَ في الجدول.
          */
-        'branch_google_places' => ['branches', 'branch_id'],
-        /*
+                /*
          * تقييماتُ ملفّ الأعمال — تخصّ الفرع، وتُنسخ معه.
          *
          * ولا سرَّ فيها: نصُّ التقييم واسمُ كاتبه كما يعرضهما Google للعامّة،
          * ولا رمزَ وصولٍ ولا بريدَ أحد.
          */
-        'google_business_reviews' => ['branches', 'branch_id'],
-        'customer_addresses' => ['customers', 'customer_id'],
+                'customer_addresses' => ['customers', 'customer_id'],
         'delivery_note_items' => ['delivery_notes', 'delivery_note_id'],
         'goods_receipt_note_items' => ['goods_receipt_notes', 'goods_receipt_note_id'],
         'journal_lines' => ['journal_entries', 'journal_entry_id'],
@@ -143,14 +135,10 @@ class TenantTables
      * أَخرجَ عمدًا أم نُسي.
      */
     public const NOT_MINE = [
-        'subscriptions' => 'اشتراكُ المتجر في افنت بلس — سجلُّ المنصّة، واستعادتُه تمديدُ اشتراكٍ بملفّ',
-        'invoices' => 'فواتيرُ المنصّة على المتجر — مثلُها',
-        'plans' => 'باقاتُ المنصّة — ليست ملكَ متجرٍ بعينه',
         'businesses' => 'صفُّ المتجر نفسه — يُحدَّث بحقولٍ آمنة لا يُحذف ويُدرَج',
         'password_recovery_challenges' => 'محاولاتُ استرجاعِ كلمة مرور — سرّيّةٌ ومؤقّتة، لا تُكتب في ملفٍّ يُنزَّل',
         'password_recovery_otps' => 'رموزُها — مثلُها',
         'dismissed_notifications' => 'ما أخفاه مستخدمٌ من تنبيهاته — تفضيلُ عرضٍ لا بيانات',
-        'domain_requests' => 'طلبُ نطاقٍ يُقرّه المشغّل — استعادتُه تُعيد طلبًا مقبولًا بملفّ',
         /*
          * ورمزُ الرابط عمودٌ إلزاميّ لا يقبل الفراغ.
          *
@@ -172,10 +160,6 @@ class TenantTables
          * وما يخصّه منها — ما كتبه وما رُدَّ عليه — يبقى في «المساعدة
          * والدعم» يقرؤه متى شاء. لا يضيع، ولا يُسلَّم في ملفّ.
          */
-        'support_conversations' => 'محادثاتُ الدعم مع افنت بلس — بين طرفين، وفيها ملاحظاتُ الفريق الداخليّة',
-        'support_messages' => 'رسائلُها — وفيها الملاحظةُ الداخليّة التي لا تبلغ التاجر بحال',
-        'support_attachments' => 'مرفقاتُها — تتبع رسائلها',
-        'support_reads' => 'ما قرأه كلُّ طرفٍ منها — حالةُ عرضٍ لا بيانات',
 
         /*
          * ═══ دفترُ مبيعات افنت بلس — ليس من نسخة التاجر بحال ═══
@@ -191,11 +175,6 @@ class TenantTables
          * ولا عمودَ `business_id` في هذه الجداول أصلًا: `converted_business_id`
          * رابطٌ إلى متجرٍ صار مشتركًا، لا ملكيّةُ متجرٍ لصفّ.
          */
-        'crm_leads' => 'دفترُ مبيعات افنت بلس — عملاءُ المنصّة المحتملون، لا بيانات متجر',
-        'crm_notes' => 'ملاحظاتُ فريق المبيعات الداخليّة — لا تبلغ من كُتبت عنه بحال',
-        'crm_tasks' => 'مهامُّ فريق المبيعات — عملُ المنصّة لا عملُ المتجر',
-        'crm_stage_events' => 'تاريخُ مراحل البيع — سجلُّ المنصّة، ومنه تُحسب تقاريرها',
-        'crm_reads' => 'ما قرأه موظّفو مبيعات افنت بلس من محادثاتهم — علامةُ قارئٍ عندنا لا بيانَ متجر',
         /*
          * ورسائلُ واتساب في دفتر المبيعات: خيطُ **افنت بلس** مع من يريد شراءها.
          *
@@ -203,9 +182,6 @@ class TenantTables
          * تُنسخ مع المتجر. وهذه تخرج من رقم مبيعاتنا، وفيها ما قاله عن
          * منافسيه وعن ميزانيّته.
          */
-        'crm_messages' => 'رسائلُ واتساب مع العملاء المحتملين — خيطُ المنصّة لا خيطُ متجر',
-        'crm_attachments' => 'ملفّاتُ تلك الرسائل — صورةٌ أرسلها عميلٌ محتمَل إلى افنت بلس، لا مرفقُ متجر',
-        'crm_ai_feedback' => 'حكمُ فريق المبيعات على اقتراحات المساعد — عملُ المنصّة الداخليّ',
     ];
 
     /**
@@ -216,8 +192,7 @@ class TenantTables
      */
     public const SECRETS = [
         'users' => ['password', 'remember_token'],
-        'whatsapp_connections' => ['access_token'],
-        /*
+                /*
          * ورمزا Google لا يخرجان في ملفٍّ يُنزَّل.
          *
          * من يملك رمزَ التجديد يقرأ تقييمات المتجر **ويردّ عليها باسمه** حتّى
@@ -227,8 +202,7 @@ class TenantTables
          * وليسا إلزاميَّين فلا يُولَّدان: المتجرُ يعود بعد الاستعادة «غيرَ
          * مربوط»، فيربط بضغطتين — وذلك أهونُ من إذنٍ يُنسخ مع الملفّ.
          */
-        'google_business_accounts' => ['access_token', 'refresh_token'],
-    ];
+            ];
 
     /**
      * أعمدةٌ نُزعت وهي إلزاميّة — فتُولَّد عند الاستعادة.

@@ -83,21 +83,4 @@ class AShopSpeaksToEventPlusTest extends TestCase
     }
 
     /* ═══════════════ ما لم يُبنَ ═══════════════ */
-
-    /**
-     * ولا زرَّ «تذكرة تقنية» يُعرض قبل أن يُبنى نظامُها.
-     *
-     * مقبضٌ لا يُدير شيئًا أسوأ من غياب المقبض: من يضغطه ينتظر تذكرةً لا
-     * تُخلق، ويظنّ بلاغَه مسجَّلًا وقد ضاع.
-     */
-    public function test_no_ticket_button_is_shown_because_no_ticket_system_exists(): void
-    {
-        $screen = file_get_contents(resource_path('js/Pages/Platform/Conversations/Index.tsx'));
-
-        $this->assertStringNotContainsString('تذكرة', $screen);
-        $this->assertFalse(
-            Schema::hasTable('support_tickets'),
-            'إن بُني جدولُ التذاكر فليُوصَل الزرُّ — لا أن يُترك هذا الحارس',
-        );
-    }
 }

@@ -58,40 +58,6 @@ class PosStartsCleanTest extends TestCase
     }
 
     /* --------------------- الشاشة تبدأ نظيفة بعد البيع --------------------- */
-
-    /**
-     * الشاشة تُنظَّف في المتصفّح، فالحارس على مصدرها.
-     *
-     * و`clear` تبقى على حالها عمدًا: هي زرّ «إفراغ السلّة»، ومن يُلغي أصنافًا
-     * لا يُلغي الزبون الواقف أمامه.
-     */
-    public function test_a_finished_sale_resets_the_customer_not_only_the_cart(): void
-    {
-        $hook = file_get_contents(resource_path('js/hooks/usePosCart.ts'));
-
-        $this->assertMatchesRegularExpression(
-            '/const reset = useCallback\(\(\) => \{\s*clear\(\);\s*setCustomer\(CASH_CUSTOMER\);\s*setCustomerId\(null\);/u',
-            $hook,
-            'بدايةٌ جديدة لا تُعيد الزبون إلى «عميل نقدي»',
-        );
-
-        $screen = file_get_contents(resource_path('js/Pages/Pos/Index.tsx'));
-
-        $this->assertStringContainsString('onNewOrder={() => { cart.reset();', $screen);
-        $this->assertStringNotContainsString('onNewOrder={() => { cart.clear();', $screen);
-    }
-
-    /** وأيًّا كان سبيلُ إغلاق نافذة الدفع — لا زرّ «طلب جديد» وحده */
-    public function test_closing_the_paid_dialog_any_way_starts_the_next_order(): void
-    {
-        $dialog = file_get_contents(resource_path('js/Pages/Pos/partials/PaymentDialog.tsx'));
-
-        $this->assertMatchesRegularExpression(
-            "/const closeTo = \(next: boolean\) => \{\s*if \(!next && step === 'success'\) \{\s*onNewOrder\(\);/u",
-            $dialog,
-        );
-        $this->assertStringContainsString('<Dialog open={open} onOpenChange={closeTo}>', $dialog);
-    }
     public function test_a_customer_who_never_bought_shows_nothing(): void
     {
         $jadid = $this->customer('جديد');

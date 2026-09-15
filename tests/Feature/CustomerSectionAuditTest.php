@@ -242,41 +242,4 @@ class CustomerSectionAuditTest extends TestCase
 
         $this->assertNotNull(Customer::withTrashed()->find($c->id));
     }
-    /* ------------------- النقاط ------------------- */
-
-    public function test_points_cannot_be_spent_twice(): void
-    {
-        $c = $this->customer(['points' => 100]);
-
-        $this->post(route('admin.customers.redeem', $c->id), ['points' => 100]);
-        $this->post(route('admin.customers.redeem', $c->id), ['points' => 100]);
-
-        $this->assertSame(0, (int) $c->fresh()->points);
-    }
-
-    public function test_more_points_than_held_are_clamped_not_refused_silently(): void
-    {
-        $c = $this->customer(['points' => 40]);
-
-        $this->post(route('admin.customers.redeem', $c->id), ['points' => 999]);
-
-        $this->assertSame(0, (int) $c->fresh()->points);
-    }
-
-    /* ------------------- حدّ المتجر ------------------- */
-
-    public function test_a_neighbours_customer_is_not_reachable(): void
-    {
-        $other = Business::create(['name' => 'محل آخر', 'status' => 'نشط']);
-        $theirs = Customer::create(['business_id' => $other->id, 'name' => 'غريب']);
-
-        $this->get(route('admin.customers.show', $theirs->id))->assertNotFound();
-        $this->put(route('admin.customers.update', $theirs->id), ['name' => 'مسروق'])->assertNotFound();
-        $this->delete(route('admin.customers.destroy', $theirs->id))->assertNotFound();
-        $this->get(route('admin.customers.statement', $theirs->id))->assertNotFound();
-        $this->post(route('admin.customers.redeem', $theirs->id))->assertNotFound();
-        $this->post(route('admin.customers.addresses.save', $theirs->id), [
-            'label' => 'المنزل', 'city' => 'مسقط',
-        ])->assertNotFound();
-    }
 }

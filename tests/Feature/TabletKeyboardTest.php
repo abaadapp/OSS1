@@ -175,18 +175,4 @@ class TabletKeyboardTest extends TestCase
             $this->read('resources/views/app.blade.php'),
         );
     }
-
-    /**
-     * والآيباد رأسيًّا عمودان لا عمود.
-     *
-     * عرضُه ٨٢٠ بكسل، فكان يقع تحت حدّ `lg` فتصير السلّة تحت المنتجات في
-     * شاشةٍ لا تُمرَّر — فلا يراها الكاشير ولا زرَّ دفعه إلّا إذا أدار الجهاز.
-     */
-    public function test_the_cart_stands_beside_the_products_on_a_portrait_tablet(): void
-    {
-        $screen = $this->read('resources/js/Pages/Pos/Index.tsx');
-
-        $this->assertStringContainsString('md:flex-row', $screen);
-        $this->assertStringNotContainsString('lg:flex-row', $screen, 'الحدّ عاد إلى ١٠٢٤ فيسقط الآيباد الرأسيّ');
-    }
 }

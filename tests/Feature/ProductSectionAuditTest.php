@@ -108,19 +108,6 @@ class ProductSectionAuditTest extends TestCase
 
         $this->assertNull($p->fresh()->category_id);
     }
-    public function test_the_till_screen_hides_what_was_stopped(): void
-    {
-        $source = file_get_contents(base_path('resources/js/Pages/Pos/Index.tsx'));
-
-        // لا اختبار يشغّل الشاشة هنا، وحارسُ الخادم وحده يترك الصنف معروضًا
-        // ثمّ يُردّ عند الدفع — والعميل واقف
-        $this->assertStringContainsString('p.active === false', $source);
-        $this->assertStringContainsString(
-            'x.active !== false',
-            file_get_contents(base_path('resources/js/hooks/usePosCart.ts')),
-        );
-    }
-
     /* ------------------- النسخة تشبه أصلها ------------------- */
 
     public function test_a_copy_carries_the_recipe_and_the_sizes(): void

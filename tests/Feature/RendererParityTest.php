@@ -19,11 +19,6 @@ use Tests\TestCase;
  */
 class RendererParityTest extends TestCase
 {
-    private function dir(): string
-    {
-        return resource_path('js/Pages/Admin/Website/preview/renderer');
-    }
-
     /** البصمة نفسها التي يحسبها `scripts/renderer-hash.mjs` */
     private function fingerprint(string $dir): string
     {
