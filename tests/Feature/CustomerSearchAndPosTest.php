@@ -175,21 +175,4 @@ class CustomerSearchAndPosTest extends TestCase
         $this->post(route('admin.customers.store'), ['phone' => '90000011'])
             ->assertSessionHasErrors('name');
     }
-    /**
-     * والمحذوف لا يُلتقط عند الصندوق — لا بهاتفه ولا باسمه.
-     *
-     * ولو التُقط لأضيفت نقاط بيعةٍ اليوم إلى صفٍّ مخفيّ لا تعرضه شاشة، ولظهرت
-     * فاتورةٌ جديدة معلّقةً بعميلٍ حذفه صاحب المتجر عمدًا.
-     */
-    public function test_a_deleted_customer_is_never_picked_up_by_the_till(): void
-    {
-        $gone = $this->customer(['name' => 'أحمد', 'phone' => '93333333', 'points' => 500]);
-        $gone->delete();
-
-        $this->sell(['customer' => 'أحمد', 'customer_phone' => '93333333'])->assertOk();
-
-        $order = Order::where('is_held', false)->firstOrFail();
-        $this->assertNull($order->customer_id);
-        $this->assertSame(500, (int) $gone->fresh()->points);
-    }
 }

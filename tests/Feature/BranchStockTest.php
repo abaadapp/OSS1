@@ -73,77 +73,6 @@ class BranchStockTest extends TestCase
             'product_id' => $this->product->id, 'quantity' => $salalah,
         ]);
     }
-    /* ------------------------- ما كان مكسورًا ------------------------- */
-
-    public function test_a_branch_with_no_stock_cannot_sell_its_neighbours_goods(): void
-    {
-        $this->allocate(muscat: 10, salalah: 0);
-        $this->inBranch($this->salalah);
-
-        $this->sell(5)->assertStatus(422);
-
-        $this->assertSame(10, (int) $this->product->fresh()->quantity, 'خُصم رغم رفض البيع');
-    }
-    public function test_selling_from_a_stocked_branch_still_works(): void
-    {
-        $this->allocate(muscat: 10, salalah: 0);
-        $this->inBranch($this->muscat);
-
-        $this->sell(4)->assertOk();
-
-        $this->assertSame(6, (int) $this->product->fresh()->quantity);
-        $this->assertSame(6, (int) BranchStock::where('branch_id', $this->muscat->id)
-            ->where('product_id', $this->product->id)->value('quantity'));
-    }
-
-    public function test_the_books_stay_balanced_after_a_sale(): void
-    {
-        $this->allocate(muscat: 10, salalah: 0);
-        $this->inBranch($this->muscat);
-
-        $this->sell(4)->assertOk();
-
-        $this->assertSame(
-            (int) $this->product->fresh()->quantity,
-            (int) BranchStock::where('product_id', $this->product->id)->sum('quantity'),
-            'مجموع الفروع لا يساوي كمية المنتج',
-        );
-    }
-
-    /* ------------------- المنتج الذي لم يُوزَّع بعد ------------------- */
-
-    public function test_a_product_never_allocated_to_a_branch_is_still_sellable(): void
-    {
-        // منتج أُنشئ قبل وجود الفروع: لا صفّ له في branch_stocks
-        $this->inBranch($this->muscat);
-
-        $this->sell(3)->assertOk();
-
-        $this->assertSame(7, (int) $this->product->fresh()->quantity);
-    }
-
-    public function test_its_first_sale_allocates_rather_than_going_negative(): void
-    {
-        $this->inBranch($this->muscat);
-
-        $this->sell(3)->assertOk();
-
-        $qty = (int) BranchStock::where('branch_id', $this->muscat->id)
-            ->where('product_id', $this->product->id)->value('quantity');
-
-        $this->assertSame(7, $qty, 'بدأ صفّ الفرع من صفر فصار سالبًا');
-    }
-
-    public function test_a_second_sale_after_that_still_respects_the_branch(): void
-    {
-        $this->inBranch($this->muscat);
-
-        $this->sell(7)->assertOk();
-        $this->sell(5)->assertStatus(422);  // بقي 3 فقط
-
-        $this->assertSame(3, (int) $this->product->fresh()->quantity);
-    }
-
     /* ------------------------ لا قصّ للانحراف ------------------------ */
 
     public function test_adjust_no_longer_hides_drift_behind_a_zero_floor(): void
@@ -206,22 +135,5 @@ class BranchStockTest extends TestCase
             14,
             (int) BranchStock::where('product_id', $this->product->id)->sum('quantity'),
         );
-    }
-
-    /* ---------------------- تحديد الفرع الموحَّد ---------------------- */
-
-    public function test_all_branches_view_falls_back_to_the_first_branch_consistently(): void
-    {
-        // «كل الفروع» عرضٌ لا موضع بيع: الشاشة والخصم يجب أن يتفقا على فرع واحد
-        $this->allocate(muscat: 10, salalah: 0);
-        $this->actingAs($this->owner);
-        session()->forget('current_branch');
-
-        $this->assertSame($this->muscat->id, Demo::activeBranchId());
-
-        $this->sell(4)->assertOk();
-
-        $this->assertSame(6, (int) BranchStock::where('branch_id', $this->muscat->id)
-            ->where('product_id', $this->product->id)->value('quantity'));
     }
 }

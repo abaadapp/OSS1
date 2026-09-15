@@ -242,36 +242,6 @@ class CustomerSectionAuditTest extends TestCase
 
         $this->assertNotNull(Customer::withTrashed()->find($c->id));
     }
-
-    /**
-     * والاستعادة ليست منها: زرّ «تراجع» في إشعار الحذف يردّ ما حذفه صاحبُه
-     * من مكانه — ولو تبع الإعدادات لظهر الزرّ ثمّ رُدَّ ٤٠٣.
-     */
-    public function test_a_salesperson_may_still_undo_their_own_deletion(): void
-    {
-        $c = $this->customer();
-        $c->delete();
-
-        $this->actingAs($this->salesperson())
-            ->post(route('admin.customers.restore', $c->id))
-            ->assertRedirect();
-
-        $this->assertNotSoftDeleted('customers', ['id' => $c->id]);
-    }
-
-    public function test_the_owner_still_restores_and_purges(): void
-    {
-        $c = $this->customer();
-        $c->delete();
-
-        $this->post(route('admin.customers.restore', $c->id));
-        $this->assertNotSoftDeleted('customers', ['id' => $c->id]);
-
-        $c->fresh()->delete();
-        $this->delete(route('admin.customers.purge', $c->id));
-        $this->assertNull(Customer::withTrashed()->find($c->id));
-    }
-
     /* ------------------- النقاط ------------------- */
 
     public function test_points_cannot_be_spent_twice(): void

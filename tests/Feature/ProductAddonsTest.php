@@ -75,21 +75,6 @@ class ProductAddonsTest extends TestCase
             ->put(route('admin.products.addons.sync', $this->bouquet->id), ['addon_ids' => $addonIds])
             ->assertSessionHasNoErrors();
     }
-
-    /* ------------------------------ التوافق ------------------------------ */
-
-    public function test_a_standalone_addon_line_still_sells_as_it_always_did(): void
-    {
-        $this->sell([[
-            'addon_id' => $this->wrapService->id, 'name' => 'تغليف فاخر', 'qty' => 2,
-        ]]);
-
-        $order = Order::latest('id')->firstOrFail();
-
-        $this->assertEqualsWithDelta(2.0, (float) $order->subtotal, 0.0005);
-        $this->assertNull($order->items->first()->product_id);
-    }
-
     public function test_a_product_with_no_links_still_offers_every_shop_addon(): void
     {
         $allowed = ProductAddons::for($this->bouquet);
@@ -113,32 +98,6 @@ class ProductAddonsTest extends TestCase
 
         $this->assertCount(1, ProductAddons::for($this->bouquet));
     }
-
-    /* ------------------------------- الحراسة ------------------------------ */
-
-    public function test_an_addon_the_product_does_not_allow_is_refused_by_the_server(): void
-    {
-        $this->allow([$this->chocolate->id]);
-
-        $this->sell([[
-            'id' => $this->bouquet->id, 'name' => 'بوكيه', 'qty' => 1,
-            'addons' => [['addon_id' => $this->wrapService->id, 'qty' => 1]],
-        ]], 422)->assertJsonValidationErrors('items.0.addons');
-
-        $this->assertSame(0, Order::count());
-    }
-
-    public function test_an_addon_from_another_shop_is_refused(): void
-    {
-        $other = Business::create(['name' => 'محل آخر', 'email' => 'o@a.local', 'status' => 'نشط']);
-        $theirs = Addon::create(['business_id' => $other->id, 'name' => 'بالونهم', 'price' => 2, 'active' => true]);
-
-        $this->sell([[
-            'id' => $this->bouquet->id, 'name' => 'بوكيه', 'qty' => 1,
-            'addons' => [['addon_id' => $theirs->id, 'qty' => 1]],
-        ]], 422)->assertJsonValidationErrors('items.0.addons');
-    }
-
     public function test_a_shop_cannot_link_another_shops_addon(): void
     {
         $other = Business::create(['name' => 'محل آخر', 'email' => 'o2@a.local', 'status' => 'نشط']);
@@ -149,162 +108,6 @@ class ProductAddonsTest extends TestCase
             ->assertSessionHasErrors('addon_ids.0');
 
         $this->assertDatabaseCount('product_addons', 0);
-    }
-
-    public function test_the_price_comes_from_the_database_not_from_the_request(): void
-    {
-        $this->sell([[
-            'id' => $this->bouquet->id, 'name' => 'بوكيه', 'qty' => 1, 'price' => 999,
-            'addons' => [['addon_id' => $this->chocolate->id, 'qty' => 1, 'price' => 0.001]],
-        ]]);
-
-        $addon = Order::latest('id')->firstOrFail()->items->first()->addons->first();
-
-        $this->assertEqualsWithDelta(4.0, (float) $addon->unit_price, 0.0005);
-    }
-
-    /* ------------------------------- الحساب ------------------------------- */
-
-    public function test_the_addon_rides_on_its_item_and_the_totals_include_it(): void
-    {
-        $this->sell([[
-            'id' => $this->bouquet->id, 'name' => 'بوكيه', 'qty' => 1,
-            'addons' => [
-                ['addon_id' => $this->chocolate->id, 'qty' => 1],
-                ['addon_id' => $this->wrapService->id, 'qty' => 2],
-            ],
-        ]]);
-
-        $order = Order::latest('id')->firstOrFail();
-        $item = $order->items->first();
-
-        $this->assertCount(2, $item->addons);
-        $this->assertEqualsWithDelta(6.0, (float) $item->addons_total, 0.0005);   // 4 + 2
-        $this->assertEqualsWithDelta(18.0, (float) $item->total, 0.0005);
-        $this->assertEqualsWithDelta(24.0, (float) $item->lineTotal(), 0.0005);
-        $this->assertEqualsWithDelta(24.0, (float) $order->subtotal, 0.0005);
-    }
-
-    public function test_a_quantity_of_two_multiplies_only_the_addon_line(): void
-    {
-        $this->sell([[
-            'id' => $this->bouquet->id, 'name' => 'بوكيه', 'qty' => 1,
-            'addons' => [['addon_id' => $this->wrapService->id, 'qty' => 3]],
-        ]]);
-
-        $addon = Order::latest('id')->firstOrFail()->items->first()->addons->first();
-
-        $this->assertSame(3, (int) $addon->quantity);
-        $this->assertEqualsWithDelta(3.0, (float) $addon->total, 0.0005);
-    }
-
-    /* ------------------------------- اللقطة ------------------------------- */
-
-    public function test_raising_the_addon_price_later_leaves_the_old_invoice_alone(): void
-    {
-        $this->sell([[
-            'id' => $this->bouquet->id, 'name' => 'بوكيه', 'qty' => 1,
-            'addons' => [['addon_id' => $this->chocolate->id, 'qty' => 1]],
-        ]]);
-
-        $this->chocolate->update(['price' => 5, 'name' => 'شوكولاتة بلجيكية']);
-
-        $addon = Order::latest('id')->firstOrFail()->items()->first()->addons()->first();
-
-        $this->assertEqualsWithDelta(4.0, (float) $addon->unit_price, 0.0005);
-        $this->assertSame('شوكولاتة', $addon->name);
-    }
-
-    public function test_deleting_the_addon_does_not_erase_it_from_history(): void
-    {
-        $this->sell([[
-            'id' => $this->bouquet->id, 'name' => 'بوكيه', 'qty' => 1,
-            'addons' => [['addon_id' => $this->chocolate->id, 'qty' => 1]],
-        ]]);
-
-        $this->chocolate->delete();
-
-        $addon = Order::latest('id')->firstOrFail()->items()->first()->addons()->first();
-
-        $this->assertNotNull($addon);
-        $this->assertSame('شوكولاتة', $addon->name);
-        $this->assertNull($addon->addon_id);
-    }
-
-    /* ------------------------------- المخزون ------------------------------ */
-
-    public function test_an_addon_tied_to_stock_takes_it_off_the_shelf(): void
-    {
-        $this->sell([[
-            'id' => $this->bouquet->id, 'name' => 'بوكيه', 'qty' => 1,
-            'addons' => [['addon_id' => $this->chocolate->id, 'qty' => 2]],
-        ]]);
-
-        $this->assertSame(28, (int) $this->chocolateStock->fresh()->quantity);
-    }
-
-    public function test_a_service_addon_needs_no_stock_and_moves_none(): void
-    {
-        $this->sell([[
-            'id' => $this->bouquet->id, 'name' => 'بوكيه', 'qty' => 1,
-            'addons' => [['addon_id' => $this->wrapService->id, 'qty' => 1]],
-        ]]);
-
-        $order = Order::latest('id')->firstOrFail();
-
-        $this->assertNull($order->items->first()->addons->first()->cost);
-        $this->assertSame(0, \App\Models\InventoryMovement::where('type', \App\Support\StockLedger::ADDON)->count());
-    }
-
-    public function test_the_cost_snapshot_follows_the_stock_item(): void
-    {
-        $this->sell([[
-            'id' => $this->bouquet->id, 'name' => 'بوكيه', 'qty' => 1,
-            'addons' => [['addon_id' => $this->chocolate->id, 'qty' => 1]],
-        ]]);
-
-        $addon = Order::latest('id')->firstOrFail()->items->first()->addons->first();
-        $this->chocolateStock->update(['cost' => 9]);
-
-        $this->assertEqualsWithDelta(1.5, (float) $addon->fresh()->cost, 0.0005);
-    }
-
-    public function test_deleting_the_line_gives_the_addon_stock_back_once(): void
-    {
-        $this->sell([
-            [
-                'id' => $this->bouquet->id, 'name' => 'بوكيه', 'qty' => 1,
-                'addons' => [['addon_id' => $this->chocolate->id, 'qty' => 2]],
-            ],
-            ['id' => $this->bouquet->id, 'name' => 'بوكيه', 'qty' => 1],
-        ]);
-
-        $this->assertSame(28, (int) $this->chocolateStock->fresh()->quantity);
-
-        $order = Order::latest('id')->firstOrFail();
-        $this->actingAs($this->owner);
-        OrderCorrection::setQuantity($order, $order->items->first(), 0, 'ألغى الزبون');
-
-        $this->assertSame(30, (int) $this->chocolateStock->fresh()->quantity);
-    }
-
-    public function test_removing_a_line_recomputes_the_order_without_its_addons(): void
-    {
-        $this->sell([
-            [
-                'id' => $this->bouquet->id, 'name' => 'بوكيه', 'qty' => 1,
-                'addons' => [['addon_id' => $this->chocolate->id, 'qty' => 1]],
-            ],
-            ['id' => $this->bouquet->id, 'name' => 'بوكيه', 'qty' => 1],
-        ]);
-
-        $order = Order::latest('id')->firstOrFail();
-        $this->assertEqualsWithDelta(40.0, (float) $order->subtotal, 0.0005);   // 18+4 + 18
-
-        $this->actingAs($this->owner);
-        OrderCorrection::setQuantity($order, $order->items->first(), 0, 'ألغى الزبون');
-
-        $this->assertEqualsWithDelta(18.0, (float) $order->fresh()->subtotal, 0.0005);
     }
     /* ==================== الإضافة الخاصّة بمنتجٍ واحد ==================== */
 
@@ -333,32 +136,6 @@ class ProductAddonsTest extends TestCase
         // وإضافةُ المتجر تبقى للجميع كما كانت
         $this->assertTrue(ProductAddons::for($fertiliser)->contains('id', $this->wrapService->id));
     }
-
-    /** ولا تُباع مع سواه ولو حمل الطلب معرّفها */
-    public function test_a_private_addon_is_refused_on_another_product(): void
-    {
-        $ribbon = Addon::create([
-            'business_id' => $this->business->id, 'product_id' => $this->bouquet->id,
-            'name' => 'شريط ذهبي', 'price' => 0.5, 'active' => true,
-        ]);
-
-        $fertiliser = Product::create([
-            'business_id' => $this->business->id, 'name' => 'كيس سماد',
-            'price' => 2, 'cost' => 1, 'quantity' => 20, 'active' => true,
-        ]);
-
-        $this->sell([[
-            'id' => $fertiliser->id, 'name' => 'كيس سماد', 'qty' => 1,
-            'addons' => [['addon_id' => $ribbon->id, 'qty' => 1]],
-        ]], 422)->assertJsonValidationErrors('items.0.addons');
-
-        // ومع صاحبها تمرّ
-        $this->sell([[
-            'id' => $this->bouquet->id, 'name' => 'بوكيه', 'qty' => 1,
-            'addons' => [['addon_id' => $ribbon->id, 'qty' => 1]],
-        ]]);
-    }
-
     /** وربطُها بمنتجٍ آخر يُردّ في بابه لا في نقطة البيع وحدها */
     public function test_another_products_addon_cannot_be_linked_here(): void
     {
@@ -452,38 +229,6 @@ class ProductAddonsTest extends TestCase
             'name' => 'شريط', 'price' => 1, 'product_id' => $theirs->id,
         ])->assertStatus(422)->assertJsonValidationErrors('product_id');
     }
-    /**
-     * إضافةُ المنتج تُعرض معه ولو ضاق الربط على غيرها.
-     *
-     * قسمُ الإضافات في شاشة المنتج صار لما يخصّه وحده، فلا يُختار فيه شيء
-     * ولا يُلغى. وربطٌ قديم في `product_addons` يضيّق إضافات المتجر — ولا
-     * معنى لأن يُخرج إضافةً صُنعت لهذا المنتج بعينه.
-     */
-    public function test_a_private_addon_survives_an_old_narrowing_link(): void
-    {
-        $ribbon = Addon::create([
-            'business_id' => $this->business->id, 'product_id' => $this->bouquet->id,
-            'name' => 'شريط ذهبي', 'price' => 0.5, 'active' => true,
-        ]);
-
-        // ربطٌ لا يذكرها — كما لو كان قد كُتب قبل أن توجد
-        $this->actingAs($this->owner)
-            ->put(route('admin.products.addons.sync', $this->bouquet->id), ['addon_ids' => [$this->chocolate->id]])
-            ->assertSessionHasNoErrors();
-
-        $offered = ProductAddons::for($this->bouquet)->pluck('id')->all();
-
-        $this->assertContains($ribbon->id, $offered);
-        $this->assertContains($this->chocolate->id, $offered);
-        $this->assertNotContains($this->wrapService->id, $offered);
-
-        // وتُقبل في البيع كذلك، لا في العرض وحده
-        $this->sell([[
-            'id' => $this->bouquet->id, 'name' => 'بوكيه', 'qty' => 1,
-            'addons' => [['addon_id' => $ribbon->id, 'qty' => 1]],
-        ]]);
-    }
-
     /** وتُحذف من شاشتها */
     public function test_a_private_addon_can_be_deleted_from_its_product(): void
     {

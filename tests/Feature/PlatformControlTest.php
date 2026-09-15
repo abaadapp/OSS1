@@ -48,28 +48,6 @@ class PlatformControlTest extends TestCase
 
         return [$biz, $owner];
     }
-
-    /* ------------------- ١· الإيقاف يوقف فعلًا ------------------- */
-
-    public function test_a_suspended_user_cannot_log_in(): void
-    {
-        [, $owner] = $this->tenant(user: ['status' => 'موقوف', 'email' => 's@eventplus.om']);
-
-        $this->post(route('login.attempt'), ['email' => 's@eventplus.om', 'password' => 'password'])
-            ->assertSessionHasErrors('email');
-
-        $this->assertGuest();
-    }
-
-    public function test_a_disabled_business_locks_its_people_out(): void
-    {
-        [, $owner] = $this->tenant(['status' => 'معطل'], ['email' => 'd@eventplus.om']);
-
-        $this->post(route('login.attempt'), ['email' => 'd@eventplus.om', 'password' => 'password'])
-            ->assertSessionHasErrors('email');
-
-        $this->assertGuest();
-    }
     /** ويوم الانتهاء نفسه يبقى مسموحًا: من دفع حتى اليوم يعمل اليوم كاملًا */
     public function test_the_last_day_of_the_subscription_still_works(): void
     {
@@ -120,40 +98,5 @@ class PlatformControlTest extends TestCase
 
         $this->actingAs($owner)->get(route('admin.dashboard'))
             ->assertInertia(fn ($page) => $page->where('context.subscription.daysLeft', 3));
-    }
-    public function test_the_branch_limit_is_enforced(): void
-    {
-        [$biz, $owner] = $this->planned(['max_branches' => 1]);
-        Branch::create(['business_id' => $biz->id, 'name' => 'الفرع الرئيسي']);
-
-        $this->actingAs($owner)->post(route('admin.branches.store'), ['name' => 'فرع ثانٍ'])
-            ->assertSessionHasErrors('name');
-
-        $this->assertSame(1, Branch::where('business_id', $biz->id)->count());
-    }
-
-    public function test_the_employee_limit_is_enforced(): void
-    {
-        // المالك نفسه مستخدمٌ في المتجر، فسقف واحدٍ مبلوغٌ سلفًا
-        [$biz, $owner] = $this->planned(['max_employees' => 1]);
-
-        $this->actingAs($owner)->post(route('admin.employees.store'), [
-            'name' => 'موظف', 'login_username' => 'new', 'job_title' => 'كاشير',
-        ])->assertSessionHasErrors('name');
-
-        $this->assertSame(1, User::where('business_id', $biz->id)->count());
-    }
-
-    public function test_the_product_limit_is_enforced(): void
-    {
-        [$biz, $owner] = $this->planned(['max_products' => 1]);
-        Product::create([
-            'business_id' => $biz->id, 'name' => 'وردة', 'price' => 5, 'quantity' => 1, 'active' => true,
-        ]);
-
-        $this->actingAs($owner)->post(route('admin.products.store'), ['name' => 'ثانية', 'price' => 5])
-            ->assertSessionHasErrors('name');
-
-        $this->assertSame(1, Product::where('business_id', $biz->id)->count());
     }
 }

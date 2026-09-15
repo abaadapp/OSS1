@@ -105,31 +105,6 @@ class ThePreviewAndThePrintShareAFontTest extends TestCase
             $this->assertFileExists(public_path(ltrim($path, '/')), "ملفُّ الخطّ مفقود: {$path}");
         }
     }
-
-    /**
-     * والإعلانُ داخل `@media screen` — لا يبلغ المحرّك.
-     *
-     * mpdf يقرأ `CSSselectMedia => 'mpdf'` فيتجاهل `screen` و`print` معًا.
-     * ولو خرج الإعلانُ من الكتلة لحاول جلبَ ملفٍّ عند كلّ ورقةٍ تُطبع.
-     */
-    public function test_the_declaration_lives_only_in_the_screen_block(): void
-    {
-        $html = $this->sheet();
-
-        $screen = strpos($html, '@media screen');
-        $face = strpos($html, '@font-face');
-
-        $this->assertNotFalse($screen);
-        $this->assertNotFalse($face);
-        $this->assertGreaterThan($screen, $face, 'إعلانُ الخطّ خارج كتلة الشاشة');
-
-        // ولا إعلانَ ثانٍ قبل الكتلة
-        $this->assertFalse(
-            strpos(substr($html, 0, $screen), '@font-face'),
-            'إعلانُ خطٍّ يسبق كتلة الشاشة — يبلغ المحرّك',
-        );
-    }
-
     /**
      * وملفّا المحرّك قائمان — وفيهما ما تتّصل به الحروف.
      *

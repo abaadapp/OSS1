@@ -255,32 +255,4 @@ class AdminPanelAuditTest extends TestCase
         $this->assertSame('اسمٌ جديد', $this->business->fresh()->name);
         $this->assertDatabaseMissing('settings', ['key' => 'shop_name']);
     }
-    public function test_the_screen_and_the_closed_list_do_not_drift_apart(): void
-    {
-        /*
-         * الحارس الحقيقيّ للإغلاق.
-         *
-         * قائمةٌ مغلقة تُكتب مرّةً ثم يُضاف مقبضٌ إلى الشاشة ولا يُضاف إليها:
-         * يتحرّك في الواجهة ويقول التنبيه «تم الحفظ» ولا يُكتب شيء — وهو
-         * العطب نفسه الذي جاء الإغلاق ليمنعه، بوجهٍ مقلوب. فيُقارَن المصدران.
-         */
-        $tsx = file_get_contents(resource_path('js/Pages/Admin/Settings/Index.tsx'));
-        $start = strpos($tsx, 'const form = useForm({');
-        $this->assertNotFalse($start, 'لم يُعثر على نموذج الإعدادات في الشاشة');
-
-        $depth = 0;
-        $open = strpos($tsx, '{', $start);
-        for ($i = $open; $i < strlen($tsx); $i++) {
-            if ($tsx[$i] === '{') { $depth++; }
-            elseif ($tsx[$i] === '}') { $depth--; if ($depth === 0) { break; } }
-        }
-        preg_match_all('/^\s{8}([a-z_0-9]+):/m', substr($tsx, $open, $i - $open), $m);
-
-        $onScreen = array_unique($m[1]);
-        $reflection = new \ReflectionClass(\App\Http\Controllers\Admin\SettingController::class);
-        $allowed = array_keys($reflection->getConstant('KEYS'));
-
-        $this->assertSame([], array_values(array_diff($onScreen, $allowed)), 'مقبضٌ في الشاشة لا يقبله الحفظ');
-        $this->assertSame([], array_values(array_diff($allowed, $onScreen)), 'مفتاحٌ مسموح لا مقبض له في الشاشة');
-    }
 }

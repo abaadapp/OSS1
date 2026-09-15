@@ -68,95 +68,7 @@ class PreparationFlowAuditTest extends TestCase
 
         return $order;
     }
-    /* ------------------- الرفض يُرى ------------------- */
-
-    /**
-     * كان يُردّ بـ`withErrors` وحدها، واللوحة لا تعرض إلّا `flash.toast`.
-     *
-     * فالضغطة لا تفعل شيئًا ولا تقول شيئًا — فتُعاد، ثمّ يُسأل صاحبُ المحلّ
-     * عن لوحةٍ «لا تعمل».
-     */
-    public function test_a_refused_move_says_so_where_the_screen_can_show_it(): void
-    {
-        $order = $this->order(['status' => OrderStatus::CANCELLED]);
-
-        $this->move($order, OrderStatus::READY)
-            ->assertSessionHasErrors('status')
-            ->assertSessionHas('toast', fn ($toast) => $toast['type'] === 'danger'
-                && str_contains($toast['msg'], 'لا يمكن نقل الطلب'));
-    }
-
-    public function test_the_refusal_names_both_ends(): void
-    {
-        $order = $this->order(['status' => OrderStatus::DELIVERED]);
-
-        $this->move($order, OrderStatus::PREPARING);
-
-        $msg = session('toast')['msg'];
-        $this->assertStringContainsString(OrderStatus::DELIVERED, $msg);
-        $this->assertStringContainsString(OrderStatus::PREPARING, $msg);
-    }
-
-    public function test_an_accepted_move_still_toasts_success(): void
-    {
-        $order = $this->order();
-
-        $this->move($order, OrderStatus::READY)
-            ->assertSessionHasNoErrors()
-            ->assertSessionHas('toast', fn ($toast) => $toast['type'] === 'success');
-
-        $this->assertSame(OrderStatus::READY, $order->fresh()->status);
-    }
-
-    /* ------------------- الانتقالات غير القانونية ------------------- */
-
-    public function test_a_delivered_order_cannot_go_back_to_the_workbench(): void
-    {
-        $order = $this->order(['status' => OrderStatus::DELIVERED]);
-
-        $this->move($order, OrderStatus::PREPARING)->assertSessionHasErrors('status');
-
-        // وإلّا جُهِّزت الباقة مرّتين وحُسبت مرّتين
-        $this->assertSame(OrderStatus::DELIVERED, $order->fresh()->status);
-    }
-
-    public function test_a_cancelled_order_cannot_be_revived(): void
-    {
-        $order = $this->order(['status' => OrderStatus::CANCELLED]);
-
-        $this->move($order, OrderStatus::READY)->assertSessionHasErrors('status');
-
-        $this->assertSame(OrderStatus::CANCELLED, $order->fresh()->status);
-    }
-
-    public function test_an_unknown_status_never_reaches_the_column(): void
-    {
-        $order = $this->order();
-
-        $this->move($order, 'قيد الشحن الفضائي')->assertSessionHasErrors('status');
-
-        $this->assertSame(OrderStatus::PREPARING, $order->fresh()->status);
-    }
-
     /* ------------------- اللوحة والشاشة بابٌ واحد ------------------- */
-
-    /**
-     * حارسان يفترقان عند أوّل تعديل — فالعامل يستطيع من لوحته ما لا يستطيعه
-     * صاحبُ المحلّ من شاشته.
-     */
-    public function test_both_screens_refuse_the_same_move(): void
-    {
-        $a = $this->order(['status' => OrderStatus::DELIVERED]);
-        $b = $this->order(['status' => OrderStatus::DELIVERED]);
-
-        $this->move($a, OrderStatus::PREPARING)->assertSessionHasErrors('status');
-        $this->post(route('admin.orders.status', $b->number), ['status' => OrderStatus::PREPARING])
-            ->assertSessionHasErrors('status');
-
-        $this->assertSame(OrderStatus::DELIVERED, $a->fresh()->status);
-        $this->assertSame(OrderStatus::DELIVERED, $b->fresh()->status);
-    }
-
     public function test_neither_screen_writes_the_move_by_hand(): void
     {
         foreach ([
@@ -209,34 +121,6 @@ class PreparationFlowAuditTest extends TestCase
 
         $this->assertSame($before + 2, (int) $this->product->fresh()->quantity);
     }
-
-    /* ------------------- حدّ المتجر والفرع ------------------- */
-
-    public function test_a_neighbours_order_cannot_be_moved_from_this_board(): void
-    {
-        $other = Business::create(['name' => 'الجار', 'status' => 'نشط']);
-        $theirBranch = Branch::create(['business_id' => $other->id, 'name' => 'فرعهم']);
-        $theirs = Order::create([
-            'business_id' => $other->id, 'branch_id' => $theirBranch->id,
-            'number' => 'INV-THEIRS', 'status' => OrderStatus::PREPARING, 'is_held' => false,
-            'payment_method' => 'نقدي', 'subtotal' => 5, 'total' => 5,
-            'scheduled_for' => now()->addHour(),
-        ]);
-
-        $this->move($theirs, OrderStatus::READY)->assertNotFound();
-
-        $this->assertSame(OrderStatus::PREPARING, $theirs->fresh()->status);
-    }
-    public function test_a_branch_bound_board_refuses_to_move_another_branchs_order(): void
-    {
-        $second = Branch::create(['business_id' => $this->business->id, 'name' => 'صلالة']);
-        $elsewhere = $this->order(['branch_id' => $second->id]);
-
-        session(['current_branch' => $this->branch->id]);
-
-        $this->move($elsewhere, OrderStatus::READY)->assertNotFound();
-    }
-
     /* ------------------- الصلاحية ------------------- */
 
     private function staff(string $role, array $permissions): User

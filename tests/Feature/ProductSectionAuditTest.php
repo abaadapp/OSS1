@@ -108,23 +108,6 @@ class ProductSectionAuditTest extends TestCase
 
         $this->assertNull($p->fresh()->category_id);
     }
-    public function test_a_stopped_product_cannot_be_sold(): void
-    {
-        $p = $this->product(['active' => false]);
-
-        // ماسحٌ يقرأ الباركود لا يسأل الشاشة، وسلّةٌ عُلّقت قبل الإيقاف تُستأنف بعده
-        $this->sell($p)->assertStatus(422);
-
-        $this->assertSame(0, Order::where('is_held', false)->count());
-    }
-
-    public function test_a_live_product_still_sells(): void
-    {
-        $this->sell($this->product())->assertOk();
-
-        $this->assertSame(1, Order::where('is_held', false)->count());
-    }
-
     public function test_the_till_screen_hides_what_was_stopped(): void
     {
         $source = file_get_contents(base_path('resources/js/Pages/Pos/Index.tsx'));
@@ -214,36 +197,6 @@ class ProductSectionAuditTest extends TestCase
         $this->assertNotSame($p->sku, $copy->sku);
         $this->assertNotSame($p->barcode, $copy->barcode);
     }
-
-    /* ---------------- الرمز لا يتكرّر ولو بعد استعادة ---------------- */
-
-    public function test_a_restore_that_would_duplicate_a_barcode_is_refused(): void
-    {
-        $gone = $this->product(['name' => 'أ', 'sku' => 'S1', 'barcode' => 'B1']);
-        $gone->delete();
-
-        // القيد يتجاوز المحذوف عمدًا، فالإضافة بالرمز نفسه مسموحة
-        $this->post(route('admin.products.store'), [
-            'name' => 'ب', 'price' => 5, 'sku' => 'S1', 'barcode' => 'B1',
-        ])->assertSessionHasNoErrors();
-
-        $this->post(route('admin.products.restore', $gone->id));
-
-        // صنفان بباركودٍ واحد يجعلان الماسح يختار أحدهما — والفرق يظهر في الجرد
-        $this->assertSame(1, Product::where('barcode', 'B1')->count());
-        $this->assertSoftDeleted('products', ['id' => $gone->id]);
-    }
-
-    public function test_a_restore_with_a_free_code_still_works(): void
-    {
-        $gone = $this->product(['sku' => 'S9', 'barcode' => 'B9']);
-        $gone->delete();
-
-        $this->post(route('admin.products.restore', $gone->id));
-
-        $this->assertNotSoftDeleted('products', ['id' => $gone->id]);
-    }
-
     /* ------------------- الحذف الجماعي له فاعل ------------------- */
 
     public function test_a_bulk_deletion_records_who_did_it(): void

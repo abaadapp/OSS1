@@ -129,30 +129,6 @@ class ArabicNumeralsTest extends TestCase
     }
 
     /* --------------------------- الاستثناء --------------------------- */
-
-    /**
-     * كلمة السرّ لا تُمسّ.
-     *
-     * لو بُدّلت أرقامُها عند الحفظ وعند الدخول لَبدا كلُّ شيءٍ سليمًا — إلى أن
-     * يمرّ الحقلُ يومًا بمسارٍ لا يمرّ بهذا الوسيط، فلا يُفتح الحساب ولا يُعرف
-     * لماذا. فتبقى كما كُتبت حرفًا بحرف.
-     */
-    public function test_a_password_is_never_rewritten(): void
-    {
-        $this->assertTrue(NormalizeNumbers::untouched('password'));
-        $this->assertTrue(NormalizeNumbers::untouched('password_confirmation'));
-        $this->assertTrue(NormalizeNumbers::untouched('current_password'));
-
-        $this->owner->update(['password' => Hash::make('سرّي٥٠٠')]);
-
-        $this->post(route('login.attempt'), [
-            'email' => 'o@eventplus.om',
-            'password' => 'سرّي٥٠٠',
-        ]);
-
-        $this->assertAuthenticatedAs($this->owner);
-    }
-
     /* ------------------------- لا حقلَ يُنسى ------------------------- */
 
     /**

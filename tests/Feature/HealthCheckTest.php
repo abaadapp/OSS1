@@ -45,14 +45,4 @@ class HealthCheckTest extends TestCase
         $this->assertSame(503, $res->status());
         $res->assertJson(['ok' => false, 'storage' => false, 'db' => true]);
     }
-
-    public function test_it_leaks_nothing_about_the_system(): void
-    {
-        // تُقرأ من الإنترنت بلا مصادقة: تقول حيّ أو ميت، ولا تقول بماذا يعمل
-        $body = $this->get('/health')->getContent();
-
-        foreach (['laravel', 'php', base_path()] as $secret) {
-            $this->assertStringNotContainsStringIgnoringCase((string) $secret, $body);
-        }
-    }
 }

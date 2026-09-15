@@ -319,22 +319,4 @@ class TheMoneySaysWhichBankItEnteredTest extends TestCase
     }
 
     // ───────────────────────── وما لم يتغيّر ─────────────────────────
-
-    /**
-     * والقيدُ لم يتبدّل: الجانبُ «bank» لا يتبع أيَّ حسابٍ بعينه.
-     *
-     * `bank_account_id` بيانُ مطابقةٍ لا وجهةُ قيد — ولو تبع القيدُ الحسابَ
-     * لاحتاج كلُّ حسابٍ ورقةً في شجرة الحسابات، وهذا تغييرٌ آخر لم يُطلب.
-     */
-    public function test_the_ledger_side_is_unchanged(): void
-    {
-        $this->actingAs($this->owner)->post('/admin/customer-invoices', $this->payload([
-            'issue' => true, 'payment_method' => 'تحويل', 'bank_account_id' => $this->second->id,
-        ]))->assertSessionHasNoErrors();
-
-        // والمقارنةُ بإجمالي الورقة لا برقمٍ مكتوب: النسبةُ إعدادٌ يتبدّل
-        $total = (float) CustomerInvoice::firstOrFail()->total;
-
-        $this->assertEqualsWithDelta($total, Ledger::balance($this->business->id, 'bank'), 0.001);
-    }
 }

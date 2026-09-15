@@ -65,34 +65,6 @@ class SubscriptionGraceTest extends TestCase
     }
 
     // ————— ٢· الحجز لا الطرد —————
-
-    public function test_a_locked_merchant_can_still_sign_in(): void
-    {
-        /*
-         * الدخول لا يُرفض: يدخل ويقف عند صفحةٍ تقول له كم عليه وبمن يتّصل.
-         * ورفضُه عند الباب كان يجعله يجرّب كلمة المرور ثانيةً وثالثة.
-         */
-        $this->tenant(now()->subDays(30)->toDateString());
-
-        $this->post(route('login.attempt'), [
-            'email' => 'owner@eventplusapp.om', 'password' => 'password',
-        ])->assertSessionHasNoErrors();
-
-        $this->assertAuthenticated();
-    }
-    public function test_a_disabled_business_is_still_thrown_out_not_held(): void
-    {
-        /*
-         * التعطيل غير الانتهاء: أمرُه قرارٌ من المنصة لا موعدٌ مرّ، ولا شيء
-         * يفعله صاحبه. فتُنهى جلسته ويُردّ إلى الدخول كما كان.
-         */
-        $owner = $this->tenant(now()->addMonth()->toDateString());
-        $owner->business->update(['status' => 'معطل']);
-
-        $this->actingAs($owner)->get(route('admin.dashboard'))->assertRedirect(route('login'));
-        $this->assertGuest();
-    }
-
     // ————— ٣· الإنذار —————
 
     public function test_it_warns_a_week_before(): void

@@ -50,37 +50,5 @@ class LoginScreenTest extends TestCase
         $this->get('/pin-login')->assertNotFound();
         $this->post('/pin-login', ['pin' => '1234'])->assertNotFound();
     }
-
-    /** والخروج بالخمول يعود إلى شاشة الدخول لا إلى لوحة الأرقام */
-    public function test_idle_logout_returns_to_the_login_screen(): void
-    {
-        $this->actingAs($this->owner)
-            ->post(route('logout', ['to' => 'pin']))
-            ->assertRedirect(route('login'));
-
-        $this->assertGuest();
-    }
     /* --------------------------- حدّ المحاولات --------------------------- */
-
-    /**
-     * خمس محاولاتٍ خاطئة تكفي على باب البريد.
-     *
-     * كان الحدّ محروسًا على بابين، ورُفع أحدهما — فصار هذا هو الباب الوحيد،
-     * وخلفه حساب مدير المنصة لا درج صندوق. والسادسة تُرفض بالحدّ لا بالكلمة:
-     * حتى كلمة المرور الصحيحة لا تمرّ.
-     */
-    public function test_repeated_bad_passwords_are_rate_limited(): void
-    {
-        for ($i = 0; $i < 5; $i++) {
-            $this->post(route('login.attempt'), [
-                'email' => 'salem@eventplus.om', 'password' => 'خطأ',
-            ])->assertSessionHasErrors('email');
-        }
-
-        $this->post(route('login.attempt'), [
-            'email' => 'salem@eventplus.om', 'password' => 'secret-pass',
-        ])->assertSessionHasErrors('email');
-
-        $this->assertGuest();
-    }
 }

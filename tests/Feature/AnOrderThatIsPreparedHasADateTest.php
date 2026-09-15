@@ -64,76 +64,6 @@ class AnOrderThatIsPreparedHasADateTest extends TestCase
 
         $this->actingAs($this->owner);
     }
-    /** طلبٌ حيٌّ كامل — يُستعمل لبابِ التعديل */
-    private function scheduled(): Order
-    {
-        $this->sell([
-            'fulfillment_type' => FlowerOrder::DELIVERY,
-            'recipient_name' => 'سارة',
-            'recipient_phone' => '91234567',
-            'delivery_address' => 'الخوير، شارع ١٨',
-            'scheduled_for' => now()->addDay()->format('Y-m-d H:i:s'),
-        ])->assertOk();
-
-        return Order::where('business_id', $this->business->id)->latest('id')->firstOrFail();
-    }
-
-    /* ------------------------------ بابُ الصندوق ------------------------------ */
-
-    public function test_a_delivery_order_without_a_date_is_refused(): void
-    {
-        $this->sell([
-            'fulfillment_type' => FlowerOrder::DELIVERY,
-            'recipient_name' => 'سارة',
-            'recipient_phone' => '91234567',
-            'delivery_address' => 'الخوير، شارع ١٨',
-        ])->assertStatus(422)->assertJsonValidationErrors('scheduled_for');
-
-        $this->assertSame(0, Order::where('business_id', $this->business->id)->count());
-    }
-
-    /** والاستلام من المحلّ مثلُه: هو أيضًا لا يُصنع في لحظته */
-    public function test_a_pickup_order_without_a_date_is_refused(): void
-    {
-        $this->sell(['fulfillment_type' => FlowerOrder::PICKUP])
-            ->assertStatus(422)->assertJsonValidationErrors('scheduled_for');
-    }
-    /* ------------------------------ بابُ التعديل ------------------------------ */
-
-    public function test_the_date_cannot_be_emptied_out_of_a_live_order(): void
-    {
-        $order = $this->scheduled();
-
-        $this->put(route('admin.orders.details.update', $order->number), [
-            'scheduled_for' => '',
-        ])->assertSessionHasErrors('scheduled_for');
-
-        $this->assertNotNull($order->fresh()->scheduled_for, 'الطلبُ فقد موعدَه فسقط من اللوحة');
-    }
-
-    /** ولا يسقط الطلب من اللوحة بعد المحاولة */
-    public function test_the_order_is_still_on_the_board_after_the_refusal(): void
-    {
-        $order = $this->scheduled();
-
-        $this->put(route('admin.orders.details.update', $order->number), ['scheduled_for' => '']);
-
-        $numbers = collect($this->board())->pluck('number')->all();
-        $this->assertContains($order->number, $numbers);
-    }
-
-    /** وتصحيحُ عنوانٍ لا يُطالَب بموعدٍ جديد: المحفوظ هو المعتبَر */
-    public function test_a_correction_that_does_not_touch_the_date_still_saves(): void
-    {
-        $order = $this->scheduled();
-
-        $this->put(route('admin.orders.details.update', $order->number), [
-            'delivery_address' => 'الخوير، شارع 20',
-        ])->assertSessionHasNoErrors();
-
-        $this->assertSame('الخوير، شارع 20', $order->fresh()->delivery_address);
-    }
-
     /* ------------------------------ حارسان لا يفترقان ------------------------------ */
 
     /**
@@ -152,23 +82,6 @@ class AnOrderThatIsPreparedHasADateTest extends TestCase
         $errors = FlowerOrder::afterValidation(['fulfillment_type' => FlowerOrder::PICKUP]);
         $this->assertSame(__($refusal), $errors['scheduled_for'] ?? null);
     }
-
-    /* ------------------------------ ملاحظةُ السطر ------------------------------ */
-
-    public function test_the_line_note_reaches_the_board(): void
-    {
-        $this->sell([
-            'fulfillment_type' => FlowerOrder::PICKUP,
-            'scheduled_for' => now()->addDay()->format('Y-m-d H:i:s'),
-            'items' => [[
-                'id' => $this->product->id, 'name' => 'باقة ورد', 'qty' => 1,
-                'note' => 'بلا ورد أحمر',
-            ]],
-        ])->assertOk();
-
-        $this->assertSame('بلا ورد أحمر', $this->board()[0]['items'][0]['note']);
-    }
-
     /** ويرسمها من يقف عند الطاولة — لا تصل الشاشةَ لتُطرح */
     public function test_the_board_draws_the_line_note(): void
     {

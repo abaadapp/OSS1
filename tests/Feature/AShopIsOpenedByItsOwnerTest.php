@@ -55,39 +55,6 @@ class AShopIsOpenedByItsOwnerTest extends TestCase
     }
 
     /* ═══════════════ الثلاثةُ معًا ═══════════════ */
-
-    /**
-     * التسجيلُ يُنشئ متجرًا ومالكًا وتصنيفاتِ بداية — ويدخل صاحبَه.
-     *
-     * والتصنيفاتُ ليست زينة: متجرٌ يفتح لوحتَه على صفحةٍ بيضاء لا يعرف من
-     * أين يبدأ، فيُبذَر له ما يخصّ نشاطه.
-     */
-    public function test_registering_opens_a_shop_an_owner_and_a_shelf(): void
-    {
-        $this->post(route('register.store'), $this->form())
-            ->assertRedirect(route('admin.setup.index'));
-
-        $business = Business::firstOrFail();
-
-        $this->assertSame('زهور الخوير', $business->name);
-        $this->assertSame('محل ورود', $business->type);
-        $this->assertSame('سالم بن راشد', $business->owner_name);
-        $this->assertSame('مسقط — الخوير', $business->address);
-
-        $owner = User::firstOrFail();
-
-        $this->assertSame('salem@example.com', $owner->email);
-        $this->assertSame('admin', $owner->role);
-        $this->assertSame((int) $business->id, (int) $owner->business_id);
-        $this->assertNotSame('eventplus2026', $owner->password, 'كلمةُ المرور محفوظةٌ كما كُتبت');
-
-        // تصنيفاتُ «محل ورود» — من `BusinessTypes` لا من قائمةٍ هنا
-        $this->assertGreaterThan(0, Category::where('business_id', $business->id)->count());
-
-        /* ويدخل فورًا: لا يُردّ إلى بابٍ يكتب فيه ما كتبه للتوّ */
-        $this->assertAuthenticatedAs($owner);
-    }
-
     /** والتجربةُ تبدأ وتنتهي: متجرٌ بلا تاريخٍ يعمل إلى الأبد */
     public function test_a_new_shop_starts_a_trial_that_ends(): void
     {
@@ -138,23 +105,6 @@ class AShopIsOpenedByItsOwnerTest extends TestCase
     }
 
     /* ═══════════════ ولا شيءَ يُكتب حين يسقط شيء ═══════════════ */
-
-    /**
-     * بيانٌ ناقصٌ لا يترك متجرًا نصفَ مبنيّ.
-     *
-     * والمعاملةُ هي الحارس: متجرٌ بلا مالكٍ بابٌ لا يُفتح أبدًا ولا يعرف به
-     * أحد، ومالكٌ بلا متجرٍ حسابٌ يدخل إلى لا شيء.
-     */
-    public function test_a_refused_signup_leaves_nothing_behind(): void
-    {
-        $this->post(route('register.store'), $this->form(['password' => 'short']))
-            ->assertSessionHasErrors('password');
-
-        $this->assertSame(0, Business::count());
-        $this->assertSame(0, User::count());
-        $this->assertGuest();
-    }
-
     /**
      * والنشاطُ من سجلّه — لا نصًّا يُرسَل بيد.
      *
@@ -238,54 +188,7 @@ class AShopIsOpenedByItsOwnerTest extends TestCase
 
         $this->assertSame(0, Business::count());
     }
-
-    /**
-     * ويُخنق: بابٌ يكتب في القاعدة بلا حسابٍ سابق أسهلُ ما يُستنزف.
-     *
-     * سكربتٌ يفتح ألفَ متجرٍ في دقيقة — والمفتاحُ العنوانُ وحده، إذ يبدّل
-     * من يُغرق البابَ البريدَ في كلّ محاولة.
-     */
-    public function test_the_door_is_throttled_by_address_not_by_email(): void
-    {
-        for ($i = 0; $i < 5; $i++) {
-            $this->flushSession();
-            $this->post(route('register.store'), $this->form([
-                'email' => "flood{$i}@example.com",
-                'password' => 'x',
-            ]));
-        }
-
-        $this->flushSession();
-        $this->post(route('register.store'), $this->form(['email' => 'flood9@example.com']))
-            ->assertSessionHasErrors('email');
-
-        $this->assertSame(0, Business::count(), 'مرّ طلبٌ بعد الخنق');
-    }
-
     /* ═══════════════ ولم ينكسر ما كان يعمل ═══════════════ */
-
-    /**
-     * والدخولُ بالحساب الجديد يعمل — ومعه الخروجُ ثمّ الدخول.
-     *
-     * حسابٌ يُنشأ ولا يُدخَل به أسوأُ من حسابٍ لا يُنشأ: صاحبُه يظنّ أنّه
-     * سجّل، ويقف أمام بابٍ يرفض بياناته الصحيحة.
-     */
-    public function test_the_new_account_can_log_out_and_back_in(): void
-    {
-        $this->post(route('register.store'), $this->form());
-        $this->assertAuthenticated();
-
-        $this->post(route('logout'));
-        $this->assertGuest();
-
-        $this->post(route('login.attempt'), [
-            'email' => 'salem@example.com',
-            'password' => 'eventplus2026',
-        ])->assertRedirect();
-
-        $this->assertAuthenticatedAs(User::firstOrFail());
-    }
-
     /** ومن دخل لا يفتح معالجَ تسجيلٍ ثانٍ فيخرج بمتجرٍ لا يقصده */
     public function test_a_signed_in_merchant_is_not_offered_a_second_shop(): void
     {

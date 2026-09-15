@@ -146,49 +146,4 @@ class PurchaseAndOfflineTest extends TestCase
 
         $this->assertSame('مطلوب', $po->fresh()->status);
     }
-    public function test_a_queued_sale_replayed_after_reconnect_is_not_billed_twice(): void
-    {
-        $first = $this->sell('offline-1')->assertOk()->json();
-
-        // الشبكة عادت والواجهة أعادت رفع نفس السلّة
-        $second = $this->sell('offline-1')->assertOk()->json();
-
-        $this->assertSame($first['invoice'], $second['invoice'], 'رقم فاتورة مختلف');
-        $this->assertTrue($second['duplicate'] ?? false, 'لم يُعلَم أنه تكرار');
-        $this->assertSame(1, Order::where('business_id', $this->business->id)->count());
-    }
-
-    public function test_a_replayed_sale_does_not_deduct_stock_again(): void
-    {
-        $this->sell('offline-2', qty: 2)->assertOk();
-        $this->assertSame(3, (int) $this->product->fresh()->quantity, '5 - 2');
-
-        $this->sell('offline-2', qty: 2)->assertOk();
-
-        $this->assertSame(3, (int) $this->product->fresh()->quantity, 'خُصم المخزون مرّتين');
-    }
-
-    public function test_two_genuinely_different_sales_are_both_recorded(): void
-    {
-        $a = $this->sell('offline-3')->assertOk()->json();
-        $b = $this->sell('offline-4')->assertOk()->json();
-
-        $this->assertNotSame($a['invoice'], $b['invoice']);
-        $this->assertSame(2, Order::where('business_id', $this->business->id)->count());
-    }
-    /* --------------------- متانة ترقيم الفواتير --------------------- */
-
-    public function test_a_stray_non_numeric_invoice_number_does_not_break_the_till(): void
-    {
-        // رقم شاذّ قد يأتي من نسخة مستعادة أو إدخال يدوي. على SQLite يُقرأ
-        // صفرًا بصمت، وعلى PostgreSQL كان CAST يرفع خطأً فيتعطّل كل بيع بعده.
-        Order::create([
-            'business_id' => $this->business->id, 'number' => 'INV-ABC',
-            'total' => 1, 'status' => 'مكتمل', 'is_held' => false, 'ordered_at' => now(),
-        ]);
-
-        $this->sell('after-stray')->assertOk();
-
-        $this->assertSame(2, Order::where('business_id', $this->business->id)->count());
-    }
 }

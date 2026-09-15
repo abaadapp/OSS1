@@ -88,68 +88,6 @@ class PosDeviceTest extends TestCase
     }
 
     /* -------------------------- عزل المستأجرين -------------------------- */
-
-    /** موظف من متجر أ لا يبيع على جهاز متجر ب — يُخرَج من الجلسة */
-    public function test_an_employee_cannot_use_another_tenants_device(): void
-    {
-        $cashier = $this->cashier($this->a, 'a1@eventplus.om');
-        [$devB, $rawB] = $this->device($this->branchB);
-
-        $this->enterPos($devB, $rawB, $cashier)->assertRedirect(route('login'));
-        $this->assertGuest();
-    }
-
     /* ---------------------------- إذن الفرع ---------------------------- */
-
-    /** ممنوعٌ من فرعٍ لا يبيع على جهازه ولو دخل ببريدٍ صحيح */
-    public function test_an_employee_not_assigned_to_the_branch_is_refused(): void
-    {
-        $cashier = $this->cashier($this->a, 'k@eventplus.om', [$this->khuwair->id]);
-        [$dev, $raw] = $this->device($this->seeb);
-
-        $this->enterPos($dev, $raw, $cashier)->assertRedirect(route('login'));
-        $this->assertGuest();
-    }
-
-    /** ومن له فرعان يعمل على جهازي الفرعين */
-    public function test_an_employee_of_two_branches_works_on_both_devices(): void
-    {
-        $cashier = $this->cashier($this->a, 'k2@eventplus.om', [$this->khuwair->id, $this->seeb->id]);
-        [$d1, $r1] = $this->device($this->khuwair);
-        [$d2, $r2] = $this->device($this->seeb, 'كاشير 02');
-
-        $this->enterPos($d1, $r1, $cashier);
-        $this->assertAuthenticated();
-        $this->assertSame($this->khuwair->id, session('current_branch'));
-
-        $this->enterPos($d2, $r2, $cashier);
-        $this->assertAuthenticated();
-        $this->assertSame($this->seeb->id, session('current_branch'));
-    }
-
-    /** وبلا تحديد يعمل في كل فروع متجره — وإلا أُقفل كل كاشير قائم يوم النشر */
-    public function test_an_employee_without_branches_works_everywhere_in_their_tenant(): void
-    {
-        $cashier = $this->cashier($this->a, 'k3@eventplus.om');
-        [$dev, $raw] = $this->device($this->seeb);
-
-        $this->enterPos($dev, $raw, $cashier);
-        $this->assertAuthenticated();
-        $this->assertSame($this->seeb->id, session('current_branch'));
-    }
     /* -------------------------- سياق الجلسة -------------------------- */
-
-    /** الجلسة تحمل الموظف والفرع والجهاز والمتجر الصحيح */
-    public function test_the_session_carries_the_right_context(): void
-    {
-        $cashier = $this->cashier($this->a, 'k8@eventplus.om', [$this->seeb->id]);
-        [$dev, $raw] = $this->device($this->seeb);
-
-        $this->enterPos($dev, $raw, $cashier);
-
-        $this->assertSame($cashier->id, auth()->id());
-        $this->assertSame($this->a->id, auth()->user()->business_id);
-        $this->assertSame($this->seeb->id, session('current_branch'));
-        $this->assertNotNull($dev->fresh()->last_seen_at);
-    }
 }

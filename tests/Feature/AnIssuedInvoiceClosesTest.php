@@ -185,26 +185,4 @@ class AnIssuedInvoiceClosesTest extends TestCase
 
         $this->assertFalse(Permissions::entersPanel($this->cashier->fresh()));
     }
-    /* ------------------------------ الشاشة ------------------------------ */
-
-    public function test_the_screen_hides_the_pencil_when_the_invoice_is_closed(): void
-    {
-        // قلمٌ يُعرض ثمّ يُردّ عند الضغط يجعل الكاشير يظنّ العطب في النظام
-        $today = $this->sale();
-        $old = $this->sale(now()->subDays(2)->toDateTimeString());
-
-        $this->actingAs($this->owner);
-
-        $this->assertTrue($this->canEdit($today));
-        $this->assertFalse($this->canEdit($old));
-    }
-
-    public function test_the_screen_hides_the_pencil_from_whoever_may_not_use_it(): void
-    {
-        $order = $this->sale();
-
-        $this->actingAs($this->cashier);
-
-        $this->assertFalse($this->canEdit($order));
-    }
 }

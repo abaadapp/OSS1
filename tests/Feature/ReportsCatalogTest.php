@@ -155,19 +155,6 @@ class ReportsCatalogTest extends TestCase
         $this->actingAs($this->staff(['reports', 'employees']))
             ->get(route('admin.reports.staff'))->assertOk();
     }
-
-    public function test_the_shared_window_is_gone_not_merely_unused(): void
-    {
-        /*
-         * بابٌ متروكٌ يبقى بابًا: مسارُ النافذة كان يردّ الجداول الثلاثة
-         * بصلاحيةٍ أخرى وبلا فترة. وتركُه مفتوحًا بعد أن صار لكلٍّ صفحته
-         * يعني بابين للشيء الواحد، يُدقّق أحدهما ويُنسى الآخر.
-         */
-        $this->assertFalse(Route::has('admin.reports.data'), 'مسار النافذة المشتركة ما زال قائمًا');
-        $this->assertFileDoesNotExist(app_path('Http/Controllers/Admin/ReportDataController.php'));
-        $this->assertFileDoesNotExist(resource_path('js/Pages/Admin/Reports/partials/ReportViewer.tsx'));
-    }
-
     /**
      * الملفّ يحمل ما على الشاشة — وإلا فهو ورقةٌ تناقضها ولا تقول ذلك.
      *

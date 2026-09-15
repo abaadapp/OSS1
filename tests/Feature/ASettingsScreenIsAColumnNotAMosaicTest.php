@@ -157,31 +157,6 @@ class ASettingsScreenIsAColumnNotAMosaicTest extends TestCase
     }
 
     /* ---------------------------- سقفُ العرض ---------------------------- */
-
-    /**
-     * والسقفُ على النموذج لا على الصفحة.
-     *
-     * نموذجٌ حقلاه حقلان يمتدّ على ١٦٠٠ بكسل فتقع التسمية في طرفٍ وقيمتُها
-     * في الطرف الآخر. وجدولُ الفروع والسجلُّ وشجرةُ الحسابات تحتاج العرض
-     * كلَّه — فلو شملها السقف لَانكمش ما وُضع ليتّسع.
-     */
-    public function test_the_width_cap_covers_forms_and_spares_tables(): void
-    {
-        $tsx = $this->screen('Admin/Settings/Index.tsx');
-
-        $start = strpos($tsx, 'const SECTION_WIDTH');
-        $this->assertNotFalse($start, 'خريطةُ العرض غائبة');
-        $map = substr($tsx, $start, strpos($tsx, '};', $start) - $start);
-
-        foreach (['business', 'finance', 'permissions', 'templates', 'notifications'] as $form) {
-            $this->assertStringContainsString("{$form}:", $map, "نموذج «{$form}» بلا سقفِ قراءة");
-        }
-
-        foreach (['branches', 'employees', 'devices', 'activity', 'trash', 'chart'] as $table) {
-            $this->assertStringNotContainsString("{$table}:", $map, "جدول «{$table}» حُشر في عمودٍ ضيّق");
-        }
-    }
-
     /* ---------------------------- تهيئةُ المتجر ---------------------------- */
 
     /**

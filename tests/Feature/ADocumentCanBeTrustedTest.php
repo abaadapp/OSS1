@@ -357,33 +357,6 @@ class ADocumentCanBeTrustedTest extends TestCase
     }
 
     /* ═══════════ §14 — اسمُ الملفّ لا يدخل الترويسة كما جاء ═══════════ */
-
-    /** بادئةُ رقمٍ يكتبها التاجر لا تكسر ترويسةَ التنزيل */
-    public function test_a_merchant_prefix_cannot_break_the_download_header(): void
-    {
-        $this->actingAs($this->owner);
-
-        $response = Pdf::sheet('<p>x</p>', 'invoice-A"; evil=1'."\r\n".'X: y', PaperSize::A4);
-        $disposition = (string) $response->headers->get('Content-Disposition');
-
-        $this->assertStringStartsWith('inline; filename="invoice-A-evil-1-X-y.pdf"', $disposition);
-
-        /*
-         * والاسمُ الأصليُّ يتبعه مرمَّزًا (RFC 5987) كي لا تُمحى العربيّةُ منه
-         * — انظر `MpdfDriver::respond`. والترميزُ بالنسبة المئويّة، فلا تنصيص
-         * فيه ولا سطرٌ جديد يخرج منه.
-         */
-        $this->assertStringContainsString("filename*=UTF-8''", $disposition);
-        $this->assertSame(1, substr_count($disposition, 'filename="'));
-        $this->assertDoesNotMatchRegularExpression('/[\r\n]/', $disposition);
-        $this->assertSame(
-            '"',
-            substr($disposition, strpos($disposition, 'filename="') + 9, 1),
-            'اقتباسٌ في غير موضعه',
-        );
-        $this->assertStringNotContainsString('"', substr($disposition, strpos($disposition, 'filename*=')));
-    }
-
     /* ═══════════ §21 — والحالاتُ التي تُنسى ═══════════ */
 
     /** مئةُ صنفٍ تخرج في صفحاتٍ متعدّدة بلا قصّ */

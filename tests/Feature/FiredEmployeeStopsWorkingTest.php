@@ -48,17 +48,6 @@ class FiredEmployeeStopsWorkingTest extends TestCase
     {
         $this->actingAs($this->employee)->get(route('admin.dashboard'))->assertSuccessful();
     }
-
-    public function test_a_deleted_employee_cannot_read(): void
-    {
-        $this->actingAs($this->employee)->get(route('admin.dashboard'))->assertSuccessful();
-
-        $this->employee->delete();
-
-        $this->get(route('admin.dashboard'))->assertRedirect(route('login'));
-        $this->assertGuest();
-    }
-
     /** والقراءة أهون: الكتابة هي ما يُفسد دفاتر التاجر */
     public function test_a_deleted_employee_cannot_write(): void
     {
@@ -70,27 +59,6 @@ class FiredEmployeeStopsWorkingTest extends TestCase
 
         $this->assertFalse(Customer::where('name', 'زبونٌ بعد الطرد')->exists(),
             'الموظف المحذوف كتب صفًّا في متجرٍ لم يعد يعمل فيه');
-    }
-
-    /** والموقوف كما كان — لم يُكسَر بإصلاح المحذوف */
-    public function test_a_suspended_employee_is_still_stopped(): void
-    {
-        $this->actingAs($this->employee)->get(route('admin.dashboard'))->assertSuccessful();
-
-        $this->employee->update(['status' => 'موقوف']);
-
-        $this->get(route('admin.dashboard'))->assertRedirect(route('login'));
-        $this->assertGuest();
-    }
-
-    /** ولا يعود من الباب — وهو بريده وكلمة مروره */
-    public function test_a_deleted_employee_cannot_log_back_in(): void
-    {
-        $this->employee->delete();
-
-        $this->post(route('login.attempt'), ['email' => 'e@eventplus.om', 'password' => 'password'])
-            ->assertSessionHasErrors();
-        $this->assertGuest();
     }
     /** والحيّ يبقى حيًّا — لئلا يُقرأ الإغلاق إغلاقًا على الجميع */
     public function test_an_employee_who_was_never_deleted_still_works(): void

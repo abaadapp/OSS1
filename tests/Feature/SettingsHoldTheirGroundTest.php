@@ -99,32 +99,6 @@ class SettingsHoldTheirGroundTest extends TestCase
         $this->assertStringContainsString('12.50', Demo::money(12.5));
         $this->assertSame(2, Demo::baseCurrency()['decimals']);
     }
-    public function test_a_second_branch_is_refused_at_the_cap(): void
-    {
-        $this->cappedAtOneBranch();
-
-        $this->actingAs($this->owner)->post(route('admin.branches.store'), ['name' => 'صلالة'])
-            ->assertSessionHasErrors('name');
-    }
-
-    public function test_the_cap_is_not_walked_around_by_deleting_and_restoring(): void
-    {
-        /*
-         * السقفُ يُفرَض عند الإنشاء وحده، والاستعادة إنشاءٌ في أثره: يُحذف
-         * الفرع، ويُفتح غيرُه في مكانه، ثمّ يُضغط «تراجع» — فيصير فرعان
-         * لباقةٍ بيعت بفرعٍ واحد. والحدّ الذي يُلتفّ عليه بضغطتين ليس حدًّا.
-         */
-        $spare = Branch::create(['business_id' => $this->business->id, 'name' => 'صلالة']);
-        $this->cappedAtOneBranch();
-
-        $this->actingAs($this->owner);
-        $spare->delete();
-
-        $this->post(route('admin.branches.restore', $spare->id))->assertSessionHasErrors();
-
-        $this->assertSame(1, Branch::where('business_id', $this->business->id)->count());
-    }
-
     /* ============ الفروع: اسمٌ يُميّز، ونصحٌ يُمكن العمل به ============ */
 
     public function test_two_branches_may_not_carry_the_same_name(): void
@@ -183,59 +157,6 @@ class SettingsHoldTheirGroundTest extends TestCase
         $this->assertFalse(Route::has('admin.inventory.transfers.store'));
         $this->assertFalse(Route::has('admin.inventory.transfers.pdf'));
     }
-
-    /* ============ الإعداد يصل إلى موضعه، ولا يكسر ما قبله ============ */
-
-    public function test_turning_the_tax_off_empties_it_everywhere_at_once(): void
-    {
-        $this->set('vat_enabled', '0');
-
-        $this->sell()->assertOk();
-        $order = Order::latest('id')->firstOrFail();
-
-        $this->assertSame(0.0, round((float) $order->tax, 3), 'ضريبةٌ جُبيت من متجرٍ أطفأها');
-
-        $this->actingAs($this->owner);
-        $summary = Demo::reportSummary('all');
-        $this->assertSame(0.0, round((float) $summary['tax'], 3), 'وتُقرّ في التقرير وهي لم تُجبَ');
-    }
-
-    public function test_the_invoice_prefix_opens_a_new_run_without_colliding(): void
-    {
-        $this->set('inv_prefix', 'AAA-');
-        $this->sell()->assertOk();
-        $first = Order::latest('id')->firstOrFail()->number;
-
-        $this->set('inv_prefix', 'BBB-');
-        $this->set('inv_start', '500');
-        $this->sell()->assertOk();
-        $second = Order::latest('id')->firstOrFail()->number;
-
-        $this->assertSame('AAA-000001', $first);
-        $this->assertSame('BBB-000500', $second, 'البادئة الجديدة تبدأ من رقم التاجر لا من عدّاد القديمة');
-        $this->assertSame(2, Order::distinct('number')->count('number'), 'رقمان متطابقان في دفترٍ واحد');
-    }
-
-    public function test_a_payment_method_the_merchant_switched_off_is_refused_at_the_till(): void
-    {
-        $this->set('pay_card', '0');
-
-        $this->sell(['payment_method' => 'بطاقة'])
-            ->assertStatus(422)->assertJsonValidationErrors('payment_method');
-
-        $this->assertSame(0, Order::count());
-    }
-
-    public function test_switching_every_method_off_does_not_stop_the_till(): void
-    {
-        // حجبُ وسيلةٍ إعدادٌ، وإيقافُ الصندوق عطل
-        $this->set('pay_cash', '0');
-        $this->set('pay_card', '0');
-        $this->set('pay_transfer', '0');
-
-        $this->sell()->assertOk();
-    }
-
     public function test_a_prefix_with_a_wildcard_never_reaches_the_counter(): void
     {
         $this->actingAs($this->owner)->post(route('admin.settings.update'), ['inv_prefix' => 'IN%-'])

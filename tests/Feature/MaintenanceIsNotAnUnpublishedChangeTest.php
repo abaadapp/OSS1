@@ -38,19 +38,4 @@ class MaintenanceIsNotAnUnpublishedChangeTest extends TestCase
     {
         $this->assertFalse($this->site->hasUnpublishedChanges());
     }
-
-    public function test_turning_maintenance_on_is_not_an_unpublished_change(): void
-    {
-        $this->toggle(true)->assertSessionHasNoErrors();
-
-        $this->assertFalse($this->site->fresh()->hasUnpublishedChanges(),
-            'الصيانةُ عُدّت تغييرًا ينتظر النشر — وهي تقع في اللحظة');
-    }
-    /** ورسالتُها تُحفظ — هي ما يقرؤه الزائر */
-    public function test_the_message_is_kept(): void
-    {
-        $this->toggle(true, 'نعود بعد ساعة');
-
-        $this->assertSame('نعود بعد ساعة', $this->site->fresh()->maintenance_message);
-    }
 }

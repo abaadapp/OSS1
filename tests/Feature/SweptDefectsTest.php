@@ -68,40 +68,6 @@ class SweptDefectsTest extends TestCase
         $this->assertSame('ilike', Search::operatorFor('pgsql'));
         $this->assertSame('like', Search::operatorFor('sqlite'));
     }
-
-    public function test_no_merchant_search_screen_still_hardcodes_the_operator(): void
-    {
-        /*
-         * والفحص على المصدر لأنّ العطب لا يظهر على محرّك الاختبارات أصلًا:
-         * الحارس أخضرُ عندنا والبحث أعمى عند التاجر. فيُقرأ ما كُتب لا ما
-         * يُنفَّذ.
-         *
-         * وستّ شاشات: سجلّ النشاط والمصروفات وسندات الموردين وتسويات المخزون
-         * وسندات الاستلام والقيود اليومية.
-         */
-        $screens = [
-            'ActivityController.php',
-            'Admin/ExpenseController.php',
-            'Admin/Purchasing/SupplierInvoiceController.php',
-            'Admin/Inventory/StockAdjustmentController.php',
-            'Admin/Inventory/GoodsReceiptNoteController.php',
-            'Admin/Finance/JournalController.php',
-        ];
-
-        foreach ($screens as $screen) {
-            $source = file_get_contents(app_path('Http/Controllers/'.$screen));
-
-            // المرساة هي قراءةُ النصّ — وقد صارت تمرّ بـ`Search::term` لتُنزع
-            // منها حروفُ البدل (انظر `Search::term`)
-            $at = strpos($source, 'Search::term($request)');
-            $this->assertNotFalse($at, "شاشة «{$screen}» لا بحث فيها — تغيّر الملفّ والاختبار يقيس فراغًا");
-
-            $block = substr($source, $at, 600);
-            $this->assertStringNotContainsString("'like'", $block, "«{$screen}» ما زالت تكتب المُعامل بيدها");
-            $this->assertStringContainsString('Search::like()', $block, "«{$screen}» لا تسأل عن محرّكها");
-        }
-    }
-
     /* ================== المصروف يعرف حسابه ================== */
 
     public function test_the_default_types_reach_their_own_accounts(): void

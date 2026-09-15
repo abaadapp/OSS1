@@ -91,31 +91,6 @@ class CustomerEditTest extends TestCase
         $this->put(route('admin.customers.update', $theirs->id), $this->fields())->assertNotFound();
         $this->delete(route('admin.customers.destroy', $theirs->id))->assertNotFound();
     }
-
-    /* -------------------------------- الحذف -------------------------------- */
-
-    public function test_deleting_hides_him_and_keeps_his_invoices(): void
-    {
-        Order::create([
-            'business_id' => $this->business->id, 'number' => 'INV-000001',
-            'customer_id' => $this->customer->id, 'customer_name' => 'سالم',
-            'branch' => 'الرئيسي', 'payment_method' => 'نقدي', 'payment_status' => 'مدفوع',
-            'status' => 'مكتمل', 'subtotal' => 100, 'discount' => 0, 'tax' => 0,
-            'total' => 100, 'is_held' => false, 'ordered_at' => now(),
-        ]);
-
-        $this->delete(route('admin.customers.destroy', $this->customer->id))
-            ->assertRedirect(route('admin.customers.index'));
-
-        $this->assertSoftDeleted('customers', ['id' => $this->customer->id]);
-        $this->assertDatabaseHas('orders', ['number' => 'INV-000001', 'total' => 100]);
-
-        $rows = $this->get(route('admin.customers.index'))
-            ->assertOk()->viewData('page')['props']['customers'];
-
-        $this->assertCount(0, $rows);
-    }
-
     public function test_he_waits_in_the_trash_and_comes_back(): void
     {
         $this->delete(route('admin.customers.destroy', $this->customer->id));

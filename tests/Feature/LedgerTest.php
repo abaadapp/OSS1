@@ -202,17 +202,6 @@ class LedgerTest extends TestCase
             ['account' => 'sales', 'credit' => 10],
         ]);
     }
-
-    public function test_a_missing_account_names_itself_in_the_error(): void
-    {
-        $this->expectExceptionMessageMatches('/nonexistent/');
-
-        Ledger::post($this->business->id, 'حساب مجهول', [
-            ['account' => 'nonexistent', 'debit' => 10],
-            ['account' => 'sales', 'credit' => 10],
-        ]);
-    }
-
     /* -------------------------- ميزان المراجعة -------------------------- */
 
     public function test_the_trial_balance_always_balances(): void

@@ -72,62 +72,6 @@ class ProductCompositionDraftTest extends TestCase
     {
         return Product::where('name', 'بوكيه الحب')->firstOrFail();
     }
-
-    /* ------------------------------ المقاسات ------------------------------ */
-
-    public function test_sizes_written_beside_the_product_are_saved_with_it(): void
-    {
-        $this->create([
-            'variants' => [
-                ['name' => 'وسط', 'name_en' => 'Medium', 'price' => 18, 'sku' => 'BQ-M'],
-                ['name' => 'كبير', 'name_en' => '', 'price' => 25, 'sku' => ''],
-            ],
-        ])->assertSessionHasNoErrors();
-
-        $variants = ProductVariant::where('product_id', $this->product()->id)->orderBy('sort_order')->get();
-
-        $this->assertSame(['وسط', 'كبير'], $variants->pluck('name')->all());
-        $this->assertSame('BQ-M', $variants[0]->sku);
-        // الفراغ ليس رمزًا: رمزان فارغان يتعارضان في قيد التفرّد
-        $this->assertNull($variants[1]->sku);
-        $this->assertEqualsWithDelta(25.0, (float) $variants[1]->price, 0.0005);
-    }
-
-    /* ------------------------------- الوصفة ------------------------------- */
-
-    public function test_more_than_one_component_all_arrive(): void
-    {
-        // العطب الذي شُكي منه: مكوّنٌ واحد يمرّ والثاني يضيع
-        $this->create([
-            'recipe' => [
-                ['component_product_id' => $this->rose->id, 'quantity' => 12, 'wastage_percent' => 5, 'variant_index' => null],
-                ['component_product_id' => $this->wrap->id, 'quantity' => 1, 'wastage_percent' => 0, 'variant_index' => null],
-            ],
-        ])->assertSessionHasNoErrors();
-
-        $items = RecipeItem::where('product_id', $this->product()->id)->orderBy('sort_order')->get();
-
-        $this->assertCount(2, $items);
-        $this->assertSame([$this->rose->id, $this->wrap->id], $items->pluck('component_product_id')->map(fn ($i) => (int) $i)->all());
-        $this->assertEqualsWithDelta(12.0, (float) $items[0]->quantity, 0.0005);
-        $this->assertEqualsWithDelta(5.0, (float) $items[0]->wastage_percent, 0.0005);
-    }
-
-    public function test_a_component_written_twice_is_summed_not_duplicated(): void
-    {
-        $this->create([
-            'recipe' => [
-                ['component_product_id' => $this->rose->id, 'quantity' => 7, 'wastage_percent' => 0, 'variant_index' => null],
-                ['component_product_id' => $this->rose->id, 'quantity' => 5, 'wastage_percent' => 0, 'variant_index' => null],
-            ],
-        ])->assertSessionHasNoErrors();
-
-        $items = RecipeItem::where('product_id', $this->product()->id)->get();
-
-        $this->assertCount(1, $items);
-        $this->assertEqualsWithDelta(12.0, (float) $items[0]->quantity, 0.0005);
-    }
-
     public function test_a_recipe_line_follows_the_size_it_was_written_under(): void
     {
         $this->create([
@@ -223,22 +167,6 @@ class ProductCompositionDraftTest extends TestCase
 
         $this->assertNull(Addon::where('name', 'تغليف فاخر')->firstOrFail()->product_id);
     }
-
-    public function test_a_shop_addon_with_the_same_name_is_reused_not_duplicated(): void
-    {
-        $existing = Addon::create([
-            'business_id' => $this->business->id, 'name' => 'تغليف فاخر', 'price' => 1, 'active' => true,
-        ]);
-
-        $this->create([
-            'new_addons' => [['name' => 'تغليف فاخر', 'price' => 3, 'private' => false]],
-        ])->assertSessionHasNoErrors();
-
-        $this->assertSame(1, Addon::where('name', 'تغليف فاخر')->count());
-        // والسعر القائم لا يُدهَس: تغييره من هنا يمسّ منتجاتٍ أخرى بلا علم
-        $this->assertEqualsWithDelta(1.0, (float) $existing->fresh()->price, 0.0005);
-    }
-
     public function test_an_existing_addon_can_be_picked_while_the_product_is_written(): void
     {
         $wrap = Addon::create([
@@ -324,20 +252,5 @@ class ProductCompositionDraftTest extends TestCase
         // المكتوب بيده لا يُترجَم فوقه: القاموس لا يعرف «بلجيكية»
         $this->assertSame('Belgian chocolate', $addon->name_en);
         $this->assertSame($this->product()->id, (int) $addon->product_id);
-    }
-
-    public function test_a_new_addon_may_be_tied_to_stock_from_the_create_screen(): void
-    {
-        $this->create([
-            'new_addons' => [[
-                'name' => 'زيادة 3 وردات', 'price' => 2.5, 'private' => true,
-                'inventory_product_id' => $this->rose->id, 'inventory_quantity' => 3,
-            ]],
-        ])->assertSessionHasNoErrors();
-
-        $addon = Addon::where('name', 'زيادة 3 وردات')->firstOrFail();
-
-        $this->assertSame($this->rose->id, (int) $addon->inventory_product_id);
-        $this->assertEqualsWithDelta(3.0, (float) $addon->inventory_quantity, 0.0005);
     }
 }

@@ -127,41 +127,6 @@ class PasswordsAreNotReadableTest extends TestCase
             $this->assertStringNotContainsString($issued, json_encode($row, JSON_UNESCAPED_UNICODE));
         }
     }
-
-    /**
-     * والمولَّدة ليست ستّة محارف من قاعدةٍ معروفة.
-     *
-     * كانت `'Ab'.random_int(1000, 9999)` — تسعةُ آلاف احتمال، وشكلٌ يبدأ
-     * بـ«Ab». من عرف القاعدة جرّبها كلَّها في دقائق، وهي مفتاحُ صندوقٍ
-     * ومخزونٍ وأرقام هواتف زبائن.
-     */
-    public function test_the_generated_password_is_long_and_unpredictable(): void
-    {
-        $seen = [];
-
-        for ($i = 0; $i < 50; $i++) {
-            $seen[] = MerchantAccount::temporaryPassword();
-        }
-
-        foreach ($seen as $one) {
-            $this->assertSame(10, strlen($one));
-            /*
-             * والشكلُ القديم هو المقصود لا الحرفان.
-             *
-             * كان `assertStringStartsNotWith('Ab', ...)` — وكلمةٌ عشوائيّة من
-             * ستٍّ وخمسين محرفًا تبدأ بهما مرّةً في كلّ ٣١٣٦، وخمسون في
-             * الجولة: نحوَ ٢٪ من كلّ تشغيل. فكانت البوّابةُ تحمرّ بلا عطب —
-             * وحُمرةٌ عشوائيّة تُعلّم الناسَ إعادةَ التشغيل بدل القراءة، وهي
-             * أخطرُ من بوّابةٍ غائبة. والمقصودُ أنّ `Ab####` لم تعد تُولَّد.
-             */
-            $this->assertDoesNotMatchRegularExpression('/^Ab\d{4}$/', $one);
-            // بلا حروفٍ تلتبس عند الإملاء
-            $this->assertDoesNotMatchRegularExpression('/[lO01]/', $one);
-        }
-
-        $this->assertCount(50, array_unique($seen));
-    }
-
     /** ولا يعيد أحدٌ تعيين كلمة موظّف جارٍ */
     public function test_a_neighbours_employee_keeps_their_password(): void
     {

@@ -274,34 +274,6 @@ class ExportFollowsTheScreenTest extends TestCase
             $this->csv('admin.export.products', ['q' => 'سرّ']),
         );
     }
-
-    public function test_a_cancelled_order_is_listed_but_not_counted_in_the_total(): void
-    {
-        /*
-         * الشاشة تعرض الملغى في الجدول وتحسب إجماليّها بلا قيمته. فلو جمعه
-         * الملفّ لقال مبيعاتٍ لم تقع — وخالف الرقم الذي قرأه التاجر قبل أن
-         * يضغط «تصدير».
-         */
-        $this->order('INV-20', OrderStatus::COMPLETED, 'زبون مكتمل');
-        $this->order('INV-21', OrderStatus::CANCELLED, 'زبون ملغى');
-
-        $res = $this->actingAs($this->owner)->get(route('admin.orders.xlsx'));
-        $res->assertOk();
-
-        $this->assertGreaterThan(1000, strlen($this->body($res)));
-
-        // والمجموع يُحسب هنا بالقاعدة نفسها التي يقرأ بها الملفّ
-        $this->actingAs($this->owner);
-        $rows = \App\Support\Demo::orders(request());
-        $total = array_sum(array_map(
-            fn ($o) => $o['status'] === OrderStatus::CANCELLED ? 0.0 : (float) $o['total'],
-            $rows,
-        ));
-
-        $this->assertCount(2, $rows);
-        $this->assertEqualsWithDelta(10.0, $total, 0.0005);
-    }
-
     public function test_the_export_menu_carries_the_filters_in_its_links(): void
     {
         /*

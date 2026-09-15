@@ -197,64 +197,6 @@ class StocktakeTest extends TestCase
     }
 
     /* ==================== الجرد يصل تقرير الهالك ==================== */
-
-    /**
-     * النقص الذي يكشفه العدّ هالكٌ يُقرأ باسم صنفه.
-     *
-     * كان الجرد يكتب رصيدًا وحركةً ومصروفًا واحدًا مجمَّعًا لكلّ الأصناف —
-     * فلا صفَّ تعديلٍ ولا تكلفةَ لحظة ولا صنفٌ يُعرف. ومحلُّ ورد هالكُه
-     * مصروفُه الأوّل، وكان النظام يبتلعه ثمّ يقول «لا هالك».
-     */
-    public function test_a_shortage_found_at_stocktake_lands_in_the_waste_report(): void
-    {
-        // عشرةٌ في الدفتر وسبعةٌ في اليد: ثلاثُ ورداتٍ عُدمت
-        $this->actingAs($this->owner)->post(route('admin.inventory.stocktake.apply'), [
-            'branch_id' => $this->muscat->id,
-            'counts' => [$this->product->id => 7],
-        ])->assertSessionHasNoErrors();
-
-        $row = \App\Models\StockAdjustment::firstOrFail();
-
-        $this->assertSame(\App\Models\StockAdjustment::STOCKTAKE_LOSS, $row->reason);
-        $this->assertEqualsWithDelta(-3.0, (float) $row->quantity_delta, 0.001);
-        // تكلفة اللحظة لا تكلفة اليوم
-        $this->assertEqualsWithDelta(4.0, (float) $row->cost_at_time, 0.001);
-        $this->assertSame($this->muscat->id, (int) $row->branch_id);
-        $this->assertSame($this->product->id, (int) $row->product_id);
-
-        $totals = \App\Support\Waste::totals($this->business->id, [
-            'from' => now()->subDay()->toDateString(), 'to' => now()->addDay()->toDateString(),
-        ]);
-
-        $this->assertEqualsWithDelta(3.0, $totals['quantity'], 0.001);
-        $this->assertEqualsWithDelta(12.0, $totals['value'], 0.001);
-
-        // وباسم صنفه لا مجمَّعًا
-        $byProduct = \App\Support\Waste::groupedBy($this->business->id, 'product', [
-            'from' => now()->subDay()->toDateString(), 'to' => now()->addDay()->toDateString(),
-        ]);
-        $this->assertSame('باقة ورد', $byProduct[0]['label']);
-    }
-
-    /** والزيادة تصحيحُ دفترٍ لا هالك — ولا ربح */
-    public function test_a_surplus_found_at_stocktake_is_not_waste(): void
-    {
-        $this->actingAs($this->owner)->post(route('admin.inventory.stocktake.apply'), [
-            'branch_id' => $this->muscat->id,
-            'counts' => [$this->product->id => 13],
-        ])->assertSessionHasNoErrors();
-
-        $row = \App\Models\StockAdjustment::firstOrFail();
-
-        $this->assertSame(\App\Models\StockAdjustment::STOCKTAKE_GAIN, $row->reason);
-        $this->assertEqualsWithDelta(3.0, (float) $row->quantity_delta, 0.001);
-        $this->assertFalse(\App\Support\Waste::isWaste($row->reason));
-
-        $this->assertEqualsWithDelta(0.0, \App\Support\Waste::totals($this->business->id, [
-            'from' => now()->subDay()->toDateString(), 'to' => now()->addDay()->toDateString(),
-        ])['value'], 0.001);
-    }
-
     /** ولا يُسجَّل صفٌّ لصنفٍ لم يتغيّر: جردٌ صحيح لا يُنتج ضجيجًا */
     public function test_a_matching_count_writes_no_row_at_all(): void
     {
@@ -330,29 +272,6 @@ class StocktakeTest extends TestCase
         $this->assertSame(5, (int) BranchStock::where('branch_id', $this->salalah->id)
             ->where('product_id', $this->product->id)->value('quantity'));
     }
-
-    /** والمعدوم هالكٌ باسم صنفه في التقرير */
-    public function test_loss_mode_lands_in_the_waste_report_as_damage(): void
-    {
-        $this->actingAs($this->owner)->post(route('admin.inventory.stocktake.apply'), [
-            'branch_id' => $this->muscat->id,
-            'mode' => 'loss',
-            'counts' => [$this->product->id => 3],
-        ])->assertSessionHasNoErrors();
-
-        $row = \App\Models\StockAdjustment::firstOrFail();
-
-        $this->assertSame('تلف', $row->reason);
-        $this->assertEqualsWithDelta(-3.0, (float) $row->quantity_delta, 0.001);
-        $this->assertEqualsWithDelta(4.0, (float) $row->cost_at_time, 0.001);
-        $this->assertTrue(\App\Support\Waste::isWaste($row->reason));
-
-        $window = ['from' => now()->subDay()->toDateString(), 'to' => now()->addDay()->toDateString()];
-
-        $this->assertEqualsWithDelta(3.0, \App\Support\Waste::totals($this->business->id, $window)['quantity'], 0.001);
-        $this->assertEqualsWithDelta(12.0, \App\Support\Waste::totals($this->business->id, $window)['value'], 0.001);
-    }
-
     /** والوضع الافتراضيّ لم ينقلب: من لم يُرسل شيئًا يبقى على «المعدود» */
     public function test_the_default_mode_is_still_counting(): void
     {

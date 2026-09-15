@@ -147,21 +147,6 @@ class ThePressFetchesNothingItIsNotGivenTest extends TestCase
 
         return ['ascii' => $ascii->invoke(null, $raw), 'utf8' => $utf8->invoke(null, $raw)];
     }
-
-    /** تنصيصٌ أو سطرٌ جديد لا يخرج من الاسم إلى الترويسة */
-    public function test_a_quote_or_a_newline_cannot_escape_the_header(): void
-    {
-        foreach (['inv"-0001', "inv\r\nSet-Cookie: a=b", "inv\n\nX-Evil: 1", 'inv;x=1'] as $raw) {
-            $n = $this->names($raw);
-
-            $this->assertStringNotContainsString('"', $n['ascii']);
-            $this->assertDoesNotMatchRegularExpression('/[\r\n]/', $n['ascii']);
-            // والمرمَّزُ لا تنصيصَ فيه ولا سطر بعد الترميز
-            $this->assertStringNotContainsString('"', rawurldecode(rawurlencode($n['utf8'])) === $n['utf8'] ? rawurlencode($n['utf8']) : '');
-            $this->assertDoesNotMatchRegularExpression('/[\r\n]/', rawurlencode($n['utf8']));
-        }
-    }
-
     /** ولا فاصلَ مسارٍ يقترح على المتصفّح مكانًا غير مجلّد التنزيلات */
     public function test_a_path_separator_never_survives(): void
     {

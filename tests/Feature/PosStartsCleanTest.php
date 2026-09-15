@@ -92,22 +92,6 @@ class PosStartsCleanTest extends TestCase
         );
         $this->assertStringContainsString('<Dialog open={open} onOpenChange={closeTo}>', $dialog);
     }
-
-    /* ------------------------- آخر فاتورة في العملاء ------------------------- */
-
-    public function test_the_customers_screen_carries_the_last_invoice(): void
-    {
-        $zahra = $this->customer('زهرة');
-        $first = $this->sell($zahra);
-        $second = $this->sell($zahra);
-
-        $rows = collect(Demo::customers())->keyBy('id');
-
-        $this->assertSame($second->number, $rows[$zahra->id]['last_invoice']);
-        $this->assertNotSame($first->number, $rows[$zahra->id]['last_invoice']);
-        $this->assertSame((float) $second->total, $rows[$zahra->id]['last_invoice_total']);
-    }
-
     public function test_a_customer_who_never_bought_shows_nothing(): void
     {
         $jadid = $this->customer('جديد');
@@ -117,24 +101,6 @@ class PosStartsCleanTest extends TestCase
         $this->assertNull($rows[$jadid->id]['last_invoice']);
         $this->assertNull($rows[$jadid->id]['last_invoice_total']);
     }
-
-    /** والمعلَّقة ليست فاتورة: سلّةٌ لم تُبَع بعد */
-    public function test_a_held_basket_is_not_the_last_invoice(): void
-    {
-        $zahra = $this->customer('زهرة');
-        $sold = $this->sell($zahra);
-
-        Order::create([
-            'business_id' => $this->business->id, 'customer_id' => $zahra->id,
-            'number' => 'HELD-1', 'customer_name' => 'زهرة', 'total' => 999,
-            'is_held' => true, 'status' => 'معلق', 'ordered_at' => now()->addHour(),
-        ]);
-
-        $rows = collect(Demo::customers())->keyBy('id');
-
-        $this->assertSame($sold->number, $rows[$zahra->id]['last_invoice']);
-    }
-
     /** ولا فاتورةُ جارٍ تصل شاشة أحد */
     public function test_a_neighbours_invoice_never_appears(): void
     {

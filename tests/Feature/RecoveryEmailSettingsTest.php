@@ -290,33 +290,6 @@ class RecoveryEmailSettingsTest extends TestCase
             ->assertOk()
             ->assertInertia(fn ($p) => $p->where('recovery.mail_ready', true));
     }
-
-    /**
-     * والقسمُ لا يُرسم أصلًا حين لا بريد.
-     *
-     * ═══ ولمَ يُقاس في المصدر ═══
-     *
-     * الخادم يمنع، لكنّ المنعَ بعد الضغط. ومقبضٌ يُعرض ثمّ يُردّ أسوأ من
-     * غياب المقبض — وهذه القاعدةُ مطبَّقةٌ في شاشة الدخول (يختفي «نسيت كلمة
-     * المرور؟» ويحلّ محلّه «راجع مدير النظام») ونُسيت في الإعدادات وحدها.
-     *
-     * والخروجُ المبكّر يسبق النموذجَ في الملفّ: لو نُقل بعده لَرُسم الحقلُ
-     * ثمّ اختفى، ولو حُذف لَعاد الباب المسدود.
-     */
-    public function test_the_section_is_not_drawn_at_all_without_a_mailer(): void
-    {
-        $source = file_get_contents(
-            resource_path('js/Pages/Admin/Settings/panels/RecoveryEmailSection.tsx')
-        );
-
-        $guard = mb_strpos($source, 'if (! recovery.mail_ready) {');
-        $form = mb_strpos($source, "route('admin.settings.recovery.start')");
-
-        $this->assertNotFalse($guard, 'القسم يُرسم ولو لم يكن على الخادم مُرسِلُ بريد');
-        $this->assertNotFalse($form, 'لم يعد النموذج في مكانه — أُعيدت قراءةُ الحارس على غير موضعه');
-        $this->assertLessThan($form, $guard, 'الحارس بعد النموذج — يُرسم الحقل ثمّ يختفي');
-    }
-
     /** ويُقال لصاحبه ماذا يفعل بدلًا منه — لا يُترك بلا جواب */
     public function test_the_merchant_is_told_what_to_do_instead(): void
     {

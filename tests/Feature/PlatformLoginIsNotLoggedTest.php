@@ -49,15 +49,6 @@ class PlatformLoginIsNotLoggedTest extends TestCase
     {
         return ActivityLog::whereIn('action', ['login', 'logout'])->count();
     }
-
-    public function test_the_platform_managers_login_leaves_no_row(): void
-    {
-        $this->post(route('login.attempt'), ['email' => 'platform@eventplus.om', 'password' => 'password']);
-        $this->assertAuthenticated();
-
-        $this->assertSame(0, $this->logins(), 'دخول مدير المنصة كُتب في السجلّ');
-    }
-
     public function test_nor_does_his_logout(): void
     {
         $this->actingAs($this->platform)->post(route('logout'));

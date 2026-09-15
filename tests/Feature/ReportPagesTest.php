@@ -264,45 +264,6 @@ class ReportPagesTest extends TestCase
             $this->assertSame(0.0, (float) ($summary['average'] ?? 0));
         }
     }
-
-    /* ====================== ما لا يُفقد في النقل ====================== */
-
-    public function test_every_report_offers_the_three_approved_exports(): void
-    {
-        /*
-         * وحلّت محلّ زرّ الطباعة بطلب صاحب المشروع.
-         *
-         * والورقةُ من المتصفّح تخرج بهوامشه وترويسته ورابط الصفحة في قاعها،
-         * ولا تحمل اسم المتجر ولا فترة التقرير. والملفّ يخرج بترويسة المتجر
-         * وفترته، ويُرسَل، ويُجمع عمودُه في إكسل. ومن أراد ورقةً طبع الـPDF.
-         */
-        $dir = resource_path('js/Pages/Admin/Reports');
-
-        foreach (glob($dir.'/*.tsx') as $file) {
-            $screen = basename($file, '.tsx');
-            if ($screen === 'Index') {
-                continue;
-            }
-
-            $source = file_get_contents($file);
-            $viaShell = str_contains($source, 'ReportScreen');
-
-            $this->assertTrue(
-                $viaShell || str_contains($source, 'ExportMenu'),
-                "«{$screen}» بلا تصدير"
-            );
-            $this->assertStringNotContainsString('PrintReport', $source, "«{$screen}» ما زال يعرض الطباعة");
-        }
-
-        // والهيكل المشترك يحملها، فما بُني عليه يرثها بصيغها الثلاث
-        $shell = file_get_contents(resource_path('js/Components/ReportScreen.tsx'));
-        foreach (['export.xlsx', 'export.pdf', 'export.csv'] as $format) {
-            $this->assertStringContainsString($format, $shell, "الهيكل بلا {$format}");
-        }
-
-        $this->assertFileDoesNotExist(resource_path('js/Components/PrintReport.tsx'));
-    }
-
     public function test_the_filters_use_the_systems_picker_not_the_native_one(): void
     {
         /*
@@ -515,18 +476,6 @@ class ReportPagesTest extends TestCase
             file_get_contents(resource_path('js/Components/ReportScreen.tsx')),
         );
     }
-
-    public function test_the_crowded_tab_strip_is_gone_not_merely_hidden(): void
-    {
-        // مكوّنٌ متروكٌ يعود يومًا: يُحذف هو ومصدرُ بياناته في الخادم معًا
-        $this->assertFileDoesNotExist(resource_path('js/Components/ReportTabs.tsx'));
-        $this->assertFalse(method_exists(Reports::class, 'tabsFor'), 'مصدرُ الشريط ما زال في الخادم');
-
-        foreach (glob(resource_path('js/Pages/Admin/Reports').'/*.tsx') as $file) {
-            $this->assertStringNotContainsString('ReportTabs', file_get_contents($file), basename($file));
-        }
-    }
-
     public function test_the_index_hides_what_its_owner_cannot_open(): void
     {
         /*

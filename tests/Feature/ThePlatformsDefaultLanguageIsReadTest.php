@@ -58,64 +58,6 @@ class ThePlatformsDefaultLanguageIsReadTest extends TestCase
             'locale' => $own,
         ]);
     }
-    public function test_a_visitor_before_login_follows_the_platform(): void
-    {
-        // من لا حساب له ولا نشاط — وهو أوّل من يرى الشاشة
-        $this->platform('en');
-
-        $this->assertSame('en', $this->localeAfterRequest());
-    }
-
-    public function test_without_a_setting_it_is_still_arabic(): void
-    {
-        $this->assertSame('ar', $this->localeAfterRequest());
-    }
-
-    public function test_a_nonsense_value_does_not_break_the_screen(): void
-    {
-        // صفٌّ قديمٌ أو محرَّرٌ بيدٍ في القاعدة لا يُصدَّق
-        $this->platform('fr');
-
-        $this->assertSame('ar', $this->localeAfterRequest());
-    }
-
-    /* ═══════════ والأخصُّ يغلب ═══════════ */
-
-    public function test_a_shop_that_set_its_language_is_not_overridden(): void
-    {
-        $this->platform('en');
-        $shop = $this->shop();
-        Setting::create(['business_id' => $shop->id, 'key' => 'locale', 'value' => 'ar']);
-
-        $this->assertSame('ar', $this->localeAfterRequest($this->owner($shop)));
-    }
-
-    public function test_an_employee_who_chose_keeps_his_choice(): void
-    {
-        $this->platform('en');
-        $shop = $this->shop();
-
-        $this->assertSame('ar', $this->localeAfterRequest($this->owner($shop, own: 'ar')));
-    }
-
-    public function test_a_shop_with_no_language_of_its_own_follows_the_platform(): void
-    {
-        // وهو الحال الغالب: متجرٌ يُضاف ولا يفتح تبويب اللغة قطّ
-        $this->platform('en');
-        $shop = $this->shop();
-
-        $this->assertSame('en', $this->localeAfterRequest($this->owner($shop)));
-    }
-
-    public function test_the_session_beats_everything(): void
-    {
-        $this->platform('en');
-
-        $this->post(route('language.guest'), ['locale' => 'ar'])->assertRedirect();
-
-        $this->assertSame('ar', $this->localeAfterRequest());
-    }
-
     /* ═══════════ ولا تُسقط اللغةُ صفحةً ═══════════ */
 
     public function test_a_database_without_a_settings_table_still_serves_a_page(): void

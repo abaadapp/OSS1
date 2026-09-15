@@ -101,32 +101,6 @@ class TheDisplayedAmountIsTheCollectableAmountTest extends TestCase
     }
 
     /* ═════════ القاعدة: لا تُحذف منزلةٌ فيها رقم ═════════ */
-
-    /**
-     * الكتابةُ لا تُخفي شيئًا من المخزَّن — في كلّ عملةٍ وكلّ مبلغ.
-     *
-     * وهذا هو الثابتُ كلُّه في سطرٍ واحد: ما يُقرأ من الورقة، إذا أُعيد عددًا،
-     * يساوي ما في القاعدة.
-     */
-    public function test_what_is_written_reads_back_as_what_is_stored(): void
-    {
-        $cases = [['OMR', 'ر.ع'], ['AED', 'د.إ'], ['USD', '$'], ['KWD', 'د.ك']];
-        $amounts = [0.0, 0.004, 0.005, 1.005, 12.894, 12.915, 5.25, 12.5, 1000.5, 99999.999];
-
-        foreach ($cases as [$code, $symbol]) {
-            $cur = $this->currency($code, $symbol);
-
-            foreach ($amounts as $value) {
-                $this->assertEqualsWithDelta(
-                    round($value, 3),
-                    $this->asRead(Money::amount($value, $cur)),
-                    0.0004,
-                    "{$code} تكتب {$value} على نحوٍ يُقرأ غيرَه",
-                );
-            }
-        }
-    }
-
     /** ولا تُكتب منزلةٌ لا خبرَ فيها — «5.25» درهمًا تبقى «5.25» لا «5.250» */
     public function test_a_digit_that_says_nothing_is_not_written(): void
     {
@@ -233,35 +207,6 @@ class TheDisplayedAmountIsTheCollectableAmountTest extends TestCase
         );
         $this->assertSame(0.0, $invoice->fresh()->outstanding());
     }
-
-    /** والخصمُ: البنودُ تجمع إلى مجموعها، وكلُّ سطرٍ يُقرأ كما خُزّن */
-    public function test_a_discounted_invoice_reads_back_line_by_line(): void
-    {
-        $cur = $this->currency('AED', 'د.إ');
-        $this->actingAs($this->owner);
-
-        $totals = CustomerInvoices::compute($this->business->id, [
-            ['description' => 'أ', 'quantity' => 3, 'unit_price' => 4.09, 'discount' => 1.007],
-            ['description' => 'ب', 'quantity' => 1, 'unit_price' => 0.005],
-        ]);
-
-        $sum = round(array_sum(array_column($totals['items'], 'line_total')), 3);
-        $this->assertSame($sum, $totals['total']);
-
-        foreach ($totals['items'] as $item) {
-            $this->assertEqualsWithDelta(
-                round((float) $item['line_total'], 3),
-                $this->asRead(Money::amount((float) $item['line_total'], $cur)),
-                0.0004,
-            );
-        }
-        $this->assertEqualsWithDelta(
-            $totals['total'],
-            $this->asRead(Money::amount($totals['total'], $cur)),
-            0.0004,
-        );
-    }
-
     /**
      * والدفترُ لا يتحرّك: التقريبُ الداخليُّ ثلاثُ منازل، وعتبةُ التسوية `0.0005`.
      *

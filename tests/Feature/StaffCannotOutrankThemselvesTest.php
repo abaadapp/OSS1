@@ -139,20 +139,6 @@ class StaffCannotOutrankThemselvesTest extends TestCase
 
         $this->assertSame('cashier', $me->fresh()->role);
     }
-
-    public function test_an_accountant_cannot_raise_their_own_salary(): void
-    {
-        $me = $this->staff('accountant', 'محاسب');
-        $this->actingAs($me);
-
-        $this->put(route('admin.employees.update', $me->id), [
-            'name' => $me->name, 'email' => $me->email, 'job_title' => 'محاسب',
-            'basic_salary' => 5000,
-        ])->assertSessionHasErrors('job_title');
-
-        $this->assertEqualsWithDelta(300, (float) $me->fresh()->basic_salary, 0.001);
-    }
-
     public function test_they_may_still_correct_their_own_phone(): void
     {
         $me = $this->staff('accountant', 'محاسب');

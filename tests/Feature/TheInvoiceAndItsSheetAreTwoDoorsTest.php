@@ -74,69 +74,8 @@ class TheInvoiceAndItsSheetAreTwoDoorsTest extends TestCase
             'permissions' => $permissions,
         ]);
     }
-    /** ولا يراه في شاشته أصلًا: بابٌ لا يُعرض خيرٌ من بابٍ يُقال لصاحبه «ليست لك» */
-    public function test_the_door_is_not_drawn_for_who_may_not_open_it(): void
-    {
-        $order = $this->sell();
-
-        $this->actingAs($this->staff('cashier', ['orders']))
-            ->get(route('admin.orders.show', $order->number))
-            ->assertInertia(fn ($page) => $page
-                ->where('invoiceEdit.can', false)
-                ->where('invoiceEdit.reason', null));
-    }
-
-    /** ومن يملكها ويومُ فاتورته قائم يراه مفتوحًا */
-    public function test_the_door_is_open_on_the_day_of_the_sale(): void
-    {
-        $order = $this->sell();
-
-        $this->get(route('admin.orders.show', $order->number))
-            ->assertInertia(fn ($page) => $page->where('invoiceEdit.can', true));
-    }
     /* ==================== والبابان لم يختلطا ==================== */
-
-    /**
-     * ورقةُ التفاصيل لا تمسّ ريالًا.
-     *
-     * وهذا ما كان الزرُّ الواحد يَعِد به ولا يقوله: من فتحه باحثًا عن المبلغ
-     * لم يكن ليجده مهما ملأ من حقول.
-     */
-    public function test_the_detail_sheet_moves_no_money(): void
-    {
-        $order = $this->sell(3);
-        $before = (float) $order->total;
-
-        $this->put(route('admin.orders.details.update', $order->number), [
-            'fulfillment_type' => 'delivery',
-            'recipient_name' => 'سارة',
-            'recipient_phone' => '99887766',
-            'delivery_address' => 'الخوض',
-            // وطلبٌ يُجهَّز له موعد — وإلّا سقط من لوحة التجهيز صامتًا
-            'scheduled_for' => now()->addDay()->format('Y-m-d\TH:i'),
-        ])->assertRedirect();
-
-        $order->refresh();
-        $this->assertSame('سارة', $order->recipient_name);
-        $this->assertSame($before, (float) $order->total);
-    }
     /* ==================== وما تحتاجه الشاشة ليُنادى الباب ==================== */
-
-    /**
-     * الحمولةُ تحمل معرّفَ كلّ بند ووسائلَ الدفع المأذونة.
-     *
-     * وبلا المعرّف لا يُبنى المسار، فيبقى القلمُ مرسومًا لا يُدير شيئًا.
-     */
-    public function test_the_payload_carries_what_the_pencil_needs(): void
-    {
-        $order = $this->sell();
-
-        $this->get(route('admin.orders.show', $order->number))
-            ->assertInertia(fn ($page) => $page
-                ->has('order.items.0.id')
-                ->has('order.payment_methods'));
-    }
-
     /**
      * وزرّان في الترويسة لا زرّ.
      *

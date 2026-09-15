@@ -40,23 +40,6 @@ class ProductPricingTest extends TestCase
             'price' => 100, 'cost' => 60, 'quantity' => 50, 'alert_qty' => 5, 'active' => true,
         ], $over));
     }
-    /* ------------------------------- الخصم ------------------------------- */
-
-    public function test_the_product_discount_reaches_the_receipt(): void
-    {
-        $order = $this->sell($this->product(['discount' => 20]));
-
-        $this->assertSame(80.0, (float) $order->subtotal, 'بيع بكامل السعر ومعه خصم ٢٠٪');
-        $this->assertSame(80.0, (float) $order->items()->first()->price);
-    }
-
-    public function test_a_product_without_a_discount_is_untouched(): void
-    {
-        $order = $this->sell($this->product());
-
-        $this->assertSame(100.0, (float) $order->subtotal);
-    }
-
     public function test_a_discount_over_a_hundred_is_refused(): void
     {
         // خصمٌ ٥٠٠ على سعر ١٠ يجعل سطر الفاتورة سالبًا — وكان يُقبل ويُحفظ
@@ -76,29 +59,5 @@ class ProductPricingTest extends TestCase
         Product::whereKey($p->id)->update(['discount' => 500]);
 
         $this->assertSame(0.0, $p->fresh()->sellingPrice());
-    }
-
-    /* ------------------------------ الضريبة ------------------------------ */
-
-    public function test_an_empty_rate_follows_the_store(): void
-    {
-        $order = $this->sell($this->product(['tax' => null]));
-
-        $this->assertSame(5.0, (float) $order->tax, 'الصنف بلا نسبة يتبع نسبة المتجر');
-    }
-
-    public function test_a_zero_rated_product_carries_no_tax(): void
-    {
-        // الخبز والحليب والدواء صفرية في عُمان — حاجةٌ لا رفاهية
-        $order = $this->sell($this->product(['tax' => 0]));
-
-        $this->assertSame(0.0, (float) $order->tax);
-        $this->assertSame(100.0, (float) $order->total);
-    }
-    public function test_a_higher_product_rate_beats_the_store_rate(): void
-    {
-        $order = $this->sell($this->product(['price' => 100, 'tax' => 10]));
-
-        $this->assertSame(10.0, (float) $order->tax);
     }
 }

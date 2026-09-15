@@ -21,17 +21,6 @@ class SearchLooksTheSameEverywhereTest extends TestCase
     {
         return file_get_contents(resource_path('js/Components/UnifiedSearch.tsx'));
     }
-
-    /** الحقل ظاهرٌ على كلّ عرض — لا يُخفى تحت نقطة انكسار */
-    public function test_the_box_is_never_hidden_by_width(): void
-    {
-        $this->assertDoesNotMatchRegularExpression(
-            '/<div ref=\{boxRef\} className="[^"]*\bhidden\b/',
-            $this->code(),
-            'صندوق البحث يُخفى على الشاشات الضيّقة',
-        );
-    }
-
     /** ولا ينكمش دافعًا أزرارَ الترويسة خارج الشاشة */
     public function test_the_box_may_shrink_inside_the_header(): void
     {

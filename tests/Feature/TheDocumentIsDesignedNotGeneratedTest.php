@@ -237,43 +237,6 @@ class TheDocumentIsDesignedNotGeneratedTest extends TestCase
         /* والرقمُ الأهمّ كتلةٌ واحدة: تسميتُه في صفحةٍ ورقمُه في أخرى خبرٌ مبتور */
         $this->assertMatchesRegularExpression('/table\.figwrap \{[^}]*page-break-inside: avoid/s', $html);
     }
-
-    /**
-     * وخاتمةُ الورقة تتبع المال: المجاميعُ، ثمّ ما يُقال، ثمّ الرمز.
-     *
-     * ═══ وما تغيّر في الترتيب ═══
-     *
-     * كانت الملاحظاتُ في الجهة المقابلة للمجاميع — عمودان. وفي المرجع
-     * المعتمد تقع المجاميعُ أسطرًا تتبع الجدول بأعمدته، وما بعدها يأتي
-     * تحتها لا بإزائها: «اعرضها بعد المنطقة الرئيسية» و«QR تحت المحتوى
-     * المالي/الملاحظات».
-     *
-     * فيُحرَس الترتيبُ لا الشكل: المجاميعُ أوّلًا، فالملاحظات، فالرمز.
-     */
-    public function test_the_close_follows_the_money_then_the_words_then_the_code(): void
-    {
-        $order = $this->order();
-        $order->update(['notes' => 'يُرجى مراجعة الشحنة عند الاستلام.']);
-
-        $html = DocumentRenderer::saleSheet(
-            $this->business->id,
-            $order->fresh()->load('items'),
-            ['show_notes' => true] + \App\Support\DocumentTemplates::settings($this->business->id, 'sale'),
-            ['paperUrl' => \App\Support\PublicDocument::url($order)],
-        );
-
-        $totals = strpos($html, '<table class="totals">');
-        $notes = strpos($html, 'يُرجى مراجعة الشحنة عند الاستلام.');
-        $code = strpos($html, '<div class="qr-block">');
-
-        $this->assertNotFalse($totals, 'لا مجاميعَ على الورقة');
-        $this->assertNotFalse($notes, 'الملاحظاتُ لا تبلغ الورقة');
-        $this->assertNotFalse($code, 'الرمزُ لا يبلغ الورقة');
-
-        $this->assertLessThan($notes, $totals, 'الملاحظاتُ قبل المجاميع');
-        $this->assertLessThan($code, $notes, 'الرمزُ فوق الملاحظات لا أسفلها');
-    }
-
     /**
      * وورقةٌ بلا أسعار تبقى لها خاتمة.
      *

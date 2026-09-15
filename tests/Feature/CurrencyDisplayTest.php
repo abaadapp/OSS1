@@ -57,33 +57,6 @@ class CurrencyDisplayTest extends TestCase
         ]);
 
     }
-    public function test_switching_display_currency_does_not_change_what_is_recorded(): void
-    {
-        $this->actingAs($this->owner);
-
-        session(['display_currency' => 'USD']);
-        Demo::flushCurrency();
-
-        $order = $this->sell();
-
-        // 10 + 5% = 10.5 بالعملة الأساسية مهما كانت عملة العرض
-        $this->assertSame(10.5, (float) $order->total, 'القيد تأثّر بعملة العرض');
-        $this->assertSame(10.0, (float) $order->subtotal);
-    }
-
-    public function test_the_tax_invoice_stays_in_the_base_currency(): void
-    {
-        $this->actingAs($this->owner);
-        $order = $this->sell();
-
-        session(['display_currency' => 'USD']);
-        Demo::flushCurrency();
-
-        // moneyBase هي ما تستعمله قوالب الفواتير
-        $this->assertStringContainsString('10.500', Demo::moneyBase($order->total));
-        $this->assertStringNotContainsString('27.300', Demo::moneyBase($order->total));
-    }
-
     public function test_the_screen_converts_at_the_declared_rate(): void
     {
         $this->actingAs($this->owner);

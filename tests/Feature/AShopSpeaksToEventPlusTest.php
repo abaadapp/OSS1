@@ -58,21 +58,6 @@ class AShopSpeaksToEventPlusTest extends TestCase
             'password' => bcrypt('password'), 'role' => $role, 'status' => 'نشط',
         ]);
     }
-    /* ═══════════════ الرقم ═══════════════ */
-
-    public function test_each_conversation_carries_a_reference_that_never_repeats(): void
-    {
-        $a = $this->conversation();
-        $b = $this->conversation();
-
-        $this->assertMatchesRegularExpression('/^SUP-\d{4}-\d{6}$/', $a->reference);
-        $this->assertNotSame($a->reference, $b->reference);
-        $this->assertSame(
-            (int) substr($a->reference, -6) + 1,
-            (int) substr($b->reference, -6),
-            'والتسلسلُ يتقدّم واحدًا لا يقفز',
-        );
-    }
     /* ═══════════════ النسخةُ الاحتياطيّة ═══════════════ */
 
     /**

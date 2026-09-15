@@ -299,8 +299,6 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'tenant', 'business'
 
     // إرسالُ الفاتورة إلى الزبون — نصٌّ يُكتب في الخادم ويُفتح على واتساب التاجر
     /* إبلاغُ الزبون بحالة طلبه يدويًّا — لا يمرّ بميتا، فيعمل والحظرُ قائم */
-    Route::post('/orders/{number}/status-notice', [OrderDetailController::class, 'statusNotice'])
-        ->name('orders.statusNotice');
     /* طلبُ تقييمٍ على Google — بملفّ فرع الطلب، وبعد التسليم وحده */
     /*
      * ورقتا البيع — فاتورةٌ مقصوصة وإيصالُ صندوق.

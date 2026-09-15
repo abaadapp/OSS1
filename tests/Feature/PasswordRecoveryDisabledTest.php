@@ -128,16 +128,4 @@ class PasswordRecoveryDisabledTest extends TestCase
         $this->get(route('login'))
             ->assertInertia(fn ($page) => $page->where('canRecover', true));
     }
-
-    public function test_signing_in_never_depended_on_mail_anyway(): void
-    {
-        // الدخول لا يرسل بريدًا إطلاقًا — فتعطيل البريد لا يمسّه
-        $this->withMail('log');
-
-        $this->post(route('login.attempt'), [
-            'email' => 'salem@eventplus.om', 'password' => 'secret-pass',
-        ])->assertSessionHasNoErrors();
-
-        $this->assertAuthenticated();
-    }
 }

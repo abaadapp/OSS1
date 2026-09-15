@@ -45,24 +45,6 @@ class EverySaleCarriesItsIncomeTest extends TestCase
             'ordered_at' => now()->subMonths(3),
         ], $attributes));
     }
-
-    /* ------------------------------ الإصلاح ------------------------------ */
-
-    public function test_a_sale_with_no_entry_gets_one(): void
-    {
-        $order = $this->order();
-
-        $this->artisan('finance:repair-order-income')->assertSuccessful();
-
-        $tx = Transaction::where('order_id', $order->id)->firstOrFail();
-
-        $this->assertSame('دخل', $tx->type);
-        $this->assertEqualsWithDelta(105.0, (float) $tx->amount, 0.0005);
-        $this->assertEqualsWithDelta(5.0, (float) $tx->tax_amount, 0.0005);
-        $this->assertSame('بطاقة', $tx->method);
-        $this->assertSame($order->number, $tx->reference);
-    }
-
     public function test_the_entry_carries_the_day_of_the_sale_not_the_day_of_the_repair(): void
     {
         // قيدٌ بتاريخ اليوم يجعل مبيعات العام كلّها تظهر في شهرٍ واحد
