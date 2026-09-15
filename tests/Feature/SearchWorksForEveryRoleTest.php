@@ -26,6 +26,56 @@ use Tests\TestCase;
  */
 class SearchWorksForEveryRoleTest extends TestCase
 {
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $this->shop = Business::create(['name' => 'متجري', 'type' => 'عام', 'status' => 'نشط']);
+        Branch::create(['business_id' => $this->shop->id, 'name' => 'الرئيسي']);
+        JobTitle::create(['business_id' => $this->shop->id, 'name' => 'مدير', 'role' => 'admin']);
+
+        $this->owner = User::create([
+            'business_id' => $this->shop->id, 'name' => 'المالك', 'email' => 'owner@eventplusapp.om',
+            'password' => bcrypt('x'), 'role' => 'admin', 'status' => 'نشط',
+        ]);
+
+        /*
+         * كاشيرٌ بدوره لا بصلاحياتٍ مكتوبةٍ باليد.
+         *
+         * `Permissions::MAP['cashier']` هو ما يملكه كاشيرُ الإنتاج فعلًا —
+         * لوحةٌ ونقطةُ بيع، لا أكثر. ومُعطًى يمنحه `orders` يدويًّا يختبر
+         * موظّفًا لا وجود له، ويمرّ بينما ينكسر الحقيقيّ.
+         */
+        $this->cashier = User::create([
+            'business_id' => $this->shop->id, 'name' => 'كاشير', 'email' => 'cashier@eventplusapp.om',
+            'password' => bcrypt('x'), 'role' => 'cashier', 'status' => 'نشط',
+        ]);
+
+        /*
+         * وموظّفٌ يدخل اللوحة بصلاحياتٍ ممنوحةٍ يدويًّا: نقطةُ البيع والمنتجات.
+         *
+         * وهو الحال الذي يقع فعلًا حين يُمنح كاشيرٌ شاشةَ المنتجات: يدخل
+         * اللوحة فيرى ترويستها وصندوقَها — ولا يملك «الطلبات».
+         */
+        $this->onFloor = User::create([
+            'business_id' => $this->shop->id, 'name' => 'بائع', 'email' => 'floor@eventplusapp.om',
+            'password' => bcrypt('x'), 'role' => 'cashier', 'status' => 'نشط',
+            'permissions' => ['pos', 'products'],
+        ]);
+
+        $this->platform = User::create([
+            'business_id' => null, 'name' => 'مدير المنصّة', 'email' => 'super@eventplusapp.om',
+            'password' => bcrypt('x'), 'role' => 'super_admin', 'status' => 'نشط',
+        ]);
+
+        Product::create([
+            'business_id' => $this->shop->id, 'name' => 'وردة حمراء',
+            'price' => 5, 'cost' => 2, 'quantity' => 9, 'alert_qty' => 1, 'active' => true,
+        ]);
+        Customer::create(['business_id' => $this->shop->id, 'name' => 'زبونة الورد', 'phone' => '99001122']);
+        Supplier::create(['business_id' => $this->shop->id, 'name' => 'مشتل الورد']);
+        }
+
     use RefreshDatabase;
 
     private Business $shop;

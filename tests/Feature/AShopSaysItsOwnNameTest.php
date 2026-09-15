@@ -20,6 +20,26 @@ use Tests\TestCase;
  */
 class AShopSaysItsOwnNameTest extends TestCase
 {
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $this->business = Business::create(['name' => 'متجري', 'type' => 'عام', 'status' => 'نشط']);
+        Currency::create([
+            'business_id' => $this->business->id, 'code' => 'OMR', 'name' => 'ريال عماني',
+            'symbol' => 'ر.ع', 'rate' => 1, 'is_base' => true, 'active' => true,
+        ]);
+        $this->owner = User::create([
+            'business_id' => $this->business->id, 'name' => 'المالك', 'email' => 'o@eventplus.om',
+            'password' => bcrypt('password'), 'role' => 'admin', 'status' => 'نشط',
+        ]);
+        $this->cashier = User::create([
+            'business_id' => $this->business->id, 'name' => 'كاشير', 'email' => 'c@eventplus.om',
+            'password' => bcrypt('password'), 'role' => 'sales', 'status' => 'نشط',
+            'permissions' => ['pos'],
+        ]);
+        }
+
     use RefreshDatabase;
 
     private Business $business;

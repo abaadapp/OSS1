@@ -285,4 +285,13 @@ class NoOneGrantsARoleAboveHisOwnTest extends TestCase
 
     /* ══════════════ ٤ · وبطاقةُ الموظّف لا تناقض نفسَها ══════════════ */
     /* ══════════════ ٥ · واللوحةُ لا تخلط نطاقين ══════════════ */
+
+    private function form(array $over = []): array
+    {
+        return array_merge([
+            'name' => 'حساب جديد', 'login_username' => 'newone',
+            'password' => 'password12345', 'job_title' => 'كاشير',
+            'manual_permissions' => true, 'permissions' => ['dashboard', 'pos'],
+        ], $over);
+        }
 }
