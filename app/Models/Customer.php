@@ -40,8 +40,4 @@ class Customer extends Model
         return $this->hasMany(CustomerAddress::class);
     }
 
-    public function pointTransactions(): HasMany
-    {
-        return $this->hasMany(PointTransaction::class);
-    }
 }

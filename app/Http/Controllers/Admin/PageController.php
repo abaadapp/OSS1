@@ -19,7 +19,6 @@ use App\Support\DocumentTemplates;
 use App\Support\Emojis;
 use App\Support\InvoiceBranding;
 use App\Support\Mailer;
-use App\Support\OrderNotice;
 use App\Support\OrderStatus;
 use App\Support\Permissions;
 use App\Support\ProductImages;
@@ -194,10 +193,6 @@ class PageController extends Controller
              * أو بقالبٍ لم يُعتمَد أو بحصّةٍ نفدت، وفي كلٍّ منها يبقى الزبون
              * بلا خبر. واليدُ آخرُ ما يبقى حين تسقط الأتمتة.
              */
-            'statusNotice' => OrderNotice::state(
-                Order::where('business_id', Demo::bid())
-                    ->where('is_held', false)->where('number', $number)->first()
-            ),
             /*
              * والورقةُ إلى جانب التفاصيل — HTML لا PDF.
              *
@@ -651,7 +646,7 @@ class PageController extends Controller
                 'phone' => $b?->phone,
                 'email' => $b?->email,
                 'address' => $b?->address,
-                'logo' => \App\Http\Controllers\SuperAdmin\PageController::logoUrl($b?->logo),
+                'logo' => self::logoUrl($b?->logo),
             ],
             /*
              * إعدادات الموقع والنطاق — انتقلت من «أدوات التسويق» إلى هنا.
@@ -778,4 +773,17 @@ class PageController extends Controller
             default => [],
         };
     }
+
+    /** رابطُ الشعار — مسارٌ مخزَّن أو عنوانٌ كامل كما هو */
+    public static function logoUrl(?string $logo): ?string
+    {
+        if (! $logo) {
+            return null;
+        }
+
+        return str_starts_with($logo, 'http')
+            ? $logo
+            : \Illuminate\Support\Facades\Storage::disk('public')->url($logo);
+    }
+
 }

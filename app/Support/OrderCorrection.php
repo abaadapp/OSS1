@@ -98,8 +98,8 @@ class OrderCorrection
                 'order_total_before' => $totalBefore,
                 'order_total_after' => (float) $order->total,
                 'reason' => $reason,
-                'user_id' => PosCashier::id() ?? auth()->id(),
-                'employee_name' => PosCashier::name() ?? auth()->user()?->name,
+                'user_id' => auth()->id(),
+                'employee_name' => auth()->user()?->name,
             ]);
 
             Activity::log('updated', $newQty === 0
@@ -269,7 +269,7 @@ class OrderCorrection
             'sku' => $product->sku,
             'type' => 'تعديل فاتورة',
             'quantity' => ($delta > 0 ? '+' : '').$delta,
-            'employee_name' => PosCashier::name() ?? auth()->user()?->name,
+            'employee_name' => auth()->user()?->name,
         ]);
     }
 
@@ -300,7 +300,7 @@ class OrderCorrection
         StockLedger::move(
             (int) $order->business_id, $branchId, $units,
             StockLedger::CORRECTION,
-            PosCashier::name() ?? auth()->user()?->name,
+            auth()->user()?->name,
             $order->number,
         );
     }
@@ -368,7 +368,7 @@ class OrderCorrection
         StockLedger::move(
             (int) $order->business_id, $order->branch_id, $back,
             StockLedger::CORRECTION,
-            PosCashier::name() ?? auth()->user()?->name,
+            auth()->user()?->name,
             $order->number,
         );
     }
@@ -476,7 +476,7 @@ class OrderCorrection
                 StockLedger::move(
                     $bid, $order->branch_id, $units,
                     StockLedger::CORRECTION,
-                    PosCashier::name() ?? auth()->user()?->name,
+                    auth()->user()?->name,
                     $order->number,
                 );
             }
@@ -511,8 +511,8 @@ class OrderCorrection
                 'order_total_before' => $totalBefore,
                 'order_total_after' => (float) $order->total,
                 'reason' => $reason,
-                'user_id' => PosCashier::id() ?? auth()->id(),
-                'employee_name' => PosCashier::name() ?? auth()->user()?->name,
+                'user_id' => auth()->id(),
+                'employee_name' => auth()->user()?->name,
             ]);
 
             Activity::log('updated', $newQty === 0
@@ -569,8 +569,8 @@ class OrderCorrection
                 'order_total_before' => (float) $order->total,
                 'order_total_after' => (float) $order->total,
                 'reason' => $reason,
-                'user_id' => PosCashier::id() ?? auth()->id(),
-                'employee_name' => PosCashier::name() ?? auth()->user()?->name,
+                'user_id' => auth()->id(),
+                'employee_name' => auth()->user()?->name,
             ]);
 
             Activity::log('updated', 'صحّح وسيلة الدفع في الفاتورة '.$order->number
@@ -647,7 +647,7 @@ class OrderCorrection
             Transaction::where('order_id', $order->id)->delete();
             Books::unpostSale(
                 $fresh,
-                PosCashier::id() ?? auth()->id(),
+                auth()->id(),
                 $reason ?: __('إلغاء الطلب'),
             );
 
@@ -666,7 +666,7 @@ class OrderCorrection
              */
             CustomerInvoices::onOrderCancelled(
                 $fresh,
-                PosCashier::id() ?? auth()->id(),
+                auth()->id(),
                 $reason ?: null,
             );
 
@@ -679,8 +679,8 @@ class OrderCorrection
                 'order_total_before' => $totalBefore,
                 'order_total_after' => $totalBefore,
                 'reason' => $reason ?: __('إلغاء الطلب'),
-                'user_id' => PosCashier::id() ?? auth()->id(),
-                'employee_name' => PosCashier::name() ?? auth()->user()?->name,
+                'user_id' => auth()->id(),
+                'employee_name' => auth()->user()?->name,
             ]);
         });
     }

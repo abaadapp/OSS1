@@ -32,19 +32,4 @@ class Branch extends Model
         return $this->hasMany(Order::class);
     }
 
-    public function devices(): HasMany
-    {
-        return $this->hasMany(PosDevice::class);
-    }
-
-    /**
-     * ملفُّ الفرع على خرائط Google — واحدٌ لا أكثر (تفرّدٌ في القاعدة).
-     *
-     * ويُقرأ ولو كان مفكوكًا: الصفُّ يبقى بعد الفكّ للأثر، ومن يريد المربوطَ
-     * وحده يُرشّح بـ`linked()`.
-     */
-    public function googlePlace(): HasOne
-    {
-        return $this->hasOne(BranchGooglePlace::class);
-    }
 }

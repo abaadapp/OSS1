@@ -30,7 +30,7 @@ class Customers
      * **ثلاثةُ عملاء لشخصٍ واحد، بلا رسالةٍ واحدة**. وهو الضررُ بعينه الذي
      * كُتب هذا القيدُ ليمنعه.
      *
-     * فيُقابَل الرقمُ مطبَّعًا بـ`WhatsAppPhone::normalize` — وهي «موضعٌ واحد
+     * فيُقابَل الرقمُ مطبَّعًا بـ`PhoneNumber::normalize` — وهي «موضعٌ واحد
      * يعرف كيف يُكتب الرقم»، تُسقط المسافات والرموز وتردّ الأرقام العربية
      * لاتينيّةً وتُلبس المحلّيَّ مفتاحَ دولته. ولا يُكتب المطبَّعُ في صفّ
      * العميل: من كتب رقمه بشكلٍ يفهمه يجده كما كتبه.
@@ -52,7 +52,7 @@ class Customers
              * `where`: العمود يحمل الرقم كما كُتب، والتطبيع دالّةُ تطبيقٍ لا
              * دالّةُ قاعدة. وهي قراءةُ أعمدةٍ أربعةٍ لعملاء متجرٍ واحد.
              */
-            $wanted = WhatsAppPhone::normalize($value);
+            $wanted = PhoneNumber::normalize($value);
 
             $clash = \App\Models\Customer::withTrashed()
                 ->where('business_id', $businessId)
@@ -60,7 +60,7 @@ class Customers
                 ->when($exceptId, fn ($q) => $q->whereKeyNot($exceptId))
                 ->get(['id', 'name', 'phone', 'deleted_at'])
                 ->first(fn ($c) => (string) $c->phone === (string) $value
-                    || ($wanted !== null && WhatsAppPhone::normalize($c->phone) === $wanted));
+                    || ($wanted !== null && PhoneNumber::normalize($c->phone) === $wanted));
 
             if (! $clash) {
                 return;

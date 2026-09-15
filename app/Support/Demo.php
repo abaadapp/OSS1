@@ -349,8 +349,8 @@ class Demo
     /**
      * فروع المتجر — ومعها ما يتعلّق بكل فرع.
      *
-     * العددان ليسا زينة: زرّ الحذف كان يسأل «حذف هذا الفرع؟» بلا أن يقول إن
-     * فيه أربعمئة فاتورة وصندوقَين. وتحذيرٌ يمنع الضغطة أنفع من سلّةٍ
+     * والعددُ ليس زينة: زرّ الحذف كان يسأل «حذف هذا الفرع؟» بلا أن يقول إن
+     * فيه أربعمئة فاتورة. وتحذيرٌ يمنع الضغطة أنفع من سلّةٍ
      * تُصلحها بعدها — فمن يقرأ العدد يتوقّف، ومن لا يقرؤه يضغط.
      */
     public static function branches(): array
@@ -358,13 +358,11 @@ class Demo
         return Branch::where('business_id', self::bid())
             ->withCount([
                 'orders as orders_count' => fn ($q) => $q->sold(),
-                'devices as devices_count',
             ])
             ->orderBy('id')->get()
             ->map(fn ($b) => [
                 'id' => $b->id, 'name' => $b->name, 'phone' => $b->phone, 'address' => $b->address,
                 'orders' => (int) $b->orders_count,
-                'devices' => (int) $b->devices_count,
             ])->all();
     }
 
@@ -395,43 +393,8 @@ class Demo
     /** قائمة المتاجر في لوحة المنصّة — الحقيقيّة وحدها */
     public static function businesses(): array
     {
-        return Business::real()->with('plan')->orderByDesc('id')->get()
+        return Business::real()->orderByDesc('id')->get()
             ->map(fn ($b) => self::businessRow($b))->all();
-    }
-
-    /**
-     * أداء الشركات — لتقرير المنصة.
-     *
-     * كانت مقصورةً على «محل ورود»: بقيّةٌ من كون النظام محلَّ ورودٍ يومًا.
-     * فتقرير المنصة كان يُخرج نوعًا واحدًا ويسقط المخابز والمغاسل والورش —
-     * تقريرٌ ناقصٌ لا يقول إنه ناقص.
-     */
-    public static function businessPerformance(): array
-    {
-        /*
-         * والمتاجر الحقيقية وحدها، والمبيع من الطلبات وحده.
-         *
-         * كان التقرير يجمع المتجر التجريبيّ إلى التجّار فيتصدّرهم بمبيعاتٍ
-         * مخترَعة، ويعدّ الملغى والمعلّق طلبات — فرقمُ «الطلبات» في التقرير
-         * يخالف رقمَه في ملفّ المتجر نفسه، وكلاهما عن الشيء ذاته.
-         */
-        $sold = fn ($q) => $q->sold();
-
-        return Business::real()->with('plan')
-            ->withCount(['products', 'users', 'orders as orders_count' => $sold])->get()->map(fn ($b) => [
-                'id' => $b->id,
-                'name' => $b->name,
-                'logo' => $b->logo,
-                'owner' => $b->owner_name,
-                'city' => $b->city,
-                'branches' => $b->branches_count,
-                'employees' => (int) $b->users_count,
-                'products' => (int) $b->products_count,
-                'orders' => (int) $b->orders_count,
-                'status' => $b->status,
-                'plan' => $b->plan?->name ?? '—',
-                'sales' => (float) Order::where('business_id', $b->id)->sold()->sum('total'),
-            ])->all();
     }
 
     /** أحدث الأنشطة من سجل النشاط (حسب الدور) */
@@ -2688,27 +2651,6 @@ class Demo
         return ['labels' => $rows->pluck('cat')->all(), 'series' => $rows->pluck('s')->map(fn ($v) => round((float) $v, 3))->all()];
     }
 
-    /** نمو الشركات (عدد التسجيلات) في السنة الجارية — يناير … ديسمبر */
-    public static function businessesGrowthSeries(): array
-    {
-        $labels = [];
-        $data = [];
-        foreach (self::yearMonths() as $m) {
-            $labels[] = self::monthLabel($m);
-            $data[] = Business::real()->whereYear('starts_at', $m->year)->whereMonth('starts_at', $m->month)->count();
-        }
-
-        return ['labels' => $labels, 'data' => $data];
-    }
-
-    /** توزيع الشركات على الباقات */
-    public static function planDistribution(): array
-    {
-        $rows = Business::with('plan')->get()->groupBy(fn ($b) => $b->plan?->name ?? __('بدون باقة'))->map->count();
-
-        return ['labels' => $rows->keys()->all(), 'series' => $rows->values()->all()];
-    }
-
     /* ============================ باحثات مفردة (حسب المعرّف) ============================ */
 
     /**
@@ -2754,7 +2696,7 @@ class Demo
      */
     public static function business($id): array
     {
-        $business = is_numeric($id) ? Business::with('plan')->find((int) $id) : null;
+        $business = is_numeric($id) ? Business::find((int) $id) : null;
 
         return $business ? self::businessRow($business) : [];
     }

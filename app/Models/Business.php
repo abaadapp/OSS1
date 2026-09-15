@@ -129,14 +129,12 @@ class Business extends Model
         return \Illuminate\Support\Facades\Storage::url($value);
     }
 
-    public function plan(): BelongsTo { return $this->belongsTo(Plan::class); }
     public function users(): HasMany { return $this->hasMany(User::class); }
     public function branches(): HasMany { return $this->hasMany(Branch::class); }
     public function categories(): HasMany { return $this->hasMany(Category::class); }
     public function products(): HasMany { return $this->hasMany(Product::class); }
     public function customers(): HasMany { return $this->hasMany(Customer::class); }
     public function orders(): HasMany { return $this->hasMany(Order::class); }
-    public function subscriptions(): HasMany { return $this->hasMany(Subscription::class); }
     public function expenses(): HasMany { return $this->hasMany(Expense::class); }
     public function transactions(): HasMany { return $this->hasMany(Transaction::class); }
 }

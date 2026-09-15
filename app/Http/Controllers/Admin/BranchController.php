@@ -111,12 +111,8 @@ class BranchController extends Controller
         Activity::log('deleted', 'حذف الفرع: '.$branch->name, ['subject_id' => $branch->id, 'subject_type' => 'branch']);
         $branch->delete();
 
-        $msg = $devices->isEmpty()
-            ? __('تم حذف الفرع')
-            : __('تم حذف الفرع، وأُبطل تفعيل :count من أجهزته.', ['count' => $devices->count()]);
-
         return back()->with('toast', [
-            'msg' => $msg,
+            'msg' => __('تم حذف الفرع'),
             'type' => 'warning',
             'undo' => ['url' => route('admin.branches.restore', $branch->id), 'label' => $branch->name],
         ]);
