@@ -74,23 +74,16 @@ class TenantTables
         'customer_credit_notes',
         'delivery_notes', 'delivery_note_items',
         'payroll_runs', 'payroll_lines',
-
-        /*
-         * والموقعُ آخرًا: بينه وبين نسخِه حلقةٌ مفتاحيّة.
-         *
-         * `websites.published_version_id` يشير إلى نسخةٍ، و`website_versions.website_id`
-         * يشير إلى الموقع. فلا يسبق أحدُهما الآخر — انظر `DEFERRED`.
-         */
     ];
 
     /**
      * أعمدةٌ تُترك فارغةً عند الإدراج ثمّ تُكتب في جولةٍ ثانية.
      *
-     * حلقةُ المفتاحين لا تُحلّ بترتيب: الموقعُ يشير إلى نسخته والنسخةُ إلى
-     * موقعها. فيُدرَج الموقعُ بلا مؤشّرٍ، ثمّ نسخُه، ثمّ يُعاد المؤشّر.
+     * لحلقةِ مفتاحين لا تُحلّ بترتيب: جدولٌ يشير إلى آخرَ يشير إليه. ولا
+     * حلقةَ في الجداول اليوم — والقائمةُ تبقى لأنّ `BackupController`
+     * يقرؤها، فأوّلُ حلقةٍ تُستحدَث تُكتب هنا لا في الاستعادة.
      */
-    public const DEFERRED = [
-            ];
+    public const DEFERRED = [];
 
     /**
      * جداولُ الأبناء: لا `business_id` فيها، وتُقرأ من خلال أبيها.
@@ -99,22 +92,7 @@ class TenantTables
      */
     public const THROUGH = [
         'branch_user' => ['branches', 'branch_id'],
-        /*
-         * ربطُ الفرع بخرائط Google — يخصّ المتجر ويُنسخ معه.
-         *
-         * ومَن استعاد نسختَه ولم يعد الربطُ معها يجد فروعَه كلَّها «غير
-         * مربوطة» — فيربطها من جديدٍ واحدًا واحدًا، وإيصالاتُه في ما بينهما
-         * تُطبع بلا رمز.
-         *
-         * ولا سرَّ فيه: معرّفُ المكان عامٌّ عند Google، ولا مفتاحَ في الجدول.
-         */
-                /*
-         * تقييماتُ ملفّ الأعمال — تخصّ الفرع، وتُنسخ معه.
-         *
-         * ولا سرَّ فيها: نصُّ التقييم واسمُ كاتبه كما يعرضهما Google للعامّة،
-         * ولا رمزَ وصولٍ ولا بريدَ أحد.
-         */
-                'customer_addresses' => ['customers', 'customer_id'],
+        'customer_addresses' => ['customers', 'customer_id'],
         'delivery_note_items' => ['delivery_notes', 'delivery_note_id'],
         'goods_receipt_note_items' => ['goods_receipt_notes', 'goods_receipt_note_id'],
         'journal_lines' => ['journal_entries', 'journal_entry_id'],
@@ -134,7 +112,7 @@ class TenantTables
      * أَخرجَ عمدًا أم نُسي.
      */
     public const NOT_MINE = [
-        'businesses' => 'صفُّ المتجر نفسه — يُحدَّث بحقولٍ آمنة لا يُحذف ويُدرَج',
+        'businesses' => 'صفُّ الشركة نفسها — يُحدَّث بحقولٍ آمنة لا يُحذف ويُدرَج',
         'password_recovery_challenges' => 'محاولاتُ استرجاعِ كلمة مرور — سرّيّةٌ ومؤقّتة، لا تُكتب في ملفٍّ يُنزَّل',
         'password_recovery_otps' => 'رموزُها — مثلُها',
         'dismissed_notifications' => 'ما أخفاه مستخدمٌ من تنبيهاته — تفضيلُ عرضٍ لا بيانات',

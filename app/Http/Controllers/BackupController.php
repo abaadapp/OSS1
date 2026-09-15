@@ -114,8 +114,8 @@ class BackupController extends Controller
     /**
      * يُدرج الجداول بترتيبها — والمؤجَّلُ يُكتب في جولةٍ ثانية.
      *
-     * `websites.published_version_id` يشير إلى نسخةٍ لم تُدرج بعد، ونسخُها
-     * تشير إليه: حلقةٌ لا يحلّها ترتيب. فيُدرَج بلا مؤشّرٍ ثمّ يُعاد إليه.
+     * حلقةُ مفتاحين: صفٌّ يشير إلى صفٍّ لم يُدرج بعد، والثاني يشير إليه —
+     * حلقةٌ لا يحلّها ترتيب. فيُدرَج بلا مؤشّرٍ ثمّ يُعاد إليه.
      */
     private function insertAll(array $data, int $bid, ?int $currentUserId): void
     {

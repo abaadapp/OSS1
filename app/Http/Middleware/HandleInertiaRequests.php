@@ -57,12 +57,6 @@ class HandleInertiaRequests extends Middleware
                 'isEmployee' => $user->isEmployee(),
                 // وإلى أين يدخل: الوجهة لا الإذن وحده — انظر Permissions::panelEntry
                 'panelUrl' => Permissions::panelEntry($user),
-                /*
-                 * هل هذه جلسة انتحالٍ من لوحة المنصة؟
-                 *
-                 * تُعلَن في كل صفحة لا في صفحةٍ واحدة: من ينسى أنه في حساب
-                 * غيره يعدّل بيانات تاجرٍ ظنًّا أنها بياناته.
-                 */
                 // الأقسام المسموح بها — الواجهة تخفي ما لا يُسمح به بدل تخمينه
                 'abilities' => collect(Permissions::sections())
                     ->filter(fn ($section) => $user->allows($section))

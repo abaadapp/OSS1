@@ -9,7 +9,7 @@ use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Storage;
 
 /**
- * نسخ احتياطي تلقائي لكل المتاجر إلى storage/app/private/backups.
+ * نسخ احتياطي تلقائي لكل الشركات إلى storage/app/private/backups.
  * يُجدول يوميًا في routes/console.php — ويتطلب cron على الخادم (انظر README: النشر).
  * تشغيل يدوي: php artisan backup:run
  *
@@ -29,10 +29,10 @@ use Illuminate\Support\Facades\Storage;
 class BackupRun extends Command
 {
     protected $signature = 'backup:run
-        {--business= : معرّف متجر محدّد (اختياري)}
+        {--business= : معرّف شركةٍ محدّدة (اختياري)}
         {--keep=14 : كم يومًا تُحفظ النسخ قبل حذفها}';
 
-    protected $description = 'إنشاء نسخة احتياطية JSON لبيانات كل المتاجر — مع التحقّق منها';
+    protected $description = 'إنشاء نسخة احتياطية JSON لبيانات كل الشركات — مع التحقّق منها';
 
     /** بصمة آخر تشغيل — يقرؤها eventplus:preflight */
     public const STAMP = 'backups/last-run.json';
