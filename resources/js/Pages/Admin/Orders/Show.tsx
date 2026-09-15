@@ -7,7 +7,6 @@ import {
     FileText,
     Gift,
     MapPin,
-    MessageCircle,
     PencilLine,
     Phone,
     Printer,
@@ -101,7 +100,7 @@ interface OrderDetail {
  * صلاحيةُ `order.edit` ويومُ البيع، يقيسهما الخادم قبل الرسم وعند الكتابة.
  */
 export default function OrderShow() {
-    const { order, context, taxInvoice, statusNotice, paper, invoiceEdit, otherBranch } = usePage<
+    const { order, context, taxInvoice, paper, invoiceEdit, otherBranch } = usePage<
         PageProps<{
             order: OrderDetail;
             /** أيُصحَّح متنُ الفاتورة الآن — وإن لم يُصحَّح فلمَ. يُقاس في الخادم */
@@ -111,13 +110,6 @@ export default function OrderShow() {
             /** ورقةُ الطلب مرسومةً — من وصفة الطباعة نفسِها. و`null` لطلبٍ لا صفَّ له */
             paper: { html: string; size: string } | null;
             taxInvoice: { registered: boolean; ready: boolean };
-            /** حالُ طلب التقييم — تُقاس في الخادم، والشاشةُ ترسم ما قِيس */
-            statusNotice: {
-                event: string | null;
-                show: boolean;
-                reason: string | null;
-                preparedAt: string | null;
-            };
         }>
     >().props;
     const t = useTranslate();
@@ -191,7 +183,6 @@ export default function OrderShow() {
     const isDelivery = form.data.fulfillment_type === 'delivery';
 
     /* إرسالُ الفاتورة — نموذجٌ فارغ: النصُّ كلُّه يُكتب في الخادم */
-    const sending = useForm({});
 
     const occasionLabel = order.occasions.find((o) => o.value === order.occasion_type)?.label;
     const fulfillmentLabel = order.fulfillments.find((f) => f.value === order.fulfillment_type)?.label;
@@ -303,37 +294,6 @@ export default function OrderShow() {
                             على رفض. والسببُ نفسُه يُقاس في الخادم ثانيةً —
                             فمن نادى المسار دون الشاشة يُردّ بالجواب نفسِه.
                         */}
-                        {actionable &&
-                            statusNotice.event &&
-                            (statusNotice.show ? (
-                                <Button
-                                    variant="outline"
-                                    disabled={sending.processing}
-                                    onClick={() =>
-                                        sending.post(route('admin.orders.statusNotice', order.id), {
-                                            preserveScroll: true,
-                                        })
-                                    }
-                                >
-                                    <MessageCircle />
-                                    {/*
-                                        و«مجددًا» تشهد بأنّ الأولى وصلت.
-
-                                        ولم تصل: `preparedAt` تقول إنّ النصَّ
-                                        جُهِّز، لا إنّه خرج — ولا يعرف النظامُ
-                                        أنّ التاجر ضغط «إرسال» في واتساب.
-                                        فيُقال «جهّزه» لا «أبلغه».
-                                    */}
-                                    {statusNotice.preparedAt
-                                        ? t('جهّز الإشعار مجددًا')
-                                        : t('أبلغ الزبون بواتسابك')}
-                                </Button>
-                            ) : (
-                                <Button variant="outline" disabled title={statusNotice.reason ?? undefined}>
-                                    <MessageCircle />
-                                    {statusNotice.reason}
-                                </Button>
-                            ))}
                         {/*
                             الفاتورة الضريبيّة — ولا تُعرض لمن لا فاتورةَ ضريبيّةَ
                             له.

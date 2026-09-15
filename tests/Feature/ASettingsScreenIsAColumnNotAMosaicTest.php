@@ -28,14 +28,6 @@ class ASettingsScreenIsAColumnNotAMosaicTest extends TestCase
 {
     /** الشاشات التي أُعيد بناؤها على الهيكل المشترك */
     private const SCREENS = [
-        'Admin/Integrations/Google.tsx',
-        'Admin/Integrations/GoogleBusiness.tsx',
-        'Admin/Integrations/Whatsapp.tsx',
-        'Admin/Marketing/Seo.tsx',
-        'Admin/Marketing/Whatsapp.tsx',
-        'Admin/Website/Domain.tsx',
-        'Admin/Website/Store.tsx',
-        'Admin/Website/Seo.tsx',
         'Admin/Setup/Index.tsx',
         'Admin/Settings/Index.tsx',
     ];

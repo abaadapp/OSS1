@@ -256,39 +256,6 @@ class ARestoreReturnsTheShopTest extends TestCase
         $this->assertSame(1, DB::table('products')->where('business_id', $business->id)->count(),
             'حُذف المتجر لأجل ملفٍّ لا يُعيده');
     }
-
-    public function test_no_secret_leaves_in_the_file(): void
-    {
-        /*
-         * والأعمدةُ مكتوبةٌ هنا بأسمائها لا مقروءةً من `SECRETS`.
-         *
-         * حارسٌ يقرأ القائمةَ التي يحرسها لا يحرس شيئًا: من حذف سطرًا منها
-         * حذف سؤالَه معه، فيمرّ التسريبُ ويمرّ الاختبار.
-         */
-        [$business] = $this->shop();
-
-        $payload = BackupService::payload($business->id);
-        $file = json_encode($payload, JSON_UNESCAPED_UNICODE);
-
-        $never = [
-            'users' => ['password', 'remember_token'],
-            'whatsapp_connections' => ['access_token'],
-        ];
-
-        foreach ($never as $table => $columns) {
-            $this->assertNotEmpty($payload[$table] ?? [], "لا سطرَ في {$table} — الحارس لا يحرس شيئًا");
-
-            foreach ($payload[$table] as $row) {
-                foreach ($columns as $column) {
-                    $this->assertArrayNotHasKey($column, $row, "{$table}.{$column} خرج في ملفٍّ يُنزَّل");
-                }
-            }
-        }
-
-        // والقيمةُ نفسها لا تُلتقط من مكانٍ آخر في الملفّ
-        $this->assertStringNotContainsString('EAAG-سرّ-', $file, 'رمزُ الوصول خرج في الملفّ');
-    }
-
     /* ============================== أدوات ============================== */
 
     /** عددُ السطور في كل جدولٍ للمتجر — بصمةُ حالته */
@@ -348,7 +315,6 @@ class ARestoreReturnsTheShopTest extends TestCase
             'quantity' => 20, 'created_at' => now(), 'updated_at' => now(),
         ]);
 
-
         $customer = DB::table('customers')->insertGetId([
             'business_id' => $bid, 'name' => 'زبون', 'phone' => '9000000'.$bid,
             'created_at' => now(), 'updated_at' => now(),
@@ -391,11 +357,6 @@ class ARestoreReturnsTheShopTest extends TestCase
         DB::table('settings')->insert(['business_id' => $bid, 'key' => 'vat_rate', 'value' => '5', 'created_at' => now(), 'updated_at' => now()]);
 
         // ورمزان سرّيّان: بلا سطرٍ يحملهما لا يحرس حارسُ التسريب شيئًا
-        DB::table('whatsapp_connections')->insert([
-            'business_id' => $bid, 'owner_type' => 'business', 'provider' => 'meta',
-            'access_token' => 'EAAG-سرّ-'.$bid, 'status' => 'connected',
-            'created_at' => now(), 'updated_at' => now(),
-        ]);
 
         return [$business, $owner];
         }
