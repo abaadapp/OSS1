@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { router, useForm, usePage } from '@inertiajs/react';
-import { FileText, MessageCircle, Paperclip, Trash2, Undo2 } from 'lucide-react';
+import { FileText, Paperclip, Trash2, Undo2 } from 'lucide-react';
 import AdminLayout from '@/Layouts/AdminLayout';
 import PageHeader from '@/Components/PageHeader';
 import DocumentMeta from '@/Components/DocumentMeta';
@@ -112,7 +112,6 @@ export default function CustomerInvoiceShow() {
     const detach = (id: number) =>
         router.delete(`/admin/customer-invoices/${invoice.id}/attachments/${id}`, { preserveScroll: true });
     const cancel = useForm({ reason: '' });
-    const remind = useForm({});
 
     return (
         <AdminLayout title={label}>
@@ -131,17 +130,6 @@ export default function CustomerInvoiceShow() {
                                 {may.pay && (
                                     <Button variant="outline" onClick={() => setPaying((v) => !v)}>
                                         {t('تسجيل دفعة')}
-                                    </Button>
-                                )}
-                                {invoice.outstanding > 0 && (
-                                    <Button
-                                        variant="outline"
-                                        disabled={remind.processing}
-                                        onClick={() => remind.post(`/admin/customer-invoices/${invoice.id}/remind`, { preserveScroll: true })}
-                                    >
-                                        <MessageCircle />
-                                        {/* وهو يفتح واتساب التاجر ليضغط هو — لا مُرسِلَ آليّ */}
-                                        {t('ذكّره بواتسابك')}
                                     </Button>
                                 )}
                                 {/*

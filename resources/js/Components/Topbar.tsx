@@ -151,7 +151,7 @@ export default function Topbar({ onMenuClick }: { onMenuClick: () => void }) {
             {searchUrl && <UnifiedSearch url={searchUrl} pages={pages} />}
 
             {/*
-             * أربعة أزرار لا أكثر: الكاشير، والموقع، والإشعارات، والحساب.
+             * زرّان لا أكثر: الإشعارات والحساب.
              *
              * كان الشريط يحمل سبعة مداخل — عملة ولغة وفرع مستقلّة إلى جانبها —
              * فصار صفًّا من القوائم يزاحم بعضه على الشاشات المتوسطة. واللغة
@@ -159,11 +159,6 @@ export default function Topbar({ onMenuClick }: { onMenuClick: () => void }) {
              * الحساب حيث بقيّة ما يخصّ من يقف أمام الشاشة.
              */}
             <div className="ms-auto flex shrink-0 items-center gap-1.5">
-                {context && (
-                    <>
-                    </>
-                )}
-
                 {/* الإشعارات */}
                 {feed && (
                     <DropdownMenu>
@@ -238,7 +233,7 @@ export default function Topbar({ onMenuClick }: { onMenuClick: () => void }) {
 
                 {/* الحساب — قائمة صفوف تفتح بمرور الماوس: رأس المستخدم، الفرع
                     الافتراضي واختياره، اللغة كمبدّل مقسّم، إدارة الحساب،
-                    والخروج. «المظهر» و«اشتراك ركاز» مؤجّلان بطلب المالك. */}
+                    والخروج. */}
                 <DropdownMenu open={accountOpen} onOpenChange={setAccountOpen} modal={false}>
                     <DropdownMenuTrigger asChild>
                         <button

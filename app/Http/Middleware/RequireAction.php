@@ -17,7 +17,7 @@ use Symfony\Component\HttpFoundation\Response;
  * سطرَ الفحص تفتح البابَ كلَّه، ولا شيء يكشفه — المسارُ يعمل، والشاشةُ تُرسم،
  * والتاجرُ لا يعرف أنّ موظّفًا بدّل نطاقه.
  *
- *   Route::middleware('may:website.configure')->group(...)
+ *   Route::middleware('may:order.edit')->group(...)
  */
 class RequireAction
 {

@@ -8,10 +8,10 @@ import { cn } from '@/lib/utils';
  *
  * ═══ ولمَ رسمٌ لا لقطةُ شاشة ═══
  *
- * لقطةُ شاشةٍ حقيقيّة تحمل بياناتِ متجرٍ ما: أرقامَ مبيعاتٍ وأسماءَ زبائن.
+ * لقطةُ شاشةٍ حقيقيّة تحمل بياناتِ شركةٍ ما: أرقامَ مبيعاتٍ وأسماءَ عملاء.
  * ولقطةٌ «تجريبيّة» تحمل أرقامًا مخترعةً تُقرأ وعدًا بما لم يُقَس. فالرسمُ
  * تجريدٌ صادق: أعمدةٌ وبطاقاتٌ بلا رقمٍ واحد، تقول **شكلَ** ما يُدار لا
- * كم رَبِح أحد.
+ * كم رَبِحت شركة.
  *
  * وهو رسمٌ في الترميز لا صورة: لا ملفَّ يُحمَّل، ولا يبهت على شاشةٍ عالية
  * الدقّة، ويتبع خطَّ النظام وألوانَه وحدَها.
@@ -82,37 +82,45 @@ const PRODUCTS = (
     </Frame>
 );
 
-const POS = (
+const DOCUMENTS = (
     <Frame>
-        <div className="grid grid-cols-[1fr_auto] gap-3" aria-hidden>
-            <div className="space-y-2">
-                {[92, 76, 84, 60].map((w, i) => (
-                    <div key={i} className="flex items-center gap-2">
-                        <span className="size-6 shrink-0 rounded-[7px] bg-[#111]/[0.06]" />
-                        <Line w={w} />
-                    </div>
-                ))}
+        <div className="space-y-2.5" aria-hidden>
+            <div className="flex items-center justify-between">
+                <Line w={34} dark />
+                <span className="size-7 rounded-[8px] bg-[#111]/[0.07]" />
             </div>
-            <div className="grid w-20 grid-cols-3 gap-1.5">
-                {Array.from({ length: 9 }).map((_, i) => (
-                    <span key={i} className="aspect-square rounded-[5px] bg-[#111]/[0.07]" />
-                ))}
+            {[96, 88, 92, 74].map((w, i) => (
+                <div key={i} className="flex items-center gap-2">
+                    <Line w={w} />
+                    <span className="h-2 w-8 shrink-0 rounded-full bg-[#111]/[0.09]" />
+                </div>
+            ))}
+            <div className="flex justify-end pt-1">
+                <Line w={28} dark />
             </div>
         </div>
-        <div className="mt-3 h-8 rounded-[9px] bg-[#111]" aria-hidden />
     </Frame>
 );
 
-const WEBSITE = (
+const LEDGER = (
     <Frame>
-        <div className="space-y-2.5" aria-hidden>
-            <div className="h-14 rounded-[10px] bg-[#111]/[0.07]" />
-            <div className="grid grid-cols-2 gap-2.5">
-                <div className="h-16 rounded-[10px] bg-[#111]/[0.05]" />
-                <div className="h-16 rounded-[10px] bg-[#111]/[0.05]" />
+        <div className="space-y-2" aria-hidden>
+            {[
+                [56, 22],
+                [44, 30],
+                [62, 18],
+                [38, 26],
+                [50, 24],
+            ].map(([a, b], i) => (
+                <div key={i} className="flex items-center gap-3">
+                    <span className="h-2 shrink-0 rounded-full bg-[#111]/12" style={{ width: `${a}%` }} />
+                    <span className="h-2 shrink-0 rounded-full bg-[#111]/45" style={{ width: `${b}%` }} />
+                </div>
+            ))}
+            <div className="mt-3 flex items-center gap-3 border-t border-[#ececec] pt-3">
+                <Line w={30} dark />
+                <span className="h-2 w-10 rounded-full bg-[#111]/70" />
             </div>
-            <Line w={64} dark />
-            <Line w={40} />
         </div>
     </Frame>
 );
@@ -122,24 +130,24 @@ export default function AuthShowcase() {
 
     const slides: Slide[] = [
         {
-            title: 'كل أعمالك في مكان واحد',
-            body: 'أدر المبيعات والمخزون والعملاء والموقع الإلكتروني من لوحةٍ واحدة.',
+            title: 'أعمال الشركة في مكان واحد',
+            body: 'العملاء والمشاريع والمشتريات والمالية — لوحةٌ واحدة بدل جداولَ متفرّقة.',
             art: DASHBOARD,
         },
         {
-            title: 'منتجاتك ومخزونك تحت السيطرة',
-            body: 'أصناف وتصنيفات وكميّات — وما نفد يُعرف قبل أن يُطلب.',
+            title: 'فاتورةٌ تُصدَر وتُحصَّل',
+            body: 'فاتورةُ عميلٍ برقم أمر الشراء ومركز التكلفة، ثمّ سندُ قبضٍ يُوزَّع عليها.',
+            art: DOCUMENTS,
+        },
+        {
+            title: 'كلُّ ورقةٍ تدخل الدفتر',
+            body: 'قيدٌ مزدوجٌ مع كلّ حركة، وشجرةُ حساباتٍ وميزانُ مراجعةٍ يُقرآن في أيّ لحظة.',
+            art: LEDGER,
+        },
+        {
+            title: 'ما تملكه الشركة محسوب',
+            body: 'مخزونٌ بأرصدة الفروع، وأصولٌ ثابتةٌ تُهلَك، ومصروفاتٌ لكلٍّ حسابُها.',
             art: PRODUCTS,
-        },
-        {
-            title: 'نقطة بيع تعمل على أي جهاز',
-            body: 'بيعٌ سريع وطباعة إيصال، وكلُّ بيعةٍ تدخل الدفتر في لحظتها.',
-            art: POS,
-        },
-        {
-            title: 'متجرك على الإنترنت بلا مطوّر',
-            body: 'صفحاتٌ تُبنى بالسحب، ومنتجاتُك عليها هي منتجاتُك نفسها.',
-            art: WEBSITE,
         },
     ];
 

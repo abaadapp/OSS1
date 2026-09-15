@@ -23,7 +23,6 @@ export interface Product {
     stock_status: string;
     active: boolean;
     /** يُعرض في المتجر على الإنترنت — غير `active` التي تعني «يُباع» */
-    published?: boolean;
     alert: number;
     tax: number;
     discount: number;

@@ -63,7 +63,6 @@ const FIELD_SECTION: Record<string, TabKey> = {
     sku: 'basic',
     barcode: 'basic',
     active: 'basic',
-    published: 'basic',
     price: 'pricing',
     cost: 'pricing',
     tax: 'pricing',
@@ -103,7 +102,6 @@ export default function ProductForm({ categories, product, description, currency
         quantity: product ? String(product.qty) : '',
         alert_qty: product ? String(product.alert) : '',
         active: product ? product.active : true,
-        published: product?.published ?? true,
         image: null as File | null,
         // مسوّدة التركيب — تُملأ عند الإنشاء وتُكتب في الخادم بعد إنشاء
         // المنتج مباشرة. وفي التعديل تبقى فارغةً: هناك لكلّ فعلٍ مسارُه
@@ -511,35 +509,14 @@ export default function ProductForm({ categories, product, description, currency
 
                         <Card className="p-6">
                             <h3 className="mb-4 font-bold text-[#111]">{t('حالة المنتج')}</h3>
-                            {/*
-                                مفتاحان لا واحد: «يُباع» غير «يُعرض على الإنترنت».
-
-                                وكان المفتاح الأوّل يقول «في نقطة البيع والمتجر»
-                                فيحكم الاثنين معًا — فمن أراد إخفاء ورق التغليف
-                                عن زبائن موقعه اضطرّ إلى إيقاف بيعه عند الطاولة.
-                            */}
-                            <div className="divide-y divide-[var(--ui-border,#e8e8e8)]">
-                                <div className="flex items-center justify-between gap-3 pb-4">
-                                    <div>
-                                        <p className="text-sm font-medium text-[#111]">{t('تفعيل المنتج')}</p>
-                                        <p className="mt-0.5 text-[12px] text-[#9ca3af]">
-                                            {t('إظهاره في القوائم والفواتير')}
-                                        </p>
-                                    </div>
-                                    <Switch on={form.data.active} onChange={() => form.setData('active', !form.data.active)} />
+                            <div className="flex items-center justify-between gap-3">
+                                <div>
+                                    <p className="text-sm font-medium text-[#111]">{t('تفعيل المنتج')}</p>
+                                    <p className="mt-0.5 text-[12px] text-[#9ca3af]">
+                                        {t('إظهاره في القوائم والفواتير')}
+                                    </p>
                                 </div>
-
-                                <div className="flex items-center justify-between gap-3 pt-4">
-                                    <div>
-                                        <p className="text-sm font-medium text-[#111]">{t('عرضه في متجرك على الإنترنت')}</p>
-                                        <p className="mt-0.5 text-[12px] text-[#9ca3af]">
-                                            {form.data.active
-                                                ? t('يظهر لزوّار متجرك بصورته وسعره')
-                                                : t('لن يظهر ما دام غير مفعّل')}
-                                        </p>
-                                    </div>
-                                    <Switch on={form.data.published} onChange={() => form.setData('published', !form.data.published)} />
-                                </div>
+                                <Switch on={form.data.active} onChange={() => form.setData('active', !form.data.active)} />
                             </div>
                         </Card>
                     </div>

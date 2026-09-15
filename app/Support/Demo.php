@@ -715,7 +715,6 @@ class Demo
                 'stock_status' => Product::statusFor($qty, (int) $p->alert_qty),
                 'active' => (bool) $p->active,
                 // ما يُعرض في المتجر على الإنترنت — انظر App\Support\Storefront
-                'published' => (bool) $p->published,
                 'alert' => $p->alert_qty,
                 /*
                  * النسبة الفعليّة من المصدر الذي يحتسب بها الخادم — لا العمود الخام.
