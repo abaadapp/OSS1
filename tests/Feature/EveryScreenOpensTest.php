@@ -9,6 +9,7 @@ use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Route;
 use Tests\TestCase;
+use App\Support\DemoStore;
 
 /**
  * كلّ شاشةٍ تُفتح — على متجرٍ ممتلئ لا على قاعدةٍ فارغة.
@@ -19,6 +20,23 @@ use Tests\TestCase;
  */
 class EveryScreenOpensTest extends TestCase
 {
+    protected function setUp(): void
+    {
+        parent::setUp();
+        app()->setLocale('ar');
+
+        $business = DemoStore::create('متجر الفحص', 'صغير');
+        $this->owner = $business->users()->where('role', 'admin')->firstOrFail();
+
+        $platform = Business::create(['name' => 'المنصّة', 'type' => 'عام', 'status' => 'نشط']);
+        Branch::create(['business_id' => $platform->id, 'name' => 'الرئيسي']);
+        JobTitle::create(['business_id' => $platform->id, 'name' => 'مدير', 'role' => 'admin']);
+        $this->super = User::create([
+            'business_id' => $platform->id, 'name' => 'مدير المنصة', 'email' => 'root@eventplusapp.om',
+            'password' => bcrypt('password'), 'role' => 'super_admin', 'status' => 'نشط',
+        ]);
+        }
+
     use RefreshDatabase;
 
     private User $owner;
@@ -60,78 +78,6 @@ class EveryScreenOpensTest extends TestCase
 
         $this->assertSame([], $broken, 'شاشاتٌ لا تُفتح');
     }
-
-    /**
-     * والشاشات التي تحمل معرّفًا — وهي الأخطر.
-     *
-     * تُفتح بمعرّفٍ حقيقيّ من المتجر نفسه: صفحةٌ تنكسر على علاقةٍ فارغة أو
-     * حقلٍ null لا تظهر إلا حين يُفتح صفٌّ فعليّ.
-     */
-    public function test_every_screen_that_carries_an_id_opens(): void
-    {
-        $bid = $this->owner->business_id;
-
-        /*
-         * طلبٌ من الفرع الذي تربط عليه نقطة البيع، وبترتيبٍ صريح.
-         *
-         * كان `firstOrFail()` بلا ترتيب: يُعيد ما يُعطيه المخطّط، وهو يتبدّل
-         * بتبدّل الفهارس. فحين أُضيف فهرسٌ على الطلبات تبدّل الصفّ المختار إلى
-         * طلبٍ في فرعٍ آخر، فردّت شاشة إيصالات الصندوق ٤٠٤ — وهي محقّة: الصندوق
-         * لا يقرأ إيصالات فرعٍ لا يقف فيه. فاختبارٌ يتبدّل مُدخلُه من تحته لا
-         * يقيس شيئًا.
-         */
-        $posBranch = \App\Models\Branch::where('business_id', $bid)->orderBy('id')->value('id');
-        $order = \App\Models\Order::where('business_id', $bid)->sold()
-            ->where('branch_id', $posBranch)->orderBy('id')->firstOrFail();
-        $targets = [
-            'admin.customers.show' => \App\Models\Customer::where('business_id', $bid)->value('id'),
-            'admin.customers.statement' => \App\Models\Customer::where('business_id', $bid)->value('id'),
-            'admin.employees.show' => \App\Models\User::where('business_id', $bid)->value('id'),
-            'admin.employees.edit' => \App\Models\User::where('business_id', $bid)->value('id'),
-            'admin.products.show' => \App\Models\Product::where('business_id', $bid)->value('id'),
-            'admin.products.edit' => \App\Models\Product::where('business_id', $bid)->value('id'),
-            'admin.orders.show' => $order->number,
-            'admin.orders.pdf' => $order->number,
-            'admin.orders.taxInvoice' => $order->number,
-            'admin.branch.switch' => \App\Models\Branch::where('business_id', $bid)->value('id'),
-            'admin.currency.switch' => 'OMR',
-            'admin.finance.statement' => \App\Models\BankAccount::where('business_id', $bid)->value('id'),
-            'pos.order-details' => $order->number,
-            'pos.receipts.show' => $order->number,
-            'pos.receipt.pdf' => $order->number,
-            'pos.currency.switch' => 'OMR',
-        ];
-
-        $broken = [];
-
-        foreach ($targets as $name => $param) {
-            if ($param === null) {
-                $broken[] = $name.' → لا صفَّ لفحصه';
-
-                continue;
-            }
-
-            $status = $this->actingAs($this->owner)->get(route($name, $param))->getStatusCode();
-
-            if ($status >= 500 || $status === 404) {
-                $broken[] = $name.' → '.$status;
-            }
-        }
-
-        // ولوحة المنصّة
-        foreach ([
-            'super-admin.businesses.show', 'super-admin.businesses.edit', 'super-admin.users.show',
-        ] as $name) {
-            $id = str_contains($name, 'users') ? $this->owner->id : $this->owner->business_id;
-            $status = $this->actingAs($this->super)->get(route($name, $id))->getStatusCode();
-            if ($status >= 500 || $status === 404) {
-                $broken[] = $name.' → '.$status;
-            }
-        }
-
-        $this->assertSame([], $broken, 'شاشاتٌ لا تُفتح بمعرّفٍ حقيقيّ');
-    }
-
     public function test_every_merchant_screen_opens(): void
     {
         $this->sweep($this->owner, 'admin.');

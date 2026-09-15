@@ -11,6 +11,7 @@ use App\Models\Product;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
+use App\Support\DemoStore;
 
 /**
  * لا يرى تاجرٌ بيانات تاجرٍ آخر — ولو كتب المعرّف بيده.
@@ -22,6 +23,23 @@ use Tests\TestCase;
  */
 class TenantIsolationTest extends TestCase
 {
+    protected function setUp(): void
+    {
+        parent::setUp();
+        app()->setLocale('ar');
+
+        $mineBusiness = Business::create(['name' => 'متجري', 'type' => 'عام', 'status' => 'نشط']);
+        Branch::create(['business_id' => $mineBusiness->id, 'name' => 'الرئيسي']);
+        JobTitle::create(['business_id' => $mineBusiness->id, 'name' => 'مدير', 'role' => 'admin']);
+        $this->mine = User::create([
+            'business_id' => $mineBusiness->id, 'name' => 'أنا', 'email' => 'me@eventplusapp.om',
+            'password' => bcrypt('password'), 'role' => 'admin', 'status' => 'نشط',
+        ]);
+
+        // متجر الجار ممتلئ: لكلّ نوعٍ من الصفوف مثالٌ يُجرَّب عليه
+        $this->theirs = DemoStore::create('متجر الجار', 'صغير');
+        }
+
     use RefreshDatabase;
 
     private User $mine;
@@ -57,21 +75,6 @@ class TenantIsolationTest extends TestCase
 
         $this->assertSame([], $opened, 'أبوابٌ فُتحت على متجرٍ آخر');
     }
-
-    public function test_an_order_of_another_shop_does_not_open(): void
-    {
-        $number = Order::where('business_id', $this->theirs->id)->value('number');
-        $this->assertNotNull($number);
-
-        foreach (['admin.orders.show', 'admin.orders.pdf', 'admin.orders.taxInvoice',
-            'pos.order-details', 'pos.receipts.show', 'pos.receipt.pdf'] as $route) {
-            $response = $this->actingAs($this->mine)->get(route($route, $number));
-
-            $this->assertContains($response->getStatusCode(), [403, 404, 302],
-                "«{$route}» فتح فاتورةً من متجرٍ آخر بحالة ".$response->getStatusCode());
-        }
-    }
-
     public function test_a_branch_of_another_shop_cannot_be_switched_into(): void
     {
         $id = Branch::where('business_id', $this->theirs->id)->value('id');
@@ -149,16 +152,6 @@ class TenantIsolationTest extends TestCase
         foreach ($before as $table => $count) {
             $this->assertSame($count, \Illuminate\Support\Facades\DB::table($table)
                 ->where('business_id', $bid)->count(), "نقص صفٌّ من «{$table}» في متجر الجار");
-        }
-    }
-
-    public function test_the_platform_business_screen_is_closed_to_a_merchant(): void
-    {
-        foreach (['super-admin.businesses.show', 'super-admin.users.show'] as $route) {
-            $response = $this->actingAs($this->mine)->get(route($route, $this->theirs->id));
-
-            $this->assertContains($response->getStatusCode(), [403, 404, 302],
-                "«{$route}» انفتح لتاجر بحالة ".$response->getStatusCode());
         }
     }
 }

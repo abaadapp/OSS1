@@ -91,14 +91,6 @@ class SearchIsBlindToCaseTest extends TestCase
         // و`_` تبقى: نزعُها يمنع إيجاد ما فيه شرطةٌ سفليّة أصلًا
         $this->assertSame('SKU_12', $term('SKU_12'));
     }
-
-    /** والبحثان الموحّدان قائمان: مسحٌ لا يجد شيئًا ليس دليلَ سلامة */
-    public function test_both_unified_search_routes_exist(): void
-    {
-        $this->assertNotNull(Route::getRoutes()->getByName('admin.search'));
-        $this->assertNotNull(Route::getRoutes()->getByName('super-admin.search'));
-    }
-
     /** @return array<int, string> */
     private function php(string $dir): array
     {

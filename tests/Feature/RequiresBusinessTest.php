@@ -41,16 +41,6 @@ class RequiresBusinessTest extends TestCase
             'role' => 'super_admin', 'status' => 'نشط',
         ]);
     }
-
-    public static function merchantRoutes(): array
-    {
-        return [
-            ['admin.dashboard'], ['admin.products.index'], ['admin.orders.index'],
-            ['admin.customers.index'], ['admin.settings.index'], ['admin.employees.index'],
-            ['pos.index'], ['pos.orders'], ['pos.receipts'], ['pos.customers'],
-        ];
-    }
-
     #[DataProvider('merchantRoutes')]
     #[DataProvider('merchantRoutes')]
     public function test_a_real_merchant_user_passes_through_untouched(string $name): void

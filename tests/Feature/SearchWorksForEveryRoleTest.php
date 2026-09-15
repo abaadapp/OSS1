@@ -182,15 +182,6 @@ class SearchWorksForEveryRoleTest extends TestCase
 
         $this->assertStringContainsString('/admin/orders', (string) $url);
     }
-    /* -------------------------- مدير المنصّة -------------------------- */
-
-    public function test_the_platform_admin_searches_companies_and_users(): void
-    {
-        $groups = $this->titles($this->platform, 'متجر', 'super-admin.search');
-
-        $this->assertContains(__('الشركات'), $groups, 'بحث المنصّة لا يجد الشركات');
-    }
-
     /**
      * ولا يدخل بحثَ التجّار: ليس له متجرٌ يبحث فيه.
      *

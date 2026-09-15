@@ -22,6 +22,22 @@ use Tests\TestCase;
  */
 class BranchIsEmptiedBeforeDeletionTest extends TestCase
 {
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $this->business = Business::create(['name' => 'متجري', 'type' => 'عام', 'status' => 'نشط']);
+        $this->main = Branch::create(['business_id' => $this->business->id, 'name' => 'الرئيسي']);
+        $this->second = Branch::create(['business_id' => $this->business->id, 'name' => 'فرع القرم']);
+
+        $this->owner = User::create([
+            'business_id' => $this->business->id, 'name' => 'المالك', 'email' => 'o@eventplus.om',
+            'password' => bcrypt('password'), 'role' => 'admin', 'status' => 'نشط',
+        ]);
+
+        $this->actingAs($this->owner);
+        }
+
     use RefreshDatabase;
 
     private Business $business;
