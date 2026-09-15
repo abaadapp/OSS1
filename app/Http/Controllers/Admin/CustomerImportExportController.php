@@ -25,7 +25,7 @@ class CustomerImportExportController extends Controller
     /** أعمدة الملف بترتيب النشاط (تُستخدم للتصدير والنموذج) */
     private function columns(): array
     {
-        return [__('الاسم'), __('الهاتف'), __('البريد'), __('العنوان'), __('الفرع'), __('النقاط')];
+        return [__('الاسم'), __('الهاتف'), __('البريد'), __('العنوان'), __('الفرع')];
     }
 
     /**
@@ -55,7 +55,6 @@ class CustomerImportExportController extends Controller
                 $c->email ?? '',
                 $c->address ?? '',
                 $c->branch?->name ?? '',
-                (int) $c->points,
             ])->all();
     }
 
@@ -69,7 +68,7 @@ class CustomerImportExportController extends Controller
 
         $sheet->fromArray($this->columns(), null, 'A1');
 
-        $lastCol = 'F';
+        $lastCol = 'E';
         $sheet->getStyle("A1:{$lastCol}1")->getFont()->setBold(true)->getColor()->setRGB('FFFFFF');
         $sheet->getStyle("A1:{$lastCol}1")->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('111111');
         $sheet->getStyle("A1:{$lastCol}1")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
@@ -201,7 +200,6 @@ class CustomerImportExportController extends Controller
             $email = $get('email');
             $address = $get('address');
             $fileBranch = $get('branch');
-            $points = (int) ($idx['points'] !== null ? ($r[$idx['points']] ?? 0) : 0);
 
             // تحديد الفرع: فرع الملف إن طابق فرعًا موجودًا، وإلا الفرع الافتراضي
             $branchId = $defaultBranchId;
@@ -258,11 +256,11 @@ class CustomerImportExportController extends Controller
              * وعنوانه معها. ولا شيء في الشاشة يقول ذلك.
              */
             $stated = [];
-            foreach (['name', 'phone', 'email', 'address', 'points'] as $field) {
+            foreach (['name', 'phone', 'email', 'address'] as $field) {
                 $stated[$field] = $idx[$field] !== null && $get($field) !== '';
             }
 
-            $rows[] = compact('name', 'phone', 'email', 'address', 'points', 'branchId', 'branchDisplay', 'status', 'note', 'targetId', 'stated');
+            $rows[] = compact('name', 'phone', 'email', 'address', 'branchId', 'branchDisplay', 'status', 'note', 'targetId', 'stated');
         }
 
         session()->put(self::SESSION_KEY, [
@@ -292,7 +290,7 @@ class CustomerImportExportController extends Controller
         ];
 
         // ما لا يذكره الملفّ يبقى كما هو — يُقال قبل التأكيد لا بعده
-        $labels = ['name' => 'الاسم', 'phone' => 'الهاتف', 'email' => 'البريد', 'address' => 'العنوان', 'points' => 'النقاط'];
+        $labels = ['name' => 'الاسم', 'phone' => 'الهاتف', 'email' => 'البريد', 'address' => 'العنوان'];
         $untouched = [];
         if ($counts['update'] > 0) {
             foreach ($labels as $key => $label) {
@@ -337,7 +335,6 @@ class CustomerImportExportController extends Controller
                     'phone' => $r['phone'] ?: null,
                     'email' => $r['email'] ?: null,
                     'address' => $r['address'] ?: null,
-                    'points' => (int) $r['points'],
                 ];
 
                 if ($r['status'] === 'new') {
@@ -354,12 +351,11 @@ class CustomerImportExportController extends Controller
                             $fields['branch_id'] = $r['branchId'];
                         }
                         // وما لم يذكره الملفّ لا يُكتب — انظر بناء `stated` أعلاه
-                        foreach (['name', 'phone', 'email', 'address', 'points'] as $field) {
+                        foreach (['name', 'phone', 'email', 'address'] as $field) {
                             if (! ($r['stated'][$field] ?? true)) {
                                 unset($fields[$field]);
                             }
                         }
-                        $before = (int) $customer->points;
                         $customer->update($fields);
                         $updated++;
                     }
@@ -404,10 +400,9 @@ class CustomerImportExportController extends Controller
             'email' => ['البريد', 'ايميل', 'الايميل', 'email', 'mail'],
             'address' => ['العنوان', 'عنوان', 'address'],
             'branch' => ['الفرع', 'فرع', 'branch'],
-            'points' => ['النقاط', 'نقاط', 'points'],
         ];
 
-        $index = ['name' => 0, 'phone' => 1, 'email' => 2, 'address' => 3, 'branch' => 4, 'points' => 5];
+        $index = ['name' => 0, 'phone' => 1, 'email' => 2, 'address' => 3, 'branch' => 4];
         $found = [];
         $isHeader = false;
 
@@ -438,7 +433,6 @@ class CustomerImportExportController extends Controller
                 'email' => $found['email'] ?? null,
                 'address' => $found['address'] ?? null,
                 'branch' => $found['branch'] ?? null,
-                'points' => $found['points'] ?? null,
             ];
         } else {
             // بلا ترويسة: افتراض الترتيب حسب عدد الأعمدة المتاحة
@@ -448,8 +442,7 @@ class CustomerImportExportController extends Controller
                 'phone' => $cols > 1 ? 1 : null,
                 'email' => $cols > 2 ? 2 : null,
                 'address' => $cols > 3 ? 3 : null,
-                'branch' => $cols > 5 ? 4 : null,
-                'points' => $cols > 5 ? 5 : ($cols > 4 ? 4 : null),
+                'branch' => $cols > 4 ? 4 : null,
             ];
         }
 

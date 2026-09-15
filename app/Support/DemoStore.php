@@ -418,7 +418,6 @@ class DemoStore
                 'business_id' => $bid, 'name' => $name,
                 'phone' => '+9689' . str_pad((string) mt_rand(0, 9999999), 7, '0', STR_PAD_LEFT),
                 'email' => 'demo.customer' . ($i + 1) . '@example.om',
-                'points' => mt_rand(0, 900),
                 'address' => self::CITIES[$i % count(self::CITIES)],
                 'tax_number' => $i % 9 === 0 ? 'OM' . mt_rand(100000, 999999) : null,
             ]);

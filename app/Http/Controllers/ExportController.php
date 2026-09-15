@@ -86,10 +86,10 @@ class ExportController extends Controller
     {
         $rows = array_map(fn ($c) => [
             $c['id'], $c['name'], $c['phone'], $c['email'], $c['orders'],
-            number_format($c['total_spent'], 3, '.', ''), $c['points'], $c['last_order'],
+            number_format($c['total_spent'], 3, '.', ''), $c['last_order'],
         ], Demo::customers(request()));
 
-        return $this->stream('customers', [__('المعرّف'), __('الاسم'), __('الهاتف'), __('البريد'), __('عدد الطلبات'), __('إجمالي الإنفاق'), __('النقاط'), __('آخر طلب')], $rows);
+        return $this->stream('customers', [__('المعرّف'), __('الاسم'), __('الهاتف'), __('البريد'), __('عدد الطلبات'), __('إجمالي الإنفاق'), __('آخر طلب')], $rows);
     }
 
     /**

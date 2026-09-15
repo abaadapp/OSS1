@@ -26,7 +26,6 @@ interface Row {
     email: string | null;
     address: string | null;
     branchDisplay: string;
-    points: number;
     status: 'new' | 'update' | 'invalid' | 'dup_file';
     note?: string | null;
 }
@@ -91,7 +90,6 @@ export default function ImportPreview() {
                 ))}
             </div>
 
-            {/* الغائب كان يُقرأ صفرًا: قائمة أسماءٍ وأرقام تمحو نقاط الولاء كلّها */}
             {untouched.length > 0 && (
                 <div className="mb-4 flex items-start gap-2 rounded-[10px] bg-[#f0fdf4] px-3 py-2.5 text-[13px] text-[#166534]">
                     <ShieldCheck className="mt-0.5 size-4 shrink-0" />
@@ -116,7 +114,7 @@ export default function ImportPreview() {
                 <Table>
                     <TableHeader>
                         <TableRow className="hover:bg-transparent">
-                            {['#', 'الاسم', 'الهاتف', 'البريد', 'العنوان', 'الفرع', 'النقاط', 'الحالة'].map((h) => (
+                            {['#', 'الاسم', 'الهاتف', 'البريد', 'العنوان', 'الفرع', 'الحالة'].map((h) => (
                                 <TableHead key={h}>{h === '#' ? h : t(h)}</TableHead>
                             ))}
                         </TableRow>
@@ -133,7 +131,6 @@ export default function ImportPreview() {
                                     <TableCell dir="ltr" className="text-[#6b7280]">{r.email || '—'}</TableCell>
                                     <TableCell className="text-[#6b7280]">{r.address || '—'}</TableCell>
                                     <TableCell className="text-[#4b4b4b]">{r.branchDisplay}</TableCell>
-                                    <TableCell className="tabular-nums text-[#4b4b4b]">{number(r.points)}</TableCell>
                                     <TableCell>
                                         <Badge variant={s.variant}>{t(s.label)}</Badge>
                                         {(r.status === 'invalid' || r.status === 'dup_file') && r.note && (

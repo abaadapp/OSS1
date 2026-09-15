@@ -406,7 +406,6 @@ export default function CustomerShow() {
                         </Field>
                         <Field
                             label="رقم الهاتف"
-                            hint="نقاط الولاء تتبع الرقم — تغييره ينقلها معه"
                             error={edit.errors.phone}
                         >
                             <Input dir="ltr" value={edit.data.phone} onChange={(e) => edit.setData('phone', e.target.value)} />

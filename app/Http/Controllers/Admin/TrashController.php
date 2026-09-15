@@ -163,7 +163,6 @@ class TrashController extends Controller
             'id' => $c->id,
             'name' => $c->name,
             'phone' => $c->phone,
-            'points' => (int) $c->points,
             'deletedAt' => $c->deleted_at?->format('Y-m-d H:i'),
             'deletedBy' => $c->deleted_by,
             'daysLeft' => $left($c),

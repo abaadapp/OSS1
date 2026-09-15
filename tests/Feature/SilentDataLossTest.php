@@ -146,29 +146,30 @@ class SilentDataLossTest extends TestCase
 
     /* ======================= استيراد العملاء ======================= */
 
-    public function test_a_contact_list_does_not_wipe_loyalty_points(): void
+    public function test_a_contact_list_does_not_wipe_what_it_does_not_mention(): void
     {
         $c = Customer::create([
             'business_id' => $this->business->id, 'name' => 'سالم',
-            'phone' => '99887766', 'email' => 'salem@eventplus.om', 'points' => 350,
+            'phone' => '99887766', 'email' => 'salem@eventplus.om', 'address' => 'مسقط — الخوير',
         ]);
 
         $this->import("الاسم,الهاتف\nسالم,99887766\n", 'customers.csv', 'customers');
 
         $fresh = $c->fresh();
-        $this->assertSame(350, (int) $fresh->points, 'مُحيت نقاط العميل لأن الملفّ لم يذكرها');
-        $this->assertSame('salem@eventplus.om', $fresh->email, 'مُحي البريد');
+        $this->assertSame('salem@eventplus.om', $fresh->email, 'مُحي البريد لأن الملفّ لم يذكره');
+        $this->assertSame('مسقط — الخوير', $fresh->address, 'مُحي العنوان');
     }
 
-    public function test_stated_points_are_still_applied(): void
+    public function test_a_stated_field_is_still_applied(): void
     {
         $c = Customer::create([
-            'business_id' => $this->business->id, 'name' => 'سالم', 'phone' => '99887766', 'points' => 350,
+            'business_id' => $this->business->id, 'name' => 'سالم',
+            'phone' => '99887766', 'email' => 'old@eventplus.om',
         ]);
 
-        $this->import("الاسم,الهاتف,النقاط\nسالم,99887766,500\n", 'customers.csv', 'customers');
+        $this->import("الاسم,الهاتف,البريد\nسالم,99887766,new@eventplus.om\n", 'customers.csv', 'customers');
 
-        $this->assertSame(500, (int) $c->fresh()->points);
+        $this->assertSame('new@eventplus.om', $c->fresh()->email);
     }
 
     private function import(string $csv, string $filename, string $kind): void

@@ -16,7 +16,6 @@ class Order extends Model
         'document_snapshot' => 'array',
         'subtotal' => 'decimal:3', 'discount' => 'decimal:3', 'tax' => 'decimal:3',
         'delivery_fee' => 'decimal:3', 'total' => 'decimal:3',
-        'coupon_discount' => 'decimal:3',
         'ordered_at' => 'datetime',
         'scheduled_for' => 'datetime',
         'hide_sender' => 'boolean',

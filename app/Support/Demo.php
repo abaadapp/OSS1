@@ -981,7 +981,6 @@ class Demo
                 : '—',
             'last_invoice' => $c->last_invoice,
             'last_invoice_total' => $c->last_invoice === null ? null : (float) $c->last_invoice_total,
-            'points' => $c->points,
         ])->all();
     }
 

@@ -57,7 +57,6 @@ export interface Customer {
     /** رقم آخر فاتورةٍ مباعة — null لعميلٍ لم يشترِ بعد */
     last_invoice?: string | null;
     last_invoice_total?: number | null;
-    points: number;
 }
 
 export interface Employee {

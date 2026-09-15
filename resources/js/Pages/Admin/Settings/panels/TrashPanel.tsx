@@ -36,7 +36,6 @@ interface TrashedExpense extends Trashed {
 interface TrashedCustomer extends Trashed {
     name: string;
     phone: string | null;
-    points: number;
     daysLeft: number;
 }
 
@@ -195,7 +194,6 @@ export default function TrashPanel({ products, expenses, customers, trashedBranc
             value: (c) => c.name,
             cell: (c) => icon(UserRound, c.name, c.phone),
         },
-        { key: 'points', header: 'النقاط', align: 'center', cell: (c) => c.points },
         deletedByColumn<TrashedCustomer>(),
         { key: 'deletedAt', header: 'تاريخ الحذف', cell: (c) => c.deletedAt ?? '—' },
         daysLeftColumn<TrashedCustomer>(),

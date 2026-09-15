@@ -20,7 +20,6 @@ class CustomerController extends Controller
         'orders' => 'orders_count',
         'total_spent' => 'orders_sum_total',
         'last_order' => 'orders_max_ordered_at',
-        'points' => 'points',
     ];
 
     private function bid(): int { return auth()->user()->business_id ?? Demo::bid(); }
@@ -72,7 +71,6 @@ class CustomerController extends Controller
              *
              * فرُفع الحقل من الحمولة، ووقع البديل: الحرف الأول من الاسم.
              */
-            'points' => $c->points,
         ]);
 
         $stats = Demo::customerStats();

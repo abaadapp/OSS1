@@ -8,7 +8,6 @@ import StatCard, { type Stat } from '@/Components/StatCard';
 import DataTable, { type Column, type ServerPagination } from '@/Components/DataTable';
 import Field, { Select } from '@/Components/Field';
 import SmartLink from '@/Components/SmartLink';
-import { Badge } from '@/Components/ui/badge';
 import { Button } from '@/Components/ui/button';
 import { Card } from '@/Components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/Components/ui/dialog';
@@ -136,16 +135,6 @@ export default function CustomersIndex() {
             key: 'last_order',
             header: 'آخر طلب',
             cell: (c) => <span dir="ltr" className="text-[#6b7280]">{c.last_order}</span>,
-        },
-        {
-            key: 'points',
-            header: 'نقاط الولاء',
-            align: 'end',
-            cell: (c) => (
-                <Badge variant="warning">
-                    {number(c.points)} {t('نقطة')}
-                </Badge>
-            ),
         },
         {
             key: 'actions',
@@ -324,7 +313,7 @@ export default function CustomersIndex() {
                     <form onSubmit={submitImport} className="space-y-4 px-5 pb-5">
                         <Field
                             label="ملف العملاء"
-                            hint="الصيغ المدعومة: CSV، XLS، XLSX، XLSM — الأعمدة: الاسم، الهاتف، البريد، العنوان، الفرع، النقاط. يمكنك تصدير ملف ثم تعديله وإعادة استيراده."
+                            hint="الصيغ المدعومة: CSV، XLS، XLSX، XLSM — الأعمدة: الاسم، الهاتف، البريد، العنوان، الفرع. يمكنك تصدير ملف ثم تعديله وإعادة استيراده."
                             error={upload.errors.file}
                             required
                         >

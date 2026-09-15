@@ -143,7 +143,6 @@ class SettingController extends Controller
             'shop_name' => __('اسم المتجر'),
             'vat_rate' => __('نسبة الضريبة'),
             'vat_filed_through' => __('آخر إقرار قُدِّم'),
-            'loyalty_earn_rate' => __('نقاط الولاء لكل ريال'),
         ]);
 
         $bid = auth()->user()->business_id ?? Demo::bid();

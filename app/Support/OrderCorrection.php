@@ -377,8 +377,9 @@ class OrderCorrection
      * يُعيد حساب الفاتورة من بنودها الباقية — بالمعادلة نفسها التي بيعت بها.
      *
      * الخصم يبقى كما اتُّفق عليه إلّا أن يتجاوز المجموع الجديد فيُقصّ إليه:
-     * كوبونٌ بعشرة على سلّةٍ صارت بثمانية لا يجعل الفاتورة سالبة. والضريبة
-     * تُحتسب سطرًا سطرًا بنسبة كل صنف كما في البيع، لا بنسبةٍ واحدة.
+     * والخصمُ يُقصّ عند قيمة السلّة: خصمٌ بعشرة على سلّةٍ صارت بثمانية لا
+     * يجعل الفاتورة سالبة. والضريبة تُحتسب سطرًا سطرًا بنسبة كل صنف كما في
+     * البيع، لا بنسبةٍ واحدة.
      */
     private static function recompute(Order $order): void
     {
@@ -389,7 +390,6 @@ class OrderCorrection
         // كميّةٍ واحدة يُسقط ثمن الشوكولاتة من الفاتورة كلّها بلا أثر
         $gross = round($items->sum(fn ($i) => (float) $i->price * (int) $i->quantity + (float) $i->addons_total), 3);
         $discount = round(min((float) $order->discount, $gross), 3);
-        $couponDiscount = round(min((float) $order->coupon_discount, $discount), 3);
 
         $tax = 0.0;
         if (Vat::enabled($bid) && $gross > 0) {
@@ -411,7 +411,6 @@ class OrderCorrection
         $order->update([
             'subtotal' => $subtotal,
             'discount' => $discount,
-            'coupon_discount' => $couponDiscount,
             'tax' => $tax,
             'total' => round($subtotal - $discount + $tax + (float) $order->delivery_fee, 3),
         ]);

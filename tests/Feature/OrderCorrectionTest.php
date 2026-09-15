@@ -73,7 +73,7 @@ class OrderCorrectionTest extends TestCase
             'subtotal' => $gross, 'discount' => 0, 'tax' => $tax, 'delivery_fee' => 0,
             'total' => round($gross + $tax, 3), 'payment_method' => 'نقدي',
             'status' => 'مكتمل', 'payment_status' => 'مدفوع',
-            'ordered_at' => now(), 'points_earned' => $customer ? (int) floor(($gross + $tax) * 5) : 0,
+            'ordered_at' => now(),
         ]);
         $order->items()->create([
             'product_id' => $this->product->id, 'name' => 'قميص',
