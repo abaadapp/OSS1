@@ -3,18 +3,27 @@
 namespace Tests\Feature;
 
 use App\Models\Business;
-use App\Models\Product;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
 
 /**
- * لوحة النشاط ونقطة البيع لا تُفتحان لمن لا متجر له.
+ * لوحةُ الشركة لا تُفتح لمن لا شركةَ له.
  *
- * مدير المنصة كان يمرّ: CheckRole يستثنيه من كل فحص، و/pos لا تفحص الدور.
- * فتنهار الصفحة (context غير مُرسَل) — أو الأسوأ، تصمد وتعرض بيانات متجر
- * آخر لأن Demo::bid() ترجع أول نشاط لمن لا يملك واحدًا.
+ * ═══ ولماذا يُردّ عند الباب لا في كلّ شاشة ═══
+ *
+ * `HandleInertiaRequests` لا يرسل `context` بلا `business_id`، والشاشاتُ
+ * تقرأ `context!.currency` فتنهار قبل أن تُركَّب الواجهة. فمن يمرّ بلا
+ * شركةٍ يرى شاشةً بيضاء لا رسالةً تقول له لماذا.
+ *
+ * وحسابٌ بلا شركةٍ ليس فرضًا: يُنشئه من يكتب صفًّا بيده في القاعدة، أو
+ * تتركه هجرةٌ قديمة. فالحارسُ يبقى وإن لم تُنشئ الشاشاتُ مثلَه اليوم.
+ *
+ * ═══ ولماذا شركتان في التهيئة ═══
+ *
+ * شركةٌ واحدة تجعل الاختبار يمرّ بلا أن يعني شيئًا: لا فرقَ بين «شركتي»
+ * و«أوّلِ شركةٍ في الجدول» حين تكون واحدة. والثانيةُ هي التي تجعل خلطَهما
+ * ممكنًا لو سقط الحارس يومًا — فهي شرطُ صدقِ الاختبار لا زينةٌ فيه.
  */
 class RequiresBusinessTest extends TestCase
 {
@@ -22,35 +31,44 @@ class RequiresBusinessTest extends TestCase
 
     private Business $mine;
 
-    private Business $theirs;
-
     protected function setUp(): void
     {
         parent::setUp();
 
-        $this->mine = Business::create(['name' => 'متجري', 'status' => 'نشط']);
-        $this->theirs = Business::create(['name' => 'متجر آخر', 'status' => 'نشط']);
-
+        // الأولى في الجدول — وليست شركةَ المستخدم، عمدًا
+        Business::create(['name' => 'شركةٌ أخرى', 'status' => 'نشط']);
+        $this->mine = Business::create(['name' => 'شركتي', 'status' => 'نشط']);
     }
 
-    private function superAdmin(): User
+    private function account(?int $businessId, string $email): User
     {
         return User::create([
-            'business_id' => null, 'name' => 'حسابٌ بلا شركة',
-            'email' => 'nobody@eventplus.om', 'password' => bcrypt('password'),
-            'role' => 'admin', 'status' => 'نشط',
+            'business_id' => $businessId,
+            'name' => 'مستخدم',
+            'email' => $email,
+            'password' => bcrypt('password'),
+            'role' => 'admin',
+            'status' => 'نشط',
         ]);
     }
-    #[DataProvider('merchantRoutes')]
-    #[DataProvider('merchantRoutes')]
-    public function test_a_real_merchant_user_passes_through_untouched(string $name): void
-    {
-        $owner = User::create([
-            'business_id' => $this->mine->id, 'name' => 'المالك',
-            'email' => 'owner@eventplus.om', 'password' => bcrypt('password'),
-            'role' => 'admin', 'status' => 'نشط',
-        ]);
 
-        $this->actingAs($owner)->get(route($name))->assertOk();
+    public function test_an_account_with_no_company_is_refused_at_the_door(): void
+    {
+        $orphan = $this->account(null, 'nobody@eventplus.om');
+
+        $this->actingAs($orphan)->get(route('admin.dashboard'))->assertForbidden();
+    }
+
+    public function test_a_real_company_user_passes_through_untouched(): void
+    {
+        $owner = $this->account($this->mine->id, 'owner@eventplus.om');
+
+        $this->actingAs($owner)->get(route('admin.dashboard'))->assertOk();
+    }
+
+    /** ولا يُردّ الزائرُ بـ403 — يُساق إلى الدخول، فالرفضُ ليس جوابَ من لم يُسأل بعد */
+    public function test_a_guest_is_sent_to_the_login_page(): void
+    {
+        $this->get(route('admin.dashboard'))->assertRedirect(route('login'));
     }
 }
