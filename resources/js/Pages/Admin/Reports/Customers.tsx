@@ -21,14 +21,14 @@ import type { PageProps } from '@/types';
 
 interface Row {
     name: string;
-    orders: number;
+    invoices: number;
     total: number;
 }
 
 interface Props {
     rows: Row[];
     limit: number;
-    summary: { total: number; customers: number; orders: number; average: number };
+    summary: { total: number; customers: number; invoices: number; average: number };
     range: ReportRange;
     rangeLabel: string;
 }
@@ -48,7 +48,7 @@ export default function ReportsCustomers() {
     const stats = [
         { label: t('إجمالي الإنفاق'), value: m(summary.total), icon: 'wallet', color: 'primary' },
         { label: t('عملاء اشتروا'), value: number(summary.customers), icon: 'users', color: 'info' },
-        { label: t('عدد الطلبات'), value: number(summary.orders), icon: 'shopping-cart', color: 'success' },
+        { label: t('عدد الفواتير'), value: number(summary.invoices), icon: 'file-text', color: 'success' },
         { label: t('متوسّط قيمة الطلب'), value: m(summary.average), icon: 'calculator', color: 'warning' },
     ];
 
@@ -97,7 +97,7 @@ export default function ReportsCustomers() {
                             <TableRow className="hover:bg-transparent">
                                 <TableHead className="w-14 text-center">#</TableHead>
                                 <TableHead>{t('العميل')}</TableHead>
-                                <TableHead className="text-end">{t('عدد الطلبات')}</TableHead>
+                                <TableHead className="text-end">{t('عدد الفواتير')}</TableHead>
                                 <TableHead className="text-end">{t('إجمالي الإنفاق')}</TableHead>
                             </TableRow>
                         </TableHeader>
@@ -109,7 +109,7 @@ export default function ReportsCustomers() {
                                     <TableRow key={`${r.name}-${i}`}>
                                         <TableCell className="text-center tabular-nums text-[#9ca3af]">{i + 1}</TableCell>
                                         <TableCell className="font-medium text-[#111]">{r.name}</TableCell>
-                                        <TableCell className="text-end tabular-nums">{number(r.orders)}</TableCell>
+                                        <TableCell className="text-end tabular-nums">{number(r.invoices)}</TableCell>
                                         <TableCell className="text-end tabular-nums">{m(r.total)}</TableCell>
                                     </TableRow>
                                 ))

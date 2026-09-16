@@ -6,8 +6,6 @@ use App\Models\Branch;
 use App\Models\BranchStock;
 use App\Models\Business;
 use App\Models\Expense;
-use App\Models\Order;
-use App\Models\OrderItem;
 use App\Models\Product;
 use App\Models\Transaction;
 use App\Models\User;
@@ -245,18 +243,11 @@ class ReportsTellTheirScopeTest extends TestCase
             'price' => 1000, 'cost' => 600, 'quantity' => 5, 'alert_qty' => 1, 'active' => true,
         ]);
 
-        $order = Order::create([
-            'business_id' => $this->business->id, 'branch_id' => $this->muscat->id,
-            'number' => 'INV-P1', 'status' => 'مكتمل',
-            'payment_method' => 'نقدي', 'subtotal' => 950, 'tax' => 50, 'total' => 1000,
-            'ordered_at' => now(), 'created_at' => now(), 'updated_at' => now(),
-        ]);
-
-        OrderItem::create([
-            'order_id' => $order->id,
-            'product_id' => $product->id, 'name' => 'باقة', 'quantity' => 1,
-            'price' => 950, 'cost' => 600, 'total' => 950,
-        ]);
+        $this->sellThroughInvoice(
+            $this->business->id,
+            [['product' => $product, 'quantity' => 1, 'unit_price' => 950, 'tax_amount' => 50]],
+            ['branch_id' => $this->muscat->id, 'number' => 'INV-P1'],
+        );
 
         Expense::create([
             'business_id' => $this->business->id, 'type' => 'إيجار', 'description' => 'إيجار',

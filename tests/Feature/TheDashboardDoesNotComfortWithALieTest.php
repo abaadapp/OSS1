@@ -5,9 +5,8 @@ namespace Tests\Feature;
 use App\Models\Branch;
 use App\Models\BranchStock;
 use App\Models\Business;
+use App\Models\CustomerInvoice;
 use App\Models\Expense;
-use App\Models\Order;
-use App\Models\OrderItem;
 use App\Models\Product;
 use App\Models\User;
 use App\Support\Demo;
@@ -161,7 +160,7 @@ class TheDashboardDoesNotComfortWithALieTest extends TestCase
         $product = Product::create(['business_id' => $this->shop->id, 'name' => 'باقة',
             'price' => 100, 'cost' => 40, 'quantity' => 10, 'alert_qty' => 2]);
 
-        $this->sell($product, 1, over: ['ordered_at' => now()->startOfMonth()]);
+        $this->sell($product, 1, over: ['issued_at' => now()->startOfMonth()->toDateString()]);
 
         // مبيعاتُ الشهر ١٠٠ والماضي صفر — لا ١٠٠ في الاثنين
         $this->assertSame('+100%', $this->card(1)['trend'], 'بيعةٌ على الحدّ حُسبت في الشهرين');
@@ -259,24 +258,13 @@ class TheDashboardDoesNotComfortWithALieTest extends TestCase
             'وصفرٌ في صلالة أقلُّ من الحدّ — فهو منخفضٌ هناك أيضًا');
     }
 
-    /** بيعةٌ حقيقية — بندٌ بتكلفته، كما في حارس اللوحة الأوّل */
-    private function sell(Product $p, int $qty, array $over = []): Order
+    /** بيعةٌ حقيقية — فاتورةٌ صادرةٌ ببندٍ منسوبٍ إلى صنفه، كما في حارس اللوحة الأوّل */
+    private function sell(Product $p, int $qty, array $over = []): CustomerInvoice
     {
-        $order = Order::create(array_merge([
-            'business_id' => $this->shop->id, 'branch_id' => $this->muscat->id,
-            'number' => 'INV-'.str_pad((string) (Order::count() + 1), 5, '0', STR_PAD_LEFT),
-            'status' => 'مكتمل',
-            'payment_method' => 'نقدي', 'payment_status' => 'مدفوع',
-            'subtotal' => $p->price * $qty, 'tax' => 0, 'total' => $p->price * $qty,
-            'ordered_at' => now(),
-        ], $over));
-
-        OrderItem::create([
-            'order_id' => $order->id, 'product_id' => $p->id, 'name' => $p->name,
-            'price' => $p->price, 'cost' => $p->cost, 'quantity' => $qty,
-            'total' => $p->price * $qty,
-        ]);
-
-        return $order;
+        return $this->sellThroughInvoice(
+            $this->shop->id,
+            [['product' => $p, 'quantity' => $qty, 'unit_price' => (float) $p->price]],
+            array_merge(['branch_id' => $this->muscat->id], $over),
+        );
     }
 }

@@ -6,8 +6,8 @@ use App\Models\ActivityLog;
 use App\Models\BankStatementLine;
 use App\Models\Branch;
 use App\Models\Category;
+use App\Models\CustomerInvoice;
 use App\Models\Expense;
-use App\Models\Order;
 use App\Models\Product;
 use App\Models\PurchaseOrder;
 use App\Models\StockAdjustment;
@@ -17,7 +17,6 @@ use App\Models\Transaction;
 use App\Models\User;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\DB;
 
 /**
  * بياناتُ التقارير — لكلّ تقريرٍ مؤشّراتُه وصفوفُه ومنتقياتُه.
@@ -81,34 +80,46 @@ class ReportData
     /**
      * إقرارُ ضريبة القيمة المضافة — ما حصّلتَه وما دفعتَه، والفرقُ المستحقّ.
      *
-     * والوعاء يُقرأ من حيث حُسبت الضريبة نفسها: `subtotal - discount`، وهو
-     * ما مرّ على `PosController::taxFor` بالضبط. ولو قيس بـ`total - tax`
-     * لَدخلت رسومُ التوصيل في الوعاء وهي لم تُضرَّب أصلًا، فيخرج رقمٌ لا
-     * تُصدّقه الضريبةُ المحصّلة بجواره.
+     * ═══ وضريبةُ المخرجات من فواتير العملاء ═══
      *
-     * ورسومُ التوصيل تُعرض في عمودها لهذا السبب: النظام لا يفرض عليها ضريبة،
-     * فمن كانت جهتُه الضريبية ترى غير ذلك يجب أن يراها مفصولةً لا مذابةً في
-     * رقمٍ يظنّه صحيحًا.
+     * كانت تُجمع من `orders` وحدها — وهو أخطرُ عطبٍ في النظام. لا مسارَ
+     * HTTP يُنشئ طلبًا منذ رُفعت نقطة البيع، فجدولُ الطلبات فارغ: ففاتورةٌ
+     * تصدر اليوم بضريبةِ ٥٪ **لا تظهر في الإقرار**، والنظامُ يقول «ضريبةٌ
+     * مستحقّة عليك: صفر» بينما دفترُ الأستاذ فيه رصيدٌ في `tax_payable`.
+     * إقرارٌ يُقدَّم ناقصًا، ولا شيءَ يقول شيئًا.
+     *
+     * فصارت من `Revenue` — الفواتيرُ الصادرة، بالتعريف نفسِه الذي يُقيَّد
+     * به في الدفتر: الوعاءُ `subtotal - discount_total` (ما يُقيَّد دائنًا في
+     * `sales`) والضريبةُ `tax_total` (ما يُقيَّد دائنًا في `tax_payable`).
+     *
+     * ═══ والمردوداتُ عمودٌ جديد ═══
+     *
+     * كان مكانَه «رسوم التوصيل (غير خاضعة)» — عمودٌ من نظام المتجر: فاتورةُ
+     * العميل لا رسومَ توصيلٍ فيها أصلًا، فكان يُطبع صفرًا في كلّ سطر.
+     * وحلّ محلَّه ما يخصّ الإقرار فعلًا: **إشعاراتُ الدائن**. كلُّ إشعارٍ
+     * يُنقص ضريبةَ المخرجات بقيده (`tax_payable` مدينًا)، وإخفاؤه يجعل
+     * الإقرارَ يطالب بضريبةِ بيعةٍ رُدّت.
      *
      * وضريبةُ المدخلات من **سندات المورّدين** لا من تقديرٍ بالنسبة: كانت
-     * تُقدَّر بضرب إجمالي أوامر الشراء في النسبة (انظر `Demo::vatReport`)،
-     * وذاك رقمٌ مخترَع — أمرُ شراءٍ ليس فاتورةً ضريبية، ولا كلُّ مورّدٍ
-     * مسجَّل. والسند يحمل ضريبتَه مكتوبةً كما أصدرها المورّد.
+     * تُقدَّر بضرب إجمالي أوامر الشراء في النسبة، وذاك رقمٌ مخترَع — أمرُ
+     * شراءٍ ليس فاتورةً ضريبية، ولا كلُّ مورّدٍ مسجَّل. والسند يحمل ضريبتَه
+     * مكتوبةً كما أصدرها المورّد.
      */
     public static function vat(int $bid, array $filters): array
     {
         $range = Demo::range($filters['range'] ?? 'month');
         $start = self::start($range);
 
-        $orders = Order::where('business_id', $bid)->sold();
         $invoices = SupplierInvoice::where('business_id', $bid);
 
         if ($start !== null) {
-            $orders->where('ordered_at', '>=', $start);
             $invoices->where('issued_at', '>=', $start->copy()->startOfDay());
         }
 
-        $sold = (clone $orders)->get(['ordered_at', 'subtotal', 'discount', 'tax', 'delivery_fee']);
+        $sold = Revenue::query($bid, $start)
+            ->get(['issued_at', 'subtotal', 'discount_total', 'tax_total']);
+
+        $returned = Revenue::credits($bid, $start)->get(['issued_at', 'amount', 'tax_amount']);
 
         /*
          * وضريبةُ المدخلات من السندات **المعتمَدة** وحدها.
@@ -137,12 +148,25 @@ class ReportData
          */
         $months = [];
 
-        foreach ($sold as $order) {
-            $key = optional($order->ordered_at)->format('Y-m') ?? '—';
+        foreach ($sold as $invoice) {
+            $key = optional($invoice->issued_at)->format('Y-m') ?? '—';
             $months[$key] ??= self::vatRow($key);
-            $months[$key]['taxable'] += (float) $order->subtotal - (float) $order->discount;
-            $months[$key]['output'] += (float) $order->tax;
-            $months[$key]['delivery'] += (float) $order->delivery_fee;
+            $months[$key]['taxable'] += (float) $invoice->subtotal - (float) $invoice->discount_total;
+            $months[$key]['output'] += (float) $invoice->tax_total;
+        }
+
+        /*
+         * والإشعارُ يُنسب إلى شهرِه هو لا إلى شهرِ فاتورته.
+         *
+         * إشعارٌ يصدر في مارس على فاتورةِ يناير يُنقص إقرارَ **مارس** — هكذا
+         * قُيّد في الدفتر. ولو نُسب إلى يناير لتغيّر إقرارٌ قُدِّم وأُقفل.
+         */
+        foreach ($returned as $note) {
+            $key = optional($note->issued_at)->format('Y-m') ?? '—';
+            $months[$key] ??= self::vatRow($key);
+            $months[$key]['returns'] += (float) $note->amount;
+            $months[$key]['taxable'] -= (float) $note->amount - (float) $note->tax_amount;
+            $months[$key]['output'] -= (float) $note->tax_amount;
         }
 
         foreach ($bought as $invoice) {
@@ -155,7 +179,7 @@ class ReportData
         krsort($months);
 
         $rows = collect($months)->map(function ($row) {
-            foreach (['taxable', 'output', 'delivery', 'purchases', 'input'] as $key) {
+            foreach (['taxable', 'output', 'returns', 'purchases', 'input'] as $key) {
                 $row[$key] = round($row[$key], 3);
             }
 
@@ -173,7 +197,7 @@ class ReportData
                 'output' => $output,
                 'purchases' => round((float) $rows->sum('purchases'), 3),
                 'input' => $input,
-                'delivery' => round((float) $rows->sum('delivery'), 3),
+                'returns' => round((float) $rows->sum('returns'), 3),
                 /*
                  * والصافي قد يكون سالبًا — وهو ليس خطأً.
                  *
@@ -200,7 +224,7 @@ class ReportData
             'month' => $key === '—' ? '—' : Carbon::createFromFormat('Y-m', $key)->translatedFormat('F Y'),
             'taxable' => 0.0,
             'output' => 0.0,
-            'delivery' => 0.0,
+            'returns' => 0.0,
             'purchases' => 0.0,
             'input' => 0.0,
             'due' => 0.0,
@@ -249,7 +273,7 @@ class ReportData
          * المتوسّط على من باع لا على من في الكشف: قسمةُ المبيعات على الجميع
          * تُظهر البائعين أضعف ممّا هم كلّما كبر عدد غير البائعين.
          */
-        $sellers = $rows->where('orders', '>', 0)->values();
+        $sellers = $rows->where('invoices', '>', 0)->values();
 
         return array_merge(self::capped($rows, $rows->count()), [
             'summary' => [
@@ -276,15 +300,15 @@ class ReportData
             ->map(fn ($c, $i) => ['id' => $i + 1] + $c);
 
         $total = (float) $rows->sum('total');
-        $orders = (int) $rows->sum('orders');
+        $invoices = (int) $rows->sum('invoices');
 
         return array_merge(self::capped($rows, $rows->count()), [
             'limit' => $limit,
             'summary' => [
                 'total' => round($total, 3),
                 'customers' => $rows->count(),
-                'orders' => $orders,
-                'average' => $orders > 0 ? round($total / $orders, 3) : 0.0,
+                'invoices' => $invoices,
+                'average' => $invoices > 0 ? round($total / $invoices, 3) : 0.0,
             ],
             'options' => [],
         ]);
@@ -504,53 +528,93 @@ class ReportData
         ]);
     }
 
-    /* ============================= الطلبات ============================= */
+    /* ========================= فواتير العملاء ========================= */
 
-    public static function orders(int $bid, array $filters): array
+    /**
+     * فواتيرُ العملاء — وكان هذا تقريرَ «الطلبات».
+     *
+     * ═══ ولمَ بُدِّل ═══
+     *
+     * لا مسارَ HTTP يُنشئ `Order` منذ رُفعت نقطة البيع، وجدولُ الطلبات في
+     * الإنتاج صفر. فكان التقريرُ يفتح على جدولٍ فارغ أبدًا، ويُصدَّر ملفًّا
+     * بلا سطر. وما تبيعه الشركةُ فعلًا يعيش في `customer_invoices`.
+     *
+     * ═══ والحالُ حالُ سدادٍ لا حالُ عمود ═══
+     *
+     * `status` في الجدول ثلاثةٌ لا غير: مسودّة وصادرة وملغاة. وما يريد
+     * قارئُ التقرير معرفتَه أدقُّ من ذلك: أمدفوعةٌ هي أم متأخّرة أم مدفوعةٌ
+     * جزئيًّا. وتلك **تُشتقّ ولا تُخزَّن** — انظر `CustomerInvoice::paymentState`
+     * — والترشيحُ بها يقع في القاعدة بالتعبير نفسِه (`scopePaymentState`)،
+     * لا في الذاكرة بعد جلب الصفحة.
+     *
+     * ولا «وسيلةَ دفع» هنا: الفاتورةُ التزامٌ لا قبض. والوسيلةُ تُسأل عن
+     * التحصيل — انظر تقرير «وسائل الدفع».
+     */
+    public static function invoices(int $bid, array $filters): array
     {
         $start = self::start($filters['range'] ?? 'month');
         $status = self::pick($filters, 'status');
         $branch = self::pick($filters, 'branch_id');
-        $method = self::pick($filters, 'payment_method');
+        $state = self::pick($filters, 'state');
 
-        $base = Order::where('business_id', $bid)
-            ->when($start, fn ($q) => $q->where('ordered_at', '>=', $start))
+        $base = CustomerInvoice::where('business_id', $bid)
+            ->when($start, fn ($q) => $q->whereDate('issued_at', '>=', $start->toDateString()))
             ->when($status, fn ($q) => $q->where('status', $status))
             ->when($branch, fn ($q) => $q->where('branch_id', $branch))
-            ->when($method, fn ($q) => $q->where('payment_method', $method));
+            ->when($state, fn ($q) => $q->paymentState($state));
 
         $count = (clone $base)->count();
-        // الملغى لا يُحسب في الإيراد — انظر Order::scopeSold
-        $soldSum = (float) (clone $base)->where('status', '!=', Order::CANCELLED)->sum('total');
-        $soldCount = (clone $base)->where('status', '!=', Order::CANCELLED)->count();
-        $cancelled = (clone $base)->where('status', Order::CANCELLED)->count();
+        $cancelled = (clone $base)->where('status', CustomerInvoice::CANCELLED)->count();
+        $drafts = (clone $base)->where('status', CustomerInvoice::DRAFT)->count();
 
-        $rows = (clone $base)->orderByDesc('ordered_at')->orderByDesc('id')->limit(self::LIMIT)->get()
-            ->map(fn ($o) => [
-                'id' => $o->id,
-                'number' => $o->number,
-                'customer' => $o->customer_name,
-                'branch' => $o->branch,
-                'status' => $o->status,
-                'method' => $o->payment_method,
-                'total' => round((float) $o->total, 3),
-                'at' => optional($o->ordered_at)->format('Y-m-d'),
+        /*
+         * والإيرادُ من الصادرة وحدها — التعريفُ واحدٌ في النظام كلِّه.
+         *
+         * مسودّةٌ لا ذمّةَ لها ولا قيد، وملغاةٌ عُكس قيدُها. وجمعُهما في
+         * «الإجمالي» يجعل التقريرَ يقول غيرَ ما يقوله ميزانُ المراجعة.
+         */
+        $issued = (clone $base)->where('status', CustomerInvoice::ISSUED);
+        $issuedSum = (float) (clone $issued)->sum('total');
+        $issuedCount = (clone $issued)->count();
+        $outstanding = (float) (clone $issued)
+            ->selectRaw('COALESCE(SUM('.CustomerInvoice::outstandingSql().'), 0) as o')
+            ->value('o');
+        $overdue = (clone $base)->overdue()->count();
+
+        $branches = Branch::where('business_id', $bid)->pluck('name', 'id');
+
+        $rows = (clone $base)->orderByDesc('issued_at')->orderByDesc('id')->limit(self::LIMIT)->get()
+            ->map(fn ($i) => [
+                'id' => $i->id,
+                'number' => $i->number,
+                'customer' => $i->customer_name,
+                'branch' => $branches[$i->branch_id] ?? '—',
+                'status' => $i->paymentState(),
+                'total' => round((float) $i->total, 3),
+                'paid' => $i->paidTotal(),
+                'outstanding' => $i->outstanding(),
+                'at' => optional($i->issued_at)->format('Y-m-d'),
+                'due' => optional($i->due_at)->format('Y-m-d'),
             ]);
 
         return array_merge(self::capped($rows, $count), [
             'summary' => [
                 'count' => $count,
-                'total' => round($soldSum, 3),
-                // المتوسّط على المُباع لا على الكلّ: الملغى يُنقص المتوسّط بلا أن يُنقص الإيراد
-                'average' => $soldCount > 0 ? round($soldSum / $soldCount, 3) : 0.0,
+                'total' => round($issuedSum, 3),
+                // المتوسّط على الصادر لا على الكلّ: مسودّةٌ لم تصدر لا تُنقص المتوسّط
+                'average' => $issuedCount > 0 ? round($issuedSum / $issuedCount, 3) : 0.0,
+                'outstanding' => round($outstanding, 3),
+                'overdue' => $overdue,
+                'drafts' => $drafts,
                 'cancelled' => $cancelled,
             ],
             'options' => [
-                'statuses' => collect(Order::where('business_id', $bid)->distinct()->pluck('status'))
-                    ->filter()->values()->map(fn ($s) => ['value' => $s, 'label' => $s])->all(),
+                'statuses' => collect([CustomerInvoice::DRAFT, CustomerInvoice::ISSUED, CustomerInvoice::CANCELLED])
+                    ->map(fn ($s) => ['value' => $s, 'label' => $s])->all(),
                 'branches' => self::branchOptions($bid),
-                'methods' => collect(Order::where('business_id', $bid)->distinct()->pluck('payment_method'))
-                    ->filter()->values()->map(fn ($m) => ['value' => $m, 'label' => $m])->all(),
+                // حالاتُ السداد كما تقرؤها الشاشة — انظر CustomerInvoice::paymentState
+                'states' => collect(['غير مدفوعة', 'مدفوعة جزئيًا', 'مدفوعة', 'متأخرة'])
+                    ->map(fn ($s) => ['value' => $s, 'label' => $s])->all(),
             ],
         ]);
     }
@@ -569,15 +633,17 @@ class ReportData
         /*
          * المبيعات تُجمع بمعرّف المنتج لا باسمه: صنفان باسمٍ متشابه يندمجان
          * بالاسم، ومنتجٌ أُعيدت تسميته يفقد تاريخه كلّه.
+         *
+         * ومن بنود **فواتير العملاء** لا من بنود الطلبات: تلك جدولٌ فارغٌ
+         * أبدًا — انظر `Revenue`. وبندُ خدمةٍ بلا `product_id` لا يُنسب إلى
+         * صنفٍ أصلًا فيسقط من هذه القراءة، وهو الصواب: التقريرُ عن الأصناف.
          */
-        $sold = DB::table('order_items')
-            ->join('orders', 'orders.id', '=', 'order_items.order_id')
-            ->where('orders.business_id', $bid)
-            ->where('orders.status', '!=', Order::CANCELLED)
-            ->when($start, fn ($q) => $q->where('orders.ordered_at', '>=', $start))
-            ->whereNotNull('order_items.product_id')
-            ->selectRaw('order_items.product_id as pid, SUM(order_items.quantity) as q, SUM(order_items.total) as s')
-            ->groupBy('order_items.product_id')->get()->keyBy('pid');
+        $sold = Revenue::items($bid, $start)
+            ->whereNotNull('customer_invoice_items.product_id')
+            ->selectRaw('customer_invoice_items.product_id as pid, '
+                .'SUM(customer_invoice_items.quantity) as q, '
+                .'SUM(customer_invoice_items.line_total) as s')
+            ->groupBy('customer_invoice_items.product_id')->get()->keyBy('pid');
 
         $rows = $products->map(function ($p) use ($sold) {
             $hit = $sold->get($p->id);
@@ -860,5 +926,4 @@ class ReportData
             ],
         ]);
     }
-
 }

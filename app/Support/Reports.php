@@ -108,13 +108,15 @@ class Reports
 
         /* ----------------------------- تشغيلية ----------------------------- */
         [
-            'key' => 'orders',
+            'key' => 'invoices',
             'category' => 'operational',
+            // وقسمُها `orders`: هو القسمُ الذي يحكم شاشاتِ فواتير العملاء
+            // أصلًا — انظر `Permissions::ALIASES['customerInvoices']`
             'section' => 'orders',
-            'title' => 'الطلبات',
-            'desc' => 'كل طلبٍ بحالته وفرعه وقيمته ووسيلة دفعه.',
-            'icon' => 'shopping-cart',
-            'route' => 'admin.reports.orders',
+            'title' => 'فواتير العملاء',
+            'desc' => 'كل فاتورةٍ بحال سدادها وفرعها وقيمتها وما بقي عليها.',
+            'icon' => 'file-text',
+            'route' => 'admin.reports.invoices',
         ],
         [
             'key' => 'products',
@@ -234,8 +236,7 @@ class Reports
     private static function visibleTo(?User $user): Collection
     {
         return collect(self::ALL)
-            ->filter(fn ($r) => $user?->allows($r['section']) ?? false)
-            ;
+            ->filter(fn ($r) => $user?->allows($r['section']) ?? false);
     }
 
     /**

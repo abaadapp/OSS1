@@ -2,14 +2,20 @@
 
 namespace App\Support;
 
-use App\Models\Order;
-use Illuminate\Support\Facades\DB;
-
 /**
- * بيانات لوحة التاجر التي يجب أن تتبع الفرع المختار.
+ * بيانات لوحة الشركة التي يجب أن تتبع الفرع المختار.
  *
  * التقارير العامة قد تقرأ النشاط كله عمدًا، أما لوحة التحكم فتجمع بطاقات
- * وأحدث طلبات ومخططات في شاشة واحدة؛ لذلك يجب أن تشترك كلها في نطاق الفرع.
+ * ومخططات في شاشة واحدة؛ لذلك يجب أن تشترك كلها في نطاق الفرع.
+ *
+ * ═══ وما تغيّر ═══
+ *
+ * كانت تقرأ `orders` — وهو جدولٌ لا مسارَ يكتب فيه منذ رُفعت نقطة البيع،
+ * ففارغٌ أبدًا. فمهما فوترت الشركةُ وحصّلت رسم المخطّطُ خطًّا على الصفر.
+ * فصارت من `Revenue` — فواتير العملاء الصادرة.
+ *
+ * و«توزيعُ وسائل الدفع» صار توزيعَ **التحصيل** لا المبيعات: الفاتورةُ
+ * التزامٌ بلا وسيلةِ دفعٍ أصلًا، والوسيلةُ تُسأل عن سند القبض.
  */
 class DashboardMetrics
 {
@@ -21,37 +27,22 @@ class DashboardMetrics
         $start = now()->startOfYear();
         $end = now()->endOfYear();
         $cutoff = now()->copy();
-        $driver = DB::connection()->getDriverName();
 
-        $format = match ($driver) {
-            'pgsql' => "to_char(ordered_at, 'YYYY-MM')",
-            'mysql', 'mariadb' => "DATE_FORMAT(ordered_at, '%Y-%m')",
-            default => "strftime('%Y-%m', ordered_at)",
-        };
+        $buckets = Revenue::series($bid, 'month', $start, $cutoff, $branch);
 
-        $rows = Order::where('business_id', $bid)
-            ->sold()
-            ->when($branch, fn ($q) => $q->where('branch_id', $branch))
-            ->whereBetween('ordered_at', [$start, $cutoff])
-            ->selectRaw("{$format} as bucket, SUM(total) as s, COUNT(*) as c")
-            ->groupBy('bucket')
-            ->get();
-
-        $sums = $rows->pluck('s', 'bucket');
-        $counts = $rows->pluck('c', 'bucket');
         $labels = [];
         $full = [];
         $data = [];
-        $orders = [];
+        $counts = [];
         $cursor = $start->copy();
 
         while ($cursor->lte($end)) {
             $key = $cursor->format('Y-m');
-            $future = $cursor->startOfMonth()->gt($cutoff);
+            $future = $cursor->copy()->startOfMonth()->gt($cutoff);
             $labels[] = $cursor->translatedFormat('M');
             $full[] = $cursor->translatedFormat('F Y');
-            $data[] = $future ? null : round((float) ($sums[$key] ?? 0), 3);
-            $orders[] = $future ? null : (int) ($counts[$key] ?? 0);
+            $data[] = $future ? null : ($buckets[$key]['sum'] ?? 0.0);
+            $counts[] = $future ? null : ($buckets[$key]['count'] ?? 0);
             $cursor->addMonthNoOverflow();
         }
 
@@ -59,28 +50,24 @@ class DashboardMetrics
             'labels' => $labels,
             'full' => $full,
             'data' => $data,
-            'counts' => $orders,
+            'counts' => $counts,
             'range' => 'year',
             'unit' => 'month',
         ];
     }
 
-    /** توزيع طرق الدفع للشهر الجاري داخل الفرع المختار. */
+    /**
+     * توزيعُ ما حُصِّل هذا الشهر على وسائله — ويتبع الفرعَ كبقيّة البطاقات.
+     *
+     * والسندُ بلا فرع، لكنّ تخصيصاته تعرف فرعَها — انظر `Revenue::byMethod`.
+     */
     public static function paymentDistribution(): array
     {
-        $branch = Demo::currentBranchId();
-        $rows = Order::where('business_id', Demo::bid())
-            ->sold()
-            ->when($branch, fn ($q) => $q->where('branch_id', $branch))
-            ->where('ordered_at', '>=', now()->startOfMonth())
-            ->selectRaw('payment_method, SUM(total) as s')
-            ->groupBy('payment_method')
-            ->orderByDesc('s')
-            ->get();
+        $rows = Revenue::byMethod(Demo::bid(), now()->startOfMonth(), null, Demo::currentBranchId());
 
         return [
-            'labels' => $rows->map(fn ($row) => Demo::methodLabel((string) $row->payment_method))->all(),
-            'series' => $rows->map(fn ($row) => round((float) $row->s, 3))->all(),
+            'labels' => $rows->map(fn ($r) => Demo::methodLabel($r['key']))->all(),
+            'series' => $rows->pluck('total')->all(),
         ];
     }
 }

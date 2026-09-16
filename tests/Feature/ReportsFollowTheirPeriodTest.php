@@ -4,11 +4,11 @@ namespace Tests\Feature;
 
 use App\Models\Branch;
 use App\Models\Business;
-use App\Models\Order;
 use App\Models\Transaction;
 use App\Models\User;
 use App\Support\Demo;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
 use PhpOffice\PhpSpreadsheet\IOFactory;
 use Tests\TestCase;
 
@@ -29,6 +29,8 @@ class ReportsFollowTheirPeriodTest extends TestCase
 
     private Business $business;
 
+    private Branch $branch;
+
     private User $owner;
 
     protected function setUp(): void
@@ -36,7 +38,7 @@ class ReportsFollowTheirPeriodTest extends TestCase
         parent::setUp();
 
         $this->business = Business::create(['name' => 'متجري', 'type' => 'عام', 'status' => 'نشط']);
-        Branch::create(['business_id' => $this->business->id, 'name' => 'الرئيسي']);
+        $this->branch = Branch::create(['business_id' => $this->business->id, 'name' => 'الرئيسي']);
         $this->owner = User::create([
             'business_id' => $this->business->id, 'name' => 'المالك', 'email' => 'o@eventplus.om',
             'password' => bcrypt('password'), 'role' => 'admin', 'status' => 'نشط',
@@ -45,14 +47,21 @@ class ReportsFollowTheirPeriodTest extends TestCase
         $this->actingAs($this->owner);
     }
 
+    /** بيعةٌ في وقتٍ محدّد — فاتورةُ عميلٍ صادرة، انظر `Revenue` */
     private function order(float $total, string $when): void
     {
-        Order::create([
-            'business_id' => $this->business->id, 'branch_id' => 1,
-            'number' => 'INV-'.uniqid(), 'status' => 'مكتمل',
-            'payment_method' => 'نقدي', 'subtotal' => $total, 'total' => $total,
-            'ordered_at' => $when, 'created_at' => $when, 'updated_at' => $when,
-        ]);
+        $this->sellThroughInvoice(
+            $this->business->id,
+            [['description' => 'بند', 'quantity' => 1, 'unit_price' => $total]],
+            [
+                'branch_id' => $this->branch->id,
+                'number' => 'INV-'.uniqid(),
+                'issued_at' => Carbon::parse($when)->toDateString(),
+                'issued_by_at' => $when,
+                'created_at' => $when,
+                'updated_at' => $when,
+            ],
+        );
     }
 
     private function trx(float $amount, string $when): void

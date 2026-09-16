@@ -30,14 +30,26 @@ class Customer extends Model
         return $this->belongsTo(Branch::class);
     }
 
+    /**
+     * طلباتُه — مفهومٌ متقاعد.
+     *
+     * لا مسارَ يُنشئ طلبًا منذ رُفعت نقطة البيع، والعلاقةُ باقيةٌ لشاشة
+     * «المبيعات» التي تقرأ ما بُذر وحده. وسجلُّ تعامل العميل يُقرأ من
+     * `invoices` — انظر `Revenue`.
+     */
     public function orders(): HasMany
     {
         return $this->hasMany(Order::class);
+    }
+
+    /** فواتيرُه — سجلُّ تعامله مع الشركة */
+    public function invoices(): HasMany
+    {
+        return $this->hasMany(CustomerInvoice::class);
     }
 
     public function addresses(): HasMany
     {
         return $this->hasMany(CustomerAddress::class);
     }
-
 }

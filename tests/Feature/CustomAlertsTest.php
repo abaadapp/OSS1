@@ -3,14 +3,14 @@
 namespace Tests\Feature;
 
 use App\Models\Business;
-use App\Models\Customer;
 use App\Models\CustomAlert;
-use App\Models\Order;
+use App\Models\Customer;
 use App\Models\Setting;
 use App\Models\User;
 use App\Support\AlertMetrics;
 use App\Support\Demo;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
 use Tests\TestCase;
 
 /**
@@ -39,13 +39,17 @@ class CustomAlertsTest extends TestCase
         $this->actingAs($this->owner);
     }
 
-    private function customerWithOrderAt(string $name, $when): Customer
+    /** عميلٌ تعامل يومًا — بفاتورةٍ صادرةٍ بتاريخها */
+    private function customerWithOrderAt(string $name, $when, ?int $businessId = null): Customer
     {
-        $c = Customer::create(['business_id' => $this->business->id, 'name' => $name]);
-        Order::create([
-            'business_id' => $this->business->id, 'number' => 'INV-' . $c->id,
-            'customer_id' => $c->id, 'customer_name' => $name, 'status' => 'مكتمل',
-            'subtotal' => 10, 'total' => 10, 'ordered_at' => $when,
+        $bid = $businessId ?? $this->business->id;
+        $c = Customer::create(['business_id' => $bid, 'name' => $name]);
+
+        $this->sellThroughInvoice($bid, [['description' => 'بند', 'quantity' => 1, 'unit_price' => 10]], [
+            'number' => 'INV-'.$c->id,
+            'customer_id' => $c->id,
+            'customer_name' => $name,
+            'issued_at' => Carbon::parse($when)->toDateString(),
         ]);
 
         return $c;
@@ -96,12 +100,7 @@ class CustomAlertsTest extends TestCase
     public function test_a_neighbours_dormant_customer_is_not_mine(): void
     {
         $other = Business::create(['name' => 'الجار', 'type' => 'عام', 'status' => 'نشط']);
-        $c = Customer::create(['business_id' => $other->id, 'name' => 'عميل الجار']);
-        Order::create([
-            'business_id' => $other->id, 'number' => 'INV-JAR', 'customer_id' => $c->id,
-            'customer_name' => 'عميل الجار', 'status' => 'مكتمل',
-            'subtotal' => 10, 'total' => 10, 'ordered_at' => now()->subDays(200),
-        ]);
+        $this->customerWithOrderAt('عميل الجار', now()->subDays(200), $other->id);
 
         $this->assertStringNotContainsString('عميل الجار', implode(' | ', $this->alertTexts()));
     }
@@ -111,24 +110,26 @@ class CustomAlertsTest extends TestCase
     public function test_a_rule_fires_only_when_its_condition_holds(): void
     {
         $this->post(route('admin.alerts.store'), [
-            'type' => 'rule', 'metric' => 'pending_orders', 'operator' => '>',
-            'threshold' => 0, 'message' => 'طلبات متراكمة', 'section' => 'orders',
+            'type' => 'rule', 'metric' => 'overdue_invoices', 'operator' => '>',
+            'threshold' => 0, 'message' => 'فواتير متراكمة', 'section' => 'orders',
         ])->assertRedirect();
 
-        $this->assertStringNotContainsString('طلبات متراكمة', implode(' | ', $this->alertTexts()));
+        $this->assertStringNotContainsString('فواتير متراكمة', implode(' | ', $this->alertTexts()));
 
-        Order::create([
-            'business_id' => $this->business->id, 'number' => 'INV-P', 'customer_name' => 'نقدي',
-            'status' => 'جديد', 'subtotal' => 5, 'total' => 5, 'ordered_at' => now(),
-        ]);
+        // فاتورةٌ مضى استحقاقُها وعليها باقٍ — والحالُ تُشتقّ ولا تُخزَّن
+        $this->sellThroughInvoice(
+            $this->business->id,
+            [['description' => 'بند', 'quantity' => 1, 'unit_price' => 5]],
+            ['number' => 'INV-P', 'due_at' => now()->subDays(3)->toDateString()],
+        );
 
-        $this->assertStringContainsString('طلبات متراكمة', implode(' | ', $this->alertTexts()));
+        $this->assertStringContainsString('فواتير متراكمة', implode(' | ', $this->alertTexts()));
     }
 
     public function test_a_disabled_rule_stays_silent(): void
     {
         $alert = CustomAlert::create([
-            'business_id' => $this->business->id, 'type' => 'rule', 'metric' => 'pending_orders',
+            'business_id' => $this->business->id, 'type' => 'rule', 'metric' => 'overdue_invoices',
             'operator' => '>', 'threshold' => -1, 'message' => 'دائمًا', 'section' => 'orders', 'active' => true,
         ]);
         $this->assertStringContainsString('دائمًا', implode(' | ', $this->alertTexts()));

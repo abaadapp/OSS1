@@ -5,7 +5,6 @@ namespace Tests\Feature;
 use App\Models\Branch;
 use App\Models\Business;
 use App\Models\Customer;
-use App\Models\Order;
 use App\Models\User;
 use App\Support\Demo;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -179,11 +178,11 @@ class OneCustomerIsOneRowAndOneBalanceTest extends TestCase
             'business_id' => $this->shop->id, 'name' => $name, 'phone' => $phone,
         ]);
 
-        Order::create([
-            'business_id' => $this->shop->id, 'customer_id' => $customer->id,
-            'number' => 'ORD-'.$customer->id, 'status' => 'مكتمل', 'payment_status' => 'مدفوع',
-            'subtotal' => $total, 'total' => $total, 'ordered_at' => now(),
-        ]);
+        $this->sellThroughInvoice(
+            $this->shop->id,
+            [['description' => 'بند', 'quantity' => 1, 'unit_price' => $total]],
+            ['number' => 'INV-'.$customer->id, 'customer_id' => $customer->id, 'customer_name' => $name],
+        );
 
         return $customer;
     }
@@ -220,19 +219,29 @@ class OneCustomerIsOneRowAndOneBalanceTest extends TestCase
         $this->assertSame(600.0, round((float) $stats['avg_spend'], 3));
     }
 
-    public function test_a_walk_in_sale_is_not_counted_as_a_customers_spending(): void
+    /**
+     * وفاتورةُ عميلٍ حُذف لا تُحسب في إنفاق العملاء.
+     *
+     * ═══ وكان هذا حارسَ «البيعة النقديّة» ═══
+     *
+     * كان الحارسُ على طلبٍ بلا `customer_id` — بيعةِ صندوقٍ لعابر. ولا وجودَ
+     * لذلك في فاتورة العميل: `customer_invoices.customer_id` لا يقبل الفراغ،
+     * فالفاتورةُ التزامٌ **على أحد** بالضرورة.
+     *
+     * والذي بقي من المعنى: العميلُ يُحذف حذفًا ناعمًا وتبقى فاتورتُه — فلو
+     * جُمعت لَقالت البطاقةُ إنفاقًا لصفٍّ لا تراه القائمة. وهو الافتراقُ
+     * نفسُه الذي يحرسه هذا الملفّ كلُّه.
+     */
+    public function test_a_deleted_customers_invoice_is_not_counted_as_customer_spending(): void
     {
         $this->spender('صغير', '92222222', 200);
+        $gone = $this->spender('راحل', '93333333', 5000);
 
-        Order::create([
-            'business_id' => $this->shop->id, 'customer_id' => null, 'customer_name' => 'عميل نقدي',
-            'number' => 'ORD-CASH', 'status' => 'مكتمل', 'payment_status' => 'مدفوع',
-            'subtotal' => 5000, 'total' => 5000, 'ordered_at' => now(),
-        ]);
+        $gone->delete();
 
         $this->actingAs($this->owner);
 
         $this->assertSame(200.0, round((float) Demo::customerStats()['total_purchases'], 3),
-            'بيعةٌ نقديّة بلا عميل حُسبت إنفاقَ العملاء');
+            'فاتورةُ عميلٍ محذوفٍ حُسبت إنفاقَ العملاء');
     }
 }

@@ -3,9 +3,9 @@
 namespace Tests\Feature;
 
 use App\Models\Business;
+use App\Models\CustomAlert;
 use App\Models\Customer;
 use App\Models\DismissedNotification;
-use App\Models\Order;
 use App\Models\Product;
 use App\Models\User;
 use App\Support\AlertMetrics;
@@ -46,7 +46,7 @@ class DashboardCardsTest extends TestCase
     {
         $this->get(route('admin.dashboard'))
             ->assertOk()
-            ->assertInertia(fn ($page) => $page->has('statCatalog', count(\App\Models\CustomAlert::METRICS)));
+            ->assertInertia(fn ($page) => $page->has('statCatalog', count(CustomAlert::METRICS)));
     }
 
     /**
@@ -58,7 +58,7 @@ class DashboardCardsTest extends TestCase
     public function test_the_catalog_matches_the_alert_metrics_exactly(): void
     {
         $catalog = collect(AlertMetrics::catalog($this->business->id))->pluck('key')->sort()->values();
-        $metrics = collect(array_keys(\App\Models\CustomAlert::METRICS))->sort()->values();
+        $metrics = collect(array_keys(CustomAlert::METRICS))->sort()->values();
 
         $this->assertEquals($metrics, $catalog);
     }
@@ -83,15 +83,32 @@ class DashboardCardsTest extends TestCase
 
         $this->assertSame(route('admin.customers.index'), $card['url']);
     }
+
+    /**
+     * فاتورةٌ متأخّرة — وهي ما يقرع الجرس اليوم.
+     *
+     * وكان «طلبٌ بانتظار التجهيز»، وجدولُ الطلبات لا مسارَ يكتب فيه — فكان
+     * الجرسُ صامتًا أبدًا في نظامٍ حقيقيّ. انظر `Demo::buildNotifications`.
+     */
+    private function overdueInvoice(string $customerName = 'نقدي'): void
+    {
+        $this->sellThroughInvoice(
+            $this->business->id,
+            [['description' => 'بند', 'quantity' => 1, 'unit_price' => 5]],
+            [
+                'number' => 'INV-1',
+                'customer_name' => $customerName,
+                'due_at' => now()->subDays(3)->toDateString(),
+            ],
+        );
+    }
+
     /* ----------------------- حذف التنبيهات ----------------------- */
 
     public function test_dismissing_one_notification_removes_it_from_the_bell(): void
     {
         Customer::create(['business_id' => $this->business->id, 'name' => 'خالد']);
-        Order::create([
-            'business_id' => $this->business->id, 'number' => 'INV-1', 'customer_name' => 'خالد',
-            'status' => 'جديد', 'subtotal' => 5, 'total' => 5, 'ordered_at' => now(),
-        ]);
+        $this->overdueInvoice('خالد');
 
         $before = Demo::allNotifications();
         $this->assertNotEmpty($before, 'لا تنبيه لنختبر حذفه');
@@ -105,10 +122,7 @@ class DashboardCardsTest extends TestCase
 
     public function test_clearing_removes_them_all(): void
     {
-        Order::create([
-            'business_id' => $this->business->id, 'number' => 'INV-1', 'customer_name' => 'نقدي',
-            'status' => 'جديد', 'subtotal' => 5, 'total' => 5, 'ordered_at' => now(),
-        ]);
+        $this->overdueInvoice();
         $this->assertNotEmpty(Demo::allNotifications());
 
         $this->postJson(route('admin.notifications.clear'))->assertOk();
@@ -119,10 +133,7 @@ class DashboardCardsTest extends TestCase
     /** والحذف لصاحبه وحده: زميلي لا يفقد تنبيهه لأنّي حذفتُ تنبيهي */
     public function test_dismissal_belongs_to_the_user_who_dismissed(): void
     {
-        Order::create([
-            'business_id' => $this->business->id, 'number' => 'INV-1', 'customer_name' => 'نقدي',
-            'status' => 'جديد', 'subtotal' => 5, 'total' => 5, 'ordered_at' => now(),
-        ]);
+        $this->overdueInvoice();
         $key = Demo::allNotifications()[0]['key'];
 
         $this->postJson(route('admin.notifications.dismiss'), ['key' => $key])->assertOk();

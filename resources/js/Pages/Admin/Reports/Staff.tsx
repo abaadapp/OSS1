@@ -27,7 +27,7 @@ interface Row {
     branch: string;
     status: string;
     sales: number;
-    orders: number;
+    invoices: number;
 }
 
 interface Props {
@@ -113,7 +113,7 @@ export default function ReportsStaff() {
                                 <TableHead>{t('الموظف')}</TableHead>
                                 <TableHead>{t('الوظيفة')}</TableHead>
                                 <TableHead>{t('الفرع')}</TableHead>
-                                <TableHead className="text-end">{t('الطلبات')}</TableHead>
+                                <TableHead className="text-end">{t('الفواتير')}</TableHead>
                                 <TableHead className="text-end">{t('المبيعات')}</TableHead>
                                 <TableHead>{t('الحالة')}</TableHead>
                             </TableRow>
@@ -127,7 +127,7 @@ export default function ReportsStaff() {
                                         <TableCell className="font-medium text-[#111]">{r.name}</TableCell>
                                         <TableCell className="text-[#6b7280]">{r.role}</TableCell>
                                         <TableCell className="text-[#6b7280]">{r.branch}</TableCell>
-                                        <TableCell className="text-end tabular-nums">{number(r.orders)}</TableCell>
+                                        <TableCell className="text-end tabular-nums">{number(r.invoices)}</TableCell>
                                         <TableCell className="text-end tabular-nums">{m(r.sales)}</TableCell>
                                         <TableCell>
                                             <Badge status={r.status} />

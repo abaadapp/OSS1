@@ -498,6 +498,8 @@ final class CustomerInvoices
             throw new RuntimeException(__('سُدِّد من هذه الفاتورة :n — ألغِ التحصيل أو أصدر إشعار دائن قبل الإلغاء.', ['n' => $invoice->paidTotal()]));
         }
 
+        self::assertNotFiled($invoice);
+
         return DB::transaction(function () use ($invoice, $reason, $userId) {
             if ($invoice->status === CustomerInvoice::ISSUED && ! $invoice->coversOrders()) {
                 $entry = JournalEntry::where('business_id', $invoice->business_id)
@@ -524,6 +526,40 @@ final class CustomerInvoices
 
             return $invoice->fresh();
         });
+    }
+
+    /**
+     * ولا تُلغى فاتورةٌ داخلةٌ في إقرارٍ ضريبيٍّ قُدِّم.
+     *
+     * ═══ ولمَ وُضع الحارسُ هنا اليوم ═══
+     *
+     * كان الإقرارُ يُبنى من `orders`، وقفلُ الفترة مكتوبٌ في
+     * `OrderCorrection::assertNotFiled` وحدَه. فلمّا صار الإقرارُ يُبنى من
+     * **فواتير العملاء** (انظر `Revenue`) بقي بابُ الإلغاء هنا مفتوحًا:
+     * تُلغى فاتورةٌ من ربعٍ سُلِّمت ورقتُه فيُعاد كتابةُ رقمٍ عند جهةٍ
+     * حكوميّة — يفتح صاحبُ الشركة تقريرَه بعد شهرين فيجد غيرَ ما قدّم، ولا
+     * شيء يقول لماذا.
+     *
+     * وهو ثغرةٌ **تُفتح بتحويل المصدر لا قبله** — فسُدَّت معه.
+     *
+     * والحدُّ يقوله صاحبُ الشركة بنفسه في إعدادات الضريبة، ومن لم يقدّم شيئًا
+     * لا يُقفل عليه شيء. وما بعد القفل يُصحَّح بإشعار دائنٍ في فترةٍ مفتوحة —
+     * لا بمحو الأصل.
+     *
+     * @throws RuntimeException برسالةٍ تُعرض كما هي
+     */
+    private static function assertNotFiled(CustomerInvoice $invoice): void
+    {
+        $issuedOn = $invoice->issued_at ?? $invoice->created_at;
+
+        if (! Vat::isFiled((int) $invoice->business_id, $issuedOn)) {
+            return;
+        }
+
+        throw new RuntimeException(__(
+            'هذه الفاتورة داخلةٌ في إقرارٍ ضريبيّ قُدِّم في :date — لا تُلغى. وتصحيحُها يكون بإشعارِ دائنٍ في فترةٍ مفتوحة.',
+            ['date' => optional(Vat::filedThrough((int) $invoice->business_id))->format('Y-m-d')],
+        ));
     }
 
     /**

@@ -766,7 +766,7 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'tenant', 'business'
     Route::get('/reports/finance', [ReportPageController::class, 'finance'])->name('reports.finance');
     Route::get('/reports/expenses', [ReportPageController::class, 'expenses'])->name('reports.expenses');
     Route::get('/reports/bank', [ReportPageController::class, 'bank'])->name('reports.bank');
-    Route::get('/reports/orders', [ReportPageController::class, 'orders'])->name('reports.orders');
+    Route::get('/reports/invoices', [ReportPageController::class, 'invoices'])->name('reports.invoices');
     Route::get('/reports/products', [ReportPageController::class, 'products'])->name('reports.products');
     Route::get('/reports/inventory', [ReportPageController::class, 'inventory'])->name('reports.inventory');
     Route::get('/reports/purchases', [ReportPageController::class, 'purchases'])->name('reports.purchases');

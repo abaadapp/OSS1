@@ -25,14 +25,6 @@ import { useTranslate } from '@/lib/i18n';
 import type { PageProps } from '@/types';
 import type { Employee } from '@/types/models';
 
-interface Order {
-    id: string;
-    customer: string;
-    total: number;
-    status: string;
-    date?: string;
-}
-
 /*
  * ونوعُ الموظّف من مصدره — لا نسخةٌ محليّة منه.
  *
@@ -53,7 +45,16 @@ interface DashboardProps {
     statCatalog: CatalogStat[];
     salesSeries: { labels: string[]; full: string[]; data: (number | null)[]; counts: (number | null)[] };
     paymentDistribution: { labels: string[]; series: number[] };
-    recentOrders: Order[];
+    /** أحدثُ الفواتير — حالُها حالُ سدادٍ لا حالُ عمود */
+    recentInvoices: {
+        id: number;
+        number: string;
+        customer: string;
+        total: number;
+        outstanding: number;
+        status: string;
+        date: string;
+    }[];
     /*
      * أفضل الأصناف مبيعًا — لا صفوفٌ من الكتالوج.
      *
@@ -65,7 +66,7 @@ interface DashboardProps {
 }
 
 export default function Dashboard() {
-    const { stats, statCatalog, salesSeries, paymentDistribution, recentOrders, topProducts, topEmployees, context } =
+    const { stats, statCatalog, salesSeries, paymentDistribution, recentInvoices, topProducts, topEmployees, context } =
         usePage<PageProps<DashboardProps>>().props;
 
     const t = useTranslate();
@@ -122,9 +123,12 @@ export default function Dashboard() {
             <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
                 <Card className="lg:col-span-2">
                     <CardHeader className="flex-row items-center justify-between">
-                        <CardTitle>{t('أحدث الطلبات')}</CardTitle>
+                        <CardTitle>{t('أحدث الفواتير')}</CardTitle>
                         <Button variant="ghost" size="sm" asChild>
-                            <SmartLink routeName={'admin.orders.index'} href={route('admin.orders.index')}>
+                            <SmartLink
+                                routeName={'admin.customerInvoices.index'}
+                                href={route('admin.customerInvoices.index')}
+                            >
                                 {t('الكل')}
                                 {/* يقلب في LTR ليشير للأمام في الاتجاهين */}
                                 <ArrowLeft className="size-4 ltr:rotate-180" />
@@ -135,31 +139,33 @@ export default function Dashboard() {
                         <Table>
                             <TableHeader>
                                 <TableRow>
-                                    <TableHead>{t('الطلب')}</TableHead>
+                                    <TableHead>{t('الفاتورة')}</TableHead>
                                     <TableHead>{t('العميل')}</TableHead>
                                     <TableHead>{t('الحالة')}</TableHead>
                                     <TableHead className="text-end">{t('الإجمالي')}</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
-                                {recentOrders.length === 0 ? (
-                                    <TableEmpty colSpan={4}>{t('لا توجد طلبات بعد')}</TableEmpty>
+                                {recentInvoices.length === 0 ? (
+                                    <TableEmpty colSpan={4}>{t('لا توجد فواتير بعد')}</TableEmpty>
                                 ) : (
-                                    recentOrders.map((order) => (
-                                        <TableRow key={order.id}>
+                                    recentInvoices.map((invoice) => (
+                                        <TableRow key={invoice.id}>
                                             <TableCell className="font-medium">
-                                                <SmartLink routeName={'admin.orders.show'} href={route('admin.orders.show', order.id)}
+                                                <SmartLink
+                                                    routeName={'admin.customerInvoices.show'}
+                                                    href={route('admin.customerInvoices.show', invoice.id)}
                                                     className="hover:underline"
                                                 >
-                                                    {order.id}
+                                                    {invoice.number}
                                                 </SmartLink>
                                             </TableCell>
-                                            <TableCell className="text-[#6b7280]">{order.customer}</TableCell>
+                                            <TableCell className="text-[#6b7280]">{invoice.customer}</TableCell>
                                             <TableCell>
-                                                <Badge status={order.status} />
+                                                <Badge status={invoice.status} />
                                             </TableCell>
                                             <TableCell className="text-end tabular-nums">
-                                                {fmt(order.total)}
+                                                {fmt(invoice.total)}
                                             </TableCell>
                                         </TableRow>
                                     ))

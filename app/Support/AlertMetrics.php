@@ -2,13 +2,13 @@
 
 namespace App\Support;
 
-use App\Models\Customer;
 use App\Models\CustomAlert;
+use App\Models\Customer;
+use App\Models\CustomerInvoice;
 use App\Models\Expense;
-use App\Models\Order;
 use App\Models\Product;
 use App\Models\PurchaseOrder;
-use Illuminate\Support\Facades\DB;
+use App\Models\Setting;
 
 /**
  * قيم المقاييس التي تُبنى عليها التنبيهات المخصّصة.
@@ -21,31 +21,34 @@ class AlertMetrics
     /** كم يومًا بلا شراء يُعدّ العميل بعدها راكدًا (قابل للضبط من الإعدادات) */
     public static function dormantDays(int $businessId): int
     {
-        $value = \App\Models\Setting::where('business_id', $businessId)
+        $value = Setting::where('business_id', $businessId)
             ->where('key', 'dormant_customer_days')->value('value');
 
         return max(1, (int) ($value ?: 60));
     }
 
     /**
-     * العملاء الراكدون: اشتروا يومًا ثم انقطعوا.
+     * العملاء الراكدون: تعاملوا يومًا ثم انقطعوا.
      *
-     * من لم يشترِ قطّ ليس راكدًا بل لم يبدأ — خلطهما يُغرق التنبيه بأسماء لا
-     * معنى لمتابعتها. ولذلك يُشترط وجود طلبٍ سابق.
+     * من لم يتعامل قطّ ليس راكدًا بل لم يبدأ — خلطهما يُغرق التنبيه بأسماء لا
+     * معنى لمتابعتها. ولذلك يُشترط وجود فاتورةٍ سابقة.
+     *
+     * وكان المقياسُ آخرَ **طلب** — وجدولُ الطلبات فارغٌ أبدًا، فكان الانضمام
+     * لا يردّ صفًّا واحدًا: صفرُ راكدين مهما انقطع العملاء. انظر `Revenue`.
      */
     public static function dormantCustomers(int $businessId, ?int $days = null)
     {
         $days = $days ?? self::dormantDays($businessId);
-        $cutoff = now()->subDays($days);
+        $cutoff = now()->subDays($days)->toDateString();
 
-        $lastOrder = Order::selectRaw('customer_id, MAX(ordered_at) as last_at')
+        $lastInvoice = CustomerInvoice::selectRaw('customer_id, MAX(issued_at) as last_at')
             ->where('business_id', $businessId)
-            ->sold()
+            ->where('status', CustomerInvoice::ISSUED)
             ->whereNotNull('customer_id')
             ->groupBy('customer_id');
 
         return Customer::where('customers.business_id', $businessId)
-            ->joinSub($lastOrder, 'o', fn ($j) => $j->on('o.customer_id', '=', 'customers.id'))
+            ->joinSub($lastInvoice, 'o', fn ($j) => $j->on('o.customer_id', '=', 'customers.id'))
             ->where('o.last_at', '<', $cutoff)
             ->orderBy('o.last_at')
             ->select('customers.*', 'o.last_at')
@@ -65,18 +68,18 @@ class AlertMetrics
     {
         $icons = [
             'daily_sales' => 'shopping-bag', 'monthly_expenses' => 'arrow-down-circle',
-            'pending_orders' => 'clock', 'low_stock_products' => 'alert-triangle',
+            'overdue_invoices' => 'clock', 'low_stock_products' => 'alert-triangle',
             'dormant_customers' => 'user-x', 'open_purchase_orders' => 'clipboard-list',
             'today_profit' => 'piggy-bank',
         ];
         $colors = [
             'daily_sales' => 'primary', 'monthly_expenses' => 'danger',
-            'pending_orders' => 'warning', 'low_stock_products' => 'warning',
+            'overdue_invoices' => 'warning', 'low_stock_products' => 'warning',
             'dormant_customers' => 'secondary', 'open_purchase_orders' => 'info',
             'today_profit' => 'success',
         ];
 
-        return collect(\App\Models\CustomAlert::METRICS)
+        return collect(CustomAlert::METRICS)
             ->map(function ($m, $key) use ($businessId, $icons, $colors) {
                 $value = self::value($key, $businessId);
 
@@ -92,29 +95,31 @@ class AlertMetrics
             ->values()->all();
     }
 
-    /** قسم المقياس → مساره. غيابه يعني بطاقة لا تقود إلى شيء */
+    /**
+     * قسم المقياس → مساره. وما لا يملكه المستخدم لا يقود إلى شيء.
+     *
+     * والخريطةُ من `CustomAlert::routeFor` لا نسخةٌ ثانية: كانت تُقرأ هنا من
+     * `Permissions::ROUTES` وهناك من خريطةٍ مكتوبةٍ بيدها — فبطاقةُ اللوحة
+     * تفتح شاشةً ونقرةُ التنبيه على المقياس نفسِه تفتح أخرى.
+     */
     private static function sectionUrl(string $section): ?string
     {
-        $name = \App\Support\Permissions::ROUTES[$section] ?? null;
-
-        return $name && auth()->user()?->allows($section) ? route($name) : null;
+        return auth()->user()?->allows($section) ? CustomAlert::routeFor($section) : null;
     }
 
     /** القيمة الحالية لمقياس */
     public static function value(string $metric, int $businessId): float
     {
         return match ($metric) {
-            'daily_sales' => (float) Order::where('business_id', $businessId)
-                ->sold()
-                ->whereDate('ordered_at', today())->sum('total'),
+            'daily_sales' => Revenue::total($businessId, now()->startOfDay(), now()->startOfDay()->addDay()),
 
             'monthly_expenses' => (float) Expense::where('business_id', $businessId)
                 ->whereBetween('spent_at', [now()->startOfMonth(), now()->endOfMonth()])
                 ->sum('amount'),
 
-            'pending_orders' => (float) Order::where('business_id', $businessId)
-                ->sold()
-                ->whereIn('status', ['جديد', 'قيد التجهيز'])->count(),
+            // والمتأخّرةُ تُشتقّ ولا تُخزَّن — النطاقُ نفسُه الذي تقرؤه الشاشة
+            'overdue_invoices' => (float) CustomerInvoice::where('business_id', $businessId)
+                ->overdue()->count(),
 
             'low_stock_products' => (float) Product::where('business_id', $businessId)
                 ->whereColumn('quantity', '<', 'alert_qty')->count(),
@@ -131,19 +136,19 @@ class AlertMetrics
         };
     }
 
+    /**
+     * ربحُ اليوم — والتكلفةُ فيه **تقديرٌ لا قيد**، انظر `Revenue::cogs`.
+     *
+     * وبندُ خدمةٍ بلا صنفٍ تكلفتُه صفرٌ هنا، وهو الصواب: تكلفةُ الخدمة
+     * عمالةٌ ومشترياتٌ تُقيَّد في موضعها لا في بطاقة صنف.
+     */
     private static function todayProfit(int $businessId): float
     {
-        $revenue = (float) Order::where('business_id', $businessId)
-            ->sold()->whereDate('ordered_at', today())->sum('total');
+        $from = now()->startOfDay();
+        $to = $from->copy()->addDay();
 
-        $cost = (float) DB::table('order_items')
-            ->join('orders', 'orders.id', '=', 'order_items.order_id')
-            ->leftJoin('products', 'products.id', '=', 'order_items.product_id')
-            ->where('orders.business_id', $businessId)
-            // الشرط بيدٍ هنا لأنه انضمام: النطاق يكتب العمود بلا بادئة
-            ->where('orders.status', '!=', \App\Models\Order::CANCELLED)
-            ->whereDate('orders.ordered_at', today())
-            ->sum(DB::raw('COALESCE(products.cost, 0) * order_items.quantity'));
+        $revenue = Revenue::total($businessId, $from, $to);
+        $cost = Revenue::cogs($businessId, $from, $to);
 
         $expenses = (float) Expense::where('business_id', $businessId)
             ->whereDate('spent_at', today())->sum('amount');

@@ -5,7 +5,7 @@ namespace Tests\Feature;
 use App\Models\Branch;
 use App\Models\Business;
 use App\Models\Customer;
-use App\Models\Order;
+use App\Models\CustomerInvoice;
 use App\Models\User;
 use App\Support\Demo;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -46,16 +46,18 @@ class CustomerTotalsTest extends TestCase
         $this->actingAs($this->owner);
     }
 
-    private function order(string $status, float $total): Order
+    /** فاتورةُ العميل بحالها — «مكتمل» صادرة، و«ملغي» ملغاة */
+    private function order(string $status, float $total): CustomerInvoice
     {
-        return Order::create([
-            'business_id' => $this->business->id,
-            'number' => 'INV-'.str_pad((string) (Order::count() + 1), 6, '0', STR_PAD_LEFT),
-            'customer_id' => $this->customer->id, 'customer_name' => 'سالم',
-            'branch' => 'الرئيسي', 'payment_method' => 'نقدي', 'payment_status' => 'مدفوع',
-            'status' => $status, 'subtotal' => $total, 'discount' => 0, 'tax' => 0,
-            'total' => $total, 'ordered_at' => now(),
-        ]);
+        return $this->sellThroughInvoice(
+            $this->business->id,
+            [['description' => 'بند', 'quantity' => 1, 'unit_price' => $total]],
+            [
+                'customer_id' => $this->customer->id,
+                'customer_name' => 'سالم',
+                'status' => $status === 'ملغي' ? CustomerInvoice::CANCELLED : CustomerInvoice::ISSUED,
+            ],
+        );
     }
 
     /** الصفّ كما يصل شاشة العملاء */
@@ -92,8 +94,8 @@ class CustomerTotalsTest extends TestCase
     /** وآخر طلبٍ لا يكون طلبًا ملغى */
     public function test_the_last_order_date_ignores_a_cancelled_one(): void
     {
-        $this->order('مكتمل', 100)->update(['ordered_at' => now()->subDays(5)]);
-        $this->order('ملغي', 900)->update(['ordered_at' => now()]);
+        $this->order('مكتمل', 100)->update(['issued_at' => now()->subDays(5)->toDateString()]);
+        $this->order('ملغي', 900)->update(['issued_at' => now()->toDateString()]);
 
         $this->assertSame(now()->subDays(5)->format('Y-m-d'), $this->row()['last_order']);
     }

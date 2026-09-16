@@ -4,7 +4,8 @@ namespace Tests\Feature;
 
 use App\Models\Branch;
 use App\Models\Business;
-use App\Models\Order;
+use App\Models\CustomerPayment;
+use App\Models\CustomerPaymentAllocation;
 use App\Models\User;
 use App\Support\DashboardMetrics;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -20,8 +21,11 @@ class DashboardBranchScopeTest extends TestCase
     use RefreshDatabase;
 
     private Business $business;
+
     private User $owner;
+
     private Branch $muscat;
+
     private Branch $salalah;
 
     protected function setUp(): void
@@ -43,20 +47,35 @@ class DashboardBranchScopeTest extends TestCase
         $this->actingAs($this->owner);
     }
 
+    /**
+     * بيعةٌ في فرعٍ — فاتورةٌ صادرة، وسندُ قبضٍ بوسيلته.
+     *
+     * والوسيلةُ على السند لا على الفاتورة: هذه التزامٌ وذاك قبض. ولذلك
+     * توزيعُ الوسائل لا يتبع الفرعَ المختار — `customer_payments` بلا فرع،
+     * والسندُ يُقبض في الشركة لا في فرع.
+     */
     private function sale(Branch $branch, int $number, float $total, string $method): void
     {
-        Order::create([
+        $invoice = $this->sellThroughInvoice(
+            $this->business->id,
+            [['description' => 'بند', 'quantity' => 1, 'unit_price' => $total]],
+            ['branch_id' => $branch->id, 'number' => (string) $number, 'customer_name' => 'عميل'],
+        );
+
+        $payment = CustomerPayment::create([
             'business_id' => $this->business->id,
-            'branch_id' => $branch->id,
-            'number' => $number,
-            'customer_name' => 'عميل',
-            'subtotal' => $total,
-            'tax' => 0,
-            'discount' => 0,
-            'total' => $total,
-            'payment_method' => $method,
-            'status' => 'مكتمل',
-            'ordered_at' => now(),
+            'customer_id' => $invoice->customer_id,
+            'number' => 'RCPT-'.$number,
+            'amount' => $total,
+            'method' => $method,
+            'occurred_at' => now(),
+        ]);
+
+        // والتخصيصُ هو ما يعرف الفرع — انظر `Revenue::byMethod`
+        CustomerPaymentAllocation::create([
+            'customer_payment_id' => $payment->id,
+            'customer_invoice_id' => $invoice->id,
+            'amount' => $total,
         ]);
     }
 

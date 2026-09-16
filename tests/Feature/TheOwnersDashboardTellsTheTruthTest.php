@@ -4,9 +4,8 @@ namespace Tests\Feature;
 
 use App\Models\Branch;
 use App\Models\Business;
+use App\Models\CustomerInvoice;
 use App\Models\Expense;
-use App\Models\Order;
-use App\Models\OrderItem;
 use App\Models\Product;
 use App\Models\User;
 use App\Support\Demo;
@@ -76,28 +75,14 @@ class TheOwnersDashboardTellsTheTruthTest extends TestCase
         ]);
     }
 
-    /** بيعةٌ حقيقية: طلبٌ مباعٌ وبندٌ فيه بتكلفته */
-    private function sell(Product $p, int $qty, float $tax = 0, array $over = []): Order
+    /** بيعةٌ حقيقية: فاتورةُ عميلٍ صادرةٌ وبندٌ فيها منسوبٌ إلى صنفه */
+    private function sell(Product $p, int $qty, float $tax = 0, array $over = []): CustomerInvoice
     {
-        $total = $p->price * $qty + $tax;
-
-        $order = Order::create(array_merge([
-            'business_id' => $this->business->id,
-            'branch_id' => $this->main->id,
-            'number' => 'INV-'.str_pad((string) (Order::count() + 1), 5, '0', STR_PAD_LEFT),
-            'status' => 'مكتمل',
-            'payment_method' => 'نقدي', 'payment_status' => 'مدفوع',
-            'subtotal' => $p->price * $qty, 'tax' => $tax, 'total' => $total,
-            'ordered_at' => now(),
-        ], $over));
-
-        OrderItem::create([
-            'order_id' => $order->id, 'product_id' => $p->id, 'name' => $p->name,
-            'price' => $p->price, 'cost' => $p->cost, 'quantity' => $qty,
-            'total' => $p->price * $qty,
-        ]);
-
-        return $order;
+        return $this->sellThroughInvoice(
+            $this->business->id,
+            [['product' => $p, 'quantity' => $qty, 'unit_price' => (float) $p->price, 'tax_amount' => $tax]],
+            array_merge(['branch_id' => $this->main->id, 'created_by' => $this->owner->id], $over),
+        );
     }
 
     /** @return array<string, mixed> */
@@ -200,7 +185,7 @@ class TheOwnersDashboardTellsTheTruthTest extends TestCase
     {
         $sara = $this->cashier('سارة', 's@eventplus.om');
         $rose = $this->product('باقة', 100, 60);
-        $this->sell($rose, 3, over: ['user_id' => $sara->id]);
+        $this->sell($rose, 3, over: ['created_by' => $sara->id]);
 
         $row = collect($this->props()['topEmployees'])->firstWhere('name', 'سارة');
 
@@ -215,8 +200,8 @@ class TheOwnersDashboardTellsTheTruthTest extends TestCase
         $new = $this->cashier('جديد', 'new@eventplus.om');
         $rose = $this->product('باقة', 100, 60);
 
-        $this->sell($rose, 1, over: ['user_id' => $old->id]);
-        $this->sell($rose, 9, over: ['user_id' => $new->id]);
+        $this->sell($rose, 1, over: ['created_by' => $old->id]);
+        $this->sell($rose, 9, over: ['created_by' => $new->id]);
 
         $names = collect($this->props()['topEmployees'])->pluck('name')->all();
 
@@ -231,7 +216,7 @@ class TheOwnersDashboardTellsTheTruthTest extends TestCase
         }
         $star = $this->cashier('النجم', 'star@eventplus.om');
         $rose = $this->product('باقة', 100, 60);
-        $this->sell($rose, 4, over: ['user_id' => $star->id]);
+        $this->sell($rose, 4, over: ['created_by' => $star->id]);
 
         $names = collect($this->props()['topEmployees'])->pluck('name')->all();
 
@@ -250,8 +235,8 @@ class TheOwnersDashboardTellsTheTruthTest extends TestCase
         $sara = $this->cashier('سارة', 's2@eventplus.om');
         $rose = $this->product('باقة', 100, 60);
 
-        $this->sell($rose, 2, over: ['user_id' => $sara->id, 'ordered_at' => now()->subMonths(4)]);
-        $this->sell($rose, 1, over: ['user_id' => $sara->id]);
+        $this->sell($rose, 2, over: ['created_by' => $sara->id, 'issued_at' => now()->subMonths(4)->toDateString()]);
+        $this->sell($rose, 1, over: ['created_by' => $sara->id]);
 
         $row = collect(Demo::employees())->firstWhere('name', 'سارة');
 
@@ -264,8 +249,8 @@ class TheOwnersDashboardTellsTheTruthTest extends TestCase
         $sara = $this->cashier('سارة', 's3@eventplus.om');
         $rose = $this->product('باقة', 100, 60);
 
-        $this->sell($rose, 5, over: ['user_id' => $sara->id, 'ordered_at' => now()->subMonths(3)]);
-        $this->sell($rose, 1, over: ['user_id' => $sara->id]);
+        $this->sell($rose, 5, over: ['created_by' => $sara->id, 'issued_at' => now()->subMonths(3)->toDateString()]);
+        $this->sell($rose, 1, over: ['created_by' => $sara->id]);
 
         $row = collect(Demo::employees())->firstWhere('name', 'سارة');
 
@@ -286,8 +271,8 @@ class TheOwnersDashboardTellsTheTruthTest extends TestCase
         $this->cashier('هدوء', 'q@eventplus.om');
         $rose = $this->product('باقة', 100, 60);
 
-        $this->sell($rose, 3, over: ['user_id' => $omar->id]);
-        $this->sell($rose, 1, over: ['user_id' => $sara->id]);
+        $this->sell($rose, 3, over: ['created_by' => $omar->id]);
+        $this->sell($rose, 1, over: ['created_by' => $sara->id]);
 
         $rows = collect(Demo::employees())->keyBy('name');
 
@@ -329,7 +314,7 @@ class TheOwnersDashboardTellsTheTruthTest extends TestCase
         $a = $this->product('أ', 10, 5);
         $b = $this->product('ب', 10, 5);
 
-        $this->sell($a, 100, over: ['status' => 'ملغي']);
+        $this->sell($a, 100, over: ['status' => CustomerInvoice::CANCELLED]);
         $this->sell($b, 2);
 
         $this->assertSame('ب', $this->props()['topProducts'][0]['name']);
@@ -355,7 +340,7 @@ class TheOwnersDashboardTellsTheTruthTest extends TestCase
 
         $orders = 0;
         $products = 0;
-        Order::retrieved(function () use (&$orders) {
+        CustomerInvoice::retrieved(function () use (&$orders) {
             $orders++;
         });
         Product::retrieved(function () use (&$products) {
@@ -364,19 +349,19 @@ class TheOwnersDashboardTellsTheTruthTest extends TestCase
 
         $this->get(route('admin.dashboard'))->assertSuccessful();
 
-        $this->assertLessThanOrEqual(12, $orders, "اللوحة بنت {$orders} طلبًا لتعرض ستّة");
+        $this->assertLessThanOrEqual(12, $orders, "اللوحة بنت {$orders} فاتورةً لتعرض ستّة");
         $this->assertLessThanOrEqual(15, $products, "اللوحة بنت {$products} منتجًا لتعرض خمسة");
     }
 
-    /** وأحدثُ الطلبات ستّةٌ، أحدثُها أوّلًا */
-    public function test_the_recent_orders_are_six_newest_first(): void
+    /** وأحدثُ الفواتير ستٌّ، أحدثُها أوّلًا */
+    public function test_the_recent_invoices_are_six_newest_first(): void
     {
         $rose = $this->product('باقة', 100, 60);
         foreach (range(1, 9) as $i) {
-            $this->sell($rose, 1, over: ['ordered_at' => now()->subDays(10 - $i)]);
+            $this->sell($rose, 1, over: ['issued_at' => now()->subDays(10 - $i)->toDateString()]);
         }
 
-        $rows = $this->props()['recentOrders'];
+        $rows = $this->props()['recentInvoices'];
 
         $this->assertCount(6, $rows);
         $this->assertSame(

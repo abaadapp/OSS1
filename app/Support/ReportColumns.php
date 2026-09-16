@@ -32,10 +32,10 @@ class ReportColumns
             ['at', 'التاريخ', 'text'], ['description', 'البيان', 'text'], ['reference', 'المرجع', 'text'],
             ['status', 'المطابقة', 'text'], ['amount', 'المبلغ', 'money'],
         ],
-        'orders' => [
-            ['at', 'التاريخ', 'text'], ['number', 'رقم الطلب', 'text'], ['customer', 'العميل', 'text'],
-            ['branch', 'الفرع', 'text'], ['method', 'وسيلة الدفع', 'text'], ['status', 'الحالة', 'text'],
-            ['total', 'الإجمالي', 'money'],
+        'invoices' => [
+            ['at', 'التاريخ', 'text'], ['number', 'رقم الفاتورة', 'text'], ['customer', 'العميل', 'text'],
+            ['branch', 'الفرع', 'text'], ['due', 'الاستحقاق', 'text'], ['status', 'الحالة', 'text'],
+            ['total', 'الإجمالي', 'money'], ['paid', 'المسدَّد', 'money'], ['outstanding', 'الباقي', 'money'],
         ],
         'products' => [
             ['name', 'المنتج', 'text'], ['category', 'القسم', 'text'], ['price', 'السعر', 'money'],
@@ -67,7 +67,7 @@ class ReportColumns
         'vat' => [
             ['month', 'الشهر', 'text'], ['taxable', 'المبيعات الخاضعة', 'money'],
             ['output', 'ضريبة المخرجات', 'money'], ['purchases', 'المشتريات', 'money'],
-            ['input', 'ضريبة المدخلات', 'money'], ['delivery', 'رسوم التوصيل (غير خاضعة)', 'money'],
+            ['input', 'ضريبة المدخلات', 'money'], ['returns', 'المردودات', 'money'],
             ['due', 'الصافي المستحقّ', 'money'],
         ],
         'payments' => [
@@ -76,10 +76,10 @@ class ReportColumns
         ],
         'staff' => [
             ['name', 'الموظف', 'text'], ['role', 'الوظيفة', 'text'], ['branch', 'الفرع', 'text'],
-            ['orders', 'الطلبات', 'number'], ['sales', 'المبيعات', 'money'], ['status', 'الحالة', 'text'],
+            ['invoices', 'الفواتير', 'number'], ['sales', 'المبيعات', 'money'], ['status', 'الحالة', 'text'],
         ],
         'customers' => [
-            ['name', 'العميل', 'text'], ['orders', 'عدد الطلبات', 'number'], ['total', 'إجمالي الإنفاق', 'money'],
+            ['name', 'العميل', 'text'], ['invoices', 'عدد الفواتير', 'number'], ['total', 'إجمالي الإنفاق', 'money'],
         ],
     ];
 

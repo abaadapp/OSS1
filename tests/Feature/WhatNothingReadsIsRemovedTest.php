@@ -4,7 +4,6 @@ namespace Tests\Feature;
 
 use App\Models\Business;
 use App\Models\Expense;
-use App\Models\Order;
 use App\Models\Setting;
 use App\Models\User;
 use App\Support\Demo;
@@ -170,19 +169,19 @@ class WhatNothingReadsIsRemovedTest extends TestCase
     {
         /*
          * ولا يُحذف عمودٌ إلّا وقد قام غيرُه مقامه: مبيعاتُ الموظّف كانت
-         * تُقرأ من `sales_total` وصارت تُحسب من الطلبات.
+         * تُقرأ من `sales_total` وصارت تُحسب من فواتير العملاء التي كتبها —
+         * انظر `Revenue::byUser`.
          */
         $clerk = User::create([
             'business_id' => $this->shop->id, 'name' => 'كاشير', 'email' => 'c@eventplus.om',
             'password' => bcrypt('password'), 'role' => 'sales', 'status' => 'نشط',
         ]);
 
-        Order::create([
-            'business_id' => $this->shop->id, 'user_id' => $clerk->id, 'number' => 'INV-1',
-            'status' => 'مكتمل', 'payment_method' => 'نقدي',
-            'payment_status' => 'مدفوع', 'subtotal' => 40, 'tax' => 0, 'total' => 40,
-            'ordered_at' => now(),
-        ]);
+        $this->sellThroughInvoice(
+            $this->shop->id,
+            [['description' => 'بند', 'quantity' => 1, 'unit_price' => 40]],
+            ['created_by' => $clerk->id, 'number' => 'INV-1'],
+        );
 
         $this->actingAs($this->owner);
         $row = collect(Demo::employees())->firstWhere('id', $clerk->id);

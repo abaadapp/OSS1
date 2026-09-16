@@ -5,15 +5,14 @@ namespace Tests\Feature;
 use App\Models\Branch;
 use App\Models\Business;
 use App\Models\Customer;
+use App\Models\CustomerPayment;
+use App\Models\CustomerPaymentAllocation;
 use App\Models\Expense;
 use App\Models\JobTitle;
-use App\Models\Order;
-use App\Models\OrderItem;
 use App\Models\Product;
 use App\Models\Supplier;
 use App\Models\Transaction;
 use App\Models\User;
-use App\Support\ReportColumns;
 use App\Support\ReportData;
 use App\Support\Reports;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -49,6 +48,8 @@ class EveryReportOpensOnRealDataTest extends TestCase
 
     private Business $shop;
 
+    private Branch $branch;
+
     private User $owner;
 
     protected function setUp(): void
@@ -56,7 +57,7 @@ class EveryReportOpensOnRealDataTest extends TestCase
         parent::setUp();
 
         $this->shop = Business::create(['name' => 'متجري', 'type' => 'عام', 'status' => 'نشط']);
-        Branch::create(['business_id' => $this->shop->id, 'name' => 'الرئيسي']);
+        $this->branch = Branch::create(['business_id' => $this->shop->id, 'name' => 'الرئيسي']);
         JobTitle::create(['business_id' => $this->shop->id, 'name' => 'مدير', 'role' => 'admin']);
 
         $this->owner = User::create([
@@ -94,6 +95,7 @@ class EveryReportOpensOnRealDataTest extends TestCase
         $this->assertGreaterThan(80, $checked, 'لم يُجرَّب ما يكفي — الفحصُ نفسُه معطوب');
         $this->assertSame([], $broken, "تقاريرُ لا تُفتح:\n".implode("\n", $broken));
     }
+
     /**
      * وتقريرُ المبيعات يُصدَّر من بابه هو.
      *
@@ -258,20 +260,32 @@ class EveryReportOpensOnRealDataTest extends TestCase
 
         /* طلباتٌ موزّعةٌ على الفترات: اليوم، وهذا الشهر، والعام الماضي */
         foreach ([now(), now()->copy()->subDays(10), now()->copy()->subMonths(8)] as $i => $when) {
-            $order = Order::create([
-                'business_id' => $this->shop->id, 'branch_id' => 1,
-                'customer_id' => $customer->id, 'customer_name' => 'زبونة',
-                'employee_name' => 'المالك', 'user_id' => $this->owner->id,
-                'number' => 'INV-'.($i + 1),
-                'status' => 'مكتمل', 'payment_status' => 'مدفوع',
-                'payment_method' => 'نقدي',
-                'subtotal' => 25, 'discount' => 0, 'tax' => 1.25, 'total' => 26.25,
-                'ordered_at' => $when, 'created_at' => $when, 'updated_at' => $when,
+            $invoice = $this->sellThroughInvoice(
+                $this->shop->id,
+                [['product' => $product, 'quantity' => 2, 'unit_price' => 12.5, 'tax_amount' => 1.25]],
+                [
+                    'branch_id' => $this->branch->id,
+                    'customer_id' => $customer->id, 'customer_name' => 'زبونة',
+                    'created_by' => $this->owner->id,
+                    'number' => 'INV-'.($i + 1),
+                    'issued_at' => $when->toDateString(),
+                    'issued_by_at' => $when,
+                    'created_at' => $when, 'updated_at' => $when,
+                ],
+            );
+
+            // وسندُ قبضٍ عليها — تقريرُ وسائل الدفع يقرأ التحصيل لا الفاتورة
+            $payment = CustomerPayment::create([
+                'business_id' => $this->shop->id,
+                'customer_id' => $customer->id,
+                'number' => 'RCPT-'.($i + 1),
+                'amount' => 26.25, 'method' => 'نقدي', 'occurred_at' => $when,
             ]);
 
-            OrderItem::create([
-                'order_id' => $order->id, 'product_id' => $product->id, 'name' => 'باقة ورد',
-                'price' => 12.5, 'quantity' => 2, 'cost' => 5, 'total' => 25,
+            CustomerPaymentAllocation::create([
+                'customer_payment_id' => $payment->id,
+                'customer_invoice_id' => $invoice->id,
+                'amount' => 26.25,
             ]);
 
             Transaction::create([

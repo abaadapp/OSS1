@@ -4,11 +4,13 @@ namespace Tests\Feature;
 
 use App\Models\Branch;
 use App\Models\Business;
+use App\Models\Customer;
+use App\Models\CustomerInvoice;
 use App\Models\JobTitle;
-use App\Models\Order;
 use App\Models\Supplier;
 use App\Models\SupplierInvoice;
 use App\Models\User;
+use App\Support\CustomerInvoices;
 use App\Support\ReportData;
 use App\Support\Reports;
 use App\Support\SupplierInvoices;
@@ -22,6 +24,13 @@ use Tests\TestCase;
  * لا يراجعه أحدٌ في الشاشة، ويُنقل كما هو إلى الإقرار. فالوعاء يُقرأ من حيث
  * حُسبت الضريبة نفسها لا من رقمٍ مجاور، والمدخلاتُ من سنداتٍ مكتوبة لا من
  * تقديرٍ بالنسبة، والصافي السالب يبقى سالبًا لأنّه رصيدٌ مستردّ لا مبلغٌ يُدفع.
+ *
+ * ═══ وضريبةُ المخرجات من فواتير العملاء ═══
+ *
+ * كانت تُجمع من `orders` وحدها — وهي جدولٌ لا مسارَ يكتب فيه: ففاتورةٌ تصدر
+ * بضريبةِ ٥٪ لا تظهر في الإقرار، والنظامُ يقول «مستحقٌّ عليك صفر» ودفترُ
+ * الأستاذ فيه رصيدٌ في `tax_payable`. وهذه الاختباراتُ تحرس أن يبقى المصدرُ
+ * هو الفواتير، وأن يوافق الإقرارُ ما قُيّد في الدفتر.
  */
 class VatReportTest extends TestCase
 {
@@ -46,20 +55,32 @@ class VatReportTest extends TestCase
         ]);
     }
 
-    private function sale(float $subtotal, float $discount, float $tax, float $delivery = 0): Order
+    /** فاتورةُ عميلٍ **صادرة** — وهي وحدها إيراد، انظر `Revenue` */
+    private function sale(float $subtotal, float $discount, float $tax): CustomerInvoice
     {
-        return Order::create([
+        $customer = Customer::firstOrCreate(
+            ['business_id' => $this->business->id, 'name' => 'عميل'],
+        );
+
+        return CustomerInvoice::create([
             'business_id' => $this->business->id,
-            'number' => 'S'.uniqid(),
-            'status' => 'مكتمل',
-            'payment_status' => 'مدفوع',
+            'customer_id' => $customer->id,
+            'number' => 'INV-'.uniqid(),
+            'status' => CustomerInvoice::ISSUED,
+            'issued_at' => now()->toDateString(),
             'subtotal' => $subtotal,
-            'discount' => $discount,
-            'tax' => $tax,
-            'delivery_fee' => $delivery,
-            'total' => $subtotal - $discount + $tax + $delivery,
-            'ordered_at' => now(),
+            'discount_total' => $discount,
+            'tax_total' => $tax,
+            'total' => $subtotal - $discount + $tax,
+            'customer_name' => 'عميل',
+            'issued_by_at' => now(),
         ]);
+    }
+
+    /** إشعارُ دائن — يُنقص المخرجات بقيمة ضريبته */
+    private function creditNote(CustomerInvoice $invoice, float $amount, float $tax): void
+    {
+        CustomerInvoices::creditNote($invoice, $amount, $tax, 'ردّ جزئيّ', $this->owner->id);
     }
 
     /** سندُ مورّدٍ — والمعتمَدُ هو الحال الطبيعيّة، وهو وحده يدخل الإقرار */
@@ -91,12 +112,13 @@ class VatReportTest extends TestCase
     public function test_the_taxable_base_is_the_one_the_tax_was_taken_on(): void
     {
         /*
-         * الوعاء `subtotal - discount` لا `total - tax`.
+         * الوعاء `subtotal - discount_total` لا `total - tax_total`.
          *
-         * ولو قيس بالثاني لَدخلت رسومُ التوصيل في الوعاء وهي لم تُضرَّب
-         * أصلًا، فيخرج رقمٌ لا تُصدّقه الضريبةُ المحصّلة بجواره — ويُقدَّم.
+         * وهو التعبيرُ نفسُه الذي يُقيَّد دائنًا في حساب `sales` — انظر
+         * `CustomerInvoices::post`. فما يقوله الإقرارُ عن شهرٍ هو ما يقوله
+         * ميزانُ المراجعة عنه، ولا يفترقان.
          */
-        $this->sale(subtotal: 100, discount: 20, tax: 4, delivery: 5);
+        $this->sale(subtotal: 100, discount: 20, tax: 4);
 
         $summary = $this->vat()['summary'];
 
@@ -104,20 +126,45 @@ class VatReportTest extends TestCase
         $this->assertSame(4.0, $summary['output']);
     }
 
-    public function test_the_delivery_fee_is_shown_apart_not_melted_into_the_base(): void
+    /**
+     * وإشعارُ الدائن يُنقص المخرجات — ويُقال في عموده.
+     *
+     * كلُّ إشعارٍ يُقيَّد `tax_payable` **مدينًا**: أي يُنقص ما على الشركة.
+     * فإخفاؤه يجعل الإقرارَ يطالب بضريبةِ بيعةٍ رُدّت — ويُدفع ما لا يُستحقّ.
+     */
+    public function test_a_credit_note_reduces_the_output_tax_and_is_disclosed(): void
     {
-        // ما لا يفرض عليه النظامُ ضريبةً يُقال، لا يُترك ليُكتشف عند الجهة
-        $this->sale(subtotal: 100, discount: 0, tax: 5, delivery: 7);
+        $invoice = $this->sale(subtotal: 100, discount: 0, tax: 5);
+        $this->creditNote($invoice, amount: 21, tax: 1);
 
-        $this->assertSame(7.0, $this->vat()['summary']['delivery']);
+        $summary = $this->vat()['summary'];
+
+        $this->assertSame(21.0, $summary['returns'], 'لم يُعرض المردود');
+        $this->assertSame(4.0, $summary['output'], 'لم تُنقص ضريبةُ المردود من المخرجات');
+        // والوعاءُ ينقص بصافي المردود (المبلغ ناقص ضريبته)
+        $this->assertSame(80.0, $summary['taxable']);
+    }
+
+    /**
+     * ومسودّةٌ ليست إيرادًا ولا ضريبة.
+     *
+     * لا ذمّةَ لها ولا قيدَ ولا رقمَ محجوز. وجمعُها في الإقرار يجعل الشركةَ
+     * تُقرّ بضريبةٍ على ورقةٍ لم تصدر بعد — وقد لا تصدر أبدًا.
+     */
+    public function test_a_draft_invoice_is_not_in_the_return(): void
+    {
+        $this->sale(subtotal: 100, discount: 0, tax: 5);
+        $this->sale(subtotal: 400, discount: 0, tax: 20)->update(['status' => CustomerInvoice::DRAFT]);
+
+        $this->assertSame(5.0, $this->vat()['summary']['output']);
         $this->assertSame(100.0, $this->vat()['summary']['taxable']);
     }
 
-    public function test_a_cancelled_sale_carries_no_tax_into_the_return(): void
+    public function test_a_cancelled_invoice_carries_no_tax_into_the_return(): void
     {
-        // بيعةٌ أُلغيت لم تُحصَّل ضريبتُها — وإقرارُها دفعُ ما لم يُقبض
+        // فاتورةٌ أُلغيت عُكس قيدُها — وإقرارُها دفعُ ما لم يُقبض
         $this->sale(subtotal: 100, discount: 0, tax: 5);
-        $this->sale(subtotal: 200, discount: 0, tax: 10)->update(['status' => 'ملغي']);
+        $this->sale(subtotal: 200, discount: 0, tax: 10)->update(['status' => CustomerInvoice::CANCELLED]);
 
         $this->assertSame(5.0, $this->vat()['summary']['output']);
     }
@@ -206,7 +253,7 @@ class VatReportTest extends TestCase
         // من اختار «السنة» يجمع ثلاثةَ أسطرٍ بعينها فيقرأ رُبعَه
         $this->sale(subtotal: 100, discount: 0, tax: 5);
         $this->sale(subtotal: 50, discount: 0, tax: 2.5)
-            ->update(['ordered_at' => now()->subMonthNoOverflow()->startOfMonth()->addDay()]);
+            ->update(['issued_at' => now()->subMonthNoOverflow()->startOfMonth()->addDay()->toDateString()]);
 
         $rows = $this->vat('year')['rows'];
 

@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Customer;
+use App\Models\CustomerInvoice;
 use App\Support\Demo;
 use Illuminate\Http\Request;
 
@@ -27,19 +28,23 @@ class CustomerController extends Controller
     public function index(Request $request)
     {
         /*
-         * ما اشتراه العميل فعلًا — لا الملغى ولا سلّةً معلّقة.
+         * ما تعامل به العميل فعلًا — لا مسودّةً ولا ملغاة.
          *
-         * `withCount('orders')` تعدّ العلاقة كما هي فتتجاوز النطاق: فكانت
+         * `withCount('invoices')` تعدّ العلاقة كما هي فتتجاوز الشرط: فكانت
          * البطاقة فوق الجدول تستثني الملغى وصفوفُه تحتها تجمعه — شاشةٌ
          * واحدة تقول رقمين عن العميل نفسه. ومن ألغى فاتورةً بألف يبقى في
          * القائمة «أنفق ١٠٠٠» بينما صفحته وكشف حسابه يقولان صفرًا.
+         *
+         * والمصدرُ فواتيرُ العميل لا طلباتُه: جدولُ الطلبات لا مسارَ يكتب
+         * فيه، فكان العمودان صفرًا لكلّ عميلٍ منذ فتحت الشركةُ بابها.
+         * انظر `App\Support\Revenue`.
          */
-        $sold = fn ($q) => $q->sold();
+        $sold = fn ($q) => $q->where('status', CustomerInvoice::ISSUED);
 
         $q = Customer::where('business_id', $this->bid())
-            ->withCount(['orders as orders_count' => $sold])
-            ->withSum(['orders as orders_sum_total' => $sold], 'total')
-            ->withMax(['orders as orders_max_ordered_at' => $sold], 'ordered_at');
+            ->withCount(['invoices as orders_count' => $sold])
+            ->withSum(['invoices as orders_sum_total' => $sold], 'total')
+            ->withMax(['invoices as orders_max_ordered_at' => $sold], 'issued_at');
 
         // القاعدة نفسها التي يقرأ بها الملفّ — انظر App\Support\ListFilters
         \App\Support\ListFilters::customers($q, $request);

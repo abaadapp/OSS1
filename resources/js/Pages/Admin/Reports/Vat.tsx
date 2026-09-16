@@ -23,7 +23,7 @@ interface Row {
     month: string;
     taxable: number;
     output: number;
-    delivery: number;
+    returns: number;
     purchases: number;
     input: number;
     due: number;
@@ -36,7 +36,8 @@ interface Props {
         output: number;
         purchases: number;
         input: number;
-        delivery: number;
+        /** إشعاراتُ الدائن في الفترة — تُنقص المخرجات أعلاه */
+        returns: number;
         due: number;
         /** سنداتُ مورّدين لم تُعتمد بعد — تُقال ولا تُخصَم */
         pending: number;
@@ -232,16 +233,16 @@ export default function ReportsVat() {
             </Card>
 
             {/*
-                ما لا يدخل الوعاء يُقال، لا يُترك ليُكتشف عند الجهة.
+                ما دخل الحسابَ وما لم يدخله يُقال، لا يُترك ليُكتشف عند الجهة.
 
-                رسومُ التوصيل لا يفرض عليها النظام ضريبة، وضريبةُ المدخلات
-                تُقرأ من سندات المورّدين وحدها — فمشترياتٌ بلا سندٍ مسجَّل
-                لا تُخصم وإن دُفعت.
+                المردوداتُ مطروحةٌ من المخرجات أعلاه لا مضافةٌ إليها، وضريبةُ
+                المدخلات تُقرأ من سندات المورّدين وحدها — فمشترياتٌ بلا سندٍ
+                مسجَّل لا تُخصم وإن دُفعت.
             */}
             <div className="mt-4 space-y-1.5 text-[12px] leading-relaxed text-[#9ca3af]">
                 <p>
-                    {t('رسوم التوصيل في هذه الفترة :n — والنظام لا يفرض عليها ضريبة، فهي خارج الوعاء أعلاه.', {
-                        n: m(summary.delivery),
+                    {t('المردودات في هذه الفترة :n — مطروحةٌ من ضريبة المخرجات أعلاه بقيمة ضريبتها.', {
+                        n: m(summary.returns),
                     })}
                 </p>
                 <p>

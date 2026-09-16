@@ -3,9 +3,8 @@
 namespace Tests\Feature;
 
 use App\Models\Business;
-use App\Models\Category;
-use App\Models\Order;
-use App\Models\OrderItem;
+use App\Models\CustomerInvoice;
+use App\Models\CustomerInvoiceItem;
 use App\Models\Product;
 use App\Models\User;
 use App\Support\Demo;
@@ -82,18 +81,14 @@ class AGoalIsMeasuredAgainstAGoalTest extends TestCase
         ]);
     }
 
-    /** بيعةٌ لموظّف — بمبلغها وتاريخها */
-    private function sell(?User $by, float $total, array $over = []): Order
+    /** بيعةٌ لموظّف — فاتورةُ عميلٍ صادرةٌ كتبها هو */
+    private function sell(?User $by, float $total, array $over = []): CustomerInvoice
     {
-        return Order::create(array_merge([
-            'business_id' => $this->bid(),
-            'user_id' => $by?->id,
-            'number' => 'INV-'.str_pad((string) (Order::count() + 1), 5, '0', STR_PAD_LEFT),
-            'status' => 'مكتمل',
-            'payment_method' => 'نقدي', 'payment_status' => 'مدفوع',
-            'subtotal' => $total, 'tax' => 0, 'total' => $total,
-            'ordered_at' => now(),
-        ], $over));
+        return $this->sellThroughInvoice(
+            $this->bid(),
+            [['description' => 'بند', 'quantity' => 1, 'unit_price' => $total]],
+            array_merge(['created_by' => $by?->id], $over),
+        );
     }
 
     /** @return array<string, mixed> صفُّ موظّفٍ بعينه كما تُرسله `Demo::employees` */
@@ -158,7 +153,7 @@ class AGoalIsMeasuredAgainstAGoalTest extends TestCase
     {
         $salem = $this->staff('سالم', target: 100);
         $this->sell($salem, 40);
-        $this->sell($salem, 60, ['status' => Order::CANCELLED]);
+        $this->sell($salem, 60, ['status' => CustomerInvoice::CANCELLED]);
 
         $this->assertSame(40.0, $this->row($salem)['target_pct'], 'الملغى ليس بيعًا');
     }
@@ -167,7 +162,7 @@ class AGoalIsMeasuredAgainstAGoalTest extends TestCase
     {
         $salem = $this->staff('سالم', target: 100);
         $this->sell($salem, 30);
-        $this->sell($salem, 500, ['ordered_at' => now()->subMonthNoOverflow()->startOfMonth()]);
+        $this->sell($salem, 500, ['issued_at' => now()->subMonthNoOverflow()->startOfMonth()->toDateString()]);
 
         $this->assertSame(30.0, $this->row($salem)['target_pct']);
     }
@@ -226,13 +221,15 @@ class AGoalIsMeasuredAgainstAGoalTest extends TestCase
         $this->assertSame(25.0, $row['target_pct']);
         $this->assertSame(200.0, $row['target']);
     }
-    /** بندٌ في طلب — بكمّيته */
-    private function line(Order $order, Product $p, int $qty): void
+
+    /** بندٌ في فاتورة — بكمّيته، منسوبًا إلى صنفه */
+    private function line(CustomerInvoice $invoice, Product $p, int $qty): void
     {
-        OrderItem::create([
-            'order_id' => $order->id, 'product_id' => $p->id, 'name' => $p->name,
-            'price' => $p->price, 'cost' => $p->cost, 'quantity' => $qty,
-            'total' => $p->price * $qty,
+        CustomerInvoiceItem::create([
+            'customer_invoice_id' => $invoice->id, 'product_id' => $p->id,
+            'description' => $p->name, 'quantity' => $qty, 'unit_price' => $p->price,
+            'discount' => 0, 'tax_rate' => 0, 'tax_amount' => 0,
+            'line_total' => $p->price * $qty, 'sort_order' => 0,
         ]);
     }
 }

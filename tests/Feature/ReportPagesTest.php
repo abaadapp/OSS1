@@ -4,16 +4,18 @@ namespace Tests\Feature;
 
 use App\Models\Branch;
 use App\Models\Business;
+use App\Models\Customer;
+use App\Models\CustomerInvoice;
+use App\Models\CustomerPayment;
 use App\Models\JobTitle;
-use App\Models\Order;
 use App\Models\Product;
 use App\Models\StockAdjustment;
-use App\Models\Transaction;
 use App\Models\User;
 use App\Support\ReportColumns;
 use App\Support\ReportData;
 use App\Support\Reports;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
 use PhpOffice\PhpSpreadsheet\IOFactory;
 use Tests\TestCase;
 
@@ -43,7 +45,7 @@ class ReportPagesTest extends TestCase
         'admin.reports.finance' => 'finance',
         'admin.reports.expenses' => 'expenses',
         'admin.reports.bank' => 'finance',
-        'admin.reports.orders' => 'orders',
+        'admin.reports.invoices' => 'invoices',
         'admin.reports.products' => 'products',
         'admin.reports.inventory' => 'inventory',
         'admin.reports.purchases' => 'purchases',
@@ -101,16 +103,34 @@ class ReportPagesTest extends TestCase
      * فيسقط بناءٌ سليم مرّةً كلَّ عشرات المرّات ولا يُعاد إنتاجُه محلّيًّا —
      * وتقريرُ فشلٍ كاذب أسوأ من غياب التقرير.
      */
-    private function sale(float $total, string $when, ?User $by = null): Order
+    private function sale(float $total, string $when, ?User $by = null): CustomerInvoice
     {
-        return Order::create([
-            'business_id' => $this->business->id,
-            'number' => 'INV-'.str_pad((string) ++$this->seq, 6, '0', STR_PAD_LEFT),
-            'customer_name' => 'زبون',
-            'total' => $total,
-            'status' => 'مكتمل',
-            'ordered_at' => $when,
-            'user_id' => $by?->id,
+        return $this->sellThroughInvoice(
+            $this->business->id,
+            [['description' => 'بند', 'quantity' => 1, 'unit_price' => $total]],
+            [
+                'number' => 'INV-'.str_pad((string) ++$this->seq, 6, '0', STR_PAD_LEFT),
+                'customer_name' => 'زبون',
+                'issued_at' => Carbon::parse($when)->toDateString(),
+                'created_by' => $by?->id,
+            ],
+        );
+    }
+
+    /** سندُ قبضٍ بوسيلته — وهو ما يقرؤه تقريرُ وسائل الدفع */
+    private function collect(float $amount, string $method, ?int $businessId = null): void
+    {
+        $bid = $businessId ?? $this->business->id;
+
+        CustomerPayment::create([
+            'business_id' => $bid,
+            'customer_id' => Customer::firstOrCreate(
+                ['business_id' => $bid, 'name' => 'عميل الاختبار'],
+            )->id,
+            'number' => 'RCPT-'.str_pad((string) ++$this->seq, 6, '0', STR_PAD_LEFT),
+            'amount' => $amount,
+            'method' => $method,
+            'occurred_at' => now(),
         ]);
     }
 
@@ -222,11 +242,7 @@ class ReportPagesTest extends TestCase
     {
         $neighbour = Business::create(['name' => 'الجار', 'type' => 'عام', 'status' => 'نشط']);
 
-        Transaction::create([
-            'business_id' => $this->business->id, 'type' => 'دخل', 'method' => 'نقدي',
-            'reference' => Transaction::nextReference($this->business->id),
-            'amount' => 250, 'occurred_at' => now(), 'description' => 'بيع',
-        ]);
+        $this->collect(250, 'نقدي');
 
         $mine = ReportData::payments($this->business->id, ['range' => 'all'])['summary']['total'];
         $theirs = ReportData::payments($neighbour->id, ['range' => 'all'])['summary']['total'];
@@ -237,11 +253,8 @@ class ReportPagesTest extends TestCase
 
     public function test_the_payment_indicators_count_only_what_actually_moved(): void
     {
-        Transaction::create([
-            'business_id' => $this->business->id, 'type' => 'دخل', 'method' => 'نقدي',
-            'reference' => Transaction::nextReference($this->business->id),
-            'amount' => 250, 'occurred_at' => now(), 'description' => 'بيع',
-        ]);
+        // والوسيلةُ تُسأل عن سند القبض لا عن الفاتورة — انظر `Revenue::collections`
+        $this->collect(250, 'نقدي');
 
         $summary = $this->props('admin.reports.payments', ['range' => 'month'])['summary'];
 
@@ -261,6 +274,7 @@ class ReportPagesTest extends TestCase
             $this->assertSame(0.0, (float) ($summary['average'] ?? 0));
         }
     }
+
     public function test_the_filters_use_the_systems_picker_not_the_native_one(): void
     {
         /*
@@ -283,8 +297,8 @@ class ReportPagesTest extends TestCase
         $this->sale(100, now()->toDateTimeString());
         $this->sale(500, now()->subMonths(6)->toDateTimeString());
 
-        $month = $this->get(route('admin.reports.export.csv', 'orders').'?range=month')->streamedContent();
-        $all = $this->get(route('admin.reports.export.csv', 'orders').'?range=all')->streamedContent();
+        $month = $this->get(route('admin.reports.export.csv', 'invoices').'?range=month')->streamedContent();
+        $all = $this->get(route('admin.reports.export.csv', 'invoices').'?range=all')->streamedContent();
 
         $this->assertStringContainsString('100', $month);
         $this->assertStringNotContainsString('500', $month, 'ملفُّ الشهر حمل بيعةً خارجه');
@@ -295,10 +309,10 @@ class ReportPagesTest extends TestCase
     {
         $this->sale(100, now()->toDateTimeString());
         $cancelled = $this->sale(400, now()->toDateTimeString());
-        $cancelled->update(['status' => Order::CANCELLED]);
+        $cancelled->update(['status' => CustomerInvoice::CANCELLED]);
 
-        $csv = $this->get(route('admin.reports.export.csv', 'orders')
-            .'?range=month&status='.urlencode(Order::CANCELLED))->streamedContent();
+        $csv = $this->get(route('admin.reports.export.csv', 'invoices')
+            .'?range=month&status='.urlencode(CustomerInvoice::CANCELLED))->streamedContent();
 
         $this->assertStringContainsString('400', $csv);
         $this->assertStringNotContainsString('100', $csv, 'الملفّ تجاهل المرشّح الذي رشّحت به الشاشة');
@@ -461,6 +475,7 @@ class ReportPagesTest extends TestCase
             file_get_contents(resource_path('js/Components/ReportScreen.tsx')),
         );
     }
+
     public function test_the_index_hides_what_its_owner_cannot_open(): void
     {
         /*

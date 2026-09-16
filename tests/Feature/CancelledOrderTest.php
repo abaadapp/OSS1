@@ -4,6 +4,8 @@ namespace Tests\Feature;
 
 use App\Models\Branch;
 use App\Models\Business;
+use App\Models\CustomerInvoice;
+use App\Models\CustomerPayment;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\Product;
@@ -15,14 +17,16 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
 /**
- * الطلب الملغى ليس بيعًا — في كل شاشة.
+ * الملغى ليس بيعًا — في كل شاشة.
  *
  * كان شرط الاستثناء يُكتب بيدٍ في كل استعلام على حدة، فكُتب في ثلاثة مواضع
  * ونُسي في أحدٍ وثلاثين: بطاقات التقارير تجمع الملغى والمخطّط تحتها يستثنيه،
  * فتقرأ الشاشةُ الواحدة رقمين متناقضين عن الفترة نفسها — ١٠٠٠ فوق و١٠٠
  * تحت. وأخطرها الإقرار الضريبي: ضريبةٌ تُقرّ على بيعةٍ أُلغيت.
  *
- * فصار موضعًا واحدًا (Order::scopeSold) يقرأ منه الجميع.
+ * فصار موضعًا واحدًا يقرأ منه الجميع. وهو اليوم `Revenue`: الفاتورةُ
+ * **الصادرة** وحدها إيراد — لا المسودّة ولا الملغاة التي عُكس قيدُها.
+ * والسندُ الملغى ليس تحصيلًا كذلك.
  */
 class CancelledOrderTest extends TestCase
 {
@@ -54,11 +58,18 @@ class CancelledOrderTest extends TestCase
         $this->actingAs($this->owner);
     }
 
+    /**
+     * طلبٌ بحاله — لشاشة «المبيعات» وحدها.
+     *
+     * لا يقرؤه شيءٌ من طبقة التحليل بعد اليوم: الإيرادُ من الفواتير
+     * (انظر `Revenue`). وهو باقٍ هنا لأنّ الشاشةَ نفسَها ما زالت تقرأ
+     * الجدول، وحارسُها يقرأ ما تقرأ.
+     */
     private function order(string $status, float $total, float $tax = 0): Order
     {
         $order = Order::create([
             'business_id' => $this->business->id,
-            'number' => 'INV-'.str_pad((string) (Order::count() + 1), 6, '0', STR_PAD_LEFT),
+            'number' => 'ORD-'.str_pad((string) (Order::count() + 1), 6, '0', STR_PAD_LEFT),
             'customer_name' => 'زبون', 'employee_name' => 'سالم',
             'branch_id' => $this->branch->id, 'branch' => 'الرئيسي',
             'payment_method' => 'نقدي', 'payment_status' => 'مدفوع', 'status' => $status,
@@ -74,7 +85,55 @@ class CancelledOrderTest extends TestCase
         return $order;
     }
 
-    /** بيعةٌ كاملة: طلبٌ وصفٌّ في دفتر الحركة معلّقٌ به — كما تكتبها نقطة البيع */
+    /** فاتورةُ عميلٍ بحالها — «مكتمل» تعني صادرة، و«ملغي» ملغاة */
+    private function invoice(string $status, float $total, float $tax = 0): CustomerInvoice
+    {
+        return $this->sellThroughInvoice(
+            $this->business->id,
+            [[
+                'product' => $this->product,
+                'quantity' => 1,
+                'unit_price' => $total - $tax,
+                'tax_amount' => $tax,
+            ]],
+            [
+                'status' => $status === 'ملغي' ? CustomerInvoice::CANCELLED : CustomerInvoice::ISSUED,
+                'branch_id' => $this->branch->id,
+                'customer_name' => 'زبون',
+            ],
+        );
+    }
+
+    /**
+     * فاتورةٌ وسندُ قبضٍ عليها — والملغى يُلغى في الاثنين.
+     *
+     * والتحصيلُ بابٌ ثانٍ غير الفاتورة: هذه التزامٌ وذاك قبض، ووسيلةُ الدفع
+     * تُسأل عن السند لا عن الورقة — انظر `Revenue::collections`.
+     */
+    private function collected(string $status, float $total, string $method = 'نقدي'): CustomerInvoice
+    {
+        $invoice = $this->invoice($status, $total);
+
+        CustomerPayment::create([
+            'business_id' => $this->business->id,
+            'customer_id' => $invoice->customer_id,
+            'number' => 'RCPT-'.str_pad((string) (CustomerPayment::count() + 1), 6, '0', STR_PAD_LEFT),
+            'amount' => $total,
+            'method' => $method,
+            'occurred_at' => now(),
+            'cancelled_at' => $status === 'ملغي' ? now() : null,
+        ]);
+
+        return $invoice;
+    }
+
+    /**
+     * بيعةٌ في دفتر الحركة — طلبٌ وصفٌّ معلَّقٌ به.
+     *
+     * و«الحركة المالية» تقرأ `transactions` — دفترَ حركةِ المال لا دفترَ
+     * الإيراد — وهي على مصدرها. و`Transaction::scopeNotCancelled` تعرف
+     * الإلغاء من **حال طلبها**، فلا بدّ من طلبٍ هنا.
+     */
     private function sale(string $status, float $total, string $method = 'نقدي'): Order
     {
         $order = $this->order($status, $total);
@@ -83,7 +142,7 @@ class CancelledOrderTest extends TestCase
             'business_id' => $this->business->id,
             'order_id' => $order->id,
             'reference' => $order->number,
-            'description' => 'مبيعات نقطة البيع',
+            'description' => 'مبيعات',
             'method' => $method,
             'kind' => Transaction::SALE,
             'type' => 'دخل',
@@ -99,8 +158,8 @@ class CancelledOrderTest extends TestCase
 
     public function test_the_cards_and_the_chart_now_say_the_same_number(): void
     {
-        $this->order('مكتمل', 100);
-        $this->order('ملغي', 900);
+        $this->invoice('مكتمل', 100);
+        $this->invoice('ملغي', 900);
 
         $cards = Demo::reportSummary('all')['sales'];
         $chart = array_sum(array_filter(Demo::salesTrend('today')['data'], fn ($v) => $v !== null));
@@ -112,8 +171,8 @@ class CancelledOrderTest extends TestCase
     public function test_the_vat_return_does_not_declare_a_cancelled_sale(): void
     {
         // أخطرها: ضريبةٌ تُقرّ على بيعةٍ أُلغيت
-        $this->order('مكتمل', 105, 5);
-        $this->order('ملغي', 945, 45);
+        $this->invoice('مكتمل', 105, 5);
+        $this->invoice('ملغي', 945, 45);
 
         /*
          * ويُسأل المصدرُ الحيّ لا دالّةً على جنبٍ تجيب السؤالَ نفسه.
@@ -130,8 +189,8 @@ class CancelledOrderTest extends TestCase
 
     public function test_the_dashboard_cards_leave_it_out_too(): void
     {
-        $this->order('مكتمل', 100);
-        $this->order('ملغي', 900);
+        $this->invoice('مكتمل', 100);
+        $this->invoice('ملغي', 900);
 
         // البطاقة الأولى «مبيعات اليوم» — تُقرأ بموضعها لا باسمها لأن الاسم
         // يمرّ بالترجمة فيختلف بلغة الجلسة
@@ -143,16 +202,17 @@ class CancelledOrderTest extends TestCase
 
     public function test_top_products_and_customers_leave_it_out(): void
     {
-        $this->order('مكتمل', 100);
-        $this->order('ملغي', 900);
+        $this->invoice('مكتمل', 100);
+        $this->invoice('ملغي', 900);
 
         $this->assertSame(100.0, (float) Demo::topSellingProducts(5, 'all')[0]['revenue']);
     }
 
     public function test_payment_distribution_leaves_it_out(): void
     {
-        $this->order('مكتمل', 100);
-        $this->order('ملغي', 900);
+        // والوسيلةُ تُسأل عن السند: سندٌ أُلغي مالٌ لم يبقَ
+        $this->collected('مكتمل', 100);
+        $this->collected('ملغي', 900);
 
         $this->assertSame([100.0], Demo::paymentDistribution('all')['series']);
 
@@ -191,8 +251,8 @@ class CancelledOrderTest extends TestCase
     /** وتقريرُ وسائل الدفع يقرأ الرقم نفسه */
     public function test_the_payments_report_leaves_a_cancelled_sale_out(): void
     {
-        $this->sale('مكتمل', 100);
-        $this->sale('ملغي', 900);
+        $this->collected('مكتمل', 100);
+        $this->collected('ملغي', 900);
 
         $report = ReportData::payments($this->business->id, ['range' => 'all']);
 
@@ -229,12 +289,8 @@ class CancelledOrderTest extends TestCase
      */
     public function test_the_finance_cards_are_not_inflated_by_a_cancelled_sale(): void
     {
-        $live = $this->sale('مكتمل', 100);
-        $live->update(['tax' => 5]);
-        Transaction::where('order_id', $live->id)->update(['tax_amount' => 5]);
-
-        $dead = $this->sale('ملغي', 900);
-        Transaction::where('order_id', $dead->id)->update(['tax_amount' => 45]);
+        $this->collected('مكتمل', 100)->update(['subtotal' => 95, 'tax_total' => 5]);
+        $this->collected('ملغي', 900)->update(['subtotal' => 855, 'tax_total' => 45]);
 
         // وتُقرأ بمواضعها لا بأسمائها: الاسم يمرّ بالترجمة فيختلف بلغة الجلسة
         $cards = collect(Demo::financeStats('all'))->pluck('value')->all();
@@ -247,8 +303,8 @@ class CancelledOrderTest extends TestCase
 
     public function test_profit_does_not_count_a_cancelled_sale(): void
     {
-        $this->order('مكتمل', 100);
-        $this->order('ملغي', 900);
+        $this->invoice('مكتمل', 100);
+        $this->invoice('ملغي', 900);
 
         $summary = Demo::reportSummary('all');
 

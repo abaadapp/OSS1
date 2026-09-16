@@ -98,9 +98,9 @@ class ReportPageController extends Controller
         return $this->report($request, 'bank', 'Bank', ['match_status']);
     }
 
-    public function orders(Request $request): Response
+    public function invoices(Request $request): Response
     {
-        return $this->report($request, 'orders', 'Orders', ['status', 'branch_id', 'payment_method']);
+        return $this->report($request, 'invoices', 'Invoices', ['status', 'branch_id', 'state']);
     }
 
     public function products(Request $request): Response

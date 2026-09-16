@@ -110,6 +110,9 @@ class ReportDownloadController extends Controller
         'operations' => 'عمليات الجرد', 'shortage' => 'قيمة النقص', 'surplus' => 'قيمة الزيادة',
         'staff' => 'الموظفون', 'sellers' => 'من باع', 'topName' => 'الأعلى', 'topSales' => 'مبيعاته',
         'customers' => 'العملاء',
+        // فواتير العملاء
+        'outstanding' => 'الباقي', 'overdue' => 'المتأخّرة', 'drafts' => 'المسودّات',
+        'paid' => 'المسدَّد', 'returns' => 'المردودات', 'invoices' => 'الفواتير',
     ];
 
     /** ما يُكتب في ترويسة الملفّ عن مدّته — مسمّاةً كانت أو بحدّين */
