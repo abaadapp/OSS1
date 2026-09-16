@@ -51,7 +51,7 @@ class Mailer
          * ثم يُرفض الطلب عند المزوّد وقت الإرسال. فيُسأل عن المفتاح هنا لا
          * هناك — والشاشة تقول الحقيقة قبل أن يعتمد عليها أحد.
          */
-        $keys = ['resend' => 'services.resend.key', 'postmark' => 'services.postmark.key'];
+        $keys = ['postmark' => 'services.postmark.key'];
         if (isset($keys[$driver]) && blank(config($keys[$driver]))) {
             return false;
         }

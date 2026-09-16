@@ -141,7 +141,7 @@ class ASwitchThatPromisesMailSaysWhenItCannotTest extends TestCase
      *
      * أربعةُ مواضع تقرؤها: شاشةُ استعادة كلمة المرور، وحارسُ مسارها،
      * و`preflight` قبل الإطلاق، وهذه المفاتيح. وهي أدقُّ من «أليس log؟»:
-     * `smtp` بلا مضيف و«resend» بلا مفتاح يبنيهما لارافيل بلا شكوى ثمّ
+     * `smtp` بلا مضيف و«postmark» بلا مفتاح يبنيهما لارافيل بلا شكوى ثمّ
      * يسقط الإرسالُ عند المستخدم لا عند من ضبط الخادم.
      */
     public function test_the_rule_lives_in_one_place(): void
@@ -154,13 +154,13 @@ class ASwitchThatPromisesMailSaysWhenItCannotTest extends TestCase
         config(['mail.default' => 'smtp', 'mail.mailers.smtp.host' => '']);
         $this->assertFalse(Mailer::configured(), 'smtp بلا مضيفٍ يُقرأ حيًّا');
 
-        config(['mail.default' => 'resend', 'services.resend.key' => '']);
+        config(['mail.default' => 'postmark', 'services.postmark.key' => '']);
         $this->assertFalse(Mailer::configured(), 'مزوّدٌ بلا مفتاحٍ يُقرأ حيًّا');
 
         config(['mail.default' => 'smtp', 'mail.mailers.smtp.host' => 'smtp.eventplus.om']);
         $this->assertTrue(Mailer::configured(), 'smtp بمضيفه يُقرأ ميّتًا');
 
-        config(['mail.default' => 'resend', 'services.resend.key' => 'k']);
+        config(['mail.default' => 'postmark', 'services.postmark.key' => 'k']);
         $this->assertTrue(Mailer::configured(), 'مزوّدٌ بمفتاحه يُقرأ ميّتًا');
     }
 }

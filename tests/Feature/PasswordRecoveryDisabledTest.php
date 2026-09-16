@@ -93,11 +93,11 @@ class PasswordRecoveryDisabledTest extends TestCase
     public function test_an_api_mailer_without_a_key_counts_as_no_mail(): void
     {
         /*
-         * نظير حالة smtp بلا مضيف، في مزوّدٍ يرسل عبر HTTPS: MAIL_MAILER=resend
+         * نظير حالة smtp بلا مضيف، في مزوّدٍ يرسل عبر HTTPS: MAIL_MAILER=postmark
          * مضبوط والمفتاح فارغ. لارافيل تقبل الإعداد وتبني المُرسِل، ثم يرفض
          * المزوّد الطلب وقت الإرسال — أي عند المستخدم لا عند من ضبط الخادم.
          */
-        config(['mail.default' => 'resend', 'services.resend.key' => null]);
+        config(['mail.default' => 'postmark', 'services.postmark.key' => null]);
 
         $this->get(route('password.request'))->assertNotFound();
         $this->get(route('login'))
