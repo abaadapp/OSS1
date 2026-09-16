@@ -15,8 +15,6 @@ interface Props {
     year: number;
     /** هل يستطيع النظام إرسال بريدٍ فعلًا — انظر App\Support\Mailer */
     canRecover: boolean;
-    /** هل بابُ التسجيل الذاتيّ مفتوح — انظر RegisterController */
-    canRegister: boolean;
 }
 
 /**
@@ -26,13 +24,19 @@ interface Props {
  *
  * كانت بطاقةً في وسط صفحةٍ رماديّة، تحمل خلفيّتَها وشعارَها ومبدّلَ لغتها
  * بيدها. فصارت على `AuthLayout` المشترك — هو نفسُه غلافُ التسجيل والتهيئة —
- * وإلى جانبها عرضٌ للمنتج على الشاشة الواسعة.
+ * وإلى جانبها لوحةُ `AuthShowcase`: رسمُ افنت بلس على الشاشة الواسعة.
  *
- * ولم يُمسّ شيءٌ من منطقها: الجهازُ المتذكَّر، ونسيانُه، و«تذكّرني»، وبابُ
+ * ثمّ رُفع منها بابان لا يقودان إلى شيءٍ في هذا النظام: رابطُ «إنشاء حساب»،
+ * وسطرُ «راجع مدير النظام». وهذا نظامُ شركةٍ واحدة تُفتح حساباتُه من
+ * **الموظفين**، لا منصّةٌ يسجّل فيها الغرباءُ أنفسَهم. فبابُ التسجيل
+ * الذاتيّ باقٍ في `RegisterController` خلف `Signup::open`، لكن لا يُشار
+ * إليه من هنا.
+ *
+ * ولم يُمسّ شيءٌ من منطق الدخول: «تذكّرني»، والإرسالُ مرّةً واحدة، وبابُ
  * الاستعادة الذي يظهر بحسب وجود مُرسِل بريد.
  */
 export default function Login() {
-    const { year, canRecover, canRegister, errors } = usePage<PageProps<Props>>().props;
+    const { year, canRecover, errors } = usePage<PageProps<Props>>().props;
     const t = useTranslate();
 
     const form = useForm({ email: '', password: '', remember: false });
@@ -53,12 +57,6 @@ export default function Login() {
 
     return (
         <AuthLayout title={t('تسجيل الدخول')} year={year} showcase={<AuthShowcase />}>
-            {/*
-                اسم المتجر فوق النموذج: الموظف يجب أن يعرف على أي متجرٍ يقف
-                قبل أن يدخل — وجهازٌ رُبط بالمتجر الخطأ يوم التركيب يبقى
-                صامتًا حتى يقف أحدهم أمام شاشةٍ ترفض بياناته الصحيحة ولا يفهم
-                لماذا.
-            */}
             <h1 className="text-[26px] font-bold leading-tight text-[#111]">
                 {t('مرحبًا بك مجددًا')} <span aria-hidden>👋</span>
             </h1>
@@ -119,11 +117,14 @@ export default function Login() {
                 </Field>
 
                 {/*
-                    «نسيت كلمة المرور» صار مسارًا حقيقيًّا لا رابط بريدٍ إلى
-                    الدعم. ويختفي حين لا يكون البريد مضبوطًا — ولا يُترك مكانه
-                    فارغًا: من نسي كلمته يحتاج جوابًا، لا غيابَ سؤال. بابٌ يقول
-                    «أرسلنا الرابط» ولا يُرسل أسوأ من بابٍ مكتوبٍ عليه «اطلب من
-                    المدير».
+                    «نسيت كلمة المرور» مسارٌ حقيقيّ، ويختفي حين لا يكون البريد
+                    مضبوطًا فلا يبقى مكانَه شيء.
+
+                    كان مكانَه سطرٌ رماديّ: «نسيت كلمتك؟ راجع مدير النظام» —
+                    رُفع بطلب صاحب النظام. وهو سطرٌ يَعِد بما لا يملكه الموظّف:
+                    مديرُ النظام في هذه الشركة هو صاحبُ الحساب نفسِه أحيانًا،
+                    فيُقرأ إحالةً إلى لا أحد. وصمتُ المكان أهونُ من إحالةٍ
+                    مغلقة — والعلاجُ الحقيقيّ ضبطُ البريد لا تحسينُ الاعتذار.
                 */}
                 {/* ويلتفّان عند الضيق بدل أن ينضغط أحدهما سطرين */}
                 <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
@@ -137,17 +138,13 @@ export default function Login() {
                         {t('تذكرني')}
                     </label>
 
-                    {canRecover ? (
+                    {canRecover && (
                         <Link
                             href={route('password.request')}
                             className="text-[13px] font-medium text-[#6b7280] transition-colors hover:text-[#111]"
                         >
                             {t('نسيت كلمة المرور؟')}
                         </Link>
-                    ) : (
-                        <span className="text-[13px] text-[#9ca3af]">
-                            {t('نسيت كلمتك؟ راجع مدير النظام')}
-                        </span>
                     )}
                 </div>
 
@@ -155,24 +152,6 @@ export default function Login() {
                     {t('تسجيل الدخول')}
                 </Button>
             </form>
-
-            {/*
-                وبابُ الحساب الجديد — ويظهر بحسب فتحه فعلًا.
-
-                `canRegister` يقرأ إعدادَ المنصّة: بابٌ مقفلٌ لا يُعرض رابطُه،
-                فمن يضغطه لا يجد صفحةً تقول «مغلق» بعد أن ملأ اسمَه.
-            */}
-            {canRegister && (
-                <p className="mt-6 text-center text-[13px] text-[#6b7280]">
-                    {t('ليس لديك حساب؟')}{' '}
-                    <Link
-                        href={route('register')}
-                        className="font-semibold text-[#111] underline-offset-4 hover:underline"
-                    >
-                        {t('إنشاء حساب')}
-                    </Link>
-                </p>
-            )}
         </AuthLayout>
     );
 }
