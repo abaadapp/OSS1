@@ -140,6 +140,34 @@
 @endsection
 
 @section('body')
+    {{--
+        وكتلةُ `@php … @endphp` هنا **قبل** `@php(…)` المفردة أدناه لا بعدها:
+        Blade يلتقط `@php` الأولى إلى أوّل `@endphp` تليها، فكتلةٌ بعد
+        المفردة تبتلعها ومعها الجدولَ كلَّه.
+    --}}
+    @php
+        /*
+            وسياساتُ الشركة بعد الشروط التجاريّة: تلك لهذا العرض وحدَه،
+            وهذه لكلّ عرض. وتُقرأ من الختم لما خرج — `CompanyPolicies::texts`
+            — فورقةٌ تُطبع بعد سنةٍ تحمل نصَّ يومها لا نصَّ اليوم.
+
+            ودليلُ القبول يُطبع آخرًا: من قَبِل، وبأيّ صفة، ومتى، وبأيّ
+            بصمة. فالورقةُ المطبوعة بعد القبول تحمل قبولَها معها.
+        */
+        $policyPanels = array_map(fn ($p) => ['cap' => $p['cap'], 'text' => $p['text']], $policies ?? []);
+
+        $approvalPanel = [];
+
+        if (($approval ?? null) !== null && $approval->decision === \App\Models\DocumentApproval::ACCEPTED) {
+            $approvalPanel = ['cap' => 'القبول', 'rows' => array_values(array_filter([
+                ['label' => __('قَبِله'), 'value' => trim($approval->signer_name.(filled($approval->signer_title) ? ' — '.$approval->signer_title : ''))],
+                filled($approval->signer_email) ? ['label' => __('البريد'), 'value' => $approval->signer_email, 'ltr' => true] : null,
+                ['label' => __('في'), 'value' => optional($approval->decided_at)->format('Y-m-d H:i'), 'ltr' => true],
+                ['label' => __('بصمة المستند'), 'value' => substr((string) $approval->content_hash, 0, 16).'…', 'ltr' => true],
+            ]))];
+        }
+    @endphp
+
     @php($h = function (string $k) {
         [$a, $b] = \App\Support\Paper::pair($k);
 
@@ -196,12 +224,15 @@
         أوّلًا، ثمّ يقرأ ما يشمله الرقم. وترتيبُهما مقصود — النطاقُ يقول
         **ما ستأخذ**، والشروطُ تقول **بأيّ التزام**.
     --}}
+
     @include('documents.v1.partials.close', [
-        'panels' => [
+        'panels' => array_merge([
             filled($quotation->scope) ? ['cap' => 'نطاق العمل', 'text' => $quotation->scope] : [],
             filled($quotation->terms) ? ['cap' => 'الشروط التجارية', 'text' => $quotation->terms] : [],
+        ], $policyPanels, [
             ($quotation->notes && ($showNotes ?? true)) ? ['cap' => 'ملاحظات', 'text' => $quotation->notes] : [],
-        ],
+            $approvalPanel,
+        ]),
         'paperUrl' => $paperUrl ?? '',
     ])
 @endsection

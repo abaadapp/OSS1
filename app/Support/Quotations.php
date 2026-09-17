@@ -2,14 +2,22 @@
 
 namespace App\Support;
 
+use App\Models\Business;
 use App\Models\Currency;
 use App\Models\Customer;
+use App\Models\DocumentApproval;
+use App\Models\PolicyException;
 use App\Models\Product;
 use App\Models\Quotation;
 use App\Models\QuotationItem;
 use App\Models\Setting;
 use App\Models\User;
 use App\Support\Document\Snapshot;
+use App\Support\Messaging\MessageIntent;
+use App\Support\Messaging\Notifiers;
+use App\Support\Policy\Finding;
+use App\Support\Policy\Registry;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
@@ -335,17 +343,28 @@ final class Quotations
 
         $totals = self::totals($businessId, self::price($businessId, $lines, $actor)['lines']);
 
+        return self::shape($businessId, $customer, $data, $totals);
+    }
+
+    /**
+     * عرضٌ على هيئته النهائيّة **بلا حفظ** — للمعاينة وللفحص قبل الكتابة.
+     *
+     * والبنودُ تُعلَّق بلا حفظ: `setRelation` تجعل `$quotation->items`
+     * تردّ ما بُني هنا بدل أن تسأل القاعدةَ عن صفوفٍ لا وجود لها —
+     * فالقالبُ يمرّ عليها كما يمرّ على بنود ورقةٍ محفوظة، وفحصُ السياسات
+     * يقرأ تاريخَها وبنودَها كما يقرؤها في عرضٍ محفوظ.
+     *
+     * @param  array<string, mixed>  $data
+     * @param  array<string, mixed>  $totals
+     */
+    private static function shape(int $businessId, ?Customer $customer, array $data, array $totals): Quotation
+    {
         $quotation = new Quotation(self::attributes($businessId, $customer, $data, $totals) + [
             'number' => null,
             'status' => Quotation::DRAFT,
             'revision' => 1,
         ]);
 
-        /*
-         * والبنودُ تُعلَّق بلا حفظ: `setRelation` تجعل `$quotation->items`
-         * تردّ ما بُني هنا بدل أن تسأل القاعدةَ عن صفوفٍ لا وجود لها —
-         * فالقالبُ يمرّ عليها كما يمرّ على بنود ورقةٍ محفوظة.
-         */
         $quotation->setRelation('items', collect($totals['items'])->map(
             fn (array $item) => new QuotationItem($item)
         ));
@@ -363,10 +382,18 @@ final class Quotations
      * ولا يخرج من هنا إلى العميل: الإرسالُ فعلٌ ثانٍ بصلاحيّةٍ ثانية، وهو
      * الذي يقطع الرقمَ ويختم الورقة.
      *
+     * ═══ والسياساتُ تُفحص قبل الكتابة ═══
+     *
+     * فعاليّةٌ بعد ثلاثة أيّامٍ والمهلةُ سبعة: يُرصد الفرقُ، ويُطلب سببٌ
+     * (`$exceptions`)، ويُكتب الاستثناءُ، وينتظر العرضُ اعتمادًا — إلّا
+     * لمن يملك `policy.override` فيعتمد لحظتَه. وبلا سببٍ لا يُحفظ العرض.
+     * انظر §18.
+     *
      * @param  array<string, mixed>  $data
      * @param  array<int, array<string, mixed>>  $lines
+     * @param  array<int, array<string, mixed>>  $exceptions  أسبابُ الاستثناء بمفاتيح السياسات
      */
-    public static function create(int $businessId, Customer $customer, array $data, array $lines, ?User $actor = null): Quotation
+    public static function create(int $businessId, Customer $customer, array $data, array $lines, ?User $actor = null, array $exceptions = []): Quotation
     {
         if ((int) $customer->business_id !== $businessId) {
             throw new RuntimeException(__('هذا العميل ليس من عملاء شركتك.'));
@@ -374,18 +401,21 @@ final class Quotations
 
         $priced = self::price($businessId, $lines, $actor);
         $totals = self::totals($businessId, $priced['lines']);
+        $settled = self::settle($businessId, self::shape($businessId, $customer, $data, $totals), $exceptions, $actor);
 
-        return DB::transaction(function () use ($businessId, $customer, $data, $totals, $priced, $actor) {
+        return DB::transaction(function () use ($businessId, $customer, $data, $totals, $priced, $settled, $actor) {
             $quotation = Quotation::create(
                 self::attributes($businessId, $customer, $data, $totals) + [
                     'number' => null,
-                    'status' => $priced['needsApproval'] ? Quotation::PENDING_APPROVAL : Quotation::DRAFT,
+                    'status' => $priced['needsApproval'] || $settled['pending']
+                        ? Quotation::PENDING_APPROVAL : Quotation::DRAFT,
                     'revision' => 1,
                     'created_by' => $actor?->id,
                 ]
             );
 
             self::writeItems($quotation, $totals['items']);
+            self::writeExceptions($quotation, $settled['rows']);
 
             Activity::log('created', 'أنشأ عرض سعر — '.$customer->name, [
                 'subject_id' => $quotation->id, 'subject_type' => 'quotation',
@@ -406,8 +436,9 @@ final class Quotations
      *
      * @param  array<string, mixed>  $data
      * @param  array<int, array<string, mixed>>  $lines
+     * @param  array<int, array<string, mixed>>  $exceptions
      */
-    public static function update(Quotation $quotation, array $data, array $lines, ?User $actor = null): Quotation
+    public static function update(Quotation $quotation, array $data, array $lines, ?User $actor = null, array $exceptions = []): Quotation
     {
         if ($quotation->isFrozen()) {
             throw new RuntimeException(__('هذا العرض خرج إلى العميل — لا يُعدَّل. أنشئ تنقيحًا جديدًا.'));
@@ -419,10 +450,12 @@ final class Quotations
 
         $priced = self::price($businessId, $lines, $actor);
         $totals = self::totals($businessId, $priced['lines']);
+        $settled = self::settle($businessId, self::shape($businessId, $customer, $data, $totals), $exceptions, $actor);
 
-        return DB::transaction(function () use ($quotation, $businessId, $customer, $data, $totals, $priced) {
+        return DB::transaction(function () use ($quotation, $businessId, $customer, $data, $totals, $priced, $settled) {
             $quotation->update(self::attributes($businessId, $customer, $data, $totals) + [
-                'status' => $priced['needsApproval'] ? Quotation::PENDING_APPROVAL : Quotation::DRAFT,
+                'status' => $priced['needsApproval'] || $settled['pending']
+                    ? Quotation::PENDING_APPROVAL : Quotation::DRAFT,
                 /*
                  * وتعديلٌ يمحو اعتمادًا سابقًا.
                  *
@@ -436,6 +469,10 @@ final class Quotations
 
             $quotation->items()->delete();
             self::writeItems($quotation, $totals['items']);
+
+            /* والاستثناءاتُ تُعاد كتابتُها مع البنود: اعتمادُها وقع على ورقةٍ لم تعد قائمة */
+            $quotation->policyExceptions()->delete();
+            self::writeExceptions($quotation, $settled['rows']);
 
             Activity::log('updated', 'عدّل عرض السعر '.self::label($quotation), [
                 'subject_id' => $quotation->id, 'subject_type' => 'quotation',
@@ -453,6 +490,108 @@ final class Quotations
         }
     }
 
+    /* ─────────────────────────── السياسات ─────────────────────────── */
+
+    /**
+     * ما خالفه العرضُ من سياسات — وهل لكلّ مخالفةٍ سببٌ مكتوب.
+     *
+     * تُعيد صفوفَ الاستثناء الجاهزةَ للكتابة، وتقول هل ينتظر العرضُ
+     * اعتمادًا. وتُرمى إن رُصدت مخالفةٌ بلا سبب: **لا يُحفظ عرضٌ يخالف
+     * سياسةً في صمت** — والشاشةُ تعرف المخالفةَ من المعاينة قبل الحفظ
+     * فتسأل عن السبب هناك.
+     *
+     * ومن يملك `policy.override` يعتمد لحظتَه — كما يعتمد صاحبُ
+     * `quotation.approve` خصمَه. ولا ينتظر أحدٌ نفسَه.
+     *
+     * @param  array<int, array<string, mixed>>  $requested  `[['key' => …, 'reason' => …, 'surcharge_amount' => …], …]`
+     * @return array{rows: list<array<string, mixed>>, pending: bool}
+     */
+    private static function settle(int $businessId, Quotation $shaped, array $requested, ?User $actor): array
+    {
+        $findings = CompanyPolicies::findings($businessId, $shaped);
+
+        if ($findings === []) {
+            return ['rows' => [], 'pending' => false];
+        }
+
+        $byKey = collect($requested)->keyBy(fn ($row) => (string) ($row['key'] ?? ''));
+        $mayOverride = (bool) $actor?->may(Permissions::POLICY_OVERRIDE);
+        $rows = [];
+        $pending = false;
+
+        foreach ($findings as $finding) {
+            $input = $byKey->get($finding->key(), []);
+            $reason = self::text($input['reason'] ?? null, 500);
+
+            if ($reason === null || $reason === '') {
+                throw new RuntimeException(__(':finding اكتب سبب الاستثناء ليُحفظ العرض.', [
+                    'finding' => $finding->message,
+                ]));
+            }
+
+            $rows[] = self::exceptionRow($finding, $reason, $input['surcharge_amount'] ?? null, $actor, $mayOverride);
+
+            if ($finding->requiresApproval && ! $mayOverride) {
+                $pending = true;
+            }
+        }
+
+        return ['rows' => $rows, 'pending' => $pending];
+    }
+
+    /**
+     * صفُّ استثناءٍ — ما رصده النظام وما كتبه الموظّف ومن اعتمد.
+     *
+     * والرسومُ **ما اختاره الموظّف** لا ما اقترحته السياسة: الاقتراحُ في
+     * `detected` يُقرأ بعد سنةٍ إلى جانب ما فُرض فعلًا، فيُرى من تنازل وكم.
+     *
+     * @return array<string, mixed>
+     */
+    private static function exceptionRow(Finding $finding, string $reason, mixed $surcharge, ?User $actor, bool $approved): array
+    {
+        return [
+            'policy_key' => $finding->key(),
+            'company_policy_id' => $finding->policy->id,
+            'policy_version' => (int) $finding->policy->version,
+            'detected' => $finding->detected + ['suggested_surcharge' => $finding->suggestedSurcharge],
+            'reason' => $reason,
+            'surcharge_amount' => $surcharge !== null && $surcharge !== ''
+                ? round(max(0.0, (float) $surcharge), 3)
+                : $finding->suggestedSurcharge,
+            'requested_by' => $actor?->id,
+            'approved_by' => $approved ? $actor?->id : null,
+            'approved_at' => $approved ? now() : null,
+        ];
+    }
+
+    /** @param  list<array<string, mixed>>  $rows */
+    private static function writeExceptions(Quotation $quotation, array $rows): void
+    {
+        foreach ($rows as $row) {
+            $exception = $quotation->policyExceptions()->create($row + ['business_id' => $quotation->business_id]);
+
+            /* سياسةٌ تُجوُوزت ← المفتاح · ما رُصد · السبب · من اعتمد · الرسوم (§24) */
+            Activity::log('status', 'تجاوز سياسة «'.Registry::label($row['policy_key']).'» في عرض السعر '
+                .self::label($quotation).' — '.$row['reason']
+                .($exception->approved_at ? ' · اعتُمد' : ' · ينتظر اعتمادًا'), [
+                    'subject_id' => $quotation->id, 'subject_type' => 'quotation',
+                    'icon' => 'shield-alert', 'color' => 'warning',
+                ]);
+        }
+    }
+
+    /**
+     * ما خالفه عرضٌ محفوظ الآن — للشاشة وللإرسال.
+     *
+     * @return list<Finding>
+     */
+    public static function findings(Quotation $quotation): array
+    {
+        $quotation->loadMissing('items');
+
+        return CompanyPolicies::findings((int) $quotation->business_id, $quotation);
+    }
+
     /* ─────────────────────────── الدورة ─────────────────────────── */
 
     /**
@@ -467,19 +606,61 @@ final class Quotations
             throw new RuntimeException(__('هذا العرض لا ينتظر اعتمادًا.'));
         }
 
-        return DB::transaction(function () use ($quotation, $actor) {
-            $quotation->update([
+        /*
+         * ═══ واعتمادان بصلاحيّتين ═══
+         *
+         * الخصمُ يعتمده صاحبُ `quotation.approve`، واستثناءُ السياسة يعتمده
+         * صاحبُ `policy.override`. ومن يملك إحداهما يعتمد ما يملك ويترك
+         * الأخرى لصاحبها — والعرضُ لا يخرج حتى يكتمل الاثنان.
+         */
+        $mayDiscount = (bool) $actor?->may(Permissions::QUOTATION_APPROVE);
+        $mayPolicy = (bool) $actor?->may(Permissions::POLICY_OVERRIDE);
+
+        if (! $mayDiscount && ! $mayPolicy) {
+            throw new RuntimeException(__('لا تملك اعتماد هذا العرض.'));
+        }
+
+        return DB::transaction(function () use ($quotation, $actor, $mayDiscount, $mayPolicy) {
+            $approvedSomething = false;
+
+            if ($mayDiscount) {
+                $count = $quotation->items()->whereNull('discount_approved_by')
+                    ->whereNotNull('discount_requested_by')
+                    ->update(['discount_approved_by' => $actor?->id, 'discount_approved_at' => now()]);
+
+                if ($count > 0) {
+                    $approvedSomething = true;
+                    Activity::log('status', 'اعتمد خصم عرض السعر '.self::label($quotation), [
+                        'subject_id' => $quotation->id, 'subject_type' => 'quotation',
+                    ]);
+                }
+            }
+
+            if ($mayPolicy) {
+                $count = $quotation->policyExceptions()->pending()
+                    ->update(['approved_by' => $actor?->id, 'approved_at' => now()]);
+
+                if ($count > 0) {
+                    $approvedSomething = true;
+                    Activity::log('status', 'اعتمد استثناء السياسة في عرض السعر '.self::label($quotation), [
+                        'subject_id' => $quotation->id, 'subject_type' => 'quotation',
+                        'icon' => 'shield-check',
+                    ]);
+                }
+            }
+
+            $stillPending = $quotation->items()->whereNull('discount_approved_by')
+                ->whereNotNull('discount_requested_by')->exists()
+                || $quotation->policyExceptions()->pending()->exists();
+
+            if (! $approvedSomething && $stillPending) {
+                throw new RuntimeException(__('ما ينتظره هذا العرض يعتمده غيرك.'));
+            }
+
+            $quotation->update($stillPending ? [] : [
                 'status' => Quotation::DRAFT,
                 'approved_by' => $actor?->id,
                 'approved_at' => now(),
-            ]);
-
-            $quotation->items()->whereNull('discount_approved_by')
-                ->whereNotNull('discount_requested_by')
-                ->update(['discount_approved_by' => $actor?->id, 'discount_approved_at' => now()]);
-
-            Activity::log('status', 'اعتمد خصم عرض السعر '.self::label($quotation), [
-                'subject_id' => $quotation->id, 'subject_type' => 'quotation',
             ]);
 
             return $quotation->fresh('items');
@@ -526,6 +707,30 @@ final class Quotations
 
             $locked->setRelation('items', $locked->items()->get());
 
+            /*
+             * ═══ والسياساتُ تُفحص ثانيةً لحظةَ الخروج ═══
+             *
+             * المسودّةُ فُحصت يومَ حُفظت — وقد تُضاف سياسةٌ بعدها، أو يُنقَّح
+             * عرضٌ فيرث تاريخًا صار عاجلًا. فكلُّ مخالفةٍ قائمةٍ الآن يجب
+             * أن يقابلها استثناءٌ **معتمَد**؛ وإلّا لا يخرج.
+             */
+            $exceptions = $locked->policyExceptions()->get();
+
+            if ($exceptions->contains(fn (PolicyException $e) => ! $e->isApproved())) {
+                throw new RuntimeException(__('هذا العرض ينتظر اعتماد استثناءٍ من سياسة — لا يخرج قبله.'));
+            }
+
+            foreach (CompanyPolicies::findings((int) $locked->business_id, $locked) as $finding) {
+                if (! $exceptions->contains('policy_key', $finding->key())) {
+                    throw new RuntimeException(__('هذا العرض يخالف سياسة «:policy» ولم يُسجَّل له استثناء — احفظه مرّةً أخرى مع السبب.', [
+                        'policy' => Registry::label($finding->key()),
+                    ]));
+                }
+            }
+
+            /* ونصُّ السياسات يُختم قبل البصمة: البصمةُ تقرؤه (§18) */
+            $locked->policy_snapshot = CompanyPolicies::snapshot((int) $locked->business_id, $locked);
+
             $locked->update([
                 /*
                  * والتنقيحُ يرث رقمَ جذره: «Q-000004 — النسخة الثانية» عرضٌ
@@ -538,6 +743,7 @@ final class Quotations
                 'sent_by' => $actor?->id,
                 /* وتُختم بحال الشركة لحظةَ الخروج — انظر `Document\Snapshot` */
                 Snapshot::COLUMN => Snapshot::capture((int) $locked->business_id),
+                'policy_snapshot' => $locked->policy_snapshot,
                 'content_hash' => self::contentHash($locked),
             ]);
 
@@ -592,11 +798,11 @@ final class Quotations
 
             $copy = $quotation->replicate([
                 'status', 'revision', 'root_id',
-                'approved_by', 'approved_at', 'sent_by', 'sent_at',
+                'approved_by', 'approved_at', 'sent_by', 'sent_at', 'sent_to',
                 'first_viewed_at', 'last_viewed_at', 'view_count',
                 'decided_at', 'decided_by', 'decided_by_name', 'rejection_reason',
                 'cancelled_at', 'cancelled_by', 'cancellation_reason',
-                'document_snapshot', 'content_hash',
+                'document_snapshot', 'policy_snapshot', 'content_hash',
             ]);
 
             $copy->fill([
@@ -614,6 +820,38 @@ final class Quotations
                 $row = $item->replicate(['quotation_id']);
                 $row->quotation_id = $copy->id;
                 $row->save();
+            }
+
+            /*
+             * والاستثناءاتُ تُحمل بأسبابها ويُعاد اعتمادُها.
+             *
+             * التنقيحُ ورقةٌ جديدة، ومن اعتمد استثناءً على الأولى لم ير
+             * الثانية. فالسببُ يُنقل — كتبه صاحبُه مرّة — والاعتمادُ يُطلب
+             * ثانيةً. ومخالفةٌ لم يكن لها سببٌ تُترك: `send` يقولها بوضوح.
+             */
+            $carried = $quotation->policyExceptions->mapWithKeys(fn (PolicyException $e) => [
+                $e->policy_key => ['key' => $e->policy_key, 'reason' => $e->reason, 'surcharge_amount' => $e->surcharge_amount],
+            ]);
+            $copy->setRelation('items', $copy->items()->get());
+            $mayOverride = (bool) $actor?->may(Permissions::POLICY_OVERRIDE);
+            $rows = [];
+            $pending = false;
+
+            foreach (CompanyPolicies::findings((int) $copy->business_id, $copy) as $finding) {
+                $input = $carried->get($finding->key());
+
+                if ($input === null) {
+                    continue;
+                }
+
+                $rows[] = self::exceptionRow($finding, (string) $input['reason'], $input['surcharge_amount'], $actor, $mayOverride);
+                $pending = $pending || ($finding->requiresApproval && ! $mayOverride);
+            }
+
+            self::writeExceptions($copy, $rows);
+
+            if ($pending) {
+                $copy->update(['status' => Quotation::PENDING_APPROVAL]);
             }
 
             $quotation->update(['status' => Quotation::SUPERSEDED]);
@@ -638,11 +876,11 @@ final class Quotations
         return DB::transaction(function () use ($quotation, $actor) {
             $copy = $quotation->replicate([
                 'number', 'status', 'revision', 'root_id',
-                'approved_by', 'approved_at', 'sent_by', 'sent_at',
+                'approved_by', 'approved_at', 'sent_by', 'sent_at', 'sent_to',
                 'first_viewed_at', 'last_viewed_at', 'view_count',
                 'decided_at', 'decided_by', 'decided_by_name', 'rejection_reason',
                 'cancelled_at', 'cancelled_by', 'cancellation_reason',
-                'document_snapshot', 'content_hash',
+                'document_snapshot', 'policy_snapshot', 'content_hash',
             ]);
 
             $copy->fill([
@@ -739,6 +977,248 @@ final class Quotations
     }
 
     /**
+     * قرارُ العميل **من رابطه** — دليلٌ يُكتب، لا خبرٌ يُسجَّل.
+     *
+     * ═══ ما يجعله دليلًا ═══
+     *
+     * • البصمةُ تُحسب من الصفّ **الآن** وتُقارَن بما خُتم عند الإرسال: لو
+     *   مُسّ العرضُ في القاعدة بعد خروجه رُدّ القرارُ — العميلُ يقبل ما
+     *   رآه، لا ما صار.
+     * • اللقطةُ تُكتب في `document_approvals` مع الموقّع ونصِّ إقراره
+     *   والعنوانِ والمتصفّح.
+     * • والصفُّ واحدٌ لكلّ عرض — بقيدٍ في القاعدة لا بشرطٍ هنا.
+     *
+     * ═══ وتحت قفل ═══
+     *
+     * ضغطتان على «أقبل» تقرآن «أُرسل» معًا خارج القفل فتكتبان قرارين.
+     * والقفلُ يُسلسلهما، والقيدُ يردّ الثانية إن مرّت.
+     *
+     * @param  array<string, mixed>  $signer  `name` · `title` · `email` · `phone` · `consent` · `decline_reason`
+     * @param  array<string, mixed>  $meta  `ip` · `user_agent`
+     */
+    public static function decide(Quotation $quotation, string $decision, array $signer, array $meta = []): Quotation
+    {
+        $accepted = $decision === DocumentApproval::ACCEPTED;
+
+        if (! $accepted && $decision !== DocumentApproval::DECLINED) {
+            throw new RuntimeException(__('قرارٌ غير معروف.'));
+        }
+
+        $name = self::text($signer['name'] ?? null, 120);
+
+        if ($name === null || $name === '') {
+            throw new RuntimeException(__('اكتب اسمك ليُسجَّل القرار باسمه.'));
+        }
+
+        $declineReason = self::text($signer['decline_reason'] ?? null, 500);
+
+        if (! $accepted && ($declineReason === null || $declineReason === '')) {
+            throw new RuntimeException(__('اكتب سبب الاعتذار — يساعدنا على تحسين ما نعرضه.'));
+        }
+
+        return DB::transaction(function () use ($quotation, $accepted, $name, $signer, $declineReason, $meta) {
+            $locked = Quotation::where('business_id', $quotation->business_id)
+                ->lockForUpdate()->findOrFail($quotation->id);
+
+            if (! $locked->isDecidable()) {
+                throw new RuntimeException($locked->isExpired()
+                    ? __('انتهت صلاحية هذا العرض — تواصل مع الشركة لتجديده.')
+                    : __('هذا العرض لا يقبل قرارًا الآن.'));
+            }
+
+            $locked->setRelation('items', $locked->items()->get());
+            $payload = self::hashPayload($locked);
+
+            if (! Fingerprint::matches($payload, $locked->content_hash)) {
+                throw new RuntimeException(__('تغيّر محتوى هذا العرض بعد إرساله — لا يُقبل بهذه الصورة. تواصل مع الشركة.'));
+            }
+
+            try {
+                $approval = DocumentApproval::create([
+                    'business_id' => $locked->business_id,
+                    'approvable_type' => $locked->getMorphClass(),
+                    'approvable_id' => $locked->id,
+                    'provider' => DocumentApproval::INTERNAL,
+                    'decision' => $accepted ? DocumentApproval::ACCEPTED : DocumentApproval::DECLINED,
+                    'content_hash' => $locked->content_hash,
+                    'accepted_snapshot' => $payload,
+                    'signer_name' => $name,
+                    'signer_title' => self::text($signer['title'] ?? null, 120),
+                    'signer_email' => self::text($signer['email'] ?? null, 120),
+                    'signer_phone' => self::text($signer['phone'] ?? null, 40),
+                    'consent_text' => $accepted ? self::text($signer['consent'] ?? null, 1000) : null,
+                    'decline_reason' => $accepted ? null : $declineReason,
+                    'decided_at' => now(),
+                    'ip' => self::text($meta['ip'] ?? null, 45),
+                    'user_agent' => self::text($meta['user_agent'] ?? null, 255),
+                ]);
+            } catch (QueryException) {
+                /* القيدُ الفريد ردّ قرارًا ثانيًا سبقه أوّل — على SQLite حيث لا قفل */
+                throw new RuntimeException(__('قُرّر في هذا العرض قبل لحظات.'));
+            }
+
+            $locked->update([
+                'status' => $accepted ? Quotation::ACCEPTED : Quotation::REJECTED,
+                'decided_at' => $approval->decided_at,
+                'decided_by' => null,
+                'decided_by_name' => $name,
+                'rejection_reason' => $accepted ? null : $declineReason,
+            ]);
+
+            /* قرارُ عميل ← من الرابط: الاسم · البريد · IP · الوقت · البصمة (§24) */
+            Activity::log('status', ($accepted ? 'قبل العميل عرض السعر ' : 'اعتذر العميل عن عرض السعر ')
+                .self::label($locked).' إلكترونيًّا — '.$name
+                .(filled($approval->signer_email) ? ' <'.$approval->signer_email.'>' : ''), [
+                    'business_id' => $locked->business_id,
+                    'subject_id' => $locked->id, 'subject_type' => 'quotation',
+                    'icon' => $accepted ? 'file-check' : 'file-x',
+                    'color' => $accepted ? 'success' : 'danger',
+                ]);
+
+            return $locked->fresh();
+        });
+    }
+
+    /* ─────────────────────────── الإيصال ─────────────────────────── */
+
+    /**
+     * إرسالُ الرابط بالبريد — أوّلَ مرّةٍ عرضًا، وبعدها تذكيرًا.
+     *
+     * والإرسالُ هنا **إيصالٌ** لا تحويلُ حال: `send` أخرجت الورقةَ وقطعت
+     * رقمَها وختمتها، وهذه توصلها. ولا تُنادى قبلها — رابطُ مسودّةٍ يفتح
+     * على ٤٠٤ في يد العميل.
+     *
+     * والقناةُ تقول عن نفسها هل تُوصِل (`Notifier::configured`): بريدٌ إلى
+     * `log` «ينجح» في نظر لارافيل والرسالةُ في ملفّ على الخادم — فيُرفض
+     * هنا لا في الشاشة وحدها.
+     */
+    public static function email(Quotation $quotation, string $to, ?string $note, ?User $actor = null): void
+    {
+        if (! $quotation->isDecidable()) {
+            throw new RuntimeException($quotation->isExpired()
+                ? __('انتهت صلاحية هذا العرض — نقّحه قبل أن تذكّر به.')
+                : __('لا يُرسَل بالبريد إلا عرضٌ خرج وينتظر قرارًا.'));
+        }
+
+        $notifier = Notifiers::email();
+
+        if (! $notifier->configured()) {
+            throw new RuntimeException(__('إرسالُ البريد غير مضبوط على الخادم — انسخ الرابط وأرسله بنفسك.'));
+        }
+
+        $business = Business::find($quotation->business_id);
+        $reminder = $quotation->sent_to !== null;
+        $label = self::label($quotation);
+        $currency = Money::of((int) $quotation->business_id);
+
+        $paragraphs = array_values(array_filter([
+            filled($quotation->attention_to) ? __('السيد/ة :name المحترم/ة،', ['name' => $quotation->attention_to]) : __('تحية طيبة،'),
+            $reminder
+                ? __('نذكّركم بعرض السعر :label الخاص بـ«:title» — وهو صالح حتى :date.', [
+                    'label' => $label, 'title' => $quotation->title,
+                    'date' => optional($quotation->valid_until)->format('Y-m-d') ?: '—',
+                ])
+                : __('يسرّنا أن نرفق عرض السعر :label الخاص بـ«:title» بقيمة :total — وهو صالح حتى :date.', [
+                    'label' => $label, 'title' => $quotation->title,
+                    'total' => Money::format((float) $quotation->total, $currency),
+                    'date' => optional($quotation->valid_until)->format('Y-m-d') ?: '—',
+                ]),
+            self::text($note, 2000),
+            __('يمكنكم قراءة العرض كاملًا وقبوله إلكترونيًا من الرابط أدناه.'),
+        ], fn ($p) => filled($p)));
+
+        $result = $notifier->send(new MessageIntent(
+            to: $to,
+            subject: ($reminder ? __('تذكير: ') : '').__('عرض سعر :label — :company', [
+                'label' => $label, 'company' => $business?->name ?? '',
+            ]),
+            paragraphs: $paragraphs,
+            url: PublicDocument::url($quotation),
+            action: __('فتح عرض السعر'),
+            templateKey: $reminder ? 'quotation.reminder' : 'quotation.link',
+            senderName: $business?->name,
+            replyTo: filled($actor?->email) ? $actor->email : (filled($business?->email) ? $business->email : null),
+            footer: $business?->name,
+        ));
+
+        if (! $result->sent) {
+            throw new RuntimeException((string) $result->reason);
+        }
+
+        if (! $reminder) {
+            $quotation->forceFill(['sent_to' => self::text($to, 120)])->saveQuietly();
+        }
+
+        /* عرضٌ أُرسل ← من · إلى أيّ بريد · متى (§24) */
+        Activity::log('updated', ($reminder ? 'أرسل تذكيرًا بعرض السعر ' : 'أرسل عرض السعر ').$label.' بالبريد إلى '.$to, [
+            'subject_id' => $quotation->id, 'subject_type' => 'quotation', 'icon' => 'mail',
+        ]);
+    }
+
+    /**
+     * خبرُ القرار — إلى الشركة، وإيصالٌ إلى من قرّر.
+     *
+     * وأفضلُ جهدٍ لا شرط: القرارُ كُتب وثبت، وبريدٌ يسقط لا يُسقطه. فلا
+     * استثناءَ يخرج من هنا، وما فشل يُقيَّد في سجلّ الأخطاء.
+     */
+    public static function notifyDecision(Quotation $quotation, DocumentApproval $approval): void
+    {
+        $notifier = Notifiers::email();
+
+        if (! $notifier->configured()) {
+            return;
+        }
+
+        $business = Business::find($quotation->business_id);
+        $label = self::label($quotation);
+        $accepted = $approval->isAccepted();
+
+        if (Mailer::deliverable($business)) {
+            $notifier->send(new MessageIntent(
+                to: (string) $business->email,
+                subject: $accepted
+                    ? __('قبل العميل عرض السعر :label', ['label' => $label])
+                    : __('اعتذر العميل عن عرض السعر :label', ['label' => $label]),
+                paragraphs: array_values(array_filter([
+                    __(':name — :customer', ['name' => $approval->signer_name, 'customer' => (string) $quotation->customer_name])
+                        .(filled($approval->signer_title) ? ' ('.$approval->signer_title.')' : ''),
+                    $accepted
+                        ? __('قبل العرض إلكترونيًا في :at.', ['at' => $approval->decided_at?->format('Y-m-d H:i')])
+                        : __('اعتذر عن العرض في :at — السبب: :reason', [
+                            'at' => $approval->decided_at?->format('Y-m-d H:i'), 'reason' => (string) $approval->decline_reason,
+                        ]),
+                    filled($approval->ip) ? __('من العنوان :ip', ['ip' => $approval->ip]) : null,
+                ])),
+                url: route('admin.quotations.show', $quotation->id),
+                action: __('فتح العرض في النظام'),
+                templateKey: $accepted ? 'quotation.accepted' : 'quotation.declined',
+                senderName: $business->name,
+            ));
+        }
+
+        if ($accepted && filled($approval->signer_email)) {
+            $notifier->send(new MessageIntent(
+                to: (string) $approval->signer_email,
+                subject: __('تأكيد قبولكم لعرض السعر :label — :company', ['label' => $label, 'company' => $business?->name ?? '']),
+                paragraphs: [
+                    __('السيد/ة :name المحترم/ة،', ['name' => $approval->signer_name]),
+                    __('نشكركم على قبول عرض السعر :label الخاص بـ«:title». هذا تأكيد بأن قبولكم سُجّل في :at.', [
+                        'label' => $label, 'title' => $quotation->title,
+                        'at' => $approval->decided_at?->format('Y-m-d H:i'),
+                    ]),
+                    __('بصمة المستند: :hash', ['hash' => $approval->content_hash]),
+                ],
+                url: PublicDocument::url($quotation),
+                action: __('فتح عرض السعر'),
+                templateKey: 'quotation.receipt',
+                senderName: $business?->name,
+                replyTo: filled($business?->email) ? $business->email : null,
+                footer: $business?->name,
+            ));
+        }
+    }
+
+    /**
      * فتحَه العميلُ — واقعةٌ تُختم ولا تُغيّر حالًا.
      *
      * و«أوّلُ فتحٍ» يُكتب مرّةً: هو ما يُقاس به «أُرسل ولم يُفتح قطّ»، وأوّلُ
@@ -770,7 +1250,20 @@ final class Quotations
      */
     public static function contentHash(Quotation $quotation): string
     {
-        $payload = [
+        return Fingerprint::of(self::hashPayload($quotation));
+    }
+
+    /**
+     * الحمولةُ التي تُبصَم — وهي نفسُها ما يُكتب في `accepted_snapshot`.
+     *
+     * فالدليلُ يحمل ما بُصم لا وصفًا له: من شكّ بعد سنةٍ أعاد الحسابَ
+     * على اللقطة وقارن — انظر `DocumentApproval::verify`.
+     *
+     * @return array<string, mixed>
+     */
+    public static function hashPayload(Quotation $quotation): array
+    {
+        return [
             'items' => $quotation->items->map(fn (QuotationItem $i) => [
                 'p' => $i->product_id,
                 'd' => (string) $i->description,
@@ -795,9 +1288,18 @@ final class Quotations
                 (string) $quotation->valid_until?->toDateString(),
                 (string) $quotation->payment_terms_days,
             ],
+            /*
+             * وسياساتُ الشركة كما خُتمت: مفتاحٌ ونسخةٌ ونصّان. فتعديلُ
+             * سياسةٍ بعد الإرسال لا يمسّ بصمةَ ما خرج — والعميلُ يقبل
+             * النصَّ الذي قرأه بعينه.
+             */
+            'policies' => collect($quotation->policy_snapshot ?? [])->map(fn (array $p) => [
+                'k' => (string) ($p['key'] ?? ''),
+                'v' => (int) ($p['version'] ?? 0),
+                'a' => (string) ($p['text_ar'] ?? ''),
+                'e' => (string) ($p['text_en'] ?? ''),
+            ])->values()->all(),
         ];
-
-        return hash('sha256', json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR));
     }
 
     /* ─────────────────────────── الباقات ─────────────────────────── */

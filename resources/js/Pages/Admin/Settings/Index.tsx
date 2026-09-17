@@ -11,6 +11,7 @@ import {
     Languages,
     Save,
     Percent,
+    ScrollText,
     ShieldCheck,
     Store,
     Trash2,
@@ -870,6 +871,25 @@ export default function SettingsIndex() {
                                             onChange={(e) => form.setData('quotation_discount_percent', e.target.value)}
                                         />
                                     </Field>
+
+                                    {/*
+                                        وسياساتُ الشركة صفحةٌ مستقلّة لا حقلٌ هنا: هي
+                                        قائمةٌ تُضاف إليها وتُعدَّل، ونصوصُها طويلة —
+                                        وحدُّ الخصم رقمٌ واحد.
+                                    */}
+                                    <Link
+                                        href={route('admin.settings.policies.index')}
+                                        className="group flex items-center gap-4 rounded-[16px] border border-[var(--ui-border,#e8e8e8)] bg-white p-4 text-start transition hover:border-[#d4d4d4] hover:bg-[#fafafa]"
+                                    >
+                                        <ScrollText className="size-5 shrink-0 text-[#9ca3af]" />
+                                        <span className="min-w-0 flex-1">
+                                            <span className="block text-[14px] font-semibold text-[#111]">{t('سياسات الشركة')}</span>
+                                            <span className="mt-1 block text-[12px] leading-snug text-[#9ca3af]">
+                                                {t('مهلة الطلب والإلغاء والتأجيل والدفع — نصٌّ يقرؤه العميل ويُختم في كل عرض.')}
+                                            </span>
+                                        </span>
+                                        <ChevronLeft className="size-4 shrink-0 text-[#d1d5db] transition-colors group-hover:text-[#6b7280]" />
+                                    </Link>
                                 </SettingsGroup>
 
                                 <SettingsGroup title="العملة">

@@ -49,6 +49,12 @@ class TenantTables
         /* وبنودُ الباقة بعد المنتجات: الباقةُ وعضوُها كلاهما صفٌّ فيها */
         'package_items',
         'customers', 'customer_addresses',
+        /*
+         * وسياساتُ الشركة بعد العملاء والمنتجات: نطاقُها يشير إليها بلا
+         * مفتاحٍ خارجيّ، وترتيبُها هنا للقراءة لا للقيد. و`created_by`
+         * يشير إلى `users` وقد سبقت.
+         */
+        'company_policies',
         'bank_accounts', 'bank_statement_lines',
         'journal_entries', 'journal_lines',
         'transactions', 'expenses',
@@ -81,6 +87,11 @@ class TenantTables
          * دائمًا (معرّفُه أصغر)، والإدراجُ يمشي بترتيب المعرّفات.
          */
         'quotations', 'quotation_items',
+        /*
+         * وما يتبع العرضَ بعده: قرارُ العميل (دليلٌ متعدّدُ الأشكال) واستثناءاتُ
+         * السياسات — وكلاهما يحمل `business_id` فيُقرأ رأسًا لا من خلال أبيه.
+         */
+        'document_approvals', 'policy_exceptions',
         'delivery_notes', 'delivery_note_items',
         'payroll_runs', 'payroll_lines',
     ];

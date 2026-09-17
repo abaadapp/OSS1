@@ -14,6 +14,11 @@ use App\Support\Paper;
 use App\Support\PublicDocument;
 use App\Support\Quotations;
 use Illuminate\Contracts\View\View;
+use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Validation\ValidationException;
+use RuntimeException;
 
 /**
  * الورقةُ أونلاين — ما يفتحه من مسح الرمز أسفل ورقته.
@@ -39,7 +44,8 @@ use Illuminate\Contracts\View\View;
  * • **عرضُ السعر** يُعرض **كاملًا**: هو ورقةُ قرارٍ لا ورقةَ تحقّق. من
  *   يفتح الرابط يقرأ البنودَ والأسعارَ والنطاقَ والشروط ليقرّر — وملخّصٌ
  *   يقول «الإجمالي ١٢٠٠» لا يُقرَّر به شيء. وتُختم واقعةُ الفتح: «فُتح»
- *   خبرٌ لصاحب العرض لا يقوله مرفقُ بريدٍ أبدًا.
+ *   خبرٌ لصاحب العرض لا يقوله مرفقُ بريدٍ أبدًا. **ويُقرَّر منه**: زرّان
+ *   واسمٌ وإقرار — انظر `decide`.
  *
  * وما عداها لا يبلغ هنا أصلًا: `PublicDocument::allows` لا يبني رمزًا
  * لأمر الشراء ولا لسند الاستلام — انظر سياستَها هناك.
@@ -106,8 +112,18 @@ class PublicDocumentController extends Controller
             /* والفتحُ يُختم قبل الرسم: من رأى الورقة رآها، وإن انقطع اتّصالُه بعدها */
             Quotations::markViewed($document);
 
+            $document->loadMissing('approval');
+
             return InvoiceBranding::render($link->business_id, null, fn () => view('public.quotation', [
                 'paper' => QuotationController::paper($link->business_id, $document)->render(),
+                'quotation' => $document,
+                'label' => Quotations::label($document),
+                'company' => (string) ($link->business->name ?? ''),
+                /* وزرّا القرار لما ينتظر قرارًا وحدَه — و`decide` تعيد السؤال تحت قفل */
+                'decidable' => $document->isDecidable(),
+                'approval' => $document->approval,
+                'decideUrl' => route('paper.decide', $token),
+                'consent' => self::consent($link->business->name ?? ''),
             ]));
         }
 
@@ -125,6 +141,95 @@ class PublicDocumentController extends Controller
             'primary' => Branding::tokens($link->business_id)['primary_ink'],
             'stampedAt' => now()->format('Y-m-d H:i'),
         ]));
+    }
+
+    /**
+     * قرارُ العميل من رابطه — قبولٌ أو اعتذار.
+     *
+     * ═══ بلا حساب، وبحارسين ═══
+     *
+     * الواقفُ أمام الشاشة عميلٌ لا حسابَ له. فالحارسُ الأوّل الرمزُ الذي لا
+     * يُخمَّن، والثاني خنقٌ بالعنوان: بابٌ يكتب في القاعدة بلا حسابٍ أسهلُ
+     * ما يُستنزف، وعشرُ محاولاتٍ في ربع ساعةٍ تكفي من يقرّر ولا تكفي من
+     * يُغرق. والعدّادُ يُزاد **قبل** التحقّق لا بعده — انظر `RegisterController`.
+     *
+     * ═══ وما يُكتب دليلٌ ═══
+     *
+     * `Quotations::decide` تقارن بصمةَ الصفّ الآن بما خُتم عند الإرسال،
+     * وتكتب اللقطةَ والموقّعَ والعنوانَ والمتصفّح، تحت قفل. وهذه لا تفعل
+     * شيئًا سوى أن تسأل من هو وتُبلّغ الشركة.
+     */
+    public function decide(Request $request, string $token): RedirectResponse
+    {
+        $key = 'paper:decide:'.$request->ip();
+
+        if (RateLimiter::tooManyAttempts($key, 10)) {
+            throw ValidationException::withMessages([
+                'decision' => __('محاولات كثيرة. حاول بعد :seconds ثانية.', ['seconds' => RateLimiter::availableIn($key)]),
+            ]);
+        }
+
+        RateLimiter::hit($key, 900);
+
+        $link = PublicDocument::find($token);
+
+        abort_if($link === null || $link->business === null, 404);
+
+        $document = $link->linkable;
+
+        abort_unless($document instanceof Quotation, 404);
+        abort_if($document->status === Quotation::DRAFT || $document->status === Quotation::PENDING_APPROVAL, 404);
+
+        $data = $request->validate([
+            'decision' => ['required', 'in:accepted,declined'],
+            'name' => ['required', 'string', 'min:2', 'max:120'],
+            'title' => ['nullable', 'string', 'max:120'],
+            'email' => ['nullable', 'email', 'max:120'],
+            'phone' => ['nullable', 'string', 'max:40'],
+            'decline_reason' => ['nullable', 'string', 'max:500'],
+            /* والإقرارُ شرطُ القبول لا الاعتذار: من يعتذر لا يُقرّ بشيء */
+            'consent' => ['accepted_if:decision,accepted'],
+        ], [
+            'consent.accepted_if' => __('لا يُقبل العرض بلا الإقرار.'),
+        ], [
+            'name' => __('الاسم'), 'email' => __('البريد الإلكتروني'), 'decline_reason' => __('سبب الاعتذار'),
+        ]);
+
+        try {
+            $decided = Quotations::decide($document, $data['decision'], [
+                'name' => $data['name'],
+                'title' => $data['title'] ?? null,
+                'email' => $data['email'] ?? null,
+                'phone' => $data['phone'] ?? null,
+                'decline_reason' => $data['decline_reason'] ?? null,
+                'consent' => $data['decision'] === 'accepted' ? self::consent($link->business->name) : null,
+            ], [
+                'ip' => $request->ip(),
+                'user_agent' => (string) $request->userAgent(),
+            ]);
+        } catch (RuntimeException $e) {
+            throw ValidationException::withMessages(['decision' => $e->getMessage()]);
+        }
+
+        RateLimiter::clear($key);
+
+        /* والخبرُ إلى الشركة بعد أن ثبت القرار — وبأفضل جهد: بريدٌ يسقط لا يُسقطه */
+        Quotations::notifyDecision($decided, $decided->approval);
+
+        return redirect()->route('paper.show', $token)->with('decided', $data['decision']);
+    }
+
+    /**
+     * نصُّ الإقرار الذي يوافق عليه العميل — بحرفه، ويُخزَّن مع قراره.
+     *
+     * ويُبنى في موضعٍ واحدٍ تقرؤه الشاشةُ والكتابةُ معًا: نصٌّ يُعرض
+     * ونصٌّ آخر يُحفظ يجعل الدليلَ يشهد على ما لم يُقرأ.
+     */
+    public static function consent(string $company): string
+    {
+        return __('أقرّ بأنني مخوّل بقبول هذا العرض نيابة عن الجهة المذكورة فيه، وأنني قرأت بنوده ونطاق العمل وشروطه وسياسات :company المرفقة، وأوافق عليها.', [
+            'company' => $company,
+        ]);
     }
 
     /**

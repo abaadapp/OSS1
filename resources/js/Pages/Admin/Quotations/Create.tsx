@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useForm, usePage } from '@inertiajs/react';
-import { Boxes, Package, Plus, Save, Trash2, Wrench } from 'lucide-react';
+import { Boxes, Package, Plus, Save, ShieldAlert, Trash2, Wrench } from 'lucide-react';
 import AdminLayout from '@/Layouts/AdminLayout';
 import BackLink from '@/Components/BackLink';
 import PageHeader from '@/Components/PageHeader';
@@ -49,11 +49,38 @@ interface Line {
     list_price: number | null;
 }
 
+/** ما رصده فحصُ سياسةٍ — كما يردّه الخادم مع المعاينة */
+interface Finding {
+    key: string;
+    label: string;
+    message: string;
+    suggested_surcharge: number | null;
+    requires_approval: boolean;
+}
+
+/** سببُ الاستثناء كما يكتبه الموظّف — لكلّ سياسةٍ خُولفت */
+interface ExceptionInput {
+    reason: string;
+    surcharge_amount: string;
+}
+
 interface Props {
-    quotation: (Record<string, unknown> & { id: number; items: Record<string, unknown>[] }) | null;
+    quotation:
+        | (Record<string, unknown> & {
+              id: number;
+              items: Record<string, unknown>[];
+              exceptions: { key: string; reason: string; surcharge_amount: number | null }[];
+          })
+        | null;
     customers: CustomerRow[];
     catalog: CatalogRow[];
-    may: { discount: boolean; override_price: boolean; approve: boolean; discount_threshold: number };
+    may: {
+        discount: boolean;
+        override_price: boolean;
+        approve: boolean;
+        override_policy: boolean;
+        discount_threshold: number;
+    };
     vat_rate: number;
     currency: Currency;
 }
@@ -149,7 +176,22 @@ export default function QuotationCreate({ quotation, customers, catalog, may, va
          * في `transform` — انظر `submit`.
          */
         items: [] as LinePayload[],
+        exceptions: [] as { key: string; reason: string | null; surcharge_amount: string | null }[],
     });
+
+    /*
+     * والاستثناءاتُ حالةٌ مستقلّة كالبنود: تُملأ من المعاينة حين تقع
+     * مخالفة، وتحمل السببَ الذي كتبه الموظّف — ويُعاد إرسالُها في `transform`.
+     */
+    const [findings, setFindings] = useState<Finding[]>([]);
+    const [exceptions, setExceptions] = useState<Record<string, ExceptionInput>>(() =>
+        Object.fromEntries(
+            (quotation?.exceptions ?? []).map((e) => [
+                e.key,
+                { reason: e.reason, surcharge_amount: e.surcharge_amount === null ? '' : String(e.surcharge_amount) },
+            ]),
+        ),
+    );
 
     const byId = useMemo(() => new Map(catalog.map((c) => [c.id, c])), [catalog]);
 
@@ -262,8 +304,13 @@ export default function QuotationCreate({ quotation, customers, catalog, may, va
                     discount_reason: row.discount_reason || null,
                     notes: row.notes || null,
                 })),
+            exceptions: Object.entries(exceptions).map(([key, e]) => ({
+                key,
+                reason: e.reason || null,
+                surcharge_amount: e.surcharge_amount || null,
+            })),
         }),
-        [form.data, lines],
+        [form.data, lines, exceptions],
     );
 
     /*
@@ -303,7 +350,12 @@ export default function QuotationCreate({ quotation, customers, catalog, may, va
             })
                 .then((r) => (r.ok ? r.json() : null))
                 /* وخطأُ المعاينة لا يُفرغ الورقة: آخرُ رسمةٍ صحيحة أنفعُ من بياض */
-                .then((data) => data?.html && setHtml(data.html))
+                .then((data) => {
+                    if (!data?.html) return;
+                    setHtml(data.html);
+                    /* وما يخالفه من سياسات يُقال مع الورقة — فيظهر حقلُ السبب قبل الحفظ */
+                    setFindings(Array.isArray(data.findings) ? data.findings : []);
+                })
                 .catch(() => undefined);
         }, 500);
 
@@ -687,6 +739,92 @@ export default function QuotationCreate({ quotation, customers, catalog, may, va
                             </div>
                         </div>
                     </Card>
+
+                    {/* ─────────── السياسات المخالَفة ─────────── */}
+                    {/*
+                        وتظهر حين تقع المخالفة لا قبلها: الخادمُ يرصدها مع
+                        المعاينة («المهلة 7 والمتاح 3»)، فيُطلب السببُ هنا
+                        وتُقترح رسومُ الاستعجال — قابلةً للتعديل، وتُضاف بندًا
+                        حرًّا بضغطة. وبلا سببٍ لا يُحفظ العرض.
+                    */}
+                    {findings.length > 0 && (
+                        <Card className="space-y-3 border-[#fde68a] bg-[#fffbeb] p-4">
+                            <div className="flex items-center gap-2 text-[14px] font-semibold text-[#92400e]">
+                                <ShieldAlert className="size-4" />
+                                {t('هذا العرض يخالف سياسة الشركة')}
+                            </div>
+                            {findings.map((f) => {
+                                const current = exceptions[f.key] ?? { reason: '', surcharge_amount: '' };
+                                const suggested = f.suggested_surcharge ?? 0;
+
+                                return (
+                                    <div key={f.key} className="rounded-lg bg-white p-3">
+                                        <div className="mb-2 text-[13px] text-[#92400e]">
+                                            <span className="font-semibold">{t(f.label)}</span> — {f.message}
+                                            {f.requires_approval && !may.override_policy
+                                                ? ` · ${t('ينتظر اعتمادًا')}`
+                                                : ''}
+                                        </div>
+                                        <div className="grid gap-2 sm:grid-cols-[1fr_180px]">
+                                            <Input
+                                                value={current.reason}
+                                                onChange={(e) =>
+                                                    setExceptions((x) => ({
+                                                        ...x,
+                                                        [f.key]: { ...current, reason: e.target.value },
+                                                    }))
+                                                }
+                                                placeholder={t('سبب الاستثناء — مطلوب')}
+                                            />
+                                            {suggested > 0 && (
+                                                <Input
+                                                    type="number"
+                                                    step="0.001"
+                                                    min="0"
+                                                    dir="ltr"
+                                                    value={current.surcharge_amount}
+                                                    onChange={(e) =>
+                                                        setExceptions((x) => ({
+                                                            ...x,
+                                                            [f.key]: { ...current, surcharge_amount: e.target.value },
+                                                        }))
+                                                    }
+                                                    placeholder={String(suggested)}
+                                                />
+                                            )}
+                                        </div>
+                                        {suggested > 0 && (
+                                            <div className="mt-2 flex flex-wrap items-center gap-2 text-[12px] text-[#6b7280]">
+                                                {t('رسوم الاستعجال المقترحة')}: {m(suggested)}
+                                                <Button
+                                                    type="button"
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onClick={() => {
+                                                        const amount = Number(current.surcharge_amount) || suggested;
+                                                        setExceptions((x) => ({
+                                                            ...x,
+                                                            [f.key]: { ...current, surcharge_amount: String(amount) },
+                                                        }));
+                                                        setLines((rows) => [
+                                                            ...rows,
+                                                            {
+                                                                ...blankLine(),
+                                                                description: t('رسوم استعجال — :label', { label: t(f.label) }),
+                                                                unit_price: String(amount),
+                                                            },
+                                                        ]);
+                                                    }}
+                                                >
+                                                    {t('أضفها بندًا في العرض')}
+                                                </Button>
+                                            </div>
+                                        )}
+                                    </div>
+                                );
+                            })}
+                        </Card>
+                    )}
 
                     {/* ─────────── النطاق والشروط ─────────── */}
                     <Card className="space-y-3 p-4">

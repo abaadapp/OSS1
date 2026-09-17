@@ -1189,8 +1189,18 @@ class CustomerInvoiceController extends Controller
         // الإصدارُ يولد الذمّة ويكتب القيد — فعلٌ يُمنح باسمه لا بفتح القسم
         abort_if(! auth()->user()?->may(Permissions::CUSTOMER_INVOICE_ISSUE), 403);
 
+        /*
+         * والفاتورةُ تُجلب **قبل** الالتقاط لا داخله.
+         *
+         * `ModelNotFoundException` ترث `RuntimeException`، فجلبٌ داخل `try`
+         * كان يبتلع ٤٠٤ فاتورةِ شركةٍ أخرى ويردّها تحويلةً برسالة خطأ —
+         * والعزلُ سليمٌ (لا صفَّ يُمسّ) لكنّ الردَّ يكذب على حالته. اكتُشف
+         * في `QuotationController` لأنّ النمطَ نُسخ من هنا.
+         */
+        $found = $this->find($id);
+
         try {
-            $invoice = CustomerInvoices::issue($this->find($id), auth()->id());
+            $invoice = CustomerInvoices::issue($found, auth()->id());
         } catch (RuntimeException $e) {
             return back()->withErrors(['invoice' => $e->getMessage()]);
         }
@@ -1209,8 +1219,10 @@ class CustomerInvoiceController extends Controller
             'reason' => __('سبب الإلغاء'),
         ]);
 
+        $found = $this->find($id);
+
         try {
-            CustomerInvoices::cancel($this->find($id), $data['reason'], auth()->id());
+            CustomerInvoices::cancel($found, $data['reason'], auth()->id());
         } catch (RuntimeException $e) {
             return back()->withErrors(['invoice' => $e->getMessage()]);
         }
@@ -1229,9 +1241,11 @@ class CustomerInvoiceController extends Controller
             'reason' => ['required', 'string', 'max:200'],
         ]);
 
+        $found = $this->find($id);
+
         try {
             $note = CustomerInvoices::creditNote(
-                $this->find($id),
+                $found,
                 (float) $data['amount'],
                 (float) ($data['tax_amount'] ?? 0),
                 $data['reason'],

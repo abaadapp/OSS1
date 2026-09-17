@@ -33,6 +33,7 @@ use App\Http\Controllers\Admin\OrderEditController;
 use App\Http\Controllers\Admin\PageController;
 use App\Http\Controllers\Admin\Payroll\PayrollPaymentController;
 use App\Http\Controllers\Admin\Payroll\PayrollRunController;
+use App\Http\Controllers\Admin\PolicyController;
 use App\Http\Controllers\Admin\ProductCompositionController;
 use App\Http\Controllers\Admin\ProductController;
 use App\Http\Controllers\Admin\ProductImageController;
@@ -581,6 +582,8 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'tenant', 'business'
     Route::post('/quotations/{id}/duplicate', [QuotationController::class, 'duplicate'])->name('quotations.duplicate');
     Route::post('/quotations/{id}/cancel', [QuotationController::class, 'cancel'])->name('quotations.cancel');
     Route::post('/quotations/{id}/decision', [QuotationController::class, 'decision'])->name('quotations.decision');
+    /* وإرسالُ الرابط بالبريد إيصالٌ لا تحويلُ حال — انظر `Quotations::email` */
+    Route::post('/quotations/{id}/email', [QuotationController::class, 'email'])->name('quotations.email');
     Route::get('/quotations/{id}/pdf', [PdfController::class, 'quotation'])->name('quotations.pdf');
 
     /*
@@ -872,6 +875,17 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'tenant', 'business'
 
     Route::get('/settings/trash', [TrashController::class, 'index'])->name('settings.trash');
 
+    /*
+     * سياساتُ الشركة — نصٌّ يراه العميل على كلّ عرض، ومعاملاتٌ يفحصها النظام.
+     *
+     * وتحت «الإعدادات» لا «عروض الأسعار»: من يكتب العرضَ لا يكتب شروطَ
+     * الشركة. انظر `Policy\Registry` و§18.
+     */
+    Route::get('/settings/policies', [PolicyController::class, 'index'])->name('settings.policies.index');
+    Route::post('/settings/policies', [PolicyController::class, 'store'])->name('settings.policies.store');
+    Route::put('/settings/policies/{id}', [PolicyController::class, 'update'])->name('settings.policies.update');
+    Route::delete('/settings/policies/{id}', [PolicyController::class, 'destroy'])->name('settings.policies.destroy');
+
     // تنبيهات يعرّفها صاحب النشاط — قواعد على مقاييس النظام، وتذكيرات بموعد
     Route::post('/alerts', [CustomAlertController::class, 'store'])->name('alerts.store');
     Route::put('/alerts/{id}', [CustomAlertController::class, 'update'])->name('alerts.update');
@@ -890,4 +904,14 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'tenant', 'business'
 Route::get('/i/{token}', [PublicDocumentController::class, 'show'])
     ->where('token', '[A-Za-z0-9]{22}')
     ->name('paper.show');
+
+/*
+ * وقرارُ العميل من الرابط نفسِه — قبولٌ أو اعتذار.
+ *
+ * بلا حارسٍ كذلك: الواقفُ أمامه عميلٌ لا حسابَ له. ويحرسه الرمزُ الذي لا
+ * يُخمَّن، وخنقٌ بالعنوان في المتحكّم، وقفلٌ في `Quotations::decide`.
+ */
+Route::post('/i/{token}/decision', [PublicDocumentController::class, 'decide'])
+    ->where('token', '[A-Za-z0-9]{22}')
+    ->name('paper.decide');
 

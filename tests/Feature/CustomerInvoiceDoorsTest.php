@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Business;
 use App\Models\Currency;
 use App\Models\Customer;
+use App\Models\CustomerCreditNote;
 use App\Models\CustomerInvoice;
 use App\Models\Product;
 use App\Models\User;
@@ -124,14 +125,27 @@ class CustomerInvoiceDoorsTest extends TestCase
 
         /*
          * والقراءةُ ليست وحدها: من يُمنع من الرؤية يجب أن يُمنع من الكتابة.
-         * والمقياسُ ما وقع بالفاتورة لا رقمُ الاستجابة — بابٌ يردّ بتحويلٍ
-         * يحمي كما يحمي بابٌ يردّ بـ404.
+         *
+         * ═══ وبـ٤٠٤ لا بتحويلة ═══
+         *
+         * كان هذا الاختبارُ يقيس ما وقع بالفاتورة وحدَه ويقبل تحويلةً:
+         * «بابٌ يردّ بتحويلٍ يحمي كما يحمي بابٌ يردّ بـ404». والعزلُ كان
+         * سليمًا فعلًا — لكنّ الردَّ كان يكذب: `catch (RuntimeException)`
+         * يبتلع `ModelNotFoundException` (ترثها) فيردّ «حدث خطأ» عن فاتورةٍ
+         * لا وجود لها في نظر الطالب — ويقول له بذلك إنّ ثمّة شيئًا هناك.
+         * اكتُشف في `QuotationController` لأنّ النمطَ نُسخ من هنا (§0.5).
          */
-        $this->actingAs($stranger)->post('/admin/customer-invoices/'.$invoice->id.'/issue');
+        $this->actingAs($stranger)->post('/admin/customer-invoices/'.$invoice->id.'/issue')->assertNotFound();
         $this->assertSame(CustomerInvoice::DRAFT, $invoice->fresh()->status);
 
-        $this->actingAs($stranger)->post('/admin/customer-invoices/'.$invoice->id.'/cancel', ['reason' => 'ألغيها']);
+        $this->actingAs($stranger)->post('/admin/customer-invoices/'.$invoice->id.'/cancel', ['reason' => 'ألغيها'])
+            ->assertNotFound();
         $this->assertSame(CustomerInvoice::DRAFT, $invoice->fresh()->status);
+
+        $this->actingAs($stranger)->post('/admin/customer-invoices/'.$invoice->id.'/credit-note', [
+            'amount' => 5, 'reason' => 'خصم',
+        ])->assertNotFound();
+        $this->assertSame(0, CustomerCreditNote::count());
     }
 
     public function test_an_issued_invoice_is_not_hard_deleted(): void

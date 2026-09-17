@@ -4,8 +4,11 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Customer;
+use App\Models\DocumentApproval;
+use App\Models\PolicyException;
 use App\Models\Product;
 use App\Models\Quotation;
+use App\Support\CompanyPolicies;
 use App\Support\Demo;
 use App\Support\Document\Branding;
 use App\Support\Document\PaperSize;
@@ -14,10 +17,12 @@ use App\Support\Document\Version;
 use App\Support\DocumentRenderer;
 use App\Support\DocumentTemplates;
 use App\Support\InvoiceBranding;
+use App\Support\Mailer;
 use App\Support\Money;
 use App\Support\Pagination;
 use App\Support\Paper;
 use App\Support\Permissions;
+use App\Support\Policy\Registry;
 use App\Support\PublicDocument;
 use App\Support\Quotations;
 use App\Support\Search;
@@ -86,6 +91,15 @@ class QuotationController extends Controller
             'approve' => (bool) $user?->may(Permissions::QUOTATION_APPROVE),
             'cancel' => (bool) $user?->may(Permissions::QUOTATION_CANCEL),
             'record_decision' => (bool) $user?->may(Permissions::QUOTATION_RECORD_DECISION),
+            'override_policy' => (bool) $user?->may(Permissions::POLICY_OVERRIDE),
+            /*
+             * والإرسالُ بالبريد بابٌ يُخفى حين لا يفتح: بريدٌ إلى `log`
+             * «ينجح» في نظر لارافيل والرسالةُ في ملفٍّ على الخادم. فيُقال
+             * السببُ هنا ليُقرأ في الشاشة — انظر `Mailer::configured`.
+             */
+            'email' => (bool) $user?->may(Permissions::MESSAGING_SEND) && Mailer::configured(),
+            'mail_reason' => Mailer::configured() ? null
+                : __('إرسالُ البريد غير مضبوط على الخادم — انسخ الرابط وأرسله بنفسك.'),
             /*
              * وهويّةُ الورقة إعدادُ شركةٍ لا فعلَ عرض — فتُقاس بقسم
              * الإعدادات، كما في شاشة الفاتورة.
@@ -190,7 +204,8 @@ class QuotationController extends Controller
         $quotation = $this->find($id);
         $bid = $this->bid();
 
-        $quotation->load('items.product', 'items.approver', 'creator');
+        $quotation->load('items.product', 'items.approver', 'creator', 'approval',
+            'policyExceptions.requester', 'policyExceptions.approver');
 
         return Inertia::render('Admin/Quotations/Show', [
             'quotation' => $this->detail($quotation),
@@ -199,6 +214,31 @@ class QuotationController extends Controller
             /* وسلسلةُ التنقيحات تُعرض كاملة: من قرأ النسخةَ الثانية يجد الأولى */
             'chain' => $this->chain($quotation),
         ]);
+    }
+
+    /**
+     * دليلُ قرار العميل كما يُقرأ — ومعه هل ما زالت البصمةُ تطابق.
+     *
+     * @return array<string, mixed>
+     */
+    private static function evidence(DocumentApproval $a): array
+    {
+        return [
+            'decision' => $a->decision,
+            'signer_name' => $a->signer_name,
+            'signer_title' => $a->signer_title,
+            'signer_email' => $a->signer_email,
+            'signer_phone' => $a->signer_phone,
+            'consent_text' => $a->consent_text,
+            'decline_reason' => $a->decline_reason,
+            'decided_at' => optional($a->decided_at)->format('Y-m-d H:i'),
+            'ip' => $a->ip,
+            'user_agent' => $a->user_agent,
+            'content_hash' => $a->content_hash,
+            'provider' => $a->provider,
+            /* ويُعاد الحسابُ عند كلّ قراءة: دليلٌ لا يُعاد فحصُه شهادة */
+            'verified' => $a->verify(),
+        ];
     }
 
     /**
@@ -255,6 +295,28 @@ class QuotationController extends Controller
             'rejection_reason' => $q->rejection_reason,
             'cancellation_reason' => $q->cancellation_reason,
             'content_hash' => $q->content_hash,
+            'sent_to' => $q->sent_to,
+            /* والسياساتُ كما تُقرأ على ورقته — من الختم إن خرج */
+            'policies' => CompanyPolicies::texts($q),
+            'exceptions' => $q->policyExceptions->map(fn (PolicyException $e) => [
+                'id' => $e->id,
+                'key' => $e->policy_key,
+                'label' => Registry::label($e->policy_key),
+                'detected' => $e->detected,
+                'reason' => $e->reason,
+                'surcharge_amount' => $e->surcharge_amount === null ? null : (float) $e->surcharge_amount,
+                'requested_by' => $e->requester?->name,
+                'approved_by' => $e->approver?->name,
+                'approved_at' => optional($e->approved_at)->format('Y-m-d H:i'),
+            ])->all(),
+            /*
+             * وما يخالفه الآن بلا استثناء: سياسةٌ أُضيفت بعد الحفظ، أو
+             * تنقيحٌ ورث تاريخًا صار عاجلًا. يُقال هنا قبل أن يردّه `send`.
+             */
+            'unsettled' => $q->isFrozen() ? [] : collect(Quotations::findings($q))
+                ->reject(fn ($f) => $q->policyExceptions->contains('policy_key', $f->key()))
+                ->map(fn ($f) => $f->toArray())->values()->all(),
+            'approval' => $q->approval ? self::evidence($q->approval) : null,
             /*
              * ورابطُ العميل يُبنى لما **خرج** وحدَه.
              *
@@ -404,6 +466,12 @@ class QuotationController extends Controller
             'items.*.unit_price' => ['required', 'numeric', 'min:0', 'max:100000000'],
             'items.*.discount_reason' => ['nullable', 'string', 'max:255'],
             'items.*.notes' => ['nullable', 'string', 'max:2000'],
+
+            /* وأسبابُ الاستثناء من السياسات — بمفاتيحَ من القائمة المغلقة وحدها */
+            'exceptions' => ['nullable', 'array', 'max:20'],
+            'exceptions.*.key' => ['required', 'string', Rule::in(Registry::keys())],
+            'exceptions.*.reason' => ['nullable', 'string', 'max:500'],
+            'exceptions.*.surcharge_amount' => ['nullable', 'numeric', 'min:0', 'max:100000000'],
         ];
     }
 
@@ -428,14 +496,14 @@ class QuotationController extends Controller
         $customer = Customer::where('business_id', $bid)->findOrFail($data['customer_id']);
 
         try {
-            $quotation = Quotations::create($bid, $customer, $data, $data['items'], auth()->user());
+            $quotation = Quotations::create($bid, $customer, $data, $data['items'], auth()->user(), $data['exceptions'] ?? []);
         } catch (RuntimeException $e) {
             return back()->withErrors(['items' => $e->getMessage()])->withInput();
         }
 
         return redirect()->route('admin.quotations.show', $quotation->id)->with('toast', [
             'msg' => $quotation->status === Quotation::PENDING_APPROVAL
-                ? __('حُفظ العرض — وينتظر اعتماد الخصم قبل أن يُرسَل')
+                ? __('حُفظ العرض — وينتظر اعتمادًا قبل أن يُرسَل')
                 : __('حُفظ العرض'),
             'type' => 'success',
         ]);
@@ -449,14 +517,14 @@ class QuotationController extends Controller
         $data = $request->validate($this->rules($this->bid()), [], $this->labels());
 
         try {
-            $quotation = Quotations::update($quotation, $data, $data['items'], auth()->user());
+            $quotation = Quotations::update($quotation, $data, $data['items'], auth()->user(), $data['exceptions'] ?? []);
         } catch (RuntimeException $e) {
             return back()->withErrors(['items' => $e->getMessage()])->withInput();
         }
 
         return redirect()->route('admin.quotations.show', $quotation->id)->with('toast', [
             'msg' => $quotation->status === Quotation::PENDING_APPROVAL
-                ? __('حُفظ العرض — وينتظر اعتماد الخصم قبل أن يُرسَل')
+                ? __('حُفظ العرض — وينتظر اعتمادًا قبل أن يُرسَل')
                 : __('حُفظ العرض'),
             'type' => 'success',
         ]);
@@ -486,7 +554,14 @@ class QuotationController extends Controller
             return response()->json(['message' => $e->getMessage()], 422);
         }
 
-        return response()->json(['html' => self::paper($bid, $quotation)->render()]);
+        return response()->json([
+            'html' => self::paper($bid, $quotation)->render(),
+            /*
+             * وما يخالفه من سياسات يُقال مع المعاينة لا عند الحفظ: فيظهر
+             * حقلُ السبب حين تقع المخالفة، ويُحفظ العرضُ من أوّل ضغطة.
+             */
+            'findings' => array_map(fn ($f) => $f->toArray(), CompanyPolicies::findings($bid, $quotation)),
+        ]);
     }
 
     /* ─────────────────────────── الدورة ─────────────────────────── */
@@ -504,17 +579,51 @@ class QuotationController extends Controller
     public function approve(int|string $id)
     {
         // واعتمادُ ما تجاوز الحدَّ يُبطل حدًّا وضعه صاحبُ العمل — فعلٌ باسمه
-        abort_if(! auth()->user()?->may(Permissions::QUOTATION_APPROVE), 403);
+        abort_if(! auth()->user()?->may(Permissions::QUOTATION_APPROVE)
+            && ! auth()->user()?->may(Permissions::POLICY_OVERRIDE), 403);
 
         $quotation = $this->find($id);
 
         try {
-            Quotations::approve($quotation, auth()->user());
+            $quotation = Quotations::approve($quotation, auth()->user());
         } catch (RuntimeException $e) {
             return back()->withErrors(['quotation' => $e->getMessage()]);
         }
 
-        return back()->with('toast', ['msg' => __('اعتُمد الخصم'), 'type' => 'success']);
+        return back()->with('toast', [
+            'msg' => $quotation->status === Quotation::PENDING_APPROVAL
+                ? __('اعتُمد ما تملك اعتماده — ويبقى ما ينتظر غيرك')
+                : __('اعتُمد العرض — يمكن إرساله الآن'),
+            'type' => 'success',
+        ]);
+    }
+
+    /**
+     * إرسالُ الرابط بالبريد — أوّلَ مرّةٍ عرضًا، وبعدها تذكيرًا.
+     *
+     * وهو غيرُ `send`: تلك تُخرج الورقةَ وتقطع رقمَها، وهذه توصلها. ومن
+     * لا يملك بريدًا مضبوطًا ينسخ الرابطَ من الشاشة — والزرُّ لا يُرسم له.
+     */
+    public function email(Request $request, int|string $id)
+    {
+        abort_if(! auth()->user()?->may(Permissions::MESSAGING_SEND), 403);
+
+        $data = $request->validate([
+            'to' => ['required', 'email', 'max:120'],
+            'note' => ['nullable', 'string', 'max:2000'],
+        ], [], ['to' => __('بريد المُرسَل إليه'), 'note' => __('رسالة مرافقة')]);
+
+        $quotation = $this->find($id);
+
+        try {
+            Quotations::email($quotation, $data['to'], $data['note'] ?? null, auth()->user());
+        } catch (RuntimeException $e) {
+            return back()->withErrors(['email' => $e->getMessage()]);
+        }
+
+        return back()->with('toast', [
+            'msg' => __('أُرسل إلى :to', ['to' => $data['to']]), 'type' => 'success',
+        ]);
     }
 
     public function send(int|string $id)
@@ -654,6 +763,10 @@ class QuotationController extends Controller
 
         return view(Version::views($options['version'] ?? null).'.quotation', [
             'quotation' => $quotation,
+            /* وسياساتُ الشركة من ختمها إن خرج، ومن جدولها إن لم يخرج — انظر `CompanyPolicies::texts` */
+            'policies' => CompanyPolicies::texts($quotation),
+            /* ودليلُ القبول إن وُجد — يُطبع على الورقة كما يُقرأ في الشاشة */
+            'approval' => $quotation->exists ? $quotation->approval : null,
             /* وعملةُ الورقة من لقطتها إن كانت مختومة — انظر `Support\Money` */
             'currency' => Snapshot::currency($snapshot) ?: Money::of($bid),
             'tokens' => Branding::tokens($bid, DocumentRenderer::scale((string) $tpl['font'])),

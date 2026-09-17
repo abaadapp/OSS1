@@ -74,6 +74,11 @@ class NormalizeNumbers
          * يحكم كلَّ خصمٍ بعده.
          */
         'quotation_discount_percent',
+        /*
+         * وسياساتُ الشركة واستثناءاتُها: نسبةُ رسوم الاستعجال والإلغاء
+         * والدفعة المقدَّمة، ومبلغُ الرسوم الذي يكتبه الموظّف في العرض.
+         */
+        'surcharge_percent', 'fee_percent', 'advance_percent', 'surcharge_amount',
 
         // الكميّات — عشريّةٌ في التركيب والاستلام
         'quantity', 'inventory_quantity',

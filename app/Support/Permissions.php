@@ -162,6 +162,18 @@ class Permissions
     /** تسجيلُ قبول العميل أو رفضِه نيابةً عنه */
     public const QUOTATION_RECORD_DECISION = 'quotation.recordDecision';
 
+    /**
+     * اعتمادُ استثناءٍ من سياسة الشركة — «طلبٌ عاجل والمهلةُ سبعة».
+     *
+     * والطلبُ مفتوحٌ لمن يكتب: يكتب السببَ وينتظر. والاعتمادُ لمن يُجاوز
+     * السياسةَ باسمه — وهو غيرُ اعتماد الخصم: من يأذن بخصمٍ لا يأذن
+     * بالضرورة بتنفيذٍ في ثلاثة أيّام.
+     */
+    public const POLICY_OVERRIDE = 'policy.override';
+
+    /** الإرسالُ من بريد الشركة إلى العميل — رابطُ العرض وتذكيرُه */
+    public const MESSAGING_SEND = 'messaging.send';
+
     public const ACTIONS = [
         'order.edit' => 'تصحيح فاتورة مكتملة',
         /*
@@ -242,6 +254,8 @@ class Permissions
         self::QUOTATION_APPROVE => 'اعتماد خصم تجاوز الحدّ',
         self::QUOTATION_CANCEL => 'إلغاء عرض سعر',
         self::QUOTATION_RECORD_DECISION => 'تسجيل قبول العميل أو رفضه',
+        self::POLICY_OVERRIDE => 'اعتماد استثناء من سياسة الشركة',
+        self::MESSAGING_SEND => 'الإرسال من بريد الشركة',
     ];
 
     /**
@@ -318,6 +332,10 @@ class Permissions
         self::QUOTATION_APPROVE => ['admin', 'manager'],
         self::QUOTATION_CANCEL => ['admin', 'manager'],
         self::QUOTATION_OVERRIDE_PRICE => ['admin'],
+        /* والاستثناءُ من السياسة يعتمده من يملك أن يُجاوزها باسمه */
+        self::POLICY_OVERRIDE => ['admin', 'manager'],
+        /* والبائعُ يرسل من بريد الشركة: هو من يكتب العرضَ ويتابعه */
+        self::MESSAGING_SEND => ['admin', 'manager', 'sales'],
     ];
 
     /**

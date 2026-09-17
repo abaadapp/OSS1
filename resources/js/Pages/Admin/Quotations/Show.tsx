@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { router } from '@inertiajs/react';
-import { Check, Copy, Download, Eye, Pencil, Send, ShieldCheck, Slash, X } from 'lucide-react';
+import { Check, Copy, Download, Eye, Mail, Pencil, Send, ShieldAlert, ShieldCheck, Slash, X } from 'lucide-react';
 import AdminLayout from '@/Layouts/AdminLayout';
 import BackLink from '@/Components/BackLink';
 import PageHeader from '@/Components/PageHeader';
@@ -18,7 +18,7 @@ import {
     DialogTitle,
 } from '@/Components/ui/dialog';
 import { Card } from '@/Components/ui/card';
-import { Input } from '@/Components/ui/input';
+import { Input, Textarea } from '@/Components/ui/input';
 import { usePage } from '@inertiajs/react';
 import { money, number } from '@/lib/format';
 import { useTranslate } from '@/lib/i18n';
@@ -41,6 +41,35 @@ interface Item {
     tax_amount: number;
     line_total: number;
     notes: string | null;
+}
+
+interface Exception {
+    id: number;
+    key: string;
+    label: string;
+    detected: Record<string, unknown> | null;
+    reason: string;
+    surcharge_amount: number | null;
+    requested_by: string | null;
+    approved_by: string | null;
+    approved_at: string | null;
+}
+
+/** دليلُ قرار العميل من رابطه — يُقرأ ويُعاد فحصُ بصمته عند كلّ فتح */
+interface Approval {
+    decision: 'accepted' | 'declined';
+    signer_name: string;
+    signer_title: string | null;
+    signer_email: string | null;
+    signer_phone: string | null;
+    consent_text: string | null;
+    decline_reason: string | null;
+    decided_at: string | null;
+    ip: string | null;
+    user_agent: string | null;
+    content_hash: string;
+    provider: string;
+    verified: boolean;
 }
 
 interface Quotation {
@@ -75,7 +104,13 @@ interface Quotation {
     scope: string | null;
     terms: string | null;
     internal_notes: string | null;
+    contact_email: string | null;
+    sent_to: string | null;
     items: Item[];
+    policies: { cap: string; text: string }[];
+    exceptions: Exception[];
+    unsettled: { key: string; label: string; message: string }[];
+    approval: Approval | null;
 }
 
 interface Props {
@@ -86,8 +121,11 @@ interface Props {
         create: boolean;
         send: boolean;
         approve: boolean;
+        override_policy: boolean;
         cancel: boolean;
         record_decision: boolean;
+        email: boolean;
+        mail_reason: string | null;
     };
 }
 
@@ -110,6 +148,10 @@ export default function QuotationShow({ quotation: q, paper, chain, may }: Props
     const [deciding, setDeciding] = useState<null | 'accepted' | 'rejected'>(null);
     const [decidedBy, setDecidedBy] = useState('');
     const [rejectReason, setRejectReason] = useState('');
+    const [mailing, setMailing] = useState(false);
+    const [mailTo, setMailTo] = useState(q.sent_to ?? q.contact_email ?? '');
+    const [mailNote, setMailNote] = useState('');
+    const { errors } = usePage().props as { errors?: Record<string, string> };
 
     const post = (name: string) => router.post(route(name, q.id), {}, { preserveScroll: true });
 
@@ -137,10 +179,10 @@ export default function QuotationShow({ quotation: q, paper, chain, may }: Props
                             </Button>
                         )}
 
-                        {awaitingApproval && may.approve && (
+                        {awaitingApproval && (may.approve || may.override_policy) && (
                             <Button onClick={() => post('admin.quotations.approve')}>
                                 <ShieldCheck />
-                                {t('اعتماد الخصم')}
+                                {t('اعتماد')}
                             </Button>
                         )}
 
@@ -148,6 +190,17 @@ export default function QuotationShow({ quotation: q, paper, chain, may }: Props
                             <Button onClick={() => post('admin.quotations.send')}>
                                 <Send />
                                 {t('إرسال للعميل')}
+                            </Button>
+                        )}
+
+                        {/*
+                            والبريدُ بابٌ يُخفى حين لا يفتح: `may.email` تقول إنّ
+                            الخادمَ يُوصِل فعلًا. ومن لا يملكه ينسخ الرابط.
+                        */}
+                        {q.state !== 'expired' && q.status === 'sent' && may.email && (
+                            <Button variant="outline" onClick={() => setMailing(true)}>
+                                <Mail />
+                                {q.sent_to ? t('تذكير بالبريد') : t('إرسال بالبريد')}
                             </Button>
                         )}
 
@@ -197,8 +250,29 @@ export default function QuotationShow({ quotation: q, paper, chain, may }: Props
 
             {awaitingApproval && (
                 <div className="mb-4 rounded-lg bg-[#fffbeb] px-4 py-3 text-[13px] text-[#b45309]">
-                    {t('هذا العرض ينتظر اعتماد الخصم — لا يخرج إلى العميل قبله.')}
+                    {t('هذا العرض ينتظر اعتمادًا — لا يخرج إلى العميل قبله.')}
                 </div>
+            )}
+
+            {/*
+                وما يخالفه الآن بلا استثناءٍ مسجَّل: سياسةٌ أُضيفت بعد الحفظ،
+                أو تنقيحٌ ورث تاريخًا صار عاجلًا. يُقال هنا قبل أن يردّه «إرسال».
+            */}
+            {q.unsettled.length > 0 && (
+                <div className="mb-4 rounded-lg bg-[#fef2f2] px-4 py-3 text-[13px] text-[#b91c1c]">
+                    {q.unsettled.map((f) => (
+                        <div key={f.key}>
+                            {t(f.label)} — {f.message} · {t('احفظ العرض مرة أخرى مع سبب الاستثناء.')}
+                        </div>
+                    ))}
+                </div>
+            )}
+
+            {errors?.email && (
+                <div className="mb-4 rounded-lg bg-[#fef2f2] px-4 py-3 text-[13px] text-[#b91c1c]">{errors.email}</div>
+            )}
+            {errors?.quotation && (
+                <div className="mb-4 rounded-lg bg-[#fef2f2] px-4 py-3 text-[13px] text-[#b91c1c]">{errors.quotation}</div>
             )}
 
             <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_420px]">
@@ -239,8 +313,9 @@ export default function QuotationShow({ quotation: q, paper, chain, may }: Props
                                         : null
                                 }
                             />
+                            <Row label="أُرسل بالبريد إلى" value={q.sent_to} ltr />
                             <Row label="قرار العميل" value={q.decided_at} ltr />
-                            <Row label="سجّله" value={q.decided_by_name} />
+                            <Row label={q.approval ? 'قرّره' : 'سجّله'} value={q.decided_by_name} />
                             <Row label="سبب الرفض" value={q.rejection_reason} />
                             <Row label="سبب الإلغاء" value={q.cancellation_reason} />
                         </dl>
@@ -266,6 +341,97 @@ export default function QuotationShow({ quotation: q, paper, chain, may }: Props
                             </div>
                         )}
                     </Card>
+
+                    {/* ─────────── دليلُ قرار العميل ─────────── */}
+                    {/*
+                        ما يجعل القبولَ دليلًا لا زرًّا: من قَبِل، وبأيّ إقرار،
+                        ومن أين، ومتى، وبأيّ بصمة — وهل ما زالت البصمةُ تطابق
+                        ما في القاعدة. و«لا يطابق» يُقال بالأحمر: مستندٌ مُسّ
+                        بعد قبوله أخطرُ من مستندٍ لم يُقبل.
+                    */}
+                    {q.approval && (
+                        <Card className={q.approval.decision === 'accepted' ? 'border-[#a7f3d0] p-4' : 'p-4'}>
+                            <div className="mb-2 flex flex-wrap items-center gap-2">
+                                <h2 className="text-[15px] font-semibold">
+                                    {q.approval.decision === 'accepted'
+                                        ? t('قبول إلكتروني من العميل')
+                                        : t('اعتذار إلكتروني من العميل')}
+                                </h2>
+                                <span
+                                    className={
+                                        'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] ' +
+                                        (q.approval.verified
+                                            ? 'bg-[#ecfdf5] text-[#065f46]'
+                                            : 'bg-[#fef2f2] text-[#b91c1c]')
+                                    }
+                                >
+                                    <ShieldCheck className="size-3" />
+                                    {q.approval.verified ? t('البصمة تطابق') : t('البصمة لا تطابق — تغيّر المستند بعد القرار')}
+                                </span>
+                            </div>
+                            <dl className="grid gap-x-6 gap-y-2 text-[13px] sm:grid-cols-2">
+                                <Row label="الاسم" value={q.approval.signer_name} />
+                                <Row label="الصفة" value={q.approval.signer_title} />
+                                <Row label="البريد" value={q.approval.signer_email} ltr />
+                                <Row label="الهاتف" value={q.approval.signer_phone} ltr />
+                                <Row label="في" value={q.approval.decided_at} ltr />
+                                <Row label="من العنوان" value={q.approval.ip} ltr />
+                                <Row label="سبب الاعتذار" value={q.approval.decline_reason} />
+                            </dl>
+                            {q.approval.consent_text && (
+                                <p className="mt-3 rounded-md bg-[#fafafa] px-3 py-2 text-[12px] leading-relaxed text-[#52525b]">
+                                    {q.approval.consent_text}
+                                </p>
+                            )}
+                            <div className="mt-2 text-[11px] text-[#9ca3af]" dir="ltr">
+                                {q.approval.content_hash}
+                            </div>
+                        </Card>
+                    )}
+
+                    {/* ─────────── استثناءات السياسات ─────────── */}
+                    {q.exceptions.length > 0 && (
+                        <Card className="p-4">
+                            <h2 className="mb-3 flex items-center gap-2 text-[15px] font-semibold">
+                                <ShieldAlert className="size-4 text-[#b45309]" />
+                                {t('استثناءات من سياسة الشركة')}
+                            </h2>
+                            <ul className="space-y-3 text-[13px]">
+                                {q.exceptions.map((e) => (
+                                    <li key={e.id} className="rounded-lg border border-[#f4f4f5] p-3">
+                                        <div className="flex flex-wrap items-center gap-2">
+                                            <span className="font-semibold">{t(e.label)}</span>
+                                            <span
+                                                className={
+                                                    'rounded-full px-2 py-0.5 text-[11px] ' +
+                                                    (e.approved_at
+                                                        ? 'bg-[#ecfdf5] text-[#065f46]'
+                                                        : 'bg-[#fffbeb] text-[#b45309]')
+                                                }
+                                            >
+                                                {e.approved_at
+                                                    ? `${t('اعتمده')} ${e.approved_by ?? ''} · ${e.approved_at}`
+                                                    : t('ينتظر اعتمادًا')}
+                                            </span>
+                                        </div>
+                                        <div className="mt-1 text-[#52525b]">{e.reason}</div>
+                                        <div className="mt-1 text-[12px] text-[#9ca3af]">
+                                            {e.requested_by ? `${t('طلبه')} ${e.requested_by}` : ''}
+                                            {e.surcharge_amount !== null && e.surcharge_amount > 0
+                                                ? ` · ${t('رسوم')}: ${m(e.surcharge_amount)}`
+                                                : ''}
+                                            {e.detected && typeof e.detected.required_days === 'number'
+                                                ? ` · ${t('المهلة :required والمتاح :available', {
+                                                      required: String(e.detected.required_days),
+                                                      available: String(e.detected.available_days ?? ''),
+                                                  })}`
+                                                : ''}
+                                        </div>
+                                    </li>
+                                ))}
+                            </ul>
+                        </Card>
+                    )}
 
                     {/* ─────────── البنود وأسعارها ─────────── */}
                     <Card className="p-4">
@@ -374,6 +540,29 @@ export default function QuotationShow({ quotation: q, paper, chain, may }: Props
                         </Card>
                     )}
 
+                    {/*
+                        وسياساتُ الشركة كما تُقرأ على ورقته — من الختم إن خرج:
+                        ورقةٌ أُرسلت في مارس تحمل نصَّ مارس ولو غُيّرت السياسةُ بعده.
+                    */}
+                    {q.policies.length > 0 && (
+                        <Card className="p-4">
+                            <h2 className="mb-1 text-[15px] font-semibold">{t('سياسات الشركة على هذا العرض')}</h2>
+                            <p className="mb-3 text-[12px] text-[#9ca3af]">
+                                {q.frozen
+                                    ? t('كما خُتمت لحظة الإرسال — وتعديل السياسة بعده لا يمسّها.')
+                                    : t('تُختم في العرض لحظة إرساله بنسختها.')}
+                            </p>
+                            <dl className="space-y-2 text-[13px]">
+                                {q.policies.map((p) => (
+                                    <div key={p.cap}>
+                                        <dt className="font-medium">{t(p.cap)}</dt>
+                                        <dd className="whitespace-pre-line text-[#52525b]">{p.text}</dd>
+                                    </div>
+                                ))}
+                            </dl>
+                        </Card>
+                    )}
+
                     {q.internal_notes && (
                         <Card className="p-4">
                             <h2 className="mb-2 text-[15px] font-semibold">{t('ملاحظات داخلية')}</h2>
@@ -435,7 +624,7 @@ export default function QuotationShow({ quotation: q, paper, chain, may }: Props
                             {deciding === 'rejected' ? t('تسجيل رفض العميل') : t('تسجيل قبول العميل')}
                         </DialogTitle>
                         <DialogDescription>
-                            {t('يُسجَّل القرار نيابةً عن العميل — والقبول الإلكتروني الكامل يأتي لاحقًا.')}
+                            {t('يُسجَّل القرار نيابةً عن العميل — بعد مكالمة أو بريد. والقبول من رابطه يُسجَّل بنفسه.')}
                         </DialogDescription>
                     </DialogHeader>
                     <div className="space-y-3 px-5">
@@ -473,6 +662,49 @@ export default function QuotationShow({ quotation: q, paper, chain, may }: Props
                 </DialogContent>
             </Dialog>
 
+            {/*
+                ونافذةُ البريد تسأل إلى من، وتقبل سطرًا مرافقًا. والعنوانُ
+                يُملأ بما سبق: من أُرسل إليه أوّلًا، وإلّا بريدُ المُرسَل إليه
+                في العرض.
+            */}
+            <Dialog open={mailing} onOpenChange={setMailing}>
+                <DialogContent className="max-w-md">
+                    <DialogHeader>
+                        <DialogTitle>{q.sent_to ? t('تذكير بالبريد') : t('إرسال العرض بالبريد')}</DialogTitle>
+                        <DialogDescription>
+                            {t('يصل العميلَ رابطُ العرض ليقرأه ويقبله إلكترونيًا — ويُسجَّل الإرسال في الأثر.')}
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-3 px-5">
+                        <Field label="بريد المُرسَل إليه" required>
+                            <Input type="email" dir="ltr" value={mailTo} onChange={(e) => setMailTo(e.target.value)} />
+                        </Field>
+                        <Field label="رسالة مرافقة" hint="اختياري — تُكتب فوق الرابط">
+                            <Textarea rows={3} value={mailNote} onChange={(e) => setMailNote(e.target.value)} />
+                        </Field>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setMailing(false)}>
+                            {t('تراجع')}
+                        </Button>
+                        <Button
+                            disabled={mailTo.trim() === ''}
+                            onClick={() => {
+                                router.post(
+                                    route('admin.quotations.email', q.id),
+                                    { to: mailTo, note: mailNote },
+                                    { preserveScroll: true },
+                                );
+                                setMailing(false);
+                                setMailNote('');
+                            }}
+                        >
+                            <Send />
+                            {t('إرسال')}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </AdminLayout>
     );
 }

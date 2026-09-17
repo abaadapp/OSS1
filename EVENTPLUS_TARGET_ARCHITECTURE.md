@@ -84,7 +84,7 @@ SPF على `hadath.om` (الآن لا سجلَّ بريدٍ واحدًا في ا
 |---|---|---|---|
 | **1** | عينُ النظام تُفتح — التقاريرُ تقرأ الفواتير لا `orders` | ✅ **تمّت** | الإقرارُ الضريبيّ يوافق الدفتر · `Revenue` بابٌ واحد |
 | **2** | عرضُ السعر `quotations` | ✅ **تمّت** | الشركةُ تُصدر عروضَها · السعرُ يملكه الخادم |
-| **3** | الإرسالُ والقبولُ والشروط | ⬜ لم تبدأ | قبولٌ إلكترونيٌّ مختوم |
+| **3** | الإرسالُ والقبولُ والشروط | ✅ **تمّت** | قبولٌ إلكترونيٌّ مختوم · السياساتُ نصًّا وفحصًا · البريدُ يُوصِل |
 | **4** | المشروع / الفعالية `projects` | ⬜ لم تبدأ | **مركزُ العمل** |
 | **5** | المستنداتُ والتسليمُ والقبول | ⬜ لم تبدأ | توحيدُ المرفقات الخمسة |
 | **6** | مركزُ الإجراءات والأتمتة | ⬜ لم تبدأ | إسقاطُ `orders` |
@@ -235,7 +235,7 @@ Resend وسُدَّت عشرُ ثغراتٍ في `league/commonmark`، ورُف�
 يُسقط شاشةَ التنبيهات. **ليس عطبًا اليوم، ويصير عطبًا في المرحلة القادمة
 بالتحديد** — لأنّنا سنضيف أقسامًا.
 
-### 0.5 ⚠️ `catch (RuntimeException)` يبتلع ٤٠٤ في متحكّم الفواتير
+### 0.5 ✅ ~~`catch (RuntimeException)` يبتلع ٤٠٤ في متحكّم الفواتير~~ — **عُولج في المرحلة 3**
 
 ظهر أثناء بناء المرحلة 2، لأنّي نسختُ النمطَ نفسَه ثمّ سقط في اختباري:
 
@@ -260,6 +260,10 @@ try {
 وحدها — وهو ما فُعل في `QuotationController` كلِّه.
 
 **لم يُمسّ في المرحلة 2** لأنّه خارج نطاقها («لا تعيد بناء CustomerInvoice»).
+
+**وأُصلح في المرحلة 3 بإذنٍ صريح:** الجلبُ صار قبل `try` في الثلاثة، و
+`CustomerInvoiceDoorsTest::test_another_shop_cannot_read_this_invoice` صار
+يطلب ٤٠٤ نصًّا لا «أيَّ ردٍّ يحمي» — ويسقط على النسخة القديمة.
 
 ---
 
@@ -737,20 +741,30 @@ path · name · mime · size
 uploaded_by · notes
 ```
 
-#### `document_approvals` — قبولُ العميل (§19)
+#### `document_approvals` — قبولُ العميل (§19) ✅ **بُني — المرحلة 3**
 ```
 id · business_id
-approvable_type · approvable_id    ← Quotation | DeliveryPackage | Document
-document_link_id FK                ← يعيد استخدام رمز 22 حرفًا القائم
-state         varchar   ← pending · viewed · accepted · declined · expired
-content_hash  char(64)             ← بصمةُ ما عُرض بالضبط
+approvable_type · approvable_id    ← Quotation اليوم | DeliveryPackage في المرحلة 5
+provider      varchar(20) 'internal' · external_id NULL
+decision      varchar   ← accepted · declined
+content_hash  char(64)             ← بصمةُ ما عُرض بالضبط — بصمةُ الإرسال نفسُها
+accepted_snapshot json              ← الحمولةُ التي بُصمت — لا وصفٌ لها
 signer_name · signer_title · signer_email · signer_phone
-signature_image varchar NULL
-accepted_snapshot json              ← ما رآه العميلُ حرفيًّا
-viewed_at · decided_at · decline_reason
-ip · user_agent
-expires_at
+consent_text  text                  ← نصُّ الإقرار بحرفه
+decline_reason · decided_at · ip · user_agent
+unique(approvable_type, approvable_id)   ← قرارٌ واحدٌ بقيدٍ لا بشرط
 ```
+
+**وأربعةُ فروقٍ عن المقترَح، ولكلٍّ سببُه:**
+
+| المقترَح | ما بُني | لماذا |
+|---|---|---|
+| `state` (pending · viewed · …) | `decision` وحدُه | الصفُّ يُكتب **لحظةَ القرار** فقط؛ و«ينتظر» و«فُتح» و«انتهى» تُقرأ من العرض (`sent_at` · `first_viewed_at` · `valid_until`). وعمودٌ لا يحمل إلّا قيمةً واحدة ليس عمودًا |
+| `document_link_id` FK | — | `document_links` **خارج النسخة الاحتياطيّة** عمدًا (`TenantTables::NOT_MINE`) — ومفتاحٌ إليها يُسقط الاستعادة. والرابطُ واحدٌ لكلّ مستندٍ أصلًا |
+| `signature_image` · `expires_at` | — | لا لوحةَ رسمٍ الآن (قبولٌ موثَّق لا توقيع)، والانتهاءُ من `valid_until` |
+| `viewed_at` | — | على العرض نفسِه (`first_viewed_at`) ولا يُكرَّر |
+
+و`verify()` تعيد حسابَ البصمة من اللقطة — **دليلٌ لا يُعاد فحصُه شهادة**.
 
 #### `delivery_packages`
 ```
@@ -760,27 +774,39 @@ created_by
 ```
 > وبنودُها من `project_items` بكميّاتٍ مسلَّمة، عبر `delivery_package_items`.
 
-#### `company_policies` (§18)
+#### `company_policies` (§18) ✅ **بُني — المرحلة 3**
 ```
 id · business_id
-key        varchar   ← من قائمةٍ مغلقةٍ في PHP
-scope_type varchar NULL · scope_id int NULL   ← عامّ | صنف | تصنيف | عميل
-params     json
+key        varchar(40)   ← من `Policy\Registry::KEYS` المغلقة
+scope_type varchar NULL · scope_id int NULL   ← عامّ | customer | product | category
+params     json          ← بأسماءٍ من القائمة نفسِها — وما ليس فيها يُطرح
 text_ar · text_en   text        ← ما يراه العميل
-active · effective_from · version
+active · effective_from · version   ← والنسخةُ تُرفع مع كلّ تعديلٍ في النصّ أو المعاملات
 created_by
 ```
 
-#### `policy_exceptions`
+#### `policy_exceptions` ✅ **بُني — المرحلة 3**
 ```
 id · business_id
-exceptionable_type · exceptionable_id   ← Quotation | Project
-policy_key varchar
-detected   json      ← ما رصده النظام: «طُلب قبل 3 أيام والحدّ 7»
+exceptionable_type · exceptionable_id   ← Quotation اليوم | Project في المرحلة 4
+policy_key varchar · company_policy_id FK NULL · policy_version
+detected   json      ← ما رصده النظام: «المطلوب 7 والمتاح 3 والمقترَح 100»
 reason     text
-surcharge_amount numeric NULL
-requested_by · approved_by · approved_at · status
+surcharge_amount numeric NULL   ← ما اختاره الموظّف — والمقترَحُ في `detected`
+requested_by · approved_by · approved_at
 ```
+> وبلا `status`: «ينتظر» هي `approved_at IS NULL` — القاعدةُ نفسُها التي
+> مُنع بها عمودُ الحال في `document_approvals`.
+
+#### وعمودان على `quotations` — المرحلة 3
+```
+policy_snapshot json NULL   ← ختمُ السياسات لحظةَ الإرسال — ويدخل في content_hash
+sent_to         varchar(120) NULL   ← أوّلُ بريدٍ ذهب إليه
+```
+> `policy_snapshot` هو ما رُفض باسم `terms_snapshot` في المرحلة 2 — والفرقُ
+> أنّ الشروطَ هناك في أعمدة الصفّ المجمَّدة، والسياساتِ هنا **خارج الصفّ**
+> وتُعدَّل بعد الإرسال. فهذه ليست نسخةً من الحقيقة؛ هي الحقيقةُ الوحيدةُ
+> عمّا خرج.
 
 ### 8.2 الأعمدة المضافة إلى جداولَ قائمة — 6 فقط
 
@@ -1478,7 +1504,7 @@ employees · reports
 `*` يُحذف `orders` مع قسم المبيعات — انظر §14.5.
 `✅` بُني في المرحلة 2 — فصارت الأقسامُ **13**.
 
-### الأفعالُ الجديدة: 20 → 34 (بُني منها 7 — فصارت **27**)
+### الأفعالُ الجديدة: 20 → 34 (بُني منها 9 — فصارت **29**)
 
 | الفعل | التسمية | يرثه بالدور |
 |---|---|---|
@@ -1494,12 +1520,12 @@ employees · reports
 | `project.budget.view` | رؤيةُ تكلفته وربحيّته | admin · manager · accountant |
 | `project.close` | إقفالُ مشروع | admin · manager |
 | `project.reopen` | إعادةُ فتحِ مشروعٍ مُقفَل | admin |
-| `policy.override` | تجاوزُ سياسةٍ باستثناء | admin · manager |
+| `policy.override` ✅ | اعتمادُ استثناءٍ من سياسة الشركة | admin · manager |
 | `delivery.send` | إرسالُ حزمة تسليم | admin · manager |
 | `delivery.accept` | تسجيلُ قبولِ العميل نيابةً | admin · manager |
 | `document.upload` | رفعُ مستندٍ إلى مشروع | admin · manager · sales · inventory |
 | `document.approve` | وسمُ مستندٍ معتمَدًا | admin · manager |
-| `messaging.send` | الإرسالُ من قناة الشركة | admin · manager · sales |
+| `messaging.send` ✅ | الإرسالُ من بريد الشركة | admin · manager · sales |
 | `ai.use` | استعمالُ المساعد | admin · manager · sales |
 
 ### توزيعُ الأقسام على الأدوار
@@ -1775,8 +1801,8 @@ intercompany_transactions
    يقع **داخل** الالتقاط. فمن أرسل معرّفَ فاتورةٍ من شركةٍ أخرى يُردّ بتحويلةٍ
    ورسالةٍ عامّة بدل ٤٠٤ — والصفُّ لا يُمسّ (العزلُ سليم) لكنّ الردَّ يكذب على
    حالته. اكتُشف في المرحلة 2 لأنّ النمطَ نُسخ منه، وأُصلح في
-   `QuotationController` بجلبٍ يسبق الالتقاط. **ولم يُمسّ الأصلُ:** خارج نطاق
-   المرحلة، وإصلاحُه ثلاثةُ أسطرٍ يوم يُؤذن.
+   `QuotationController` بجلبٍ يسبق الالتقاط. **وأُصلح الأصلُ في المرحلة 3
+   بإذن** — ثلاثةُ أسطرٍ واختبارٌ يطلب ٤٠٤ نصًّا (§0.5).
 6. **البندُ الحرُّ بابٌ مفتوحٌ في ضبط السعر** — عن قصد. من أراد الالتفاف كتب
    بندًا بلا `product_id` بالسعر الذي يريد. ومنعُه يُعطّل أكثرَ ما تبيعه
    الشركة (عملٌ مفصّلٌ لا نظيرَ له في الكتالوج). وحارسُه اليوم ثلاثة:
@@ -1884,14 +1910,39 @@ intercompany_transactions
 
 ---
 
-### المرحلة 3 — الإرسالُ والقبولُ والشروط
+### المرحلة 3 — الإرسالُ والقبولُ والشروط ✅ **تمّت**
 
-- `document_approvals` فوق `DocumentLink` القائم
-- صفحةُ قبولٍ عامّة · `content_hash` · الأثر
-- `company_policies` — **النصُّ والختمُ أوّلًا** (§18)، والفحصُ الآليّ
-  بقاعدةٍ واحدة: `lead_time_days`
-- `policy_exceptions` + `pending_approval`
-- `Notifier` + تنفيذُ البريد (رابطُ العرض · التذكير)
+**ما سُلِّم:**
+
+- **القبولُ من الرابط** — زرّان واسمٌ وإقرارٌ تحت الورقة نفسِها
+  (`/i/{token}/decision`)، مخنوقٌ بالعنوان، وتحت قفل. و`document_approvals`
+  يُكتب **مرّةً** لحظةَ القرار: البصمةُ (وهي بصمةُ الإرسال — ولو مُسّ الصفُّ
+  بعدها رُدّ القرار)، واللقطةُ التي بُصمت، والموقّعُ ونصُّ إقراره والعنوانُ
+  والمتصفّح. و`verify()` تعيد الحساب — والشاشةُ تقولها بالأحمر إن افترقا.
+- **السياساتُ** — `Policy\Registry::KEYS` مغلقة (خمسةُ مفاتيح، ولواحدٍ
+  فحص: `LeadTimeCheck`)، و`company_policies` بنصّين ونسخةٍ ونطاقٍ (الأخصُّ
+  يحجب الأعمّ في المفتاح الواحد)، وشاشتُها تحت الإعدادات.
+  **والنصُّ يُختم** في `quotations.policy_snapshot` لحظةَ الإرسال ويدخل في
+  `content_hash` — فورقةُ مارس تُطبع في يونيو بنصّ مارس.
+- **الاستثناء** — المعاينةُ ترصد المخالفةَ قبل الحفظ، والحفظُ يطلب السبب،
+  وتُقترح رسومُ الاستعجال (وتُضاف بندًا بضغطة)، وينتظر العرضُ `policy.override`
+  — إلّا لصاحبه فيعتمد لحظتَه. و`send` يفحص ثانيةً: مخالفةٌ قائمةٌ بلا
+  استثناءٍ معتمَد لا تخرج. والتنقيحُ يحمل السببَ ويطلب الاعتمادَ ثانيةً.
+- **`Notifier`** — الحدُّ (§21) بتنفيذٍ واحد: `EmailNotifier` يرث
+  `Mailer::configured()` فيرفض `log` و`array`، و`MessageIntent` بلا لغةِ
+  قناة، و`DocumentMail` قالبٌ واحد. ومن الشاشة: «إرسال بالبريد» ثمّ «تذكير»،
+  و`sent_to` يُختم بأوّل عنوان. والشركةُ تُبلَّغ بقرار العميل، والموقّعُ
+  يصله إيصالُ قبوله.
+- **الصلاحيّتان** `policy.override` و`messaging.send`.
+- **§0.5 أُصلح** — بإذن.
+- **3 هجراتٍ جديدة · 3 مساراتِ إعداداتٍ + مسارُ بريدٍ + مسارٌ عامّ · 3 أصناف
+  اختبارٍ جديدة — 58 حالة** · واختبارٌ قائمٌ شُدّد (§0.5).
+
+**ما أُجِّل عمدًا:** جدولُ `messages` (المرحلة 7 — الأثرُ اليوم في
+`activity_logs` ويكفي لقناةٍ واحدة) · التذكيرُ الآليُّ و`follow_ups`
+(المرحلة 6) · فحوصُ الإلغاء والتأجيل (نصٌّ يُختم اليوم — وفحصُها يحتاج
+مشروعًا له موعدٌ يُلغى، أي المرحلة 4) · لوحةُ التوقيع والمزوّدُ الخارجيّ
+(§19: يُبنى يومَ يشترطه عميل).
 
 **المحصّلة:** عرضٌ يُرسَل ويُقبَل إلكترونيًّا بشروطٍ مختومة.
 

@@ -5,6 +5,8 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\MorphMany;
+use Illuminate\Database\Eloquent\Relations\MorphOne;
 
 /**
  * عرضُ سعر — وعدٌ بثمنٍ، لا التزامٌ ماليّ.
@@ -64,6 +66,7 @@ class Quotation extends Model
 
     protected $casts = [
         'document_snapshot' => 'array',
+        'policy_snapshot' => 'array',
         'issued_at' => 'date',
         'valid_until' => 'date',
         'event_starts_at' => 'date',
@@ -117,6 +120,22 @@ class Quotation extends Model
         return $this->belongsTo(User::class, 'created_by');
     }
 
+    /**
+     * قرارُ العميل من رابطه — دليلٌ يُكتب مرّةً. انظر `DocumentApproval`.
+     *
+     * وnull لما قرّره موظّفٌ نيابةً: ذاك خبرٌ في `decided_by_name` لا دليل.
+     */
+    public function approval(): MorphOne
+    {
+        return $this->morphOne(DocumentApproval::class, 'approvable');
+    }
+
+    /** ما خالفه هذا العرضُ من سياسات الشركة — وسببُ كلٍّ ومن اعتمده */
+    public function policyExceptions(): MorphMany
+    {
+        return $this->morphMany(PolicyException::class, 'exceptionable')->orderBy('id');
+    }
+
     /** معرّفُ جذر السلسلة — ونفسُه إن كان الأصل */
     public function rootId(): int
     {
@@ -166,6 +185,17 @@ class Quotation extends Model
         }
 
         return (int) now()->startOfDay()->diffInDays($this->valid_until->startOfDay(), absolute: false);
+    }
+
+    /**
+     * أيقبل قرارًا من العميل الآن؟ — أُرسل ولم تنقضِ صلاحيّتُه ولم يُقرَّر.
+     *
+     * والصفحةُ العامّة تقرأ هذا وحدَه لترسم زرَّي القرار أو تُخفيهما،
+     * و`Quotations::decide` يقرؤه ثانيةً تحت قفلٍ قبل أن يكتب.
+     */
+    public function isDecidable(): bool
+    {
+        return $this->status === self::SENT && ! $this->isExpired();
     }
 
     /** ما رُبح أو خُصم عن سعر الكتالوج — مجموعُ خصوم بنوده */
