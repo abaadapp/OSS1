@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Addon;
+use App\Models\PackageItem;
 use App\Models\Product;
 use App\Models\ProductVariant;
 use App\Models\RecipeItem;
@@ -191,6 +192,90 @@ class ProductCompositionController extends Controller
      * والقائمة الفارغة تعني «كلّ إضافات المتجر» لا «لا شيء» — وهو سلوك ما
      * قبل هذه الشاشة. ومن أراد منعها كلّها فذاك بإطفاء الإضافات نفسها.
      */
+    /* ─────────────────────── بنودُ الباقة ─────────────────────── */
+
+    /*
+     * ═══ ولمَ ليست «وصفةً» ═══
+     *
+     * الوصفةُ قائمةُ موادّ **تُخصم من الرفّ** عند البيع: `Recipe::units`
+     * ترفع الكسرَ إلى عددٍ صحيح لأنّ المخزون صحيح، و`wastage_percent` تقول
+     * كم يُكسر في التجهيز، والحارسُ أعلاه يمنع أن يكون المكوّنُ باقةً.
+     *
+     * والباقةُ **حزمةٌ تجاريّة تُسعَّر وتُعرَض**: تحوي خدماتٍ وباقاتٍ أصغر،
+     * وكميّاتُها كسريّة («يومان ونصف من فريق»)، ولا تُخصم من رفّ.
+     *
+     * اسمُهما واحدٌ ومعناهما اثنان — انظر الهجرة
+     * `a_package_lists_what_it_contains`.
+     */
+    public function storePackageItem(Request $request, int $id)
+    {
+        $package = $this->product($id);
+        $bid = $this->bid();
+
+        $data = $request->validate([
+            'item_id' => ['required', Rule::exists('products', 'id')->where('business_id', $bid)->whereNull('deleted_at')],
+            'quantity' => ['required', 'numeric', 'gt:0'],
+            'unit' => ['nullable', 'string', 'max:40'],
+        ], [], ['item_id' => __('البند'), 'quantity' => __('الكمية')]);
+
+        /* والباقةُ لا تحوي نفسَها: حلقةٌ تُدخل الفكَّ في تكرارٍ لا ينتهي */
+        if ((int) $data['item_id'] === (int) $package->id) {
+            throw ValidationException::withMessages([
+                'item_id' => __('الباقة لا تحوي نفسها.'),
+            ]);
+        }
+
+        /*
+         * والصفُّ المكرّر يُجمع لا يُضاف — كما في الوصفة.
+         *
+         * وقيدُ التفرّد في القاعدة يردّه على أيّ حال؛ وهذا يجعل الردَّ
+         * رسالةً مفهومة بدل خطأٍ من المحرّك.
+         */
+        $existing = PackageItem::where('package_id', $package->id)
+            ->where('item_id', $data['item_id'])->first();
+
+        if ($existing) {
+            $existing->update(['quantity' => (float) $existing->quantity + (float) $data['quantity']]);
+        } else {
+            PackageItem::create($data + [
+                'business_id' => $bid,
+                'package_id' => $package->id,
+                'sort_order' => (int) PackageItem::where('package_id', $package->id)->max('sort_order') + 1,
+            ]);
+        }
+
+        \App\Support\Activity::log('updated', 'عدّل بنود الباقة '.$package->name, ['subject_id' => $package->id]);
+
+        return back()->with('toast', ['msg' => __('أُضيف البند'), 'type' => 'success']);
+    }
+
+    public function updatePackageItem(Request $request, int $id, int $itemId)
+    {
+        $package = $this->product($id);
+
+        $row = PackageItem::where('package_id', $package->id)->findOrFail($itemId);
+
+        $data = $request->validate([
+            'quantity' => ['required', 'numeric', 'gt:0'],
+            'unit' => ['nullable', 'string', 'max:40'],
+        ], [], ['quantity' => __('الكمية')]);
+
+        $row->update($data);
+
+        return back()->with('toast', ['msg' => __('حُدّث البند'), 'type' => 'success']);
+    }
+
+    public function destroyPackageItem(int $id, int $itemId)
+    {
+        $package = $this->product($id);
+
+        PackageItem::where('package_id', $package->id)->findOrFail($itemId)->delete();
+
+        \App\Support\Activity::log('updated', 'حذف بندًا من الباقة '.$package->name, ['subject_id' => $package->id]);
+
+        return back()->with('toast', ['msg' => __('حُذف البند'), 'type' => 'success']);
+    }
+
     public function syncAddons(Request $request, int $id)
     {
         $product = $this->product($id);
@@ -308,7 +393,56 @@ class ProductCompositionController extends Controller
             'products' => self::productOptions((int) $product->business_id),
             'addon_ids' => DB::table('product_addons')->where('product_id', $product->id)
                 ->orderBy('sort_order')->pluck('addon_id')->map(fn ($i) => (int) $i)->all(),
+            /* بنودُ الباقة وما يصلح أن يكون منها — انظر `storePackageItem` */
+            'package_items' => self::packageItems($product),
+            'package_options' => self::packageOptions((int) $product->business_id, $product->id),
         ];
+    }
+
+    /**
+     * بنودُ الباقة بأسعارها المعتمدة.
+     *
+     * و`sellingPrice()` لا `price`: هي ما يقرؤه عرضُ السعر عند الفكّ
+     * (`Quotations::expand`). ورقمان مختلفان في الشاشتين يجعلان من يبني
+     * الباقة يحسب غير ما يُعرض على العميل.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private static function packageItems(Product $product): array
+    {
+        return $product->packageItems()->with('item')->get()
+            ->map(fn (PackageItem $row) => [
+                'id' => $row->id,
+                'item_id' => $row->item_id,
+                'name' => $row->item?->name ?? '—',
+                'kind' => $row->item?->kind ?? Product::ITEM,
+                'quantity' => (float) $row->quantity,
+                'unit' => $row->unit,
+                'unit_price' => $row->item?->sellingPrice() ?? 0.0,
+                'line_total' => round((float) $row->quantity * ($row->item?->sellingPrice() ?? 0.0), 3),
+            ])->all();
+    }
+
+    /**
+     * ما يصلح عضوًا في باقة — كلُّ الكتالوج إلّا الباقةَ نفسَها.
+     *
+     * وباقةٌ داخل باقةٍ مسموحة: «مؤتمر ٥٠٠» قد تحوي «حزمة التسجيل». والحلقةُ
+     * (أ تحوي ب، وب تحوي أ) يمنعها الفكُّ نفسُه: `Quotations::expand` تفكّ
+     * مستوًى واحدًا لا تتعمّق — فلا تكرارَ لا ينتهي.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private static function packageOptions(int $businessId, ?int $exclude): array
+    {
+        return Product::where('business_id', $businessId)
+            ->when($exclude, fn ($q) => $q->where('id', '!=', $exclude))
+            ->orderBy('name')->get(['id', 'name', 'sku', 'kind', 'price', 'discount'])
+            ->map(fn (Product $p) => [
+                'value' => $p->id,
+                'label' => $p->sku ? $p->name.' — '.$p->sku : $p->name,
+                'kind' => $p->kind ?? Product::ITEM,
+                'price' => $p->sellingPrice(),
+            ])->all();
     }
 
     /**
@@ -330,6 +464,9 @@ class ProductCompositionController extends Controller
             'stock_items' => self::stockItemOptions($businessId),
             'products' => self::productOptions($businessId),
             'addon_ids' => [],
+            /* ولا بنودَ لباقةٍ لم تُنشأ بعد: العضوُ يُعلَّق بمعرّفٍ لا وجود له */
+            'package_items' => [],
+            'package_options' => self::packageOptions($businessId, null),
         ];
     }
 

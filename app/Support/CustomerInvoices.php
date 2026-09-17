@@ -2,7 +2,6 @@
 
 namespace App\Support;
 
-use App\Models\Business;
 use App\Models\Currency;
 use App\Models\Customer;
 use App\Models\CustomerCreditNote;
@@ -11,7 +10,6 @@ use App\Models\CustomerInvoiceItem;
 use App\Models\JournalEntry;
 use App\Models\Order;
 use App\Models\Product;
-use App\Models\Setting;
 use App\Support\Document\Snapshot;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -107,128 +105,36 @@ final class CustomerInvoices
     }
 
     /**
-     * التسلسل — تحت قفلٍ على صفّ المتجر.
+     * التسلسل — تحت قفلٍ على صفّ الشركة، في `Numbering`.
      *
-     * وبلا قفل: نافذتان تُصدران في اللحظة نفسها تقرآن آخر رقمٍ فتكتبانه
-     * كلتاهما، فيسقط أحدهما على فهرس التفرّد أو — وهو أسوأ — يمرّان على
-     * قاعدةٍ بلا فهرس فيصير رقمان لورقتين.
+     * خرج من هنا لمّا صار لعرض السعر تسلسلُه: نسخُ القفل وقاعدةِ «الأكبرُ
+     * عددًا لا الأحدثُ صفًّا» يعني أنّ أوّلَ نسخةٍ تُكتب بلا قفلٍ تُخرج
+     * رقمين لورقتين في يومٍ مزدحم.
      */
     private static function sequence(int $businessId, string $model, string $prefix): string
     {
-        return DB::transaction(function () use ($businessId, $model, $prefix) {
-            Business::whereKey($businessId)->lockForUpdate()->first();
-
-            /*
-             * والأكبرُ عددًا لا الأحدثُ صفًّا.
-             *
-             * كان يقرأ آخرَ معرّفٍ لأنّ الرقم كان يُقطع لحظةَ الإنشاء، فترتيبُ
-             * المعرّفات هو ترتيبُ الأرقام. ولم يعد: الرقمُ يُقطع عند الإصدار،
-             * ومسودّةٌ كُتبت أمس تُصدَر اليوم بعد واحدةٍ كُتبت صباحًا — فآخرُ
-             * صفٍّ ليس أكبرَ رقم، وقراءتُه تُعيد رقمًا مستعمَلًا يردّه فهرسُ
-             * التفرّد في وجه من ضغط «إصدار».
-             *
-             * والقراءةُ في PHP لا `CAST` في SQL: نصٌّ غير رقميّ يتساهل معه
-             * SQLite ويرفضه PostgreSQL، فرقمٌ شاذٌّ واحد من نسخةٍ مستعادة
-             * يُعطّل الإصدار كلَّه بعد النقل.
-             */
-            $highest = (int) $model::where('business_id', $businessId)
-                ->where('number', 'like', $prefix.'%')
-                ->get(['number'])
-                ->map(fn ($r) => (int) substr((string) $r->number, strlen($prefix)))
-                ->max();
-
-            return $prefix.str_pad((string) ($highest + 1), 6, '0', STR_PAD_LEFT);
-        });
+        return Numbering::next($businessId, $model, $prefix);
     }
 
     /**
      * حسابُ البنود — في الخادم دائمًا.
      *
-     * ولا يُقرأ إجماليٌّ من الواجهة: من يستطيع فتح أدوات المتصفّح يستطيع
-     * إرسال إجماليٍّ صفرٍ لفاتورةٍ بمئة، فتُرحَّل ذمّةٌ لا تساوي ورقتَها.
+     * ═══ وهو الآن في `LineTotals` ═══
      *
-     * والضريبةُ لقطة: النسبةُ تُقرأ من إعدادات المتجر لحظةَ الكتابة وتُحفظ
-     * في السطر. وتغييرُها الشهرَ القادم لا يمسّ ورقةً صدرت.
+     * خرج الحسابُ من هنا لمّا جاء عرضُ السعر يحتاجه: قاعدةٌ تُصحَّح في
+     * أحدهما — قصُّ الخصم، أو تقريبُ الضريبة، أو بندٌ معفًى بنسبة صفر —
+     * يجب أن تبلغ الآخر. وإلّا عُرض على العميل مبلغٌ ثمّ صدرت له فاتورةٌ
+     * بغيره.
+     *
+     * ويبقى هذا البابُ كما كان: شكلُ ردّه وشكلُ ندائه لم يتغيّرا، وما
+     * يخصّ الفاتورةَ وحدها — `order_item_id` — يُمرَّر هنا لا هناك.
      *
      * @param  array<int, array<string, mixed>>  $lines
      * @return array{items: array<int, array<string, mixed>>, subtotal: float, discount: float, tax: float, total: float}
      */
     public static function compute(int $businessId, array $lines, ?float $taxRate = null): array
     {
-        /*
-         * ونسبةُ الضريبة تُقرأ لمتجر الفاتورة لا لمتجر القارئ.
-         *
-         * `Demo::vatSettings()` تقرأ متجرَ الجلسة — فلو أُنشئت فاتورةٌ لمتجرٍ
-         * آخر (أمرُ صيانة، أو لوحةُ المنصّة) لحُسبت بنسبة متجرٍ غيره.
-         */
-        $rate = $taxRate ?? (Vat::enabled($businessId)
-            ? (float) (Setting::where('business_id', $businessId)->where('key', 'vat_rate')->value('value') ?? 5)
-            : 0.0);
-
-        $items = [];
-        $subtotal = 0.0;
-        $discount = 0.0;
-        $tax = 0.0;
-        $sort = 0;
-
-        foreach ($lines as $line) {
-            $qty = round((float) ($line['quantity'] ?? 1), 3);
-            $price = round((float) ($line['unit_price'] ?? 0), 3);
-            $lineDiscount = round((float) ($line['discount'] ?? 0), 3);
-
-            if ($qty <= 0) {
-                continue;
-            }
-
-            $gross = round($qty * $price, 3);
-
-            /*
-             * ═══ والخصمُ المحتسَب هو المطبَّق، لا المطلوب ═══
-             *
-             * كان البندُ يُقصَر على صفرٍ (`max(0, ...)`) بينما يُجمَع الخصمُ
-             * **كما طُلب** في رأس الفاتورة. فبندٌ بعشرةٍ وخصمٍ بخمسةٍ وعشرين
-             * يُخرج سطرًا مجموعُه صفرٌ وإجماليًّا في الرأس **سالبًا بخمسة
-             * عشر** — ورقةٌ بنودُها لا تجمع إلى مجموعها.
-             *
-             * والخصمُ السالب أسوأ: `items.*.discount` يقبل `numeric` بلا
-             * `min:0`، فقيمةٌ سالبة كانت تُنقص من الخصم فتضخّم الإجماليَّ
-             * بلا سطرٍ يقابلها.
-             *
-             * فيُحسب مرّةً ما **وقع فعلًا**، ويُجمَع هو في الرأس. فيصير
-             * `subtotal − discount + tax` مساويًا لمجموع البنود دائمًا،
-             * وهي الخاصّيّةُ التي تُراجَع بها الورقة.
-             */
-            $lineDiscount = round(min(max(0.0, $lineDiscount), $gross), 3);
-            $net = round($gross - $lineDiscount, 3);
-            // بندٌ معفًى يُكتب بنسبة صفر — والإعفاء لقطةٌ في السطر لا قاعدةٌ عامّة
-            $lineRate = array_key_exists('tax_rate', $line) ? (float) $line['tax_rate'] : $rate;
-            $lineTax = round($net * $lineRate / 100, 3);
-
-            $subtotal = round($subtotal + $gross, 3);
-            $discount = round($discount + $lineDiscount, 3);
-            $tax = round($tax + $lineTax, 3);
-
-            $items[] = [
-                'product_id' => $line['product_id'] ?? null,
-                'order_item_id' => $line['order_item_id'] ?? null,
-                'description' => (string) ($line['description'] ?? ''),
-                'quantity' => $qty,
-                'unit_price' => $price,
-                'discount' => $lineDiscount,
-                'tax_rate' => $lineRate,
-                'tax_amount' => $lineTax,
-                'line_total' => round($net + $lineTax, 3),
-                'sort_order' => $sort++,
-            ];
-        }
-
-        return [
-            'items' => $items,
-            'subtotal' => $subtotal,
-            'discount' => $discount,
-            'tax' => $tax,
-            'total' => round($subtotal - $discount + $tax, 3),
-        ];
+        return LineTotals::compute($businessId, $lines, $taxRate, ['product_id', 'order_item_id']);
     }
 
     /**

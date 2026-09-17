@@ -68,6 +68,12 @@ class NormalizeNumbers
         // النسب والحدود
         'vat_rate', 'percent',
         'wastage_percent', 'threshold', 'monthly_target',
+        /*
+         * وحدُّ الخصم في عروض الأسعار: صاحبُ العمل يكتب «١٢٫٥» بلوحةٍ عربيّة
+         * فيُردّ بـ«يجب أن يكون رقمًا» على رقمٍ صحيح — وهو المفتاحُ الذي
+         * يحكم كلَّ خصمٍ بعده.
+         */
+        'quotation_discount_percent',
 
         // الكميّات — عشريّةٌ في التركيب والاستلام
         'quantity', 'inventory_quantity',

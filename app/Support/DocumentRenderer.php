@@ -161,6 +161,7 @@ class DocumentRenderer
         return match ($type) {
             'sale' => 'sale',
             'customer_invoice' => 'customer-invoice',
+            'quotation' => 'quotation',
             'delivery' => 'delivery',
             'purchase' => 'purchase',
             'grn' => 'grn',

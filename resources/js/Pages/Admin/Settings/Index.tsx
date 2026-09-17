@@ -300,6 +300,7 @@ export default function SettingsIndex() {
         vat_rate: get('vat_rate', '5'),
         vat_number: get('vat_number'),
         vat_filed_through: get('vat_filed_through'),
+        quotation_discount_percent: get('quotation_discount_percent', '0'),
         tax_mode: get('tax_mode', 'exclusive'),
 
         currency: get('currency', 'OMR'),
@@ -845,6 +846,30 @@ export default function SettingsIndex() {
                                     </Field>
                                 </div>
 
+                                </SettingsGroup>
+
+                                {/*
+                                    وحدُّ الخصم مع الضرائب لا في شاشةٍ ثالثة:
+                                    كلاهما رقمٌ يحكم ما يُكتب على كلّ ورقةٍ
+                                    تخرج، ويُضبطان في الجلسة نفسِها عند تجهيز
+                                    الشركة.
+                                */}
+                                <SettingsGroup title="عروض الأسعار">
+                                    <Field
+                                        label="أعلى نسبة خصم بلا اعتماد"
+                                        hint="خصمٌ يتجاوزها لا يخرج العرض حتى يعتمده من يملك ذلك. وصفرٌ يعني أن كل خصم يحتاج اعتمادًا."
+                                        error={form.errors.quotation_discount_percent}
+                                    >
+                                        <Input
+                                            type="number"
+                                            step="0.5"
+                                            min="0"
+                                            max="100"
+                                            dir="ltr"
+                                            value={form.data.quotation_discount_percent}
+                                            onChange={(e) => form.setData('quotation_discount_percent', e.target.value)}
+                                        />
+                                    </Field>
                                 </SettingsGroup>
 
                                 <SettingsGroup title="العملة">

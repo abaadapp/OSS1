@@ -83,7 +83,7 @@ SPF على `hadath.om` (الآن لا سجلَّ بريدٍ واحدًا في ا
 | # | المرحلة | الحالة | الأثر |
 |---|---|---|---|
 | **1** | عينُ النظام تُفتح — التقاريرُ تقرأ الفواتير لا `orders` | ✅ **تمّت** | الإقرارُ الضريبيّ يوافق الدفتر · `Revenue` بابٌ واحد |
-| **2** | عرضُ السعر `quotations` | ⬜ لم تبدأ | أكبرُ مكسبٍ لكلّ ساعة |
+| **2** | عرضُ السعر `quotations` | ✅ **تمّت** | الشركةُ تُصدر عروضَها · السعرُ يملكه الخادم |
 | **3** | الإرسالُ والقبولُ والشروط | ⬜ لم تبدأ | قبولٌ إلكترونيٌّ مختوم |
 | **4** | المشروع / الفعالية `projects` | ⬜ لم تبدأ | **مركزُ العمل** |
 | **5** | المستنداتُ والتسليمُ والقبول | ⬜ لم تبدأ | توحيدُ المرفقات الخمسة |
@@ -150,7 +150,7 @@ Resend وسُدَّت عشرُ ثغراتٍ في `league/commonmark`، ورُف�
 
 هذه أربعةُ أشياء اكتشفتُها في الفحص، وكلُّها تسبق أيَّ نقاشٍ عن المعمارية،
 لأنّ ثلاثةً منها **أعطابٌ حيّة الآن** والرابع خطأٌ محاسبيّ سيقع في أوّل
-مشروع.
+مشروع. وأُضيف إليها خامسٌ ظهر أثناء بناء المرحلة 2.
 
 ### 0.1 ✅ ~~طبقةُ التقارير واللوحة عمياءُ تمامًا عن إيراد الشركة~~ — **عُولج في المرحلة 1**
 
@@ -234,6 +234,32 @@ Resend وسُدَّت عشرُ ثغراتٍ في `league/commonmark`، ورُف�
 `profitability`. فهو لغمٌ نائم: أوّلُ من يضيف `profitability` إلى الأقسام
 يُسقط شاشةَ التنبيهات. **ليس عطبًا اليوم، ويصير عطبًا في المرحلة القادمة
 بالتحديد** — لأنّنا سنضيف أقسامًا.
+
+### 0.5 ⚠️ `catch (RuntimeException)` يبتلع ٤٠٤ في متحكّم الفواتير
+
+ظهر أثناء بناء المرحلة 2، لأنّي نسختُ النمطَ نفسَه ثمّ سقط في اختباري:
+
+```php
+try {
+    $invoice = CustomerInvoices::issue($this->find($id), auth()->id());
+} catch (RuntimeException $e) {
+    return back()->withErrors(['invoice' => $e->getMessage()]);
+}
+```
+
+و`ModelNotFoundException` **ترث `RuntimeException`**. فالجلبُ داخل الالتقاط
+يعني أنّ `firstOrFail` لا تُخرج ٤٠٤ — يبتلعها الالتقاط ويردّ **تحويلةً
+برسالة**. ومن طلب فاتورةَ شركةٍ أخرى بمعرّفٍ خمّنه يُقال له «حدث خطأ» بدل
+أن يُقال له إنّه لا وجود لها.
+
+**وليست ثغرةَ تسريب:** الصفُّ لا يُجلب أصلًا فلا يُمسّ شيء، والعزلُ قائم.
+لكنّ الردَّ خاطئ: ٣٠٢ مكان ٤٠٤، ورسالةٌ توحي بأنّ هناك شيئًا.
+
+**المواضع:** `CustomerInvoiceController::issue` · `cancel` · `creditNote`.
+**والإصلاحُ سطر:** يُجلب الصفُّ **قبل** `try`، ويبقى الالتقاطُ لقواعد العمل
+وحدها — وهو ما فُعل في `QuotationController` كلِّه.
+
+**لم يُمسّ في المرحلة 2** لأنّه خارج نطاقها («لا تعيد بناء CustomerInvoice»).
 
 ---
 
@@ -374,7 +400,7 @@ Rejected / Expired / Revised / Cancelled`. وثلاثٌ منها **ليست حا
 | **`Expired`** | مشتقّةٌ بحتة: `status = sent AND valid_until < today`. وتخزينُها يستلزم مهمّةً ليليّة، وأوّلُ ليلةٍ تسقط فيها تجعل الشاشةَ تكذب | `CustomerInvoice::paymentState()` اتّخذت هذا القرار حرفيًّا: «و«متأخرة» محسوبةٌ من تاريخ الاستحقاق لا حالةٌ في عمود: حالةٌ تُخزَّن تحتاج مهمّةً ليليّة، وأوّلُ ليلةٍ تسقط فيها تجعل الشاشة تقول «غير مستحقّة» عن دَينٍ تأخّر شهرًا» — **اتّبع قاعدةَ البيت** |
 | **`Revised`** | ليست حالةَ العرض، بل **علاقةٌ** بين عرضين. العرضُ القديم يصير `superseded` والجديد يبدأ `draft` | نمطُ `journal_entries.reverses_id` نفسُه: الأصلُ يبقى ويُشار إليه |
 
-### 4.2 الدورة المقترَحة — 7 حالاتٍ مخزَّنة
+### 4.2 الدورة المقترَحة — 7 حالاتٍ مخزَّنة ✅ **بُنيت كما هي**
 
 ```
                     ┌──────────────────────────────┐
@@ -425,7 +451,7 @@ needs_follow_up  = sent  AND sent_at < now() - followUpDays  ← مركزُ ال
    الوحيد: `revise()` تنسخ الصفَّ ببنوده، `revision + 1`، و`root_id` نفسُه،
    والحالة `draft`، والأصلُ يصير `superseded`.
 
-### 4.4 ضبطُ الخصم — وهو جوهرُ ما طلبت
+### 4.4 ضبطُ الخصم — وهو جوهرُ ما طلبت ✅ **بُني كما هو**
 
 طلبتَ: «لا يستطيع الموظف تغيير Base price / Discount... إلا حسب Permissions
 واضحة» و«إذا أعطى خصمًا: السبب · من طلبه · من اعتمده · القيمة قبل وبعد ·
@@ -451,8 +477,21 @@ unit_price  > list_price                → يلزم quotation.overridePrice + �
 بندٌ حرٌّ بلا product_id                 → list_price = unit_price، ولا خصم
 ```
 
-الحدُّ (`discount_threshold_percent`) سياسةٌ تُدار من الإعدادات، لا رقمٌ في
-الكود.
+الحدُّ سياسةٌ تُدار من الإعدادات، لا رقمٌ في الكود — واسمُه كما بُني
+`quotation_discount_percent`، و**صفرٌ افتراضًا**: مفتاحٌ لم يُضبط بعد يعني «لم
+يقرّر أحدٌ شيئًا»، وقراءتُه «بلا حدّ» تمنح الموظّفين خصمًا مفتوحًا حتى ينتبه
+صاحبُ العمل. وهي قاعدةُ `Permissions::abilities` نفسُها: «الفشل في بابٍ يجب
+أن يُغلقه لا أن يفتحه على مصراعيه». ولا يُثقل ذلك على أحد: من يملك
+`quotation.approve` يعتمد خصمَه في اللحظة نفسها، فلا ينتظر نفسَه.
+
+> ⚠️ **وبابٌ يبقى مفتوحًا عن قصدٍ — ويُقال صراحة:** من أراد الالتفافَ كتب
+> **بندًا حرًّا** (بلا `product_id`) بالسعر الذي يريد، فلا سعرَ كتالوجٍ
+> يُقارَن به. ولا يُغلق في هذه المرحلة: البندُ الحرّ هو الطريقةُ الطبيعيّة
+> لعرض عملٍ مفصّلٍ لا نظيرَ له في الكتالوج، ومنعُه يُعطّل أكثرَ ما تبيعه
+> الشركة. وحارسُه اليوم ثلاثة: `quotation.send` فعلٌ منفصلٌ عن الكتابة،
+> وسجلُّ النشاط ينسب كلَّ بندٍ إلى كاتبه، والورقةُ تُقرأ قبل أن تخرج.
+> وإغلاقُه التامّ سياسةٌ في سجلّ المرحلة 3 (§18): «بندٌ حرٌّ فوق مبلغٍ س
+> يحتاج اعتمادًا».
 
 **والأثر يُكتب في ثلاثة مواضعَ لا واحد**، وكلُّها قائمة:
 
@@ -570,52 +609,81 @@ Project  1 ──── n  CustomerInvoice   (customer_invoices.project_id — �
 
 ### 8.1 الجداول الجديدة — 11
 
-#### `quotations`
+#### `quotations` ✅ **بُني — المرحلة 2**
+
 ```
 id · business_id · customer_id
-number            varchar   ← تسلسلٌ على نمط CustomerInvoices::nextNumber
-root_id           FK self   ← جذرُ سلسلة التنقيحات (NULL للأصل)
-revision          int       ← 1, 2, 3…
-status            varchar   ← 7 قيمٍ لاتينيّة (§4.2)
-project_id        FK NULL   ← يُملأ عند التحويل
+number            varchar(40) NULL  ← يُقطع عند الإرسال لا عند الكتابة
+root_id           FK self NULL      ← جذرُ سلسلة التنقيحات
+revision          int               ← 1, 2, 3…
+status            varchar(20)       ← 7 قيمٍ لاتينيّة (§4.2)
 ─ الفعالية ─
-event_name · event_type · event_location
-event_starts_at · event_ends_at  (datetime)
-expected_attendees int NULL
+title · event_location
+event_starts_at · event_ends_at   date
+expected_attendees                int NULL
 ─ التجارة ─
-valid_until       date
-currency          varchar
-payment_terms_days int
-subtotal · discount_total · tax_total · total   numeric(*,3)
-po_number · contract_number · department · attention_to
+issued_at · valid_until           date
+currency          varchar(8)
+payment_terms_days                smallint NULL
+subtotal · discount_total · tax_total · total   numeric(12,3)
+─ الجهة ─
+customer_name · customer_tax_number · customer_cr · customer_address
+customer_reference · department · attention_to · contact_email · contact_phone
 ─ النصوص ─
-notes · internal_notes   text
+scope · terms · notes · internal_notes            text
 ─ التجميد ─
-terms_snapshot    json    ← الشروطُ والسياساتُ كما كانت (§18)
-document_snapshot json    ← Snapshot::capture — هويّةُ الشركة والعملة والقالب
-content_hash      char(64)
+document_snapshot json     ← Snapshot::capture
+content_hash      char(64) ← sha256(البنود + الإجماليّات + الشروط)
 ─ الأثر ─
 created_by · approved_by · approved_at
-sent_by · sent_at · first_viewed_at · view_count
-decided_at · decided_by_name · rejection_reason
+sent_by · sent_at · first_viewed_at · last_viewed_at · view_count
+decided_at · decided_by · decided_by_name · rejection_reason
+cancelled_at · cancelled_by · cancellation_reason
 created_at · updated_at
+unique(business_id, number, revision)
 ```
 
-#### `quotation_items`
+**وثلاثةُ فروقٍ عن المقترَح أعلاه، ولكلٍّ سببُه:**
+
+| المقترَح | ما بُني | لماذا |
+|---|---|---|
+| `terms_snapshot` json | — | الشروطُ في أعمدة الصفّ نفسِه (`scope` · `terms` · `notes`) وهي مجمَّدةٌ بمنع التعديل بعد الإرسال. ونسخةٌ ثانيةٌ منها في JSON مصدرٌ ثانٍ للحقيقة نفسِها — وهي القاعدةُ التي مُنع بها `journal_lines.project_id` في §8.3 |
+| `po_number` · `contract_number` | `customer_reference` | أمرُ الشراء يُصدَر **بعد** قبول العرض؛ وحقلٌ له في العرض يجعل من يملأ النموذج يبحث عن رقمٍ لا وجود له بعد. والذي يوجد قبله رقمُ مناقصةٍ أو طلبِ تسعير |
+| `project_id` | — | المشروعُ لم يُبنَ بعد (المرحلة 4)، وعمودٌ لجدولٍ غير موجود لا يُكتب |
+
+و`superseded_by_id` لم يُضف: «أيُّ تنقيحٍ حلّ محلّي» يُشتقّ من السلسلة
+نفسِها — الأعلى رقمًا في الجذر نفسِه.
+
+#### `quotation_items` ✅ **بُني**
+
 ```
 id · quotation_id · product_id NULL
 description   varchar
-quantity      numeric(*,3)
-list_price    numeric(*,3)   ← من الخادم. لا يُقبل من الطلب
-unit_price    numeric(*,3)
-discount_reason varchar NULL · discount_approved_by FK NULL
+unit          varchar(40) NULL   ← «يوم» · «شخص» · «جهاز» · «م²»
+quantity      numeric(12,3)
+list_price    numeric(12,3)   ← من `Product::sellingPrice()`. لا يُقبل من الطلب
+unit_price    numeric(12,3)   ← المعروض
+discount      numeric(12,3)   ← محسوبٌ: (list − unit) × qty. لا يُرسَل
+discount_reason · discount_requested_by · discount_approved_by · discount_approved_at
 tax_rate · tax_amount · line_total   numeric
-unit          varchar NULL   ← «يوم» · «قطعة» · «شخص» · «م²»
-sort_order    int
 notes         text NULL      ← وصفُ النطاق لهذا البند
+sort_order    int
 ```
-> **مرآةُ `customer_invoice_items` عمدًا** — وزيادتُها أربعةُ أعمدة. التحويلُ
-> إلى فاتورةٍ يصير نسخًا مباشرًا لا تحويلَ شكل.
+> **مرآةُ `customer_invoice_items` عمدًا.** التحويلُ إلى فاتورةٍ يصير نسخًا
+> مباشرًا لا تحويلَ شكل. ونسبةُ الخصم **تُشتقّ ولا تُخزَّن**
+> (`discountPercent()`): عمودٌ بالقيمة وعمودٌ بالنسبة يفترقان عند أوّل تعديل.
+
+#### `package_items` ✅ **بُني — وهو ما حلّ محلَّ `RecipeItem` (§15)**
+
+```
+id · business_id
+package_id  FK products  cascade   ← الباقةُ نفسُها
+item_id     FK products  restrict  ← ما تحويه: صنفٌ أو خدمة
+quantity    numeric(12,3)
+unit        varchar(40) NULL
+sort_order  int
+unique(package_id, item_id)        ← والعضوُ لا يتكرّر
+```
 
 #### `projects`
 ```
@@ -965,12 +1033,28 @@ products.kind  ← 'item' | 'service' | 'package'   (default 'item')
 |---|---|---|---|
 | `item` | عتادٌ يُشترى ويُستهلك (بطاقات · لانيارد · أحبار) | تُتابَع | — |
 | `service` | عملٌ يُباع بالوقت أو بالمهمّة (تشغيل تسجيل · فريق ميدانيّ) | تُخفى | — |
-| `package` | باقةٌ تحوي بنودًا | تُخفى | **`RecipeItem`** |
+| `package` | باقةٌ تحوي بنودًا | تُخفى | ~~`RecipeItem`~~ → **`package_items`** |
 
-**و`RecipeItem` هي «بنودُ الباقة» بلا عمودٍ جديد.** الجدولُ يقول: «هذا المبيع
-يتكوّن من هذه المبيعات بكميّاتها». وهو تعريفُ الباقة حرفًا بحرف. فباقة
-«مؤتمر ٥٠٠ شخص» = تسجيل + بطاقات×500 + سكانرات×4 + فريق×2. والوصفةُ تعرف
-ذلك أصلًا.
+> ⚠️ **تصحيحٌ بعد الفحص — المرحلة 2.** كان هذا القسمُ يوصي بإعادة استعمال
+> `RecipeItem` لبنود الباقة، والتوصيةُ سقطت عند قراءة الكود:
+>
+> 1. **حارسُها الحيُّ يمنع الباقةَ من أصلها.** `ProductCompositionController`
+>    يردّ بنصِّه: «هذا الصنف له وصفته الخاصة — المكوّنات أصنافُ مخزونٍ مباشرة
+>    لا باقات»، و`componentOptions` تستبعد كلَّ منتجٍ له وصفة. وباقةُ «مؤتمر
+>    ٥٠٠ شخص» تحوي خدماتٍ وباقاتٍ أصغر — وهو بعينه الممنوع هناك.
+> 2. **`Recipe::units()` ترفع الكسرَ إلى عددٍ صحيح** لأنّ المخزون أعدادٌ
+>    صحيحة، فبندُ «يومان ونصف من فريقٍ ميدانيّ» يصير ثلاثة. قرارٌ صائبٌ
+>    للرفّ، خاطئٌ للفاتورة.
+> 3. **`wastage_percent`** بلا معنًى لخدمة، و**`variant_id`** مقاسُ تجزئة.
+>
+> فالوصفةُ **قائمةُ موادّ تُخصم من الرفّ**، والباقةُ **حزمةٌ تجاريّة تُسعَّر
+> وتُعرَض**. اسمُهما واحدٌ ومعناهما اثنان. وجدولُ `package_items` جديد —
+> ستّةُ أعمدةٍ لا غير. انظر الهجرة `a_package_lists_what_it_contains`.
+
+فباقة «مؤتمر ٥٠٠ شخص» = تسجيل + بطاقات×500 + سكانرات×4 + فريق×2، وتُفَكّ
+**بأسعار الكتالوج لكلّ بندٍ على حدة** (`Quotations::expand`) لا بسعر الباقة
+موزَّعًا عليها: الأوّلُ يُقرأ، والثاني يُخرج أرقامًا كسريّةً لا يعرف أحدٌ من
+أين جاءت.
 
 **الأثرُ على الشاشة**: مبدّلٌ في نموذج المنتج يُظهر أو يُخفي حقولَ المخزون.
 لا شاشةَ جديدة.
@@ -1387,23 +1471,24 @@ QuotationController::store   ←  التحقّقُ نفسُه · الصلاحي�
 ### الأقسامُ الجديدة: 12 → 14
 
 ```
-dashboard · customers · products · quotations · projects · orders*
+dashboard · customers · products · quotations✅ · projects · orders*
 inventory · finance · expenses · settings · suppliers · purchases
 employees · reports
 ```
 `*` يُحذف `orders` مع قسم المبيعات — انظر §14.5.
+`✅` بُني في المرحلة 2 — فصارت الأقسامُ **13**.
 
-### الأفعالُ الجديدة: 20 → 34
+### الأفعالُ الجديدة: 20 → 34 (بُني منها 7 — فصارت **27**)
 
 | الفعل | التسمية | يرثه بالدور |
 |---|---|---|
-| `quotation.create` | إنشاء عرض سعر | admin · manager · sales |
-| `quotation.send` | إرسال عرضٍ للعميل | admin · manager · sales |
-| `quotation.discount` | منحُ خصمٍ ضمن الحدّ | admin · manager |
-| `quotation.overridePrice` | البيعُ فوق سعر الكتالوج | admin |
-| `quotation.approve` | اعتمادُ عرضٍ تجاوز الحدّ | admin · manager |
-| `quotation.cancel` | إلغاءُ عرض | admin · manager |
-| `quotation.recordDecision` | تسجيلُ قبولِ العميل أو رفضه نيابةً | admin · manager · sales |
+| `quotation.create` ✅ | كتابة عرض سعر | admin · manager · sales |
+| `quotation.send` ✅ | إرسال عرض سعر للعميل | admin · manager · sales |
+| `quotation.discount` ✅ | منح خصم على عرض سعر | admin · manager |
+| `quotation.overridePrice` ✅ | البيع فوق سعر الكتالوج | admin |
+| `quotation.approve` ✅ | اعتماد خصم تجاوز الحدّ | admin · manager |
+| `quotation.cancel` ✅ | إلغاء عرض سعر | admin · manager |
+| `quotation.recordDecision` ✅ | تسجيل قبول العميل أو رفضه | admin · manager · sales |
 | `project.create` | إنشاءُ مشروع | admin · manager |
 | `project.manage` | إدارةُ فريقِه ومهامِّه | admin · manager |
 | `project.budget.view` | رؤيةُ تكلفته وربحيّته | admin · manager · accountant |
@@ -1684,6 +1769,19 @@ intercompany_transactions
    مصادرُها ولا تُعاد هيكلتُها.
 4. **لا عاملَ صفٍّ يعمل.** كلُّ ما هو دوريٌّ في المجدول. مقبولٌ اليوم، ويصير
    حدًّا حين يدخل إرسالُ الرسائل.
+5. **`catch (RuntimeException)` يبتلع الأربعمئةَ وأربعة** في
+   `CustomerInvoiceController::issue` و`cancel` و`creditNote`:
+   `ModelNotFoundException` ترث `RuntimeException`، والجلبُ (`$this->find($id)`)
+   يقع **داخل** الالتقاط. فمن أرسل معرّفَ فاتورةٍ من شركةٍ أخرى يُردّ بتحويلةٍ
+   ورسالةٍ عامّة بدل ٤٠٤ — والصفُّ لا يُمسّ (العزلُ سليم) لكنّ الردَّ يكذب على
+   حالته. اكتُشف في المرحلة 2 لأنّ النمطَ نُسخ منه، وأُصلح في
+   `QuotationController` بجلبٍ يسبق الالتقاط. **ولم يُمسّ الأصلُ:** خارج نطاق
+   المرحلة، وإصلاحُه ثلاثةُ أسطرٍ يوم يُؤذن.
+6. **البندُ الحرُّ بابٌ مفتوحٌ في ضبط السعر** — عن قصد. من أراد الالتفاف كتب
+   بندًا بلا `product_id` بالسعر الذي يريد. ومنعُه يُعطّل أكثرَ ما تبيعه
+   الشركة (عملٌ مفصّلٌ لا نظيرَ له في الكتالوج). وحارسُه اليوم ثلاثة:
+   `quotation.send` فعلٌ منفصل، وسجلُّ النشاط، وقراءةُ الورقة قبل خروجها.
+   وإغلاقُه سياسةٌ في سجلّ المرحلة 3 (§18).
 
 ---
 
@@ -1736,25 +1834,53 @@ intercompany_transactions
 
 ---
 
-### المرحلة 2 — عرضُ السعر 🎯 *أكبرُ مكسبٍ لكلّ ساعة*
+### المرحلة 2 — عرضُ السعر ✅ **تمّت**
 
-**لماذا ثانيًا:** هو ألمُك المعلَن، وأكثرُ ما يُعيد استعمالَ القائم (شاشةُ
-الفاتورة بـ2176 سطرًا)، **ويقف وحده**: عرضٌ ← فاتورةٌ مباشرةً بلا مشروع.
+**ما سُلِّم:**
 
-- `quotations` + `quotation_items`
-- استخراجُ `CustomerInvoices::compute()` إلى `LineTotals` مشتركة — **لا نسخةَ
-  ثانيةٍ لحساب الإجماليات**
-- شاشةُ إنشاءٍ مبنيّةٌ على `CustomerInvoices/Create.tsx`
-- نوعُ ورقةٍ `quotation` في `DocumentTemplates::TYPES` + قالب PDF + معاينةٌ من
-  الخادم
-- التنقيحات: `root_id` · `revision` · `superseded`
-- **ضبطُ الخصم كاملًا** (§4.4): `list_price` من الخادم · الصلاحيّات ·
-  السبب · السجلّ
-- الحالاتُ السبع + المشتقّة
-- الصلاحيّاتُ السبع + قسمُ `quotations`
-- `Quotation → CustomerInvoice` (نسخُ بنودٍ مباشر)
+- **الكتالوجُ يبيع خدمات.** `products.kind` = `item` · `service` · `package`،
+  و«item» افتراضًا فلا صفَّ قائمٍ يتغيّر. و`Product::isStocked()` تقول من له
+  رفٌّ ومن لا رفَّ له.
+- **`package_items`** — بنودُ الباقة، وتُفَكّ بأسعار الكتالوج
+  (`Quotations::expand`). و**ليست `RecipeItem`**: انظر التصحيحَ في §15.
+- **`quotations` + `quotation_items`** — مرآةُ `customer_invoice_items`
+  عمدًا، فالتحويلُ إلى فاتورةٍ نسخُ بنودٍ لا تحويلَ شكل.
+- **`App\Support\LineTotals`** — محرّكُ الحساب الواحد. استُخرج من
+  `CustomerInvoices::compute()` التي صارت تُفوِّض إليه، **فلا نسخةَ ثانية**:
+  قاعدةٌ تُصحَّح في أحدهما تبلغ الآخر. و`gross_unit` أُضيف لمن له سعران.
+- **`App\Support\Numbering`** — التسلسلُ تحت قفلٍ على صفّ الشركة، مُستخرَجًا
+  من `CustomerInvoices::sequence()`.
+- **ضبطُ السعر كاملًا** (§4.4): `list_price` من `Product::sellingPrice()` في
+  الخادم و**لا يُقبل من الطلب إطلاقًا** · الخصمُ محسوبٌ لا مُرسَل · السببُ
+  شرطٌ · `quotation.discount` و`quotation.overridePrice` · وحدُّ الاعتماد
+  إعدادٌ (`quotation_discount_percent`) **صفرٌ افتراضًا — يُغلق البابَ لا
+  يفتحه**، ومن يملك الاعتماد يعتمد لحظتَه فلا ينتظر نفسَه.
+- **الحالاتُ السبع** مخزَّنة، و**الثلاثُ مشتقّة** (`presentedState()`):
+  `expired` · `unopened` · `awaiting_client`. ولا مهمّةَ ليليّة.
+- **التنقيح**: `root_id` + `revision`، والأصلُ `superseded` ولا يُمحى.
+  والتنقيحُ يرث رقمَ سلسلته. و«النسخة» غيرُه: سلسلةٌ جديدة برقمٍ جديد.
+- **التجميد**: `Snapshot::stamp` عند الإرسال + `content_hash` (sha256 على
+  البنود والإجماليّات والشروط) — وهو ما يجعل القبولَ **دليلًا** في المرحلة 3.
+- **الورقة**: نوعٌ سادس `quotation` في `DocumentTemplates::TYPES` + قالب
+  `documents/v1/quotation.blade.php` + PDF بالمحرّك القائم + معاينةٌ حيّة من
+  الخادم. **لا محرّكَ PDF جديد.**
+- **الرابطُ العامّ**: `Quotation` في `PublicDocument::PUBLIC`، والورقةُ كاملةً
+  لا ملخّصًا (هي ورقةُ قرارٍ لا ورقةَ تحقّق)، و`first_viewed_at` ·
+  `last_viewed_at` · `view_count` تُختم في الصفّ ولا تُقيَّد في سجلّ النشاط.
+- **الصلاحيّاتُ السبع** + قسم `quotations` (البائعُ يفتحه، والمحاسبُ لا).
+- **الشاشات**: «عروض الأسعار» في القائمة الجانبية — قائمةٌ ومحرّرٌ بمعاينةٍ
+  حيّة وصفحةُ عرضٍ بأثره وسلسلة تنقيحاته. ومبدّلُ النوع في نموذج المنتج
+  (يُخفي حقولَ المخزون لما لا رفَّ له)، وبطاقةُ «بنود الباقة» في تركيبه.
+- **16 مسارًا** (13 لعروض الأسعار + 3 لبنود الباقة) · **3 أصناف اختبارٍ
+  جديدة — 62 حالة**.
 
-**المحصّلة:** الشركةُ تُصدر عروضَها من النظام. وقيمةٌ حقيقيّةٌ تُسلَّم مبكرًا.
+**ما أُجِّل عمدًا:** `Quotation → CustomerInvoice`. الشكلُ مرآةٌ فالتحويلُ
+نسخٌ مباشر — لكنّه **قرارُ توقيتٍ ماليّ**: أيُفوتَر كاملًا عند القبول أم
+بدفعةٍ مقدَّمة أم بمعالم؟ وهي أنماطُ §7 التي تُبنى مع المشروع في المرحلة 4.
+وبناؤه الآن يعني زرًّا يُنشئ فاتورةً بكامل المبلغ يومَ القبول — وهو أندرُ
+الأنماط الثلاثة في هذا النشاط.
+
+**المحصّلة:** الشركةُ تُصدر عروضَها من النظام، والسعرُ يملكه الخادم.
 
 ---
 

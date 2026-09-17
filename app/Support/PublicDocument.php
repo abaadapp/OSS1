@@ -5,6 +5,7 @@ namespace App\Support;
 use App\Models\CustomerInvoice;
 use App\Models\DocumentLink;
 use App\Models\Order;
+use App\Models\Quotation;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Str;
 
@@ -19,6 +20,9 @@ use Illuminate\Support\Str;
  *
  * والرابط دائم: زبونٌ يعود بضمانٍ بعد سنةٍ يجب أن يجد فاتورته، والورقةُ
  * المطبوعة في يده لا تُحدَّث إن انتهت صلاحية رمزها.
+ *
+ * وعرضُ السعر منها: يخرج إلى العميل كما تخرج الفاتورة، ورابطُه يجعله
+ * يُقرأ على الهاتف بلا مرفقٍ يُفتح — ويقول لصاحبه **هل فُتح أصلًا**.
  */
 class PublicDocument
 {
@@ -44,9 +48,19 @@ class PublicDocument
      * أصلًا، فلو نسي قالبٌ شرطَه لم يجد ما يرسمه. ومقبضٌ يُخفي رابطًا
      * موجودًا يُنسى فيُشعَل، ورابطٌ لا يُبنى لا يُسرَّب أبدًا.
      *
+     * ═══ وعرضُ السعر ═══
+     *
+     * ويُمنح رمزًا لسببين: يصل العميلَ فيقرؤه على هاتفه بلا مرفقٍ يُفتح،
+     * و**يقول لصاحبه هل فُتح** — وهو ما لا يقوله مرفقُ بريدٍ أبدًا. فمن
+     * أرسل عرضًا ولم يُفتح منذ أسبوعٍ يعرف أنّ المشكلة في الوصول لا في
+     * السعر. انظر `Quotations::markViewed`.
+     *
+     * ولا يُبنى رمزُه قبل أن يخرج: `QuotationController` لا تطلبه لمسودّة،
+     * ورمزٌ لمسودّةٍ يفتح للعميل ورقةً لم تُرسَل إليه.
+     *
      * @var list<class-string>
      */
-    private const PUBLIC = [Order::class, CustomerInvoice::class];
+    private const PUBLIC = [Order::class, CustomerInvoice::class, Quotation::class];
 
     /** أيُمنح هذا النوعُ وجهًا عامًّا؟ */
     public static function allows(?Model $document): bool

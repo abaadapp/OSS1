@@ -33,7 +33,12 @@ class Permissions
         'accountant' => ['dashboard', 'orders', 'customers', 'finance', 'expenses',
             'employees', 'reports', 'suppliers', 'purchases'],
         'inventory' => ['dashboard', 'products', 'inventory', 'suppliers', 'purchases'],
-        'sales' => ['dashboard', 'orders', 'customers', 'products'],
+        /*
+         * والبائعُ يفتح «عروض الأسعار»: هي بابُ عمله الأوّل في Event Plus —
+         * يعرض قبل أن يُفوتر. ولا يفتحها المحاسب: مستندٌ تجاريٌّ قبل البيع
+         * لا أثرَ له في الدفتر.
+         */
+        'sales' => ['dashboard', 'quotations', 'orders', 'customers', 'products'],
         // والسائق يقرأ ما سيحمله: العنوان والموعد والمستلِم
         'delivery' => ['dashboard', 'orders'],
     ];
@@ -124,6 +129,39 @@ class Permissions
     /** فتحُ مرفقات المستندات المالية — وفيها أثمنُ ما في المتجر: أسعارُ شرائه */
     public const ATTACHMENT_VIEW = 'attachment.view';
 
+    /*
+     * ═══ عروضُ الأسعار: الكتابةُ فعلٌ، والسعرُ فعلٌ آخر ═══
+     *
+     * القسمُ («عروض الأسعار») يفتح الشاشةَ ويقرأ ما فيها. وما بعده يُفصَّل
+     * لأنّ أخطرَ ما في عرض السعر ليس كتابتَه بل **ثمنَه**: من يكتب البنود
+     * ليس بالضرورة من يقرّر أن تُباع بأقلّ من سعرها المعتمد، ولا من يأذن
+     * لها أن تخرج إلى جهةٍ تُحاسِب عليها.
+     *
+     * والخصمُ فعلان لا فعلٌ واحد: منحُه ضمن حدٍّ، واعتمادُ ما تجاوزه. ومن
+     * يمنح لا يعتمد ما منحه — وإلّا فالحدُّ زينة.
+     */
+
+    /** كتابةُ عرضِ سعرٍ وتعديلُ مسودّته — ولا سعرَ يُغيَّر به */
+    public const QUOTATION_CREATE = 'quotation.create';
+
+    /** إخراجُ العرض إلى العميل — وهو الفعل الذي يُجمّده ويقطع رقمَه */
+    public const QUOTATION_SEND = 'quotation.send';
+
+    /** منحُ خصمٍ عن سعر الكتالوج — بسببٍ يُكتب، وضمن حدٍّ يُضبط */
+    public const QUOTATION_DISCOUNT = 'quotation.discount';
+
+    /** البيعُ فوق سعر الكتالوج — بسببٍ يُكتب */
+    public const QUOTATION_OVERRIDE_PRICE = 'quotation.overridePrice';
+
+    /** اعتمادُ خصمٍ تجاوز حدَّ صاحبه — وبه وحده يخرج العرض */
+    public const QUOTATION_APPROVE = 'quotation.approve';
+
+    /** إلغاءُ عرضٍ قائم */
+    public const QUOTATION_CANCEL = 'quotation.cancel';
+
+    /** تسجيلُ قبول العميل أو رفضِه نيابةً عنه */
+    public const QUOTATION_RECORD_DECISION = 'quotation.recordDecision';
+
     public const ACTIONS = [
         'order.edit' => 'تصحيح فاتورة مكتملة',
         /*
@@ -190,6 +228,20 @@ class Permissions
         self::CUSTOMER_CREDIT_NOTE => 'إصدار إشعار دائن',
         self::CUSTOMER_PAYMENT_CREATE => 'تسجيل تحصيل من عميل',
         self::ATTACHMENT_VIEW => 'فتح مرفقات المستندات المالية',
+        /*
+         * وعرضُ السعر: سبعةُ أفعالٍ لأنّها سبعةُ قراراتٍ مختلفة.
+         *
+         * وأخطرُها ليس الكتابة: `overridePrice` تبيع فوق السعر المعلن،
+         * و`approve` تُبطل الحدَّ الذي وضعه صاحبُ العمل، و`send` تُخرج
+         * الورقةَ إلى جهةٍ تحتجّ بها.
+         */
+        self::QUOTATION_CREATE => 'كتابة عرض سعر',
+        self::QUOTATION_SEND => 'إرسال عرض سعر للعميل',
+        self::QUOTATION_DISCOUNT => 'منح خصم على عرض سعر',
+        self::QUOTATION_OVERRIDE_PRICE => 'البيع فوق سعر الكتالوج',
+        self::QUOTATION_APPROVE => 'اعتماد خصم تجاوز الحدّ',
+        self::QUOTATION_CANCEL => 'إلغاء عرض سعر',
+        self::QUOTATION_RECORD_DECISION => 'تسجيل قبول العميل أو رفضه',
     ];
 
     /**
@@ -249,6 +301,23 @@ class Permissions
         self::PAYROLL_VIEW => ['admin', 'manager', 'accountant'],
         self::PAYROLL_APPROVE => ['admin', 'manager'],
         self::PAYROLL_PAY => ['admin', 'manager'],
+        /*
+         * وعروضُ الأسعار: البائعُ يكتب ويُرسل ويسجّل قرار العميل — فذلك عملُه.
+         *
+         * ولا يمسّ السعرَ: الخصمُ للمالك ومدير الفرع، والبيعُ فوق السعر
+         * **للمالك وحده** — قرارٌ يمسّ سمعةَ التسعير كلَّه لا صفقةً واحدة.
+         * والاعتمادُ لمن وُضع الحدُّ لأجله، لا لمن يُمنَح الخصمَ نفسَه.
+         *
+         * والمحاسبُ لا يكتب عروضًا: هي مستندٌ تجاريٌّ قبل البيع لا بعده،
+         * ولا أثرَ له في الدفتر.
+         */
+        self::QUOTATION_CREATE => ['admin', 'manager', 'sales'],
+        self::QUOTATION_SEND => ['admin', 'manager', 'sales'],
+        self::QUOTATION_RECORD_DECISION => ['admin', 'manager', 'sales'],
+        self::QUOTATION_DISCOUNT => ['admin', 'manager'],
+        self::QUOTATION_APPROVE => ['admin', 'manager'],
+        self::QUOTATION_CANCEL => ['admin', 'manager'],
+        self::QUOTATION_OVERRIDE_PRICE => ['admin'],
     ];
 
     /**
@@ -433,7 +502,7 @@ class Permissions
 
     /** كل الأقسام التي تظهر في لوحة النشاط — مصدر واحد تقرأ منه الواجهة */
     public const SECTIONS = [
-        'dashboard', 'customers', 'products', 'orders',
+        'dashboard', 'customers', 'products', 'quotations', 'orders',
         'inventory', 'finance', 'expenses', 'settings',
         'suppliers', 'purchases', 'employees', 'reports',
     ];
@@ -533,6 +602,7 @@ class Permissions
         // التقاريرُ يسقط على `ROUTES['reports']` غير الموجود، فيرتفع خطأ
         // مفتاحٍ ناقص داخل HandleInertiaRequests — أي ٥٠٠ على كل صفحةٍ يفتحها
         'reports' => 'admin.reports.index',
+        'quotations' => 'admin.quotations.index',
     ];
 
     /**
@@ -580,6 +650,7 @@ class Permissions
             'employees' => 'الرواتب والموظفين',
             // كانت ساقطةً فتُعرض «reports» بحروفٍ لاتينية في قائمة صلاحيات عربية
             'reports' => 'التقارير',
+            'quotations' => 'عروض الأسعار',
         ];
 
         return collect(self::SECTIONS)

@@ -10,6 +10,7 @@ import {
 import {
     BarChart3,
     Boxes,
+    FileSignature,
     FileText,
     LayoutDashboard,
     Package,
@@ -82,6 +83,18 @@ export const NAV: NavGroup[] = [
     {
         items: [
             { label: 'المنتجات', icon: Package, route: 'admin.products.index', section: 'products' },
+            /*
+             * وعروضُ الأسعار قبل الفواتير: هي أوّلُ ما يُكتب في دورة العمل —
+             * يُعرض، ثمّ يُقبل، ثمّ يُفوتَر. وترتيبُ القائمة ترتيبُ اليوم لا
+             * ترتيبُ الجداول.
+             */
+            {
+                label: 'عروض الأسعار',
+                icon: FileSignature,
+                route: 'admin.quotations.index',
+                section: 'quotations',
+                covers: ['admin.quotations.show', 'admin.quotations.create'],
+            },
             // «الطلبات» سابقًا: المتجر يبيع ولا يستقبل طلبات وحسب
             { label: 'المبيعات', icon: ShoppingCart, route: 'admin.orders.index', section: 'orders' },
             // فواتيرُ العملاء بابٌ واحدٌ لا يتكرّر في «المالية»: ميزةٌ في

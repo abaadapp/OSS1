@@ -7,6 +7,8 @@ import { Button } from '@/Components/ui/button';
 import { Card } from '@/Components/ui/card';
 import { Input } from '@/Components/ui/input';
 import { money, number } from '@/lib/format';
+/* وبنودُ الباقة تُمرَّر عبر هذا النوع ولا تُرسَم هنا — انظر `PackageItems` */
+import type { PackageMember, PackageOption } from './PackageItems';
 import { useTranslate } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import type { Currency } from '@/types';
@@ -71,6 +73,9 @@ export interface CompositionData {
     stock_items: { value: number; label: string; quantity: number }[];
     /** منتجات المتجر — لاختيار «تظهر مع: منتجات محدّدة» */
     products: { value: number; label: string }[];
+    /* وبنودُ الباقة تُمرَّر معها ولا تُقرأ هنا — انظر `PackageItems` */
+    package_items?: PackageMember[];
+    package_options?: PackageOption[];
 }
 
 /* --------------------------- مسوّدة منتجٍ لم يُحفظ --------------------------- */

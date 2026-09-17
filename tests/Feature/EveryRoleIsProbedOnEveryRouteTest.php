@@ -121,7 +121,12 @@ class EveryRoleIsProbedOnEveryRouteTest extends TestCase
             'accountant' => ['dashboard', 'orders', 'customers', 'finance', 'expenses',
                 'employees', 'reports', 'suppliers', 'purchases'],
             'inventory' => ['dashboard', 'products', 'inventory', 'suppliers', 'purchases'],
-            'sales' => ['dashboard', 'orders', 'customers', 'products'],
+            /*
+             * والبائعُ مُنح «عروض الأسعار» عمدًا في المرحلة 2: هي بابُ عمله
+             * الأوّل في Event Plus — يعرض قبل أن يُفوتر. ولم يُمنحها المحاسب:
+             * مستندٌ تجاريٌّ قبل البيع لا أثرَ له في الدفتر.
+             */
+            'sales' => ['dashboard', 'quotations', 'orders', 'customers', 'products'],
             'delivery' => ['dashboard', 'orders'],
         ], Permissions::MAP, 'تغيّر ما يُمنح لدورٍ — إن كان عمدًا فحدّث هذا الحارس');
     }

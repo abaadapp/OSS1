@@ -48,6 +48,12 @@ class Customer extends Model
         return $this->hasMany(CustomerInvoice::class);
     }
 
+    /** عروضُ الأسعار المقدَّمة إليه — سجلُّ ما عُرض قبل ما بيع */
+    public function quotations(): HasMany
+    {
+        return $this->hasMany(Quotation::class);
+    }
+
     public function addresses(): HasMany
     {
         return $this->hasMany(CustomerAddress::class);

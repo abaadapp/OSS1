@@ -67,6 +67,15 @@ class SettingController extends Controller
         'vat_filed_through' => ['sometimes', 'nullable', 'date', 'before_or_equal:today'],
         'tax_mode' => ['sometimes', 'nullable', 'in:inclusive,exclusive'],
 
+        /*
+         * حدُّ الخصم في عروض الأسعار — سياسةٌ تُدار، لا رقمٌ في الكود.
+         *
+         * وصفرٌ افتراضًا: مفتاحٌ لم يُضبط يعني «لم يقرّر أحدٌ شيئًا»، وقراءتُه
+         * «بلا حدّ» تمنح الموظّفين خصمًا مفتوحًا حتى ينتبه صاحبُ العمل.
+         * انظر `Quotations::threshold`.
+         */
+        'quotation_discount_percent' => ['sometimes', 'nullable', 'numeric', 'min:0', 'max:100'],
+
         // العملة وعرضها
         'currency' => ['sometimes', 'nullable', 'string', 'size:3', 'alpha'],
         'decimals' => ['sometimes', 'nullable', 'integer', 'min:0', 'max:4'],
@@ -137,10 +146,12 @@ class SettingController extends Controller
             'inv_prefix.not_regex' => __('لا تصلح الرموز % و _ و \\ في بادئة رقم الفاتورة'),
             'currency.size' => __('رمز العملة ثلاثة أحرف مثل OMR'),
             'vat_rate.max' => __('نسبة الضريبة مئة بالمئة على الأكثر'),
+            'quotation_discount_percent.max' => __('نسبة الخصم مئة بالمئة على الأكثر'),
             'vat_filed_through.before_or_equal' => __('لا يُقفل إقرارُ فترةٍ لم تنتهِ بعد — اختر تاريخًا مضى.'),
         ], [
             'shop_name' => __('اسم الشركة'),
             'vat_rate' => __('نسبة الضريبة'),
+            'quotation_discount_percent' => __('أعلى نسبة خصم بلا اعتماد'),
             'vat_filed_through' => __('آخر إقرار قُدِّم'),
         ]);
 

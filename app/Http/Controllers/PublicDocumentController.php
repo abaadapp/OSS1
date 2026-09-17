@@ -2,14 +2,17 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Admin\QuotationController;
 use App\Models\CustomerInvoice;
 use App\Models\Order;
+use App\Models\Quotation;
 use App\Support\Document\Branding;
 use App\Support\DocumentPaper;
 use App\Support\InvoiceBranding;
 use App\Support\Money;
 use App\Support\Paper;
 use App\Support\PublicDocument;
+use App\Support\Quotations;
 use Illuminate\Contracts\View\View;
 
 /**
@@ -33,7 +36,12 @@ use Illuminate\Contracts\View\View;
  *   كاملةً بالبريد أو على ورق، والسؤالُ عند مسح الرمز واحد — أهذه صحيحة؟
  *   فلا تُحمَّل الصفحةُ ببنودٍ وآيبانٍ ومراكزِ تكلفةٍ لا يحتاجها من يسأل.
  *
- * وما عداهما لا يبلغ هنا أصلًا: `PublicDocument::allows` لا يبني رمزًا
+ * • **عرضُ السعر** يُعرض **كاملًا**: هو ورقةُ قرارٍ لا ورقةَ تحقّق. من
+ *   يفتح الرابط يقرأ البنودَ والأسعارَ والنطاقَ والشروط ليقرّر — وملخّصٌ
+ *   يقول «الإجمالي ١٢٠٠» لا يُقرَّر به شيء. وتُختم واقعةُ الفتح: «فُتح»
+ *   خبرٌ لصاحب العرض لا يقوله مرفقُ بريدٍ أبدًا.
+ *
+ * وما عداها لا يبلغ هنا أصلًا: `PublicDocument::allows` لا يبني رمزًا
  * لأمر الشراء ولا لسند الاستلام — انظر سياستَها هناك.
  */
 class PublicDocumentController extends Controller
@@ -79,6 +87,28 @@ class PublicDocumentController extends Controller
                 'brand' => Paper::brand($link->business, Paper::vatNumber($link->business_id)),
                 'stampedAt' => now()->format('Y-m-d H:i'),
             ]);
+        }
+
+        if ($document instanceof Quotation) {
+            /*
+             * ومسودّةٌ لا تُفتح ولو عُرف رمزُها.
+             *
+             * الرمزُ لا يُبنى لمسودّةٍ أصلًا — لكنّ عرضًا أُرسل ثمّ نُقّح
+             * يبقى رمزُه ويصير جذرُه `superseded`، وتنقيحُه الجديد يبدأ
+             * مسودّةً برمزٍ قد يُطلب. والمسودّةُ ورقةٌ لم تخرج بعد، وفتحُها
+             * للعميل يُريه سعرًا لم يُقرَّر.
+             */
+            abort_if($document->status === Quotation::DRAFT
+                || $document->status === Quotation::PENDING_APPROVAL, 404);
+
+            $document->loadMissing('items');
+
+            /* والفتحُ يُختم قبل الرسم: من رأى الورقة رآها، وإن انقطع اتّصالُه بعدها */
+            Quotations::markViewed($document);
+
+            return InvoiceBranding::render($link->business_id, null, fn () => view('public.quotation', [
+                'paper' => QuotationController::paper($link->business_id, $document)->render(),
+            ]));
         }
 
         abort_unless($document instanceof CustomerInvoice, 404);

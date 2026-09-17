@@ -38,6 +38,7 @@ use App\Http\Controllers\Admin\ProductController;
 use App\Http\Controllers\Admin\ProductImageController;
 use App\Http\Controllers\Admin\ProductImportExportController;
 use App\Http\Controllers\Admin\PurchaseOrderController;
+use App\Http\Controllers\Admin\QuotationController;
 use App\Http\Controllers\Admin\Purchasing\PurchaseRegisterController;
 use App\Http\Controllers\Admin\Purchasing\SupplierInvoiceController;
 use App\Http\Controllers\Admin\ReceivablesController;
@@ -267,6 +268,16 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'tenant', 'business'
     Route::post('/products/{id}/recipe', [ProductCompositionController::class, 'storeRecipeItem'])->name('products.recipe.store');
     Route::put('/products/{id}/recipe/{item}', [ProductCompositionController::class, 'updateRecipeItem'])->name('products.recipe.update');
     Route::delete('/products/{id}/recipe/{item}', [ProductCompositionController::class, 'destroyRecipeItem'])->name('products.recipe.destroy');
+    /*
+     * بنودُ الباقة — وهي غيرُ الوصفة.
+     *
+     * الوصفةُ تقول «كم يُخصم من الرفّ»، والباقةُ تقول «ما يشمله هذا العرض».
+     * وتُدار من شاشة المنتج نفسِها بصلاحية «المنتجات» — من يملك تركيبَ
+     * المنتج يملك ما تحويه باقتُه.
+     */
+    Route::post('/products/{id}/package', [ProductCompositionController::class, 'storePackageItem'])->name('products.package.store');
+    Route::put('/products/{id}/package/{item}', [ProductCompositionController::class, 'updatePackageItem'])->name('products.package.update');
+    Route::delete('/products/{id}/package/{item}', [ProductCompositionController::class, 'destroyPackageItem'])->name('products.package.destroy');
     Route::put('/products/{id}/addons', [ProductCompositionController::class, 'syncAddons'])->name('products.addons.sync');
     Route::delete('/products/{id}/addons/{addon}', [ProductCompositionController::class, 'destroyAddon'])->name('products.addons.destroy');
     Route::post('/products/{id}/restore', [TrashController::class, 'restore'])
@@ -539,6 +550,38 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'tenant', 'business'
     Route::delete('/finance/banks/{id}', [BankAccountController::class, 'destroy'])->name('finance.banks.destroy');
     // كشف الحساب البنكي والمطابقة — بلا معرّف: الحساب الرئيسيّ
     Route::get('/finance/statement/{id?}', [BankAccountController::class, 'statement'])->name('finance.statement');
+
+    /*
+     * عروضُ الأسعار — بابُ الإدخال الأوّل في Event Plus.
+     *
+     * وقسمُها `quotations` مستقلٌّ عن «المبيعات»: البائعُ يكتب العروضَ ولا
+     * يلزم أن يفتح دفترَ الفواتير، والمحاسبُ يفتح الفواتيرَ ولا شأنَ له
+     * بعرضٍ لم يُقبل بعد. وهو ما يُشتقّ من اسم المسار — انظر
+     * `Permissions::sectionFromRoute`.
+     */
+    Route::get('/quotations', [QuotationController::class, 'index'])->name('quotations.index');
+    /*
+     * و«create» تسبق «{id}» — والذي يحميها فعلًا `Route::pattern('id', '[0-9]+')`
+     * في أعلى الملفّ. والترتيبُ هنا احتياطٌ ثانٍ لا الحارسَ الأوّل.
+     */
+    Route::get('/quotations/create', [QuotationController::class, 'create'])->name('quotations.create');
+    /*
+     * معاينةُ الورقة قبل حفظها — تُرسم ولا تُكتب.
+     *
+     * و`POST` لا `GET`: النموذجُ كلُّه يرحل معها — بنودٌ وأسعارٌ وشروط —
+     * وشريطُ عنوانٍ يحمل عرضَ جهةٍ كاملًا يُسجَّل في كلّ سجلّ وصول.
+     */
+    Route::post('/quotations/preview', [QuotationController::class, 'preview'])->name('quotations.preview');
+    Route::post('/quotations', [QuotationController::class, 'store'])->name('quotations.store');
+    Route::get('/quotations/{id}', [QuotationController::class, 'show'])->name('quotations.show');
+    Route::put('/quotations/{id}', [QuotationController::class, 'update'])->name('quotations.update');
+    Route::post('/quotations/{id}/approve', [QuotationController::class, 'approve'])->name('quotations.approve');
+    Route::post('/quotations/{id}/send', [QuotationController::class, 'send'])->name('quotations.send');
+    Route::post('/quotations/{id}/revise', [QuotationController::class, 'revise'])->name('quotations.revise');
+    Route::post('/quotations/{id}/duplicate', [QuotationController::class, 'duplicate'])->name('quotations.duplicate');
+    Route::post('/quotations/{id}/cancel', [QuotationController::class, 'cancel'])->name('quotations.cancel');
+    Route::post('/quotations/{id}/decision', [QuotationController::class, 'decision'])->name('quotations.decision');
+    Route::get('/quotations/{id}/pdf', [PdfController::class, 'quotation'])->name('quotations.pdf');
 
     /*
      * فواتيرُ العملاء والذمم.

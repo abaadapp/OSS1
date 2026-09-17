@@ -11,6 +11,7 @@ import { useTranslate } from '@/lib/i18n';
 import { csrfHeaders } from '@/lib/csrf';
 import { cn } from '@/lib/utils';
 import AddonDialog from './AddonDialog';
+import PackageItems from './PackageItems';
 import Composition, { emptyDraft, type AddonOption, type CompositionData, type CompositionDraft } from './Composition';
 import Gallery, { type GalleryImage } from './Gallery';
 import type { Currency } from '@/types';
@@ -60,6 +61,7 @@ const FIELD_SECTION: Record<string, TabKey> = {
     name_en: 'basic',
     description: 'basic',
     category_id: 'basic',
+    kind: 'basic',
     sku: 'basic',
     barcode: 'basic',
     active: 'basic',
@@ -92,6 +94,7 @@ export default function ProductForm({ categories, product, description, currency
         name_en: product?.name_en ?? '',
         description: description ?? '',
         category_id: String(categories.find((c) => c.name === product?.cat)?.id ?? ''),
+        kind: (product?.kind ?? 'item') as Product['kind'],
         sku: product?.sku ?? '',
         barcode: product?.barcode ?? '',
         price: product ? String(product.price) : '',
@@ -226,6 +229,9 @@ export default function ProductForm({ categories, product, description, currency
      * يُبقي التبويبات في المشهد ويُظهر أن القسم تبدّل فعلًا.
      */
     const contentRef = useRef<HTMLFormElement>(null);
+    /** ما لا رفَّ له: خدمةٌ أو باقة — انظر `Product::UNSTOCKED` */
+    const unstocked = form.data.kind === 'service' || form.data.kind === 'package';
+
     const pick = (key: TabKey) => {
         setTab(key);
         requestAnimationFrame(() =>
@@ -356,6 +362,29 @@ export default function ProductForm({ categories, product, description, currency
                                         />
                                     </Field>
                                 </div>
+
+                                {/*
+                                    ونوعُ البند أوّلًا: هو ما يقرّر أيّ حقولٍ
+                                    تُعرض بعده. ومن اختار «خدمة» لا يُسأل عن
+                                    كميّةٍ على رفّ.
+                                */}
+                                <Field
+                                    label="نوع البند"
+                                    hint="الخدمة والباقة لا كمية لهما — تُخفى حقول المخزون"
+                                    error={form.errors.kind}
+                                >
+                                    <Select
+                                        value={form.data.kind}
+                                        onChange={(e) =>
+                                            form.setData('kind', e.target.value as Product['kind'])
+                                        }
+                                        options={[
+                                            { label: 'صنف', value: 'item' },
+                                            { label: 'خدمة', value: 'service' },
+                                            { label: 'باقة', value: 'package' },
+                                        ]}
+                                    />
+                                </Field>
 
                                 <Field label="القسم" error={form.errors.category_id ?? catError ?? undefined}>
                                     {newCat === null ? (
@@ -586,6 +615,16 @@ export default function ProductForm({ categories, product, description, currency
                 {tab === 'stock' && (
                     <Card className="p-6">
                         <h3 className="mb-4 font-bold text-[#111]">{t('المخزون')}</h3>
+                        {/*
+                            وما لا رفَّ له يقول ذلك بدل أن يعرض حقلين
+                            يكتبهما صاحبُه فلا يُقرآن. والخادمُ يصفّرهما على
+                            أيّ حال — انظر `ProductController::store`.
+                        */}
+                        {unstocked ? (
+                            <p className="rounded-lg bg-[#f4f4f5] px-4 py-3 text-[13px] text-[#52525b]">
+                                {t('لا مخزون لهذا البند — الخدمات والباقات لا تُعدّ على رفّ.')}
+                            </p>
+                        ) : (
                         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                             <Field label="الكمية المتوفرة" error={form.errors.quantity}>
                                 <Input
@@ -612,6 +651,7 @@ export default function ProductForm({ categories, product, description, currency
                                 />
                             </Field>
                         </div>
+                        )}
                     </Card>
                 )}
 
@@ -676,6 +716,24 @@ export default function ProductForm({ categories, product, description, currency
                             </p>
                         </Card>
                         )}
+                    </div>
+                )}
+
+                {/*
+                    والباقةُ تعرض بنودَها فوق تركيبها.
+
+                    وهما شيئان لا شيءٌ واحد: الوصفةُ تقول «كم يُخصم من
+                    الرفّ» والباقةُ تقول «ما يشمله هذا العرض» — انظر
+                    `PackageItems`.
+                */}
+                {tab === 'composition' && form.data.kind === 'package' && composition && currency && (
+                    <div className="mb-6">
+                        <PackageItems
+                            packageId={product ? Number(product.id) : null}
+                            items={composition.package_items ?? []}
+                            options={composition.package_options ?? []}
+                            currency={currency}
+                        />
                     </div>
                 )}
 

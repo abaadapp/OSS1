@@ -32,6 +32,8 @@ export interface Product {
     addon_ids?: number[] | null;
     /** ذو الوصفة رصيدُه مكوّناتُه لا عمودُه */
     has_recipe?: boolean;
+    /** صنفٌ · خدمةٌ · باقة — والخدمةُ والباقةُ لا رفَّ لهما */
+    kind?: 'item' | 'service' | 'package';
 }
 
 export interface Category {

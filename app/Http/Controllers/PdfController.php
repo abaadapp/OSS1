@@ -3,11 +3,13 @@
 namespace App\Http\Controllers;
 
 use App\Http\Controllers\Admin\CustomerInvoiceController;
+use App\Http\Controllers\Admin\QuotationController;
 use App\Models\BankAccount;
 use App\Models\Business as BusinessModel;
 use App\Models\Customer;
 use App\Models\CustomerInvoice;
 use App\Models\Order;
+use App\Models\Quotation;
 use App\Models\Setting;
 use App\Support\Activity;
 use App\Support\Demo;
@@ -20,6 +22,7 @@ use App\Support\OrderStatus;
 use App\Support\Paper;
 use App\Support\Pdf;
 use App\Support\PublicDocument;
+use App\Support\Quotations;
 use App\Support\Receivables;
 use App\Support\Reports;
 use App\Support\ShopIdentity;
@@ -393,6 +396,41 @@ class PdfController extends Controller
         Activity::log('report', 'صدّر فاتورة عميل: '.$invoice->number, ['subject_id' => $invoice->id]);
 
         return $this->pdf($html, 'customer-invoice-'.$invoice->number);
+    }
+
+    /**
+     * عرضُ سعر (PDF) — الورقةُ التي تُرسَل إلى العميل.
+     *
+     * وتُبنى حيث تُبنى المعاينة (`QuotationController::paper`) لا نسخةً
+     * ثانية هنا: قائمتان تفترقان عند أوّل متغيّرٍ يُضاف.
+     *
+     * وباللغة التي اختارها صاحبُ الشركة لورقتها، لا بلغة من ضغط الزرّ:
+     * من يمسح الرمزَ يحمل ورقةً مطبوعة، وصفحةٌ بغير لغتها تجعله يقارن
+     * نصّين مختلفين ليعرف أنّهما الشيءُ نفسُه.
+     */
+    public function quotation($id)
+    {
+        $bid = auth()->user()->business_id ?? Demo::bid();
+        $quotation = Quotation::where('business_id', $bid)->whereKey($id)
+            ->with('items')->firstOrFail();
+
+        $html = InvoiceBranding::render($bid, null, fn () => QuotationController::paper(
+            $bid,
+            $quotation,
+            null,
+            /*
+             * ورمزُ الورقة يُبنى عند الطباعة لا عند المعاينة — ولا لمسودّة:
+             * رمزٌ لمسودّةٍ يفتح للعميل ورقةً لم تخرج إليه بعد.
+             */
+            ['paperUrl' => $quotation->status === Quotation::DRAFT
+                ? '' : (PublicDocument::url($quotation) ?? '')],
+        )->render());
+
+        Activity::log('report', 'صدّر عرض سعر: '.Quotations::label($quotation), [
+            'subject_id' => $quotation->id, 'subject_type' => 'quotation',
+        ]);
+
+        return $this->pdf($html, 'quotation-'.($quotation->number ?: $quotation->id));
     }
 
     /** كشفُ حساب عميل (PDF) — رصيدٌ افتتاحيٌّ ثمّ حركةٌ برصيدٍ جارٍ */

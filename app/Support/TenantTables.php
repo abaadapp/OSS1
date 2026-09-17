@@ -46,6 +46,8 @@ class TenantTables
         'branch_user',
         'custom_alerts', 'products', 'product_variants', 'product_images',
         'addons', 'product_addons', 'recipe_items',
+        /* وبنودُ الباقة بعد المنتجات: الباقةُ وعضوُها كلاهما صفٌّ فيها */
+        'package_items',
         'customers', 'customer_addresses',
         'bank_accounts', 'bank_statement_lines',
         'journal_entries', 'journal_lines',
@@ -72,6 +74,13 @@ class TenantTables
         'customer_invoice_attachments',
         'customer_payments', 'customer_payment_allocations',
         'customer_credit_notes',
+        /*
+         * وعروضُ الأسعار بعد العملاء والمنتجات — وتشير إلى نفسها بـ`root_id`.
+         *
+         * والإشارةُ الذاتيّة لا تحتاج `DEFERRED`: الجذرُ يُكتب قبل تنقيحه
+         * دائمًا (معرّفُه أصغر)، والإدراجُ يمشي بترتيب المعرّفات.
+         */
+        'quotations', 'quotation_items',
         'delivery_notes', 'delivery_note_items',
         'payroll_runs', 'payroll_lines',
     ];
@@ -99,6 +108,7 @@ class TenantTables
         'order_item_addons' => ['order_items', 'order_item_id'],
         'order_items' => ['orders', 'order_id'],
         'customer_invoice_items' => ['customer_invoices', 'customer_invoice_id'],
+        'quotation_items' => ['quotations', 'quotation_id'],
         'customer_invoice_orders' => ['customer_invoices', 'customer_invoice_id'],
         'customer_payment_allocations' => ['customer_payments', 'customer_payment_id'],
         'payroll_lines' => ['payroll_runs', 'payroll_run_id'],

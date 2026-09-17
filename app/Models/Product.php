@@ -14,6 +14,32 @@ class Product extends Model
     // الحذف يُخفي ولا يمحو — انظر الهجرة add_soft_deletes_to_products_and_expenses
     use SoftDeletes;
 
+    /** عتادٌ يُشترى ويُستهلك — كميّتُه تُتابَع على الرفّ */
+    public const ITEM = 'item';
+
+    /** عملٌ يُباع بالوقت أو بالمهمّة — لا رفَّ له ولا كميّة */
+    public const SERVICE = 'service';
+
+    /** باقةٌ تحوي بنودًا — انظر `PackageItem` */
+    public const PACKAGE = 'package';
+
+    /**
+     * أنواعُ الكتالوج الثلاثة — مصدرٌ واحد يقرؤه التحقّقُ والشاشةُ معًا.
+     *
+     * وقائمتان تُكتبان باليد تفترقان يومًا: يُقبل نوعٌ في الحفظ ولا يُعرض
+     * في القائمة، أو يُعرض ولا يُقبل.
+     *
+     * @var list<string>
+     */
+    public const KINDS = [self::ITEM, self::SERVICE, self::PACKAGE];
+
+    /**
+     * ما لا رفَّ له — فلا كميّةَ تُتابَع ولا تنبيهَ نفادٍ يُرفع.
+     *
+     * @var list<string>
+     */
+    public const UNSTOCKED = [self::SERVICE, self::PACKAGE];
+
     protected $guarded = [];
 
     protected $casts = ['price' => 'decimal:3', 'cost' => 'decimal:3', 'active' => 'boolean'];
@@ -38,6 +64,38 @@ class Product extends Model
     public function recipeItems(): HasMany
     {
         return $this->hasMany(RecipeItem::class)->orderBy('id');
+    }
+
+    /**
+     * بنودُ الباقة — وليست وصفتَها.
+     *
+     * الوصفةُ تقول «ما يُخصم من الرفّ حين يُباع»، والباقةُ تقول «ما يشمله
+     * هذا العرض». وقد يجتمعان في منتجٍ واحد ولا يعني أحدُهما الآخر.
+     */
+    public function packageItems(): HasMany
+    {
+        return $this->hasMany(PackageItem::class, 'package_id')
+            ->orderBy('sort_order')->orderBy('id');
+    }
+
+    /** أهذا خدمةٌ أو باقة؟ — فلا مخزونَ له */
+    public function isStocked(): bool
+    {
+        return ! in_array($this->kind ?? self::ITEM, self::UNSTOCKED, true);
+    }
+
+    /** ما يُتابَع على الرفّ وحده */
+    public function scopeStocked($query)
+    {
+        return $query->whereNotIn('kind', self::UNSTOCKED);
+    }
+
+    /** أصنافٌ من نوعٍ بعينه — والمجهولُ لا يردّ الجدولَ كلَّه */
+    public function scopeOfKind($query, string $kind)
+    {
+        return in_array($kind, self::KINDS, true)
+            ? $query->where('kind', $kind)
+            : $query->whereRaw('1 = 0');
     }
 
     /** الإضافات المسموحة معه — الفارغة تعني «كلّ إضافات المتجر» لا «لا شيء» */

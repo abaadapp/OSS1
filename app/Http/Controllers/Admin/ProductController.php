@@ -131,6 +131,7 @@ class ProductController extends Controller
 
         $products = $q->paginate(12)->withQueryString()->through(fn ($p) => [
             'id' => $p->id, 'name' => $p->name, 'cat' => $p->category?->name ?? '—',
+            'kind' => $p->kind ?? Product::ITEM,
             'price' => (float) $p->price, 'cost' => (float) $p->cost, 'qty' => $p->quantity,
             'sku' => $p->sku, 'barcode' => $p->barcode, 'image' => $p->image,
             'stock_status' => $p->stock_status, 'active' => (bool) $p->active,
@@ -165,6 +166,14 @@ class ProductController extends Controller
             'description' => ['nullable', 'string'],
             'category_id' => $this->categoryRule(),
             /*
+             * نوعُ البند: صنفٌ أو خدمةٌ أو باقة.
+             *
+             * وقائمةٌ مغلقةٌ من `Product::KINDS` لا نصٌّ حرّ: نوعٌ مخترَع
+             * يُكتب في العمود يجعل `scopeStocked` تعدّه مخزونًا فتُنبّه
+             * الشاشةُ على نفاد «خدمةٍ» لا رفَّ لها.
+             */
+            'kind' => ['nullable', Rule::in(Product::KINDS)],
+            /*
              * الرمز والباركود فريدان داخل المتجر.
              *
              * صنفان بباركودٍ واحد يجعلان الماسح يختار أحدهما — فيُخصم من
@@ -195,8 +204,18 @@ class ProductController extends Controller
         $data['business_id'] = $this->bid();
         // القيم الرقمية الفارغة → افتراضياتها (الأعمدة NOT NULL؛ الفراغ يُحوَّل إلى null فيفشل)
         $data['cost'] = $data['cost'] ?? 0;
-        $data['quantity'] = $data['quantity'] ?? 0;
-        $data['alert_qty'] = $data['alert_qty'] ?? 10;
+        $data['kind'] = $data['kind'] ?? Product::ITEM;
+        /*
+         * وما لا رفَّ له لا كميّةَ له — ولو أُرسلت.
+         *
+         * حقولُ المخزون تُخفى في الشاشة حين يكون النوعُ خدمةً، وشاشةٌ تُخفي
+         * ليست حارسًا: طلبٌ مصنوعٌ بيدٍ يمرّ من فوقها. وخدمةٌ بكميّة «٥٠»
+         * تظهر في الجرد وفي تنبيه النفاد وفي تقرير المخزون — ثلاثةُ مواضعَ
+         * تقول عن شيءٍ لا وجودَ له على رفٍّ إنّه ينفد.
+         */
+        $unstocked = in_array($data['kind'], Product::UNSTOCKED, true);
+        $data['quantity'] = $unstocked ? 0 : ($data['quantity'] ?? 0);
+        $data['alert_qty'] = $unstocked ? 0 : ($data['alert_qty'] ?? 10);
         // الضريبة الفارغة تبقى فارغة: «اتبع نسبة المتجر» لا «صفر»
         $data['tax'] = ($data['tax'] ?? '') === '' ? null : $data['tax'];
         $data['discount'] = $data['discount'] ?? 0;
@@ -259,6 +278,14 @@ class ProductController extends Controller
             'description' => ['nullable', 'string'],
             'category_id' => $this->categoryRule(),
             /*
+             * نوعُ البند: صنفٌ أو خدمةٌ أو باقة.
+             *
+             * وقائمةٌ مغلقةٌ من `Product::KINDS` لا نصٌّ حرّ: نوعٌ مخترَع
+             * يُكتب في العمود يجعل `scopeStocked` تعدّه مخزونًا فتُنبّه
+             * الشاشةُ على نفاد «خدمةٍ» لا رفَّ لها.
+             */
+            'kind' => ['nullable', Rule::in(Product::KINDS)],
+            /*
              * الرمز والباركود فريدان داخل المتجر.
              *
              * صنفان بباركودٍ واحد يجعلان الماسح يختار أحدهما — فيُخصم من
@@ -297,8 +324,18 @@ class ProductController extends Controller
         $data = Lexicon::fill($data);
         // القيم الرقمية الفارغة → افتراضياتها (الأعمدة NOT NULL)
         $data['cost'] = $data['cost'] ?? 0;
-        $data['quantity'] = $data['quantity'] ?? 0;
-        $data['alert_qty'] = $data['alert_qty'] ?? 10;
+        $data['kind'] = $data['kind'] ?? Product::ITEM;
+        /*
+         * وما لا رفَّ له لا كميّةَ له — ولو أُرسلت.
+         *
+         * حقولُ المخزون تُخفى في الشاشة حين يكون النوعُ خدمةً، وشاشةٌ تُخفي
+         * ليست حارسًا: طلبٌ مصنوعٌ بيدٍ يمرّ من فوقها. وخدمةٌ بكميّة «٥٠»
+         * تظهر في الجرد وفي تنبيه النفاد وفي تقرير المخزون — ثلاثةُ مواضعَ
+         * تقول عن شيءٍ لا وجودَ له على رفٍّ إنّه ينفد.
+         */
+        $unstocked = in_array($data['kind'], Product::UNSTOCKED, true);
+        $data['quantity'] = $unstocked ? 0 : ($data['quantity'] ?? 0);
+        $data['alert_qty'] = $unstocked ? 0 : ($data['alert_qty'] ?? 10);
         // الضريبة الفارغة تبقى فارغة: «اتبع نسبة المتجر» لا «صفر»
         $data['tax'] = ($data['tax'] ?? '') === '' ? null : $data['tax'];
         $data['discount'] = $data['discount'] ?? 0;

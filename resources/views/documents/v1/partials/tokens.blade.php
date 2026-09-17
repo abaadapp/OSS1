@@ -395,6 +395,36 @@
         padding: {{ $fx(18) }} {{ $fx(6) }};
     }
 
+    /*
+        ————————————————— ما يخصّ عرض السعر —————————————————
+
+        وثلاثةُ أسطرٍ لا قالبٌ ثانٍ: عرضُ السعر يرث جدولَ البنود نفسَه،
+        وما زاد عليه عنوانُ فعاليّةٍ فوقه، ونطاقُ بندٍ تحته، وعمودُ وحدة.
+
+        ولا تُكتب في القالب نفسِه: الورقةُ كلُّها تُنسَّق من هنا، وقالبٌ
+        يحمل `style` بيده يخرج بخطٍّ لا يتبع مقاسَ التاجر ولا لونَه.
+    */
+
+    /* عنوانُ الفعاليّة: يجمع البنودَ ويقول لِمَ هي معًا */
+    .eventline {
+        font-weight: bold;
+        font-size: {{ $s(Theme::GEOMETRY['text_md']) }};
+        color: var(--document-text); color: {{ $t['text'] }};
+        margin-bottom: {{ $fx(5) }};
+    }
+
+    /* نطاقُ البند — أخفُّ من اسمه، فلا يزاحمه في القراءة */
+    table.items td .itemnote {
+        font-weight: normal;
+        font-size: {{ $s(Theme::GEOMETRY['text_xs']) }};
+        color: var(--document-second); color: {{ $t['second'] }};
+        margin-top: {{ $fx(2) }};
+        line-height: 1.4;
+    }
+
+    /* الوحدةُ صفةٌ للكميّة لا رقمٌ — فتُوسَّط معها ولا تُصفَّ مع المال */
+    table.items td.unit, table.items th.unit { text-align: center; }
+
     /* ————————————————— المجاميع ————————————————— */
 
     /*
