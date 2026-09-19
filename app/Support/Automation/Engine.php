@@ -11,6 +11,7 @@ use App\Support\Communication\Communications;
 use App\Support\Communication\Subjects;
 use App\Support\Communication\Templates;
 use App\Support\Contention;
+use App\Support\Import\Provenance;
 use App\Support\Messaging\Notifiers;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
@@ -68,6 +69,9 @@ final class Engine
 
     public const TARGET_GONE = 'target_gone';
 
+    /** مستورَدٌ تاريخيًّا — لم يمرّ بدورة النظام فلا يُذكَّر به (المرحلة 9) */
+    public const HISTORICAL = 'historical';
+
     public const REASONS = [
         self::PAUSED => 'الأتمتة موقوفة',
         self::NOT_ELIGIBLE => 'لم يعد المستند في الحال التي تستدعي المتابعة',
@@ -78,6 +82,7 @@ final class Engine
         self::COOLDOWN => 'أُرسل مثله قريبًا — فترة الهدوء',
         self::NO_TEMPLATE => 'لا قالب صالح لهذه القناة',
         self::NOT_CONFIGURED => 'القناة غير موصولة على الخادم',
+        self::HISTORICAL => 'مستند مستورَد من بيانات تاريخية — لا تُتابعه الأتمتة',
         self::MODE_OFF => 'الأتمتة مطفأة',
         self::TARGET_GONE => 'المستند لم يعد موجودًا',
     ];
@@ -153,6 +158,17 @@ final class Engine
             $to = $now->copy()->subDays(min($offsets))->format('Y-m-d');
 
             foreach ($trigger->candidates($businessId, $from, $to, $rule) as $target) {
+                /*
+                 * وما جاء من الخزنة لا يُتابَع — المرحلة 9.
+                 *
+                 * فاتورةٌ عمرُها سنتان استُوردت اليوم ليست «متأخّرةً 700 يوم»:
+                 * لم تمرّ بدورة النظام، ولا يُفاجَأ عميلٌ برسالةٍ عن ورقةٍ قديمة.
+                 * يُسأل المنشأُ هنا قبل أن يُفتح تنفيذ، وفي التأهيل ثانيةً.
+                 */
+                if (Provenance::isHistorical($target)) {
+                    continue;
+                }
+
                 $anchor = $trigger->anchor($target);
                 if ($anchor === null) {
                     continue;
@@ -325,6 +341,11 @@ final class Engine
         $anchor = $trigger->anchor($target);
         if ($anchor === null || substr($anchor, 0, 10) !== substr((string) $run->occurrence, 0, 10)) {
             return self::skip($run, self::ANCHOR_CHANGED);
+        }
+
+        /* والمنشأُ يُسأل لحظةَ الفعل أيضًا — تنفيذٌ فُتح قبل الاستيراد لا يُرسَل بعده */
+        if (Provenance::isHistorical($target)) {
+            return self::skip($run, self::HISTORICAL);
         }
 
         if (($why = $trigger->qualify($target, $step, $rule)) !== null) {

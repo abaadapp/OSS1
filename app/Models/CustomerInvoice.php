@@ -25,6 +25,8 @@ class CustomerInvoice extends Model
     protected $guarded = [];
 
     protected $casts = [
+        /* رصيدٌ افتتاحيٌّ يومَ التحويل لا مستندٌ — المرحلة 9 */
+        'is_opening_balance' => 'boolean',
         'document_snapshot' => 'array',
         'issued_at' => 'date',
         'due_at' => 'date',

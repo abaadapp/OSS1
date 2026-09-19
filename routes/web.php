@@ -16,6 +16,7 @@ use App\Http\Controllers\Admin\CustomerController;
 use App\Http\Controllers\Admin\DeliveryPackageController;
 use App\Http\Controllers\Admin\CustomerImportExportController;
 use App\Http\Controllers\Admin\CustomerInvoiceController;
+use App\Http\Controllers\Admin\DataImportController;
 use App\Http\Controllers\Admin\DocumentPrintController;
 use App\Http\Controllers\Admin\EmployeeController;
 use App\Http\Controllers\Admin\ExpenseController;
@@ -969,6 +970,30 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'tenant', 'business'
     Route::get('/automation/history/{id}', [AutomationController::class, 'show'])->whereNumber('id')->name('automation.history.show');
     Route::post('/automation/history/{id}/cancel', [AutomationController::class, 'cancel'])->whereNumber('id')->name('automation.runs.cancel');
     Route::post('/notifications/internal/{id}/read', [AutomationController::class, 'read'])->whereNumber('id')->name('notifications.internal.read');
+
+    /*
+     * استيرادُ البيانات التاريخيّة — المرحلة 9. القسمُ `imports` يقرأ؛ والتسجيلُ
+     * والربطُ والتجربةُ `import.manage`، والاعتمادُ والتنفيذُ `import.execute`،
+     * والماليُّ `import.financial`، والتراجعُ `import.rollback`. ولا مسارٌ يعطي الملفَّ نفسَه.
+     */
+    Route::get('/imports', [DataImportController::class, 'index'])->name('imports.index');
+    Route::post('/imports', [DataImportController::class, 'store'])->name('imports.store');
+    Route::put('/imports/cutover', [DataImportController::class, 'cutover'])->name('imports.cutover');
+    Route::get('/imports/{id}', [DataImportController::class, 'show'])->whereNumber('id')->name('imports.show');
+    Route::get('/imports/{id}/preview', [DataImportController::class, 'preview'])->whereNumber('id')->name('imports.preview');
+    Route::get('/imports/{id}/runs/{run}/rows', [DataImportController::class, 'rows'])->whereNumber('id')->whereNumber('run')->name('imports.rows');
+    Route::get('/imports/{id}/report', [DataImportController::class, 'report'])->whereNumber('id')->name('imports.report');
+    Route::post('/imports/{id}/profile', [DataImportController::class, 'profile'])->whereNumber('id')->name('imports.profile');
+    Route::put('/imports/{id}/mapping', [DataImportController::class, 'mapping'])->whereNumber('id')->name('imports.mapping');
+    Route::put('/imports/{id}/strategy', [DataImportController::class, 'strategy'])->whereNumber('id')->name('imports.strategy');
+    Route::put('/imports/{id}/resolve', [DataImportController::class, 'resolve'])->whereNumber('id')->name('imports.resolve');
+    Route::post('/imports/{id}/dry-run', [DataImportController::class, 'dryRun'])->whereNumber('id')->name('imports.dryRun');
+    Route::post('/imports/{id}/approve', [DataImportController::class, 'approve'])->whereNumber('id')->name('imports.approve');
+    Route::post('/imports/{id}/import', [DataImportController::class, 'import'])->whereNumber('id')->name('imports.import');
+    Route::post('/imports/{id}/rollback', [DataImportController::class, 'rollback'])->whereNumber('id')->name('imports.rollback');
+    Route::post('/imports/{id}/cancel', [DataImportController::class, 'cancel'])->whereNumber('id')->name('imports.cancel');
+    Route::post('/imports/{id}/templates', [DataImportController::class, 'saveTemplate'])->whereNumber('id')->name('imports.templates.store');
+    Route::post('/imports/{id}/templates/apply', [DataImportController::class, 'applyTemplate'])->whereNumber('id')->name('imports.templates.apply');
 
     /*
      * المراسلات — المرحلة 6.

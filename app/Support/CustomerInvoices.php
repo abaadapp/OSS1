@@ -369,11 +369,22 @@ final class CustomerInvoices
 
         $lines = [['account' => 'receivable', 'debit' => round((float) $invoice->total, 3)]];
 
-        if ($net > 0) {
-            $lines[] = ['account' => 'sales', 'credit' => $net];
-        }
-        if ($tax > 0) {
-            $lines[] = ['account' => 'tax_payable', 'credit' => $tax];
+        /*
+         * والرصيدُ الافتتاحيُّ ذمّةٌ لا إيراد — المرحلة 9.
+         *
+         * فاتورةُ «رصيد افتتاحيّ» تقول ما بقي على العميل يومَ التحويل؛ إيرادُها
+         * أُكسب قبل أن يبدأ هذا الدفتر، فيُقابَل بالأرباح المحتجزة لا بالمبيعات
+         * ولا بالضريبة — وإلّا عُدّ إيرادُ سنةٍ مضت إيرادَ اليوم.
+         */
+        if ($invoice->is_opening_balance) {
+            $lines[] = ['account' => 'retained_earnings', 'credit' => round((float) $invoice->total, 3)];
+        } else {
+            if ($net > 0) {
+                $lines[] = ['account' => 'sales', 'credit' => $net];
+            }
+            if ($tax > 0) {
+                $lines[] = ['account' => 'tax_payable', 'credit' => $tax];
+            }
         }
 
         Ledger::post(

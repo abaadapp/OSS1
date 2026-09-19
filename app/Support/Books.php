@@ -198,6 +198,32 @@ class Books
      * فاتورةٌ سُجّلت اليوم وتُدفع بعد أسبوع ليست نقدًا خرج من الدرج، ولذلك
      * يُنادى هذا عند السداد لا عند التسجيل.
      */
+    /**
+     * مصروفٌ سُدِّد يدخل الدفترَ من بابٍ واحد: حركةٌ في المعاملات ثمّ قيدٌ.
+     *
+     * كان هذا في متحكّم المصروفات؛ خرج إلى هنا لمّا صار الاستيرادُ التاريخيّ
+     * (المرحلة 9) يحتاجه — فبابٌ واحد لا نسختان تفترقان.
+     */
+    public static function postExpense(Expense $expense): void
+    {
+        if ($expense->transaction_id === null) {
+            $transaction = Transaction::create([
+                'business_id' => $expense->business_id,
+                'reference' => Transaction::nextReference($expense->business_id),
+                'description' => $expense->type.(($expense->description ?? '') !== '' ? ' — '.$expense->description : ''),
+                'method' => $expense->method,
+                'type' => 'مصروف',
+                'amount' => $expense->amount,
+                'employee_name' => $expense->employee_name,
+                'occurred_at' => $expense->spent_at,
+            ]);
+
+            $expense->update(['transaction_id' => $transaction->id]);
+        }
+
+        self::recordExpense($expense->fresh());
+    }
+
     public static function recordExpense(Expense $expense): void
     {
         if (self::hasEntry($expense)) {

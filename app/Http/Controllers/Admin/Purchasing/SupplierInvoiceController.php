@@ -22,7 +22,6 @@ use App\Support\Sort;
 use App\Support\SupplierInvoices;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
@@ -541,43 +540,8 @@ class SupplierInvoiceController extends Controller
         }
 
         try {
-            DB::transaction(function () use ($bid, $invoice, $amount, $data) {
-                /*
-                 * والمستحقّ يُقرأ ثانيةً تحت قفل.
-                 *
-                 * الفحص أعلاه يقع على نسخةٍ قُرئت قبل المعاملة. فضغطتان على
-                 * «سداد» بالمبلغ نفسه — وهي أشيع ما يقع حين يبطؤ الردّ —
-                 * تمرّان كلتاهما: يخرج المال مرّتين من الصندوق، ويصير المدفوع
-                 * أكبر من الإجمالي، فيُقرأ المستحقّ سالبًا في مجموع الذمم
-                 * كأنّ المورّد يدين لنا.
-                 */
-                $locked = SupplierInvoice::where('business_id', $bid)
-                    ->lockForUpdate()->findOrFail($invoice->id);
-
-                if ($amount - $locked->outstanding() > 0.0005) {
-                    throw new RuntimeException(__('المستحقّ على هذا السند :v فقط', [
-                        'v' => number_format($locked->outstanding(), 3),
-                    ]));
-                }
-
-                Ledger::post(
-                    $bid,
-                    __('سداد سند مورّد: ').$invoice->supplier_ref,
-                    [
-                        ['account' => 'payable', 'debit' => $amount, 'memo' => $invoice->supplier?->name],
-                        ['account' => $data['from'], 'credit' => $amount],
-                    ],
-                    Carbon::parse($data['paid_at']),
-                    'سداد مورّد',
-                    null,
-                    auth()->id(),
-                    $invoice,
-                );
-
-                $locked->update(['paid' => round((float) $locked->paid + $amount, 3)]);
-                $locked->syncStatus();
-                $invoice->setAttribute('paid', $locked->paid);
-            });
+            /* القيدُ والمسدَّدُ من بابٍ واحد في `SupplierInvoices::settle` — يقرؤه الاستيرادُ التاريخيُّ أيضًا */
+            $invoice = SupplierInvoices::settle($invoice, $amount, $data['from'], Carbon::parse($data['paid_at']), auth()->id());
         } catch (RuntimeException $e) {
             return back()->withErrors(['amount' => $e->getMessage()]);
         }

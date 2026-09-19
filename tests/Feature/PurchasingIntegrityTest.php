@@ -307,7 +307,10 @@ class PurchasingIntegrityTest extends TestCase
         $this->assertStringContainsString('items()->lockForUpdate()', $receive);
         // والورقةُ نفسُها تُقفل عند الاعتماد: مديران يضغطان معًا لا يُدخلان الشحنة مرّتين
         $this->assertStringContainsString('->lockForUpdate()->findOrFail($note->id)', $receive);
-        $this->assertStringContainsString('lockForUpdate()->findOrFail($invoice->id)', $invoice);
+        /* وانتقل السدادُ إلى `SupplierInvoices::settle` (المرحلة 9) — الحارسُ يتبعه: المتحكّمُ ينادي، والخدمةُ تقفل */
+        $settle = file_get_contents(base_path('app/Support/SupplierInvoices.php'));
+        $this->assertStringContainsString('SupplierInvoices::settle(', $invoice);
+        $this->assertStringContainsString('lockForUpdate()->findOrFail($invoice->id)', $settle);
     }
 
     public function test_partial_payments_still_add_up(): void

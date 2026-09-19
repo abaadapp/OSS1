@@ -77,6 +77,8 @@ class Revenue
         return CustomerInvoice::query()
             ->where('business_id', $bid)
             ->where('status', CustomerInvoice::ISSUED)
+            /* والرصيدُ الافتتاحيُّ ذمّةٌ لا إيراد: قُيّد على الأرباح المحتجزة لا المبيعات — المرحلة 9 */
+            ->where('is_opening_balance', false)
             ->when($start, fn ($q) => $q->whereDate(self::DATE, '>=', $start->toDateString()))
             ->when($end, fn ($q) => $q->whereDate(self::DATE, '<', $end->toDateString()))
             ->when($branchId, fn ($q) => $q->where('branch_id', $branchId));
@@ -266,6 +268,7 @@ class Revenue
             ->join('customer_invoices', 'customer_invoices.id', '=', 'customer_invoice_items.customer_invoice_id')
             ->where('customer_invoices.business_id', $bid)
             ->where('customer_invoices.status', CustomerInvoice::ISSUED)
+            ->where('customer_invoices.is_opening_balance', false)
             ->when($start, fn ($q) => $q->whereDate('customer_invoices.'.self::DATE, '>=', $start->toDateString()))
             ->when($end, fn ($q) => $q->whereDate('customer_invoices.'.self::DATE, '<', $end->toDateString()))
             ->when($branchId, fn ($q) => $q->where('customer_invoices.branch_id', $branchId));

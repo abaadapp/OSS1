@@ -10,6 +10,7 @@ import {
 import {
     BarChart3,
     Boxes,
+    Database,
     Briefcase,
     FileSignature,
     FileText,
@@ -193,6 +194,14 @@ export const NAV: NavGroup[] = [
                 route: 'admin.automation.index',
                 section: 'automation',
                 covers: ['admin.automation.history'],
+            },
+            /* واستيرادُ البيانات التاريخيّة: يُفتح مرّةً عند التحويل — المرحلة 9 */
+            {
+                label: 'استيراد البيانات',
+                icon: Database,
+                route: 'admin.imports.index',
+                section: 'imports',
+                covers: ['admin.imports.show'],
             },
         ],
     },

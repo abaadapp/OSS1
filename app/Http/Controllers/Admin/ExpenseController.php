@@ -5,7 +5,6 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Expense;
 use App\Models\Project;
-use App\Models\Transaction;
 use App\Support\Activity;
 use App\Support\Books;
 use App\Support\Demo;
@@ -240,28 +239,8 @@ class ExpenseController extends Controller
      */
     private function postToLedger(Expense $expense): void
     {
-        $transaction = Transaction::create([
-            'business_id' => $expense->business_id,
-            'reference' => Transaction::nextReference($expense->business_id),
-            // الوصف اختياريّ فقد يغيب عن الطلب أصلًا — لا يكفي أن يكون nullable
-            'description' => $expense->type.(($expense->description ?? '') !== '' ? ' — '.$expense->description : ''),
-            'method' => $expense->method,
-            'type' => 'مصروف',
-            'amount' => $expense->amount,
-            'employee_name' => $expense->employee_name,
-            'occurred_at' => $expense->spent_at,
-        ]);
-
-        $expense->update(['transaction_id' => $transaction->id]);
-
-        /*
-         * وقيدٌ مزدوج معه.
-         *
-         * الصفّ أعلاه دفترُ صندوق: مبلغٌ ونوع. والدفتر المحاسبيّ يريد طرفين
-         * — مصروفٌ مدين ونقدٌ دائن — وبدونهما يظهر في الشجرة إيرادٌ بلا ما
-         * يقابله من مصروفات المحلّ، فيُقرأ ربحٌ لم يتحقّق.
-         */
-        Books::recordExpense($expense->fresh());
+        /* الحركةُ والقيدُ من بابٍ واحد في `Books` — يقرؤه الاستيرادُ التاريخيُّ أيضًا */
+        Books::postExpense($expense);
     }
 
     /**

@@ -193,6 +193,60 @@ final class SupplierInvoices
      *
      * @throws RuntimeException
      */
+    /**
+     * سدادُ سندٍ معتمَد — القيدُ والمسدَّدُ في معاملةٍ واحدة تحت قفل.
+     *
+     * كان في متحكّم السندات؛ خرج إلى هنا لمّا صار الاستيرادُ التاريخيُّ
+     * (المرحلة 9) يكتب سدادًا قديمًا — فبابٌ واحد يقيّد «ذمم الموردين» مدينةً
+     * والصندوقَ أو البنكَ دائنًا، لا نسختان.
+     *
+     * @param  'cash'|'bank'  $from
+     */
+    public static function settle(SupplierInvoice $invoice, float $amount, string $from, Carbon $paidAt, ?int $userId = null): SupplierInvoice
+    {
+        $amount = round($amount, 3);
+
+        if ($amount <= 0) {
+            throw new RuntimeException(__('مبلغُ السداد يجب أن يكون أكبر من صفر.'));
+        }
+        if (! in_array($from, ['cash', 'bank'], true)) {
+            throw new RuntimeException(__('مصدرُ السداد الصندوقُ أو البنك.'));
+        }
+
+        return DB::transaction(function () use ($invoice, $amount, $from, $paidAt, $userId) {
+            $locked = SupplierInvoice::where('business_id', $invoice->business_id)
+                ->lockForUpdate()->findOrFail($invoice->id);
+
+            if ($locked->approval_status !== self::APPROVED) {
+                throw new RuntimeException(__('لا يُسدَّد سندٌ لم يُعتمد — اعتمده أوّلًا.'));
+            }
+            if ($amount - $locked->outstanding() > 0.0005) {
+                throw new RuntimeException(__('المستحقّ على هذا السند :v فقط', [
+                    'v' => number_format($locked->outstanding(), 3),
+                ]));
+            }
+
+            Ledger::post(
+                (int) $locked->business_id,
+                __('سداد سند مورّد: ').$locked->supplier_ref,
+                [
+                    ['account' => 'payable', 'debit' => $amount, 'memo' => $locked->supplier?->name],
+                    ['account' => $from, 'credit' => $amount],
+                ],
+                $paidAt,
+                'سداد مورّد',
+                null,
+                $userId,
+                $locked,
+            );
+
+            $locked->update(['paid' => round((float) $locked->paid + $amount, 3)]);
+            $locked->syncStatus();
+
+            return $locked->fresh();
+        });
+    }
+
     public static function approve(SupplierInvoice $invoice, ?User $by = null, ?string $overrideReason = null): SupplierInvoice
     {
         return DB::transaction(function () use ($invoice, $by, $overrideReason) {
@@ -273,10 +327,15 @@ final class SupplierInvoices
             $registered = Vat::enabled($locked->business_id);
             $cost = $registered ? round($total - $tax, 3) : $total;
 
-            $lines = [['account' => 'inventory', 'debit' => $cost, 'memo' => $locked->supplier?->name]];
+            /* والرصيدُ الافتتاحيُّ ذمّةٌ للمورّد لا بضاعةً دخلت — يُقابَل بالأرباح المحتجزة (المرحلة 9) */
+            if ($locked->is_opening_balance) {
+                $lines = [['account' => 'retained_earnings', 'debit' => $total, 'memo' => $locked->supplier?->name]];
+            } else {
+                $lines = [['account' => 'inventory', 'debit' => $cost, 'memo' => $locked->supplier?->name]];
 
-            if ($registered && $tax > 0) {
-                $lines[] = ['account' => 'tax_payable', 'debit' => $tax];
+                if ($registered && $tax > 0) {
+                    $lines[] = ['account' => 'tax_payable', 'debit' => $tax];
+                }
             }
 
             $lines[] = ['account' => 'payable', 'credit' => $total];

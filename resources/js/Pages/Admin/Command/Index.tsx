@@ -6,6 +6,7 @@ import {
     CalendarClock,
     CheckCircle2,
     Clock,
+    Database,
     Gavel,
     MessageSquareWarning,
     PackageCheck,
@@ -110,7 +111,7 @@ interface Money {
 interface Center {
     generated_at: string;
     sees_money: boolean;
-    summary: { decisions: number; late: number; delivery: number; communications: number; upcoming: number; blockers: number; automation: number };
+    summary: { decisions: number; late: number; delivery: number; communications: number; upcoming: number; blockers: number; automation: number; migration: number };
     decisions: Section;
     late: Section;
     delivery: Section;
@@ -120,6 +121,8 @@ interface Center {
     team: { rows: TeamRow[]; unassigned: number };
     /* الأتمتة — المرحلة 8: ما فشل أو لم تقدر عليه، والإيقافُ العامّ */
     automation: Section & { paused: boolean; mode: string; configured: boolean; pending: number };
+    /* نقلُ البيانات — المرحلة 9: فحصٌ فشل أو تعارضاتٌ أو استيرادٌ لم يوازن — والناجحُ لا يُذكر */
+    migration: Section;
     money: Money | null;
 }
 
@@ -159,6 +162,7 @@ export default function CommandIndex({ center: c }: { center: Center }) {
         { key: 'upcoming', label: 'يبدأ خلال أسبوع', count: c.summary.upcoming, icon: CalendarClock, tone: 'info' },
         { key: 'blockers', label: 'مشاريع معطَّلة', count: c.summary.blockers, icon: ShieldAlert, tone: 'warning' },
         { key: 'automation', label: 'أتمتة تحتاج يدًا', count: c.summary.automation + (c.automation.paused ? 1 : 0), icon: Zap, tone: 'warning' },
+        ...(c.summary.migration > 0 ? [{ key: 'migration', label: 'نقل بيانات يحتاج يدًا', count: c.summary.migration, icon: Database, tone: 'warning' }] : []),
     ];
 
     const jump = (key: string) => document.getElementById(`cc-${key}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -230,6 +234,20 @@ export default function CommandIndex({ center: c }: { center: Center }) {
                             hint={t('ما فشلت فيه أو لم تقدر عليه خلال أسبوع — والوضع: :mode · معلَّق: :n', { mode: c.automation.paused ? t('موقوفة') : c.automation.mode, n: String(c.automation.pending) })}
                             icon={Zap}
                             section={c.automation}
+                            m={m}
+                            raw
+                        />
+                    </div>
+                )}
+
+                {c.migration.rows.length > 0 && (
+                    <div id="cc-migration" className="scroll-mt-4">
+                        <ActionSection
+                            id="migration-rows"
+                            title="نقل البيانات"
+                            hint={t('مجموعاتٌ فشل فحصُها أو تنتظر قرارًا أو لم توازن مطابقتُها — والناجحُ لا يُذكر هنا')}
+                            icon={Database}
+                            section={c.migration}
                             m={m}
                             raw
                         />

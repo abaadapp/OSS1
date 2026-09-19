@@ -218,6 +218,26 @@ class Permissions
     public const AUTOMATION_PAUSE = 'automation.pause';
 
     /*
+     * ═══ استيرادُ البيانات التاريخيّة — المرحلة 9 ═══
+     *
+     * القسمُ `imports` يفتح الشاشة ويقرأ. والأفعال: إدارةُ المجموعات (تسجيلٌ
+     * وربطٌ وتجربة)، وتنفيذُ الاستيراد (يدٌ بعد اعتماد)، والماليُّ منه (ما
+     * يكتب في الدفتر — أشدُّها)، والتراجعُ. ولا فعلَ يُنفَّذ من الشاشة وحدها.
+     */
+
+    /** تسجيلُ مجموعةٍ وربطُها وتجربتُها وقراراتُ التكرار */
+    public const IMPORT_MANAGE = 'import.manage';
+
+    /** اعتمادُ الاستيراد وتنفيذُه بعد تجربةٍ ناجحة */
+    public const IMPORT_EXECUTE = 'import.execute';
+
+    /** ما يكتب في الدفتر: فواتيرُ وتحصيلاتٌ ومصروفاتٌ وسنداتٌ وأرصدةٌ افتتاحيّة */
+    public const IMPORT_FINANCIAL = 'import.financial';
+
+    /** التراجعُ عن استيرادٍ نُفّذ */
+    public const IMPORT_ROLLBACK = 'import.rollback';
+
+    /*
      * ═══ المشروع — المرحلة 4 ═══
      *
      * ولا `project.create`: المشروعُ يُنشأ من قبول العرض لا بيد، ومقبضٌ لا
@@ -339,6 +359,10 @@ class Permissions
         self::COMMUNICATION_TEMPLATES_MANAGE => 'ضبط قوالب الرسائل',
         self::AUTOMATION_MANAGE => 'ضبط قواعد الأتمتة وتشغيلها',
         self::AUTOMATION_PAUSE => 'إيقاف الأتمتة واستئنافها',
+        self::IMPORT_MANAGE => 'تسجيل مجموعات البيانات وربطها وتجربتها',
+        self::IMPORT_EXECUTE => 'اعتماد الاستيراد وتنفيذه',
+        self::IMPORT_FINANCIAL => 'استيراد البيانات المالية إلى الدفتر',
+        self::IMPORT_ROLLBACK => 'التراجع عن استيراد',
         self::PROJECT_MANAGE => 'إدارة المشروع وفريقه ومهامّه وتثبيت متطلّباته',
         self::PROJECT_BUDGET_VIEW => 'رؤية تكلفة المشروع وربحيّته',
         self::PROJECT_CLOSE => 'إقفال مشروع',
@@ -437,6 +461,11 @@ class Permissions
         /* والأتمتةُ للمالك والمدير: ما يبلغ العميلَ وحده لا يُترك لغيرهما */
         self::AUTOMATION_MANAGE => ['admin', 'manager'],
         self::AUTOMATION_PAUSE => ['admin', 'manager'],
+        /* والاستيرادُ: الإدارةُ والتنفيذُ للمالك والمدير، والماليُّ والتراجعُ للمالك وحده — يكتبان في الدفتر ويمحوان */
+        self::IMPORT_MANAGE => ['admin', 'manager'],
+        self::IMPORT_EXECUTE => ['admin', 'manager'],
+        self::IMPORT_FINANCIAL => ['admin'],
+        self::IMPORT_ROLLBACK => ['admin'],
         /*
          * والمشروع: إدارتُه وإقفالُه للمالك ومدير الفرع، وإعادةُ الفتح
          * للمالك وحده — تُعيد أرقامًا جُمّدت. والمحاسبُ يرى المال لأنّه عملُه.
@@ -643,6 +672,8 @@ class Permissions
         'command',
         // الأتمتة — المرحلة 8: القواعدُ والسجلّ. للمالك والمدير، ويُمنح بالاسم
         'automation',
+        // استيرادُ البيانات التاريخيّة — المرحلة 9. للمالك والمدير بـ`*`، ويُمنح بالاسم
+        'imports',
     ];
 
     /**
@@ -745,6 +776,7 @@ class Permissions
         'communications' => 'admin.communications.index',
         'command' => 'admin.command.index',
         'automation' => 'admin.automation.index',
+        'imports' => 'admin.imports.index',
     ];
 
     /**
@@ -797,6 +829,7 @@ class Permissions
             'communications' => 'المراسلات',
             'command' => 'مركز العمليات',
             'automation' => 'الأتمتة',
+            'imports' => 'استيراد البيانات',
         ];
 
         return collect(self::SECTIONS)

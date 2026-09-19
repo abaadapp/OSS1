@@ -113,6 +113,12 @@ class TenantTables
         'communications', 'communication_events', 'communication_templates',
         /* والأتمتةُ بعد المراسلات: التنفيذُ يشير إلى الرسالة التي أخرجها — المرحلة 8 */
         'automation_rules', 'automation_runs', 'internal_notifications',
+        /*
+         * وسجلُّ الاستيراد آخرَ الكلّ — المرحلة 9: المجموعةُ تشير إلى قالبها
+         * وإلى تنفيذها (حلقةٌ تُحلّ بالتأجيل)، والتنفيذُ والصفوفُ والأثرُ إليها.
+         * والأثرُ متعدّدُ الأشكال بلا مفتاح — يُقرأ بعد كلّ ما يشير إليه.
+         */
+        'import_mapping_templates', 'import_datasets', 'import_runs', 'import_rows', 'import_links',
     ];
 
     /**
@@ -133,6 +139,8 @@ class TenantTables
          * إلغائه. فيُدرَج المشروعُ بلا الأخيرة، وتُكتب بعد الفواتير.
          */
         'projects' => ['cancellation_fee_invoice_id'],
+        /* والمجموعةُ تشير إلى تنفيذها وهو يشير إليها — تُكتب بعده (المرحلة 9) */
+        'import_datasets' => ['dry_run_id', 'import_run_id'],
     ];
 
     /**
@@ -221,7 +229,7 @@ class TenantTables
      */
     public const SECRETS = [
         'users' => ['password', 'remember_token'],
-                /*
+        /*
          * ورمزا Google لا يخرجان في ملفٍّ يُنزَّل.
          *
          * من يملك رمزَ التجديد يقرأ تقييمات المتجر **ويردّ عليها باسمه** حتّى
@@ -231,7 +239,7 @@ class TenantTables
          * وليسا إلزاميَّين فلا يُولَّدان: المتجرُ يعود بعد الاستعادة «غيرَ
          * مربوط»، فيربط بضغطتين — وذلك أهونُ من إذنٍ يُنسخ مع الملفّ.
          */
-            ];
+    ];
 
     /**
      * أعمدةٌ نُزعت وهي إلزاميّة — فتُولَّد عند الاستعادة.

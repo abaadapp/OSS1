@@ -8,6 +8,7 @@ use App\Models\Communication;
 use App\Models\CustomerInvoice;
 use App\Models\DeliveryPackage;
 use App\Models\Expense;
+use App\Models\ImportDataset;
 use App\Models\PolicyException;
 use App\Models\Project;
 use App\Models\ProjectMember;
@@ -72,6 +73,7 @@ final class CommandCenter
         $blockers = self::blockers($businessId, $money);
         $team = self::team($businessId);
         $automation = self::automation($businessId);
+        $migration = self::migration($businessId);
 
         return [
             'generated_at' => now()->format('Y-m-d H:i'),
@@ -84,6 +86,7 @@ final class CommandCenter
                 'upcoming' => $upcoming['soon'],
                 'blockers' => $blockers['total'],
                 'automation' => $automation['total'],
+                'migration' => $migration['total'],
             ],
             'decisions' => $decisions,
             'late' => $late,
@@ -93,8 +96,50 @@ final class CommandCenter
             'blockers' => $blockers,
             'team' => $team,
             'automation' => $automation,
+            'migration' => $migration,
             'money' => $money ? self::money($businessId) : null,
         ];
+    }
+
+    /* ─────────────────────────── نقلُ البيانات ─────────────────────────── */
+
+    /**
+     * ما يحتاج يدًا في استيراد البيانات التاريخيّة — المرحلة 9.
+     *
+     * تكاملٌ صغير: فحصٌ فشل، وتعارضاتٌ لم تُحلّ، واستيرادٌ فشل، ومطابقةٌ
+     * لم توازن. والناجحُ لا يُذكر — لا يُزاحم ما يحتاج يدًا.
+     *
+     * @return array{rows: list<array<string, mixed>>, total: int}
+     */
+    public static function migration(int $bid): array
+    {
+        $rows = collect();
+
+        $datasets = ImportDataset::where('business_id', $bid)
+            ->whereIn('status', [ImportDataset::VALIDATION_FAILED, ImportDataset::NEEDS_REVIEW, ImportDataset::FAILED, ImportDataset::IMPORTED])
+            ->orderByDesc('updated_at')->limit(self::LIMIT)->get();
+
+        foreach ($datasets as $d) {
+            $t = $d->validation['totals'] ?? [];
+            [$severity, $title, $detail, $action] = match ($d->status) {
+                ImportDataset::VALIDATION_FAILED => ['danger', __('فشل فحص المجموعة :code — :name', ['code' => $d->code, 'name' => $d->name]),
+                    __(':n خطأً في التجربة', ['n' => (int) ($t['errors'] ?? 0)]), __('أصلح الملفّ أو الخريطة وأعد التجربة')],
+                ImportDataset::NEEDS_REVIEW => ['warning', __('تكراراتٌ تنتظر قرارًا في :code — :name', ['code' => $d->code, 'name' => $d->name]),
+                    __(':n تعارضًا', ['n' => (int) ($t['conflicts'] ?? 0)]), __('قرّر: إنشاء أو ربط أو تخطٍّ')],
+                ImportDataset::FAILED => ['danger', __('فشل استيراد المجموعة :code — :name', ['code' => $d->code, 'name' => $d->name]),
+                    null, __('راجع السجلّ وأعد المحاولة')],
+                default => ['warning', __('استيراد :code لم يوازن المطابقة', ['code' => $d->code]),
+                    __('فرقٌ بين المصدر والمستورَد'), __('راجع المطابقة والتقرير')],
+            };
+
+            if ($d->status === ImportDataset::IMPORTED && ($d->reconciliation['balanced'] ?? true) && (int) ($d->reconciliation['errors'] ?? 0) === 0) {
+                continue;
+            }
+
+            $rows->push(self::row('migration_'.$d->status, $severity, $title, $detail, $action, route('admin.imports.show', $d->id), $d->updated_at));
+        }
+
+        return self::section($rows);
     }
 
     /* ─────────────────────────── الأتمتة ─────────────────────────── */

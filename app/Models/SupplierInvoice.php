@@ -19,6 +19,8 @@ class SupplierInvoice extends Model
     protected $guarded = [];
 
     protected $casts = [
+        /* رصيدٌ افتتاحيٌّ يومَ التحويل لا مستندٌ — المرحلة 9 */
+        'is_opening_balance' => 'boolean',
         'issued_at' => 'date', 'due_at' => 'date',
         'subtotal' => 'decimal:3', 'tax' => 'decimal:3',
         'total' => 'decimal:3', 'paid' => 'decimal:3',
