@@ -7,6 +7,8 @@
     <meta name="csrf-token" content="{{ csrf_token() }}">
 
     <title inertia>{{ config('app.name', 'Event Plus OSS') }}</title>
+    {{-- ورقمُ الإصدار يُسقط أيقونةَ العلامة القديمة من ذاكرة المتصفّح --}}
+    <link rel="icon" href="{{ asset('favicon.ico') }}?v=ep1" sizes="any">
 
     @routes
     @viteReactRefresh

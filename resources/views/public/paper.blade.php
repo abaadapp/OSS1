@@ -75,7 +75,12 @@
             /* ميلٌ خفيف: الختم يُضرب باليد لا يُطبع مستويًا */
             transform: rotate(-8deg);
         }
-        .seal svg { width: 26px; height: 26px; fill: var(--ink); }
+        /* العلامةُ قناعٌ لا صورة: تأخذ لونَ الحبر كما كان الرسمُ المتجهيّ يأخذه */
+        .seal .mark {
+            width: 26px; height: 26px; background: var(--ink);
+            -webkit-mask: url('{{ asset('images/event-plus-mark.png') }}') center / contain no-repeat;
+            mask: url('{{ asset('images/event-plus-mark.png') }}') center / contain no-repeat;
+        }
         .stamp .t { font-weight: 700; }
 
         footer { max-width: 520px; margin: 14px auto 0; text-align: center; }
@@ -160,9 +165,7 @@
     --}}
     <div class="stamp">
         <div class="seal" aria-hidden="true">
-            <svg viewBox="11.3 67.79 232 219.76" role="img">
-                <path d="M152.16,67.8h-53.97c-3.17,0-6.06,1.8-7.47,4.64L12.16,231.65c-1.49,3.01-1.02,6.62,1.19,9.15l37.9,43.56c2.33,2.68,6.11,3.58,9.41,2.25,15.99-6.43,66.03-22.25,128.68.44,3.25,1.18,6.88.2,9.13-2.42l39.1-45.67c2.18-2.55,2.62-6.16,1.12-9.15l-79.08-157.42c-1.41-2.81-4.29-4.59-7.44-4.59ZM49.91,242.96L121.96,93.4c1.11-2.31,4.4-2.32,5.53-.02l73.39,149.77c1.26,2.58-1.37,5.32-4,4.18-64.55-28.09-122.64-8.85-143.01-.2-2.61,1.11-5.2-1.61-3.97-4.17Z"/>
-            </svg>
+            <span class="mark"></span>
         </div>
         <div>
             <div class="t">{{ __('موثّقة عبر افنت بلس') }}</div>
