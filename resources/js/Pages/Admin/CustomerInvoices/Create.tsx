@@ -94,6 +94,9 @@ interface Props {
     /** العميلُ الذي تُفتح عليه الشاشة — من `InvoiceBranding::defaultCustomerId` */
     default_customer_id: number | null;
     branding: Branding;
+    /** المشاريعُ القائمة — لتُقرأ الفاتورةُ إيرادًا تحت مشروعها (§16) */
+    projects: { id: number; code: string; name: string; customer_id: number }[];
+    preset_project_id: number | null;
 }
 
 /**
@@ -232,6 +235,8 @@ export default function CustomerInvoiceCreate({
     new_customer_id,
     default_customer_id,
     branding,
+    projects,
+    preset_project_id,
 }: Props) {
     const { context } = usePage<PageProps>().props;
     const t = useTranslate();
@@ -277,6 +282,8 @@ export default function CustomerInvoiceCreate({
         due_at: addDays(today, 30),
         payment_terms_days: '30',
         po_number: '',
+        /* والمشروعُ من الرابط إن جاءت الشاشةُ منه — زرّ «فاتورة» في المشروع */
+        project_id: preset_project_id ? String(preset_project_id) : '',
         contract_number: '',
         external_reference: '',
         department: '',
@@ -840,6 +847,17 @@ export default function CustomerInvoiceCreate({
 
                         <div id="org-fields" role="region" aria-labelledby="org-toggle" hidden={!extra}>
                             <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+                                {/* والمشروعُ بُعدٌ يُقرأ لا سطرٌ يُطبع: يربط الإيرادَ بمشروعه */}
+                                <Field label="المشروع" hint="اختياري — تُقرأ الفاتورة في ماليّة المشروع" error={form.errors.project_id as string | undefined}>
+                                    <Select
+                                        placeholder="بلا مشروع"
+                                        value={form.data.project_id}
+                                        onChange={(e) => form.setData('project_id', e.target.value)}
+                                        options={projects
+                                            .filter((pr) => !form.data.customer_id || String(pr.customer_id) === String(form.data.customer_id))
+                                            .map((pr) => ({ label: `${pr.code} — ${pr.name}`, value: pr.id }))}
+                                    />
+                                </Field>
                                 {ORG_FIELDS.map(([key, label, placeholder]) => (
                                     <div key={key} className="space-y-1.5">
                                         <Label htmlFor={`org-${key}`}>{t(label)}</Label>

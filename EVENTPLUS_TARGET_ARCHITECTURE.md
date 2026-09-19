@@ -6,7 +6,7 @@
 >
 > **راجِعْه واكتب ملاحظاتِك فيه** — الصيغةُ في «و. كيف تراجع هذا الملفّ».
 >
-> **صُمّم:** 2026-09-16 على `7ce9397` · **حُدِّث:** 2026-09-16 على `70c4a10`
+> **صُمّم:** 2026-09-16 على `7ce9397` · **حُدِّث:** 2026-09-18 على `e767924` — تصميمُ المرحلة 4: المشروعُ والمتطلّباتُ وأمرُ التغيير (§5.1 · §5.2 · §8.1 · §16)
 > **يُقرأ بعد:** [EVENTPLUS_SYSTEM_STATE.md](EVENTPLUS_SYSTEM_STATE.md) — وصفُ ما هو
 > **ويُقرأ معه:** [EVENTPLUS_SYSTEM_AUDIT.md](EVENTPLUS_SYSTEM_AUDIT.md) — سجلُّ ما كان
 
@@ -330,7 +330,10 @@ try {
       │   ‹‹ الشروطُ والسياساتُ مختومةٌ داخل العرض لحظةَ إرساله ››
       ▼
    المشروع / الفعالية  (Project — جديد)
-      │
+      │   ‹‹ العرضُ المقبول لا يُمسّ بعدها — هو الأصلُ المعتمَد ››
+      ├── متطلّبات ── ProjectRequirement · تُثبَّت مرّةً (§5.1)
+      ├── تغيير ───── ChangeOrder ──▶ قبولُ العميل (DocumentApproval — الآليّةُ نفسُها) (§5.2)
+      │                 ‹‹ النطاقُ الحاليّ = الأصلُ + التغييراتُ المقبولة ››
       ├── تخطيط ──── مهامّ · فريق · معالم
       ├── شراء  ──── PurchaseOrder → GRN → SupplierInvoice   (قائمٌ كلُّه)
       ├── مخزون ──── InventoryMovement · StockAdjustment      (قائمٌ كلُّه)
@@ -372,7 +375,7 @@ try {
 | M1 | **الكتالوج** (منتجات وخدمات وباقات) | **تعديلُ القائم** | `Product` · `Category` · `RecipeItem` |
 | M2 | **عروض الأسعار** | **جديدة** | M1 · `Customer` · نظام المستندات |
 | M3 | **الاعتماد والتوقيع الإلكتروني** | **جديدة** | `DocumentLink` · `paper.show` |
-| M4 | **المشاريع/الفعاليات** | **جديدة** | M2 |
+| M4 | **المشاريع/الفعاليات** — بمتطلّباتها وأوامرِ تغييرها | **جديدة** | M2 · M3 · M5 |
 | M5 | **السياسات والاستثناءات** | **جديدة، صغيرة** | M2 · M4 |
 | M6 | **مستندات المشروع** | **جديدة** (توحيد 5 أنماط) | M4 |
 | M7 | **التسليم والقبول** | **جديدة، فوق قائم** | M3 · M4 · `DeliveryNote` |
@@ -522,7 +525,7 @@ draft ──▶ confirmed ──▶ in_progress ──▶ delivered ──▶ ac
 | الحالة | متى | ما يترتّب |
 |---|---|---|
 | `draft` | أُنشئ يدويًّا قبل القبول | لا شيء |
-| `confirmed` | **تلقائيًّا عند قبول العرض** | البنودُ تُنسخ من العرض · التواريخ تُثبَّت |
+| `confirmed` | **تلقائيًّا عند قبول العرض** | البنودُ تُنسخ من العرض بنودَ مشروع · التواريخُ و`approved_value` تُثبَّت · **والعرضُ المقبول لا يُمسّ بعدها** (§5.2) |
 | `in_progress` | بدأ التنفيذ | تُقبل المشترياتُ والمصروفاتُ عليه |
 | `on_hold` | مؤجَّل | يُسجَّل السببُ والمدّة — سياسةُ تأجيل (§18) |
 | `delivered` | أُرسلت حزمةُ التسليم | ينتظر قبولَ العميل |
@@ -538,6 +541,139 @@ draft ──▶ confirmed ──▶ in_progress ──▶ delivered ──▶ ac
 JSON. لماذا؟ لأنّ الربحيّةَ مشتقّةٌ من مستنداتٍ قد تُلغى بعد سنة، فيتغيّر
 ربحُ مشروعٍ أُقفل. اللقطةُ تقول «هذا ما كان عند الإقفال»، والحيُّ يبقى
 محسوبًا بجانبه. هذا هو نمطُ `Snapshot` نفسُه مطبَّقًا على الأرقام.
+
+### 5.1 المتطلّبات وتثبيتُها — Baseline
+
+**القرار:** جدولٌ مستقلّ `project_requirements`، وتثبيتٌ صريحٌ بختمِ وقتٍ على
+المشروع — **لا جدولَ لقطاتٍ ولا جدولَ تاريخ**.
+
+**لماذا جدولٌ لا بندٌ ولا مهمّة:** لا يُمثَّل المتطلَّب بأمانٍ في
+`project_items` لأنّ البندَ سطرٌ تجاريٌّ له سعرٌ وكميّةٌ يُفوتَر بهما، و«القاعةُ
+بلا رصيفِ تحميل — الحملُ يدويّ» لا سعرَ له ولا كميّة، ووضعُه بندًا يُفسد
+الإجماليّات. ولا يُمثَّل في `project_tasks` لأنّ المهمّةَ **عملٌ يُنجَز** له
+منفِّذٌ وموعدٌ و«تمّ»، والمتطلَّبَ **شرطٌ يُستوفى** يبقى قائمًا بعد أن تُنجَز
+مهامُّه كلُّها، وهو ما يقيسه القبولُ في المرحلة 5، وهو ما يُعدِّله أمرُ التغيير.
+
+**الفرقُ الحاسم بين الخمسة:**
+
+| المفهوم | ما هو | أين | يتغيّر؟ |
+|---|---|---|---|
+| **QuotationItem** | وعدٌ تجاريٌّ مسعَّر في ورقةٍ خرجت | `quotation_items` | ❌ أبدًا — مجمَّدٌ ومبصوم |
+| **ProjectItem** | السطرُ نفسُه بعد القبول — **الكميّةُ المعتمَدةُ الحاليّة** وما سُلِّم منها | `project_items` | بابٌ واحد: قبولُ أمر تغيير |
+| **Requirement** | شرطٌ يجب أن يصدق عند التسليم — بلا سعر، قد يتبع بندًا | `project_requirements` | ثابتٌ بعد التثبيت؛ يُضاف/يُزال بأمر تغيير |
+| **Task** | عملٌ داخليٌّ لشخصٍ وموعد | `project_tasks` | بحرّية — ليس نطاقًا |
+| **Deliverable** | **ليس نموذجًا في المرحلة 4.** هو `ProjectItem` منظورًا من جهة التسليم: `delivery_package_items` في المرحلة 5 يشير إلى `project_items` بكميّةٍ مسلَّمة | — | — |
+
+**الدورة:**
+
+```
+confirmed ──▶ (جمعُ المتطلّبات — كتابةٌ وتعديلٌ بحرّية)
+     │
+     ▼
+Projects::baseline()  ← يكتب requirements_baselined_at · requirements_baselined_by
+     │                   ويقيّد في activity_logs
+     ▼
+الصفوفُ التي change_order_id فيها NULL تصير مجمَّدة:
+     تعديلُها أو حذفُها يُرفض في الخادم — قاعدةُ Quotation::FROZEN نفسُها
+     │
+     ▼
+بعدها: إضافةٌ أو إزالةٌ **بأمر تغييرٍ مقبول** فقط (§5.2)
+     ├── أُضيف بـ  → change_order_id
+     └── أُزيل بـ  → removed_by_change_order_id   (الصفُّ يبقى — لا يُمحى)
+```
+
+**والأصلُ المعتمَد (Original Approved Scope) قطعتان، وكلتاهما قائمة أو
+مجمَّدة:**
+
+1. **التجاريّ:** العرضُ المقبول — وبرهانُه `document_approvals.accepted_snapshot`
+   ببصمته. **لا يُنسخ في المشروع ثانيةً.**
+2. **التشغيليّ:** صفوفُ `project_requirements` التي `change_order_id IS NULL`،
+   كما كانت لحظةَ `requirements_baselined_at`.
+
+> وتصحيحُ خطأٍ مطبعيٍّ في متطلَّبٍ مثبَّت يمرّ بأمر تغييرٍ بلا سعر. هذا مقصود:
+> ما ثُبّت هو ما سيُحاسَب عليه الفريقُ ويقيسه العميل، ولا يُصحَّح بصمت.
+
+### 5.2 أمرُ التغيير — Change Order
+
+**القرار:** نموذجٌ جديد `ChangeOrder` (+ `change_order_items`) — **لا عرضٌ
+تكميليّ**. والعرضُ المقبول لا يُمسّ حرفًا.
+
+**لماذا لا عرضٌ تكميليّ (`quotations.project_id`):** العرضُ مستندٌ قائمٌ
+بذاته: رأسُ عميلٍ وتواريخُ فعاليّةٍ وشروطٌ وقبولٌ **يُنشئ مشروعًا**. وتكميليٌّ
+يعني استثناءَ `decide` من إنشاء المشروع، وجمعَ قيمة المشروع من عروضٍ عدّة،
+ونسخَ بنودٍ على مشروعٍ قائم، وكميّاتٍ **سالبةً** في جدولٍ منطقُ خصمه
+`(list − unit) × qty` — وتغييرًا بلا سعرٍ (موعدٌ أو متطلَّبٌ فقط) لا يصلح
+عرضًا أصلًا. ذلك خلطُ مفهومين. أمرُ التغيير مستندٌ واحدٌ يحمل المحاورَ الثلاثة:
+
+| المحور | ما يحمله | أين |
+|---|---|---|
+| **البنود** | زيادةُ كميّةٍ أو نقصُها على بندٍ قائم · بندٌ جديد | `change_order_items` (`project_item_id` NULL = جديد · `quantity` سالبٌ = نقص) |
+| **المتطلّبات** | ما يُضاف وما يُزال | `project_requirements.change_order_id` · `removed_by_change_order_id` |
+| **الموعد** | تاريخٌ جديد | `new_starts_at` · `new_ends_at` (NULL = بلا تغيير) |
+
+**ولا عمودَ `kind`:** «تجاريّ» = له بنود، «جدوليّ» = له موعد، «توضيحيّ» =
+لا هذا ولا ذاك. يُشتقّ ويُعرض. و«داخلَ النطاق أم إضافيّ» يجيبه الشكلُ نفسُه:
+بلا بنودٍ فتوضيحٌ داخلَ النطاق؛ ببنودٍ فإضافةٌ — مسعَّرةٌ أو **مجّانيّةٌ
+بسعرٍ صفر** وهي تُقيَّد إضافةً وإن لم تُفوتَر.
+
+**الدورة — مرآةُ عرض السعر، بالكود نفسِه حيث أمكن:**
+
+```
+  draft ──▶ pending_approval ──▶ sent ──▶ accepted   ← يُطبَّق هنا، مرّةً
+    │  ▲            │              │
+    │  └────────────┘              ├──▶ declined
+    └──────────────────────────────┴──▶ cancelled
+```
+
+| ما يقع | كيف | من أين |
+|---|---|---|
+| تسعيرُ البنود الجديدة | `list_price` من الكتالوج في الخادم · الخصمُ والزيادةُ بالأذون نفسِها | `Quotations::price` · `classify` — **تُستدعى لا تُنسخ** |
+| بندُ نقصٍ | يجب أن يشير إلى `project_item_id`، و`unit_price` يُقرأ من البند لا من الطلب، وخصمُه صفر | قاعدةٌ في `ChangeOrders` |
+| اعتمادٌ داخليّ | يلزم إن تجاوز خصمٌ حدَّه (`quotation.approve`) أو وقعت مخالفةُ سياسة (`policy.override`) — وإلّا فالمرسِلُ هو المعتمِد | `approved_by` · `approved_at` |
+| سياسةُ التأجيل | أمرٌ يحمل موعدًا جديدًا يُفحص بـ`PostponementWindowCheck` — والاستثناءُ في `policy_exceptions` بـ`exceptionable = ChangeOrder` | §18 — يحيا في المرحلة 4 |
+| الإرسال | `Snapshot::stamp` · `policy_snapshot` · `content_hash` · رقمٌ يُقطع · رابطٌ عامّ | `PublicDocument::PUBLIC += ChangeOrder` · قالبُ `change_order` |
+| قبولُ العميل | من الرابط `/i/{token}/decision`، أو موظّفٌ بـ`changeOrder.recordDecision` نيابةً | `document_approvals` — صفٌّ واحدٌ بقيدٍ فريد |
+| الصلاحيّة | `valid_until` — و`expired` تُشتقّ | `presentedState()` نفسُها |
+
+**حمولةُ البصمة** (`ChangeOrders::hashPayload`): البنودُ والفروقُ والموعدُ
+الجديد والمتطلّباتُ المضافةُ والمزالة (عنوانٌ وتفصيل) وعنوانُ الأمر وسببُه
+والسياساتُ المختومة — **و`base`**: بصمةُ العرض المقبول وأرقامُ أوامر التغيير
+المقبولة قبله. فالدليلُ يقول **على أيّ نطاقٍ** وقع التغيير، بلا عمودٍ جديد.
+
+**والأثرُ عند القبول — بابٌ واحد `ChangeOrders::apply` داخل معاملة القبول:**
+
+```
+project_items.quantity   += delta         (أو صفٌّ جديدٌ بـ change_order_id)
+project_items.line_total  يُعاد حسابُه
+project_requirements      تُكتب المفاتيحُ المضافةُ/المزالة
+projects.starts_at/ends_at = الموعدُ الجديد إن كان
+activity_logs             ← subject_type: change_order
+```
+
+ولا يُكتب في `projects` قيمةٌ حاليّة. **`approved_value` يبقى الأصلَ**،
+والحاليّةُ تُشتقّ.
+
+**الحسابُ الثلاثيّ — `App\Support\ProjectScope`، قراءةٌ لا كتابة:**
+
+| | من أين |
+|---|---|
+| **Original Approved Scope** | العرضُ المقبول + برهانُه · صفوفُ المتطلّبات ذاتُ `change_order_id IS NULL` · `projects.approved_value` |
+| **Approved Changes** | `change_orders WHERE status = accepted` ببنودها ومتطلّباتها — بترتيب `sequence` |
+| **Current Approved Scope** | `project_items` (الكميّاتُ التي كتبها البابُ الواحد) · `project_requirements WHERE removed_by_change_order_id IS NULL` · `projects.starts_at/ends_at` · **القيمةُ الحاليّة = `approved_value` + Σ `total_delta` المقبولة** |
+
+واختبارٌ يحرس: `project_items.quantity == كميّةُ العرض + Σ فروقِ الأوامر المقبولة`.
+
+**والأثرُ الماليّ — بلا كودٍ ماليٍّ جديد:** أمرُ التغيير **ليس مستندًا
+ماليًّا**. لا يُصدر فاتورةً ولا إشعارَ دائن. `Project::invoicedTotal()` يُقارَن
+بالقيمة الحاليّة لا بـ`approved_value` (§7)، فزيادةٌ مقبولة ترفع سقفَ
+التحذير، ونقصٌ مقبولٌ بعد فوترةٍ يُظهر «مفوتَرٌ فوق المعتمَد» — والموظّفُ
+يُصدر إشعارَ دائنٍ **بيده** من `CustomerCreditNote` القائم. الإيرادُ يبقى
+عند إصدار الفاتورة، والقيدُ يبقى بابًا واحدًا.
+
+**ما لا يُبنى:** لا `change_requests` منفصلٌ عن `change_orders` — الطلبُ
+والأمرُ صفٌّ واحدٌ يحمل `requested_by_party` ويمشي الدورة. ولا جدولَ تاريخٍ
+للمواعيد — كلُّ تأجيلٍ أمرُ تغييرٍ يحمل الموعدَ الجديد. ولا `project_scope_snapshots`
+— برهانُ الأصل قائم، وبرهانُ كلّ تغييرٍ في `document_approvals` بصفّه.
 
 ---
 
@@ -591,8 +727,9 @@ Project  1 ──── n  CustomerInvoice   (customer_invoices.project_id — �
 | **فواتيرُ متعدّدة** | `hasMany` طبيعيّة |
 
 **وقاعدةُ الحماية من الفوترة الزائدة**: `Project::invoicedTotal()` مقابل
-`approved_value`. تُعرض على الشاشة، وتُحذَّر عند التجاوز — ولا تُمنع: مشروعٌ
-زِيد نطاقُه يُفوتَر أكثر ممّا اعتُمد، وهذا مشروع. التحذيرُ يُقال ولا يُسَدّ
+**القيمة المعتمَدة الحاليّة** (`approved_value` + أوامرُ التغيير المقبولة —
+§5.2). تُعرض على الشاشة، وتُحذَّر عند التجاوز — ولا تُمنع: مشروعٌ
+زِيد نطاقُه بأمر تغييرٍ يُفوتَر أكثر ممّا اعتُمد أصلًا، وهذا مشروع. التحذيرُ يُقال ولا يُسَدّ
 الباب — على نمط `CreditSales::OVERRIDE` القائم.
 
 **ونقطةُ الاعتراف بالإيراد:** عند **إصدار** الفاتورة. لا عند إنشاء المشروع
@@ -611,7 +748,7 @@ Project  1 ──── n  CustomerInvoice   (customer_invoices.project_id — �
 
 ## 8. مقترحُ نموذج البيانات
 
-### 8.1 الجداول الجديدة — 11
+### 8.1 الجداول الجديدة — 14
 
 #### `quotations` ✅ **بُني — المرحلة 2**
 
@@ -689,32 +826,93 @@ sort_order  int
 unique(package_id, item_id)        ← والعضوُ لا يتكرّر
 ```
 
-#### `projects`
+#### `projects` — المرحلة 4
 ```
 id · business_id · customer_id
 code           varchar   ← «EP-2026-014»
 name           varchar
 status         varchar
-quotation_id   FK NULL   ← العرضُ المعتمَد
+quotation_id   FK NULL   ← العرضُ المعتمَد — unique: مشروعٌ واحدٌ لكلّ عرضٍ مقبول
 ─ الفعالية ─
-event_type · location · starts_at · ends_at
+event_type · location · starts_at · ends_at   ← الحاليّان؛ والأصليّان على العرض
 contact_person · contact_phone · contact_email
 ─ القيمة ─
-quoted_value · approved_value   numeric(*,3)
+quoted_value · approved_value   numeric(12,3)   ← **الأصلُ** لحظةَ القبول. والحاليّةُ تُشتقّ (§5.2)
+─ المتطلّبات ─
+requirements_baselined_at · requirements_baselined_by   ← ختمُ التثبيت (§5.1)
 ─ الفريق ─
 owner_id FK users
 ─ الإقفال ─
 closed_at · closed_by · financials_frozen json NULL
 notes · internal_notes
+created_by
 ```
 
-#### `project_items`
-بنودُ العمل المباعة — منسوخةٌ من العرض المعتمَد، وتتبع التسليمَ لا المال:
+#### `project_items` — المرحلة 4
+بنودُ العمل المباعة — منسوخةٌ من العرض المعتمَد، وتتبع التسليمَ لا المال.
+و`quantity` هي **الكميّةُ المعتمَدةُ الحاليّة**: تُكتب عند الإنشاء من العرض،
+ولا يغيّرها بعدها إلّا `ChangeOrders::apply`:
 ```
-id · project_id · product_id NULL · quotation_item_id NULL
-description · quantity · unit · unit_price · line_total
-delivered_quantity numeric   ← يزيد مع حزم التسليم
+id · business_id · project_id
+product_id NULL · quotation_item_id NULL   ← الأصلُ إن كان من العرض
+change_order_id NULL                       ← أو الأمرُ الذي أضافه
+description · unit · quantity · unit_price · tax_rate · line_total
+delivered_quantity numeric   ← يزيد مع حزم التسليم (المرحلة 5)
 status  varchar              ← pending · in_progress · delivered
+sort_order
+```
+
+#### `project_requirements` — المرحلة 4 (§5.1)
+```
+id · business_id · project_id
+project_item_id NULL              ← إن كان شرطًا على بندٍ بعينه
+title          varchar
+details        text NULL
+change_order_id NULL              ← NULL = من الأصل المثبَّت
+removed_by_change_order_id NULL   ← الصفُّ لا يُمحى؛ يُوسَم
+sort_order · created_by
+created_at · updated_at
+```
+> لا `status` ولا `source`: «قائم» = `removed_by_change_order_id IS NULL`،
+> و«من طلبه» على أمر التغيير الذي أضافه. و«استُوفي» يُقاس عند قبول التسليم
+> (المرحلة 5) لا بعمودٍ هنا.
+
+#### `change_orders` — المرحلة 4 (§5.2)
+```
+id · business_id · project_id
+sequence       smallint          ← 1, 2, 3 داخل المشروع · unique(project_id, sequence)
+number         varchar(40) NULL  ← «EP-2026-014/CO-02» — يُقطع عند الإرسال
+status         varchar(20)       ← draft · pending_approval · sent · accepted · declined · cancelled
+title · reason  text             ← ما التغيير ولماذا
+requested_by_party varchar(10)   ← customer · company
+requested_by_name  varchar(120) NULL
+─ الموعد ─
+new_starts_at · new_ends_at   date NULL   ← NULL = بلا تغيير
+─ التجارة (فروقٌ موقَّعة) ─
+subtotal_delta · discount_delta · tax_delta · total_delta   numeric(12,3)
+valid_until    date NULL
+─ التجميد ─
+document_snapshot json · policy_snapshot json · content_hash char(64)
+─ الأثر — أعمدةُ العرض نفسُها لأنّها الدورةُ نفسُها ─
+created_by · approved_by · approved_at
+sent_by · sent_at · sent_to · first_viewed_at · last_viewed_at · view_count
+decided_at · decided_by · decided_by_name · decline_reason
+cancelled_at · cancelled_by · cancellation_reason
+created_at · updated_at
+```
+
+#### `change_order_items` — المرحلة 4
+مرآةُ `quotation_items` + مرجعُ البند الذي يُعدَّل:
+```
+id · change_order_id
+project_item_id NULL   ← NULL = بندٌ جديد · وإلّا فتعديلُ كميّةٍ على قائم
+product_id NULL
+description · unit
+quantity     numeric(12,3)   ← موقَّعة: سالبٌ = نقص (ويلزمه project_item_id)
+list_price · unit_price · discount
+discount_reason · discount_requested_by · discount_approved_by · discount_approved_at
+tax_rate · tax_amount · line_total   ← موقَّعةٌ كلُّها
+notes · sort_order
 ```
 
 #### `project_members`
@@ -845,6 +1043,21 @@ sent_to         varchar(120) NULL   ← أوّلُ بريدٍ ذهب إليه
 (تقريرٌ نظاميّ لا إداريّ). عندها يُضاف بُعدٌ على السطر بقرارٍ واعٍ ومع
 استدراكٍ للماضي. ولا أظنّك تحتاجه.
 
+**ومن المرحلة 4 — ما رُفض بالقاعدة نفسِها:**
+
+| لم يُضف | لماذا |
+|---|---|
+| `quotations.project_id` (عرضٌ تكميليّ) | يخلط مستندًا قائمًا بذاته بتعديلٍ على مشروع — §5.2 |
+| `projects.current_value` | تُشتقّ: `approved_value` + Σ الأوامر المقبولة. عمودان يقولان الشيء نفسه يفترقان |
+| `change_orders.kind` | يُشتقّ من المحتوى: بنودٌ / موعدٌ / لا شيء |
+| `project_requirements.status` · `source` | «قائم» من `removed_by_change_order_id`، و«من طلبه» على الأمر |
+| `project_scope_snapshots` · `project_baselines` | برهانُ الأصل في `document_approvals` قائم، والمتطلّباتُ مجمَّدةٌ صفوفًا |
+| `project_requirement_versions` | الصفوفُ لا تُعدَّل بعد التثبيت — تُضاف وتُوسَم |
+| `change_requests` منفصلًا | الطلبُ والأمرُ دورةٌ واحدة بأعمدةِ أثرٍ واحدة |
+| `project_date_changes` | كلُّ تأجيلٍ أمرُ تغييرٍ يحمل الموعد |
+| `deliverables` | المرحلة 5: `delivery_package_items → project_items` |
+| `project_tasks.requirement_id` | لا استعمالَ له في المرحلة 4؛ مفتاحٌ اختياريٌّ يُضاف بلا ألمٍ يومَ يلزم |
+
 ---
 
 ## 9. خريطةُ العلاقات
@@ -856,6 +1069,12 @@ Business
                 │       └── DocumentApproval ──▶ DocumentLink
                 │
                 ├── Project ────┬── ProjectItem ────▶ Product
+                │       │       │       └── quotation_item_id | change_order_id  (أصلُه)
+                │       │       ├── ProjectRequirement  (change_order_id · removed_by_change_order_id)
+                │       │       ├── ChangeOrder ──┬── ChangeOrderItem ──▶ ProjectItem | Product
+                │       │       │                 ├── DocumentApproval   (قبولُ العميل — الصفُّ نفسُه)
+                │       │       │                 ├── PolicyException    (تأجيلٌ خارج المهلة)
+                │       │       │                 └── DocumentLink       (الرابطُ العامّ)
                 │       │       ├── ProjectMember ──▶ User
                 │       │       ├── ProjectTask ────▶ User
                 │       │       ├── Document ────────▶ (polymorphic)
@@ -924,15 +1143,21 @@ Business ── Account ── JournalEntry ── JournalLine
 
 ---
 
-## 12. النماذجُ الجديدة — 11
+## 12. النماذجُ الجديدة — 14
 
 ```
 Quotation · QuotationItem
 Project · ProjectItem · ProjectMember · ProjectTask
+ProjectRequirement · ChangeOrder · ChangeOrderItem        ← المرحلة 4 (§5.1 · §5.2)
 Document · DocumentApproval
 DeliveryPackage (+ DeliveryPackageItem)
 CompanyPolicy · PolicyException
 ```
+
+**وأصنافُ الدعم في المرحلة 4 — أربعة:** `Projects` (يكتب: من العرض · التثبيت
+· الإقفال) · `ChangeOrders` (يكتب: الدورةُ كلُّها، ويستدعي `Quotations::price`
+للتسعير) · `ProjectScope` (يقرأ: الأصلُ والتغييراتُ والحاليّ) ·
+`ProjectFinancials` (يقرأ: المال — §16). **ولا صنفَ خامس.**
 
 **ولا نموذجَ ماليّ في القائمة.** لا `ProjectInvoice`، ولا `ProjectExpense`،
 ولا `ProjectLedger`، ولا `Advance`. كلُّ المال يمرّ بما هو قائم.
@@ -1116,24 +1341,48 @@ CustomerInvoice   Expense     PurchaseOrder   SupplierInvoice
 
 ### الأرقامُ التي طلبتَها — ومصدرُ كلٍّ منها
 
+> **تصحيحٌ (تصميمُ المرحلة 4):** الجدولُ السابق كان يجمع `purchase_orders.total`
+> «مشترياتٍ» ويطرح «سنداتِ الموردين» من الربح — فيَعُدّ الشراءَ مرّتين (أمرًا
+> ثمّ سندًا)، ويخلط **ما التُزم به** بـ**ما صار تكلفةً**. والتصحيحُ يتّبع ما
+> يقوله الكودُ القائم عن نفسه: الذمّةُ تنشأ **باعتماد** سند المورّد وحده
+> (`SupplierInvoice::scopeOwed`)، والمصروفُ **المدفوعُ** وحده مصروف
+> (`Expense::scopePaid`)، وأمرُ الشراء نيّةٌ لا قيد.
+
 | الرقم | كيف يُحسب — **بلا جدولٍ ماليٍّ جديد** |
 |---|---|
 | **القيمة المعروضة** | `quotations.total` للعرض المرتبط |
-| **القيمة المعتمَدة** | `projects.approved_value` (لقطةٌ عند القبول) |
+| **القيمة المعتمَدة الأصليّة** | `projects.approved_value` (لقطةٌ عند القبول) |
+| **القيمة المعتمَدة الحاليّة** | `approved_value` + `SUM(change_orders.total_delta) WHERE status = accepted` (§5.2) |
 | **المفوتَر** | `SUM(customer_invoices.total) WHERE project_id AND status = صادرة` |
 | **المحصَّل** | `SUM(allocations.amount)` عبر فواتير المشروع — **بقاعدة `CustomerInvoice::paidSql()` نفسِها** (تستبعد الملغى والشيكَ المرتجع) |
 | **الباقي على العميل** | `المفوتَر − المحصَّل − إشعاراتُ الدائن` = `outstandingSql()` مجموعةً |
-| **المشتريات** | `SUM(purchase_orders.total) WHERE project_id` |
-| **التزاماتُ الموردين** | `SUM(supplier_invoices.total − paid)` بـ`scopeOwed` القائم |
-| **المصروفاتُ المباشرة** | `SUM(expenses.amount) WHERE project_id` |
-| **تكلفةُ العتاد المستهلَك** | `SUM(stock_adjustments.quantity_delta × cost_at_time) WHERE project_id` |
-| **مجملُ الربح** | `(المفوتَر − الضريبة) − (سنداتُ الموردين + المصروفات + العتاد)` |
-| **نسبةُ الربح** | مجملُ الربح ÷ (المفوتَر − الضريبة) |
+| **التكلفة الفعليّة (Actual)** — ما صار تكلفةً في الدفتر | سنداتُ المورّد **المعتمَدة** `scopeOwed` (كاملُ `total` — سُدِّدت أم لا) + المصروفاتُ **المدفوعة** `scopePaid` + العتادُ المستهلَك |
+| **التكلفة الملتزَمة (Committed)** — وُعد بها ولم تصر قيدًا | Σ على أوامر الشراء غيرِ المسودّة: `max(0, po.total − Σ سنداتها المعتمَدة)` + سنداتٌ **معلَّقة** بلا أمر شراء + المصروفاتُ **غيرُ المدفوعة** `scopeUnpaid` |
+| **المستحقُّ للموردين (Outstanding Liability)** | `SUM(total − paid)` على `scopeOwed` — وهو ما يقوله حسابُ الموردين في الدفتر عن هذا المشروع. **جزءٌ من الفعليّة لا إضافةٌ إليها** |
+| **العتادُ المستهلَك** | `SUM(stock_adjustments.quantity_delta × cost_at_time) WHERE project_id` |
+| **التكلفة المتوقَّعة عند الإتمام** | الفعليّة + الملتزَمة |
+| **مجملُ الربح المحقَّق** | `(المفوتَر − الضريبة) − الفعليّة` |
+| **الهامشُ المتوقَّع** | `(القيمةُ الحاليّة − ضريبتُها) − المتوقَّعةُ عند الإتمام` |
+| **نسبةُ الربح** | المحقَّق ÷ (المفوتَر − الضريبة) |
+
+**ثلاثةُ أوعيةٍ لا تتداخل** — وسندُ مورّدٍ يخرج من «الملتزَم» يومَ يُعتمد
+ويدخل «الفعليّ» في اللحظة نفسِها، فلا يُعدُّ الريالُ مرّتين:
+
+```
+أمرُ شراء (مُرسَل)     ──▶ ملتزَم
+   └─ سندُ مورّد معلَّق ──▶ ملتزَم (ضمن رصيد الأمر)
+   └─ سندُ مورّد معتمَد ──▶ فعليّ   ── منه غيرُ المسدَّد ──▶ مستحقٌّ للموردين
+مصروف غيرُ مدفوع       ──▶ ملتزَم
+مصروف مدفوع            ──▶ فعليّ
+تسويةُ مخزون (استهلاك) ──▶ فعليّ
+سندٌ مرفوض / ملغى      ──▶ لا شيء (القاعدةُ نفسُها في `ReportData::vat`)
+```
 
 **ولا يُخزَّن منها شيءٌ** إلّا لقطةَ الإقفال (`financials_frozen`). وتعريفُ
 «الربح» يُكتب في **موضعٍ واحد** — `ProjectFinancials::summary()` — لأنّ
 المستودع دفع ثمنَ تعريفَين مختلفين للربح من قبل، وموصوفٌ في
-`Demo::reportSummary`.
+`Demo::reportSummary`. وقاعدةُ الإقفال (§5) تقرأ الوعاءَ الملتزَم: **لا يُقفَل
+مشروعٌ وملتزَمُه فوق الصفر.**
 
 ### ⚠️ الدفعة المقدَّمة — تصحيحُ §0.2
 
@@ -1255,6 +1504,12 @@ policy_exceptions: {detected, reason, surcharge, requested_by, approved_by, stat
          ▼
 Activity::log('updated', …, subject_type: 'quotation')
 ```
+
+**وفي المرحلة 4 يحيا فحصٌ ثانٍ:** `postponement_window` على **أمر التغيير**
+الذي يحمل موعدًا جديدًا (§5.2) — و`policy_exceptions.exceptionable` يقبل
+`ChangeOrder` كما يقبل `Quotation`، والمسارُ نفسُه: سببٌ، ورسومٌ مقترَحة
+تُضاف بندًا، و`policy.override`. أمّا `cancellation_window` فيُفحص عند إلغاء
+المشروع، ورسومُه فاتورةُ عميلٍ قائمة — **المرحلة 5**.
 
 ### ⚠️ الجزءُ الأهمّ — والذي قد يُغفَل
 
@@ -1504,7 +1759,7 @@ employees · reports
 `*` يُحذف `orders` مع قسم المبيعات — انظر §14.5.
 `✅` بُني في المرحلة 2 — فصارت الأقسامُ **13**.
 
-### الأفعالُ الجديدة: 20 → 34 (بُني منها 9 — فصارت **29**)
+### الأفعالُ الجديدة: 20 → 38 (بُني منها 9 — فصارت **29**)
 
 | الفعل | التسمية | يرثه بالدور |
 |---|---|---|
@@ -1520,6 +1775,10 @@ employees · reports
 | `project.budget.view` | رؤيةُ تكلفته وربحيّته | admin · manager · accountant |
 | `project.close` | إقفالُ مشروع | admin · manager |
 | `project.reopen` | إعادةُ فتحِ مشروعٍ مُقفَل | admin |
+| `changeOrder.create` | كتابةُ أمر تغيير | admin · manager · sales |
+| `changeOrder.send` | إرسالُ أمر تغيير للعميل | admin · manager · sales |
+| `changeOrder.recordDecision` | تسجيلُ قبول العميل أو رفضه نيابةً | admin · manager · sales |
+| `changeOrder.cancel` | إلغاءُ أمر تغيير | admin · manager |
 | `policy.override` ✅ | اعتمادُ استثناءٍ من سياسة الشركة | admin · manager |
 | `delivery.send` | إرسالُ حزمة تسليم | admin · manager |
 | `delivery.accept` | تسجيلُ قبولِ العميل نيابةً | admin · manager |
@@ -1527,6 +1786,13 @@ employees · reports
 | `document.approve` | وسمُ مستندٍ معتمَدًا | admin · manager |
 | `messaging.send` ✅ | الإرسالُ من بريد الشركة | admin · manager · sales |
 | `ai.use` | استعمالُ المساعد | admin · manager · sales |
+
+**وأربعةٌ لا تُكرَّر:** خصمُ بندٍ في أمر التغيير وبيعُه فوق الكتالوج
+واعتمادُ خصمٍ تجاوز الحدَّ تمرّ بـ`quotation.discount` و`quotation.overridePrice`
+و`quotation.approve` **نفسِها** — لأنّ الكودَ الذي يفرضها واحد (`Quotations::price`)،
+ومن يُؤذَن له بخصمٍ في العرض يُؤذَن له في تعديله. وتُعاد تسميتُها في
+المرحلة 4: «خصمٌ على عرض سعر أو أمر تغيير». وتثبيتُ المتطلّبات ضمن
+`project.manage`. وأوامرُ التغيير تحت قسم `projects` — لا قسمَ لها.
 
 ### توزيعُ الأقسام على الأدوار
 
@@ -1572,6 +1838,9 @@ employees · reports
 قرارُ عميل                  ← من الرابط: الاسم · البريد · IP · الوقت · البصمة
 سياسةٌ تُجوُوزت              ← المفتاح · ما رُصد · السبب · من اعتمد · الرسوم
 مشروعٌ أُقفل / أُعيد فتحُه    ← من · متى · لقطةُ الأرقام
+متطلّباتٌ ثُبّتت              ← من · متى · كم صفًّا
+أمرُ تغييرٍ أُرسل / قُبل        ← كالعرض: البصمة · الموقّع · على أيّ نطاق (base)
+أمرُ تغييرٍ طُبّق              ← أيُّ بنودٍ تغيّرت كميّاتُها · ما أُضيف وأُزيل · الموعدُ الجديد
 حزمةُ تسليمٍ أُرسلت وقُبلت    ← كقرار العميل
 مستندٌ رُفع / اعتُمد          ← من · النسخة
 رسالةٌ أُرسلت                ← القناة · المستقبِل · الموضوع · الحال
@@ -1627,6 +1896,17 @@ final class ActionCenter
 
 **وكلُّ سطرٍ يقود إلى مكان الجواب** — على قاعدة `CustomAlert::url()`:
 «التنبيه على رقمٍ يقود إلى الرقم، ومن نقر لا يريد قائمةً يختار منها».
+
+**وإشاراتٌ تولد من المرحلة 4 — تُكتب في المرحلة 6، وتُقرأ من أعمدةٍ قائمة:**
+
+```
+مشروعٌ مؤكَّدٌ بلا تثبيتِ متطلّبات منذ N أيّام   ← requirements_baselined_at IS NULL
+أمرُ تغييرٍ ينتظر اعتمادًا داخليًّا              ← change_orders.status = pending_approval
+أمرُ تغييرٍ أُرسل ولم يُفتح / انقضت صلاحيّتُه     ← sent_at · first_viewed_at · valid_until
+مفوتَرٌ دون القيمة الحاليّة بعد القبول            ← invoicedTotal < approved_value + Σ total_delta
+مفوتَرٌ فوق القيمة الحاليّة (نقصٌ قُبل بعد فوترة) ← إشعارُ دائنٍ ينتظر يدًا
+ملتزَمٌ فوق الصفر بعد انتهاء الفعاليّة            ← أمرُ شراءٍ بلا سند · مصروفٌ لم يُسدَّد
+```
 
 ### متى يُبنى جدول؟
 
@@ -1950,24 +2230,59 @@ intercompany_transactions
 
 ### المرحلة 4 — المشروع / الفعالية
 
-- `projects` · `project_items` · `project_members` · `project_tasks`
-- `Quotation(accepted) → Project` بلا إعادة إدخال
-- الأعمدةُ الستّة (`project_id` × 5 + `products.kind`)
-- شاشةُ المشروع بتبويباتها على نمط `SectionTabs` القائم
-- `ProjectFinancials` — الأرقامُ الأحدَ عشرَ (§16)
-- **إخفاءُ قسم «المبيعات» من القائمة**
-- تقريرا «ربحيّةُ المشاريع» و«المشاريعُ الجارية»
+**الجداول — 7:** `projects` · `project_items` · `project_members` ·
+`project_tasks` · `project_requirements` · `change_orders` · `change_order_items`
+— كلُّها بـ`business_id` وفي `TenantTables::ORDER` بترتيب أبوّتها.
 
-**المحصّلة:** المشروعُ مركزُ العمل، وربحيّتُه تُقرأ.
+**الأعمدةُ على القائم — 5** (`products.kind` بُني في المرحلة 2):
+`project_id` NULL على `customer_invoices` · `expenses` · `purchase_orders` ·
+`supplier_invoices` · `stock_adjustments`.
+
+**ما يُبنى:**
+
+- `Quotation(accepted) → Project` بلا إعادة إدخال — من `decide` و`recordDecision`
+  كليهما، ومشروعٌ واحدٌ لكلّ عرض (`unique quotation_id`). **والعرضُ لا يُمسّ.**
+- المتطلّباتُ وتثبيتُها — `Projects::baseline` والتجميدُ بعده (§5.1).
+- أمرُ التغيير — دورتُه كاملةً (§5.2): تسعيرٌ بـ`Quotations::price`، وختمٌ
+  بـ`Snapshot` و`policy_snapshot` و`content_hash`، ورابطٌ عامّ
+  (`PublicDocument::PUBLIC += ChangeOrder` وفرعٌ في `PublicDocumentController`)،
+  وقالبُ `change_order` في `DocumentTemplates::TYPES`، وقبولٌ في
+  `document_approvals`، و`apply` بابًا واحدًا.
+- `PostponementWindowCheck` — الفحصُ الثاني في `Policy\Registry` (§18).
+- `ProjectScope` — الأصلُ والتغييراتُ والحاليّ، واختبارُ الحارس
+  (`quantity == العرض + Σ الفروق`).
+- `ProjectFinancials` — الأرقامُ بأوعيتها الثلاثة (§16): فعليّ · ملتزَم ·
+  مستحقٌّ للموردين — وقاعدةُ الإقفال تقرأ الملتزَم.
+- الصلاحيّات: `project.*` الخمسة + `changeOrder.*` الأربعة (§23) ·
+  `ActivitySubjects` ثابتًا (§24) · `subject_type`: `project` · `change_order`.
+- شاشةُ المشروع بتبويباتها على نمط `SectionTabs` القائم: النطاقُ الحاليّ ·
+  المتطلّبات · أوامرُ التغيير · المهامّ والفريق · المال.
+- **إخفاءُ قسم «المبيعات» من القائمة.**
+- تقريرا «ربحيّةُ المشاريع» و«المشاريعُ الجارية».
+
+**ما يُترك عمدًا للمرحلة 5:** كتابةُ `delivered_quantity` · «استُوفي» على
+المتطلَّب · `cancellation_window` ورسومُه · ربطُ المهمّة بالمتطلَّب · فوترةُ
+المعالم والدفعات المقدَّمة.
+
+**المحصّلة:** المشروعُ مركزُ العمل — يُقال فيه ما وافق عليه العميل أصلًا،
+وما تغيّر ومن طلبه ومن اعتمده وهل قَبِله العميل، وما النطاقُ الحاليّ، وما
+التُزم به وما صار تكلفة.
 
 ---
 
 ### المرحلة 5 — المستنداتُ والتسليمُ والقبول
 
+**تعتمد على المرحلة 4 في:** `project_items.quantity` (الحاليّةُ لا الأصليّة)
+هي ما يُسلَّم منه · `project_requirements` القائمةُ هي قائمةُ ما يُقاس عند
+القبول · `document_approvals` بالصفّ نفسِه لحزمة التسليم · `ProjectFinancials`
+يقرأ الفاتورةَ النهائيّة كما يقرأ غيرَها.
+
 - `documents` الموحَّد بتصنيفاته ونسخِه
-- `delivery_packages` + بنودُها
-- قبولُ التسليم بآليّة المرحلة 3 نفسِها
+- `delivery_packages` + بنودُها → `project_items` بكميّةٍ مسلَّمة — **لا جدولَ `deliverables`**
+- قبولُ التسليم بآليّة المرحلة 3 نفسِها — و«استُوفي» على المتطلَّب يُشتقّ من قبول الحزمة
 - إحياءُ `DeliveryNote` من المشروع
+- `CancellationWindowCheck` عند إلغاء المشروع — ورسومُه فاتورةُ عميلٍ قائمة
+- `project_tasks.requirement_id` إن احتاجته شاشةُ التسليم
 - فوترةُ المعالم والدفعات المقدَّمة (§16)
 
 ---

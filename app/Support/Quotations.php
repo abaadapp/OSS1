@@ -547,7 +547,7 @@ final class Quotations
      *
      * @return array<string, mixed>
      */
-    private static function exceptionRow(Finding $finding, string $reason, mixed $surcharge, ?User $actor, bool $approved): array
+    public static function exceptionRow(Finding $finding, string $reason, mixed $surcharge, ?User $actor, bool $approved): array
     {
         return [
             'policy_key' => $finding->key(),
@@ -908,28 +908,38 @@ final class Quotations
         });
     }
 
-    /** إلغاءٌ داخليّ — قبل أن يُقرَّر فيه */
+    /**
+     * إلغاءٌ داخليّ — قبل أن يُقرَّر فيه. وتحت قفل الصفّ على حاله **الآن**.
+     *
+     * قبولٌ من الرابط سبق الإلغاءَ بلحظة: نموذجٌ فُتح على «مُرسَل» يكتب
+     * «ملغى» فوق عرضٍ قُبل وأُنشئ مشروعُه. فيُقرأ الصفُّ مقفولًا ويُحكم عليه.
+     */
     public static function cancel(Quotation $quotation, string $reason, ?User $actor = null): Quotation
     {
-        if (in_array($quotation->status, [Quotation::ACCEPTED, Quotation::SUPERSEDED], true)) {
-            throw new RuntimeException(__('لا يُلغى عرضٌ قُبل أو حلّ محلَّه تنقيح.'));
-        }
-        if ($quotation->status === Quotation::CANCELLED) {
-            return $quotation;
-        }
+        return DB::transaction(function () use ($quotation, $reason, $actor) {
+            $locked = Quotation::where('business_id', $quotation->business_id)
+                ->lockForUpdate()->findOrFail($quotation->id);
 
-        $quotation->update([
-            'status' => Quotation::CANCELLED,
-            'cancelled_at' => now(),
-            'cancelled_by' => $actor?->id,
-            'cancellation_reason' => self::text($reason, 255),
-        ]);
+            if (in_array($locked->status, [Quotation::ACCEPTED, Quotation::SUPERSEDED], true)) {
+                throw new RuntimeException(__('لا يُلغى عرضٌ قُبل أو حلّ محلَّه تنقيح.'));
+            }
+            if ($locked->status === Quotation::CANCELLED) {
+                return $locked;
+            }
 
-        Activity::log('deleted', 'ألغى عرض السعر '.self::label($quotation).' — '.$reason, [
-            'subject_id' => $quotation->id, 'subject_type' => 'quotation',
-        ]);
+            $locked->update([
+                'status' => Quotation::CANCELLED,
+                'cancelled_at' => now(),
+                'cancelled_by' => $actor?->id,
+                'cancellation_reason' => self::text($reason, 255),
+            ]);
 
-        return $quotation->fresh();
+            Activity::log('deleted', 'ألغى عرض السعر '.self::label($locked).' — '.$reason, [
+                'subject_id' => $locked->id, 'subject_type' => 'quotation',
+            ]);
+
+            return $locked->fresh();
+        });
     }
 
     /**
@@ -960,20 +970,47 @@ final class Quotations
             throw new RuntimeException(__('اكتب سبب الرفض — عرضٌ يُخسر بلا سببٍ مكتوب لا يُتعلَّم منه.'));
         }
 
-        $quotation->update([
-            'status' => $accepted ? Quotation::ACCEPTED : Quotation::REJECTED,
-            'decided_at' => now(),
-            'decided_by' => $actor?->id,
-            'decided_by_name' => self::text($data['decided_by_name'] ?? null, 120),
-            'rejection_reason' => $accepted ? null : $reason,
-        ]);
+        return DB::transaction(function () use ($quotation, $accepted, $reason, $data, $actor) {
+            /* وتحت قفل: تسجيلان معًا لا يُنشئان مشروعين — انظر `Projects::fromQuotation` */
+            $locked = Quotation::where('business_id', $quotation->business_id)
+                ->lockForUpdate()->findOrFail($quotation->id);
 
-        Activity::log('status', ($accepted ? 'سجّل قبول العميل لعرض السعر ' : 'سجّل رفض العميل لعرض السعر ')
-            .self::label($quotation), [
-                'subject_id' => $quotation->id, 'subject_type' => 'quotation',
+            if ($locked->status !== Quotation::SENT) {
+                throw new RuntimeException(__('لا يُسجَّل قرارٌ إلا على عرضٍ أُرسل.'));
+            }
+
+            /*
+             * والقبولُ نيابةً يُفحص كما يُفحص من الرابط: الصفُّ الآن ببصمة
+             * الإرسال. فلا يُسجَّل باسم العميل قبولُ ورقةٍ غيرِ التي رآها.
+             * وعرضٌ خرج قبل أن تُختم البصمات (بلا `content_hash`) يمرّ كما كان.
+             */
+            if ($accepted && $locked->content_hash !== null) {
+                $locked->setRelation('items', $locked->items()->get());
+
+                if (! Fingerprint::matches(self::hashPayload($locked), $locked->content_hash)) {
+                    throw new RuntimeException(__('تغيّر محتوى هذا العرض بعد إرساله — لا يُسجَّل قبولُه بهذه الصورة.'));
+                }
+            }
+
+            $locked->update([
+                'status' => $accepted ? Quotation::ACCEPTED : Quotation::REJECTED,
+                'decided_at' => now(),
+                'decided_by' => $actor?->id,
+                'decided_by_name' => self::text($data['decided_by_name'] ?? null, 120),
+                'rejection_reason' => $accepted ? null : $reason,
             ]);
 
-        return $quotation->fresh();
+            Activity::log('status', ($accepted ? 'سجّل قبول العميل لعرض السعر ' : 'سجّل رفض العميل لعرض السعر ')
+                .self::label($locked), [
+                    'subject_id' => $locked->id, 'subject_type' => 'quotation',
+                ]);
+
+            if ($accepted) {
+                Projects::fromQuotation($locked->fresh('items'), $actor);
+            }
+
+            return $locked->fresh();
+        });
     }
 
     /**
@@ -1074,6 +1111,11 @@ final class Quotations
                     'icon' => $accepted ? 'file-check' : 'file-x',
                     'color' => $accepted ? 'success' : 'danger',
                 ]);
+
+            /* والقبولُ يُنشئ المشروعَ في المعاملة نفسِها — مرّةً، انظر `Projects::fromQuotation` */
+            if ($accepted) {
+                Projects::fromQuotation($locked->fresh('items'));
+            }
 
             return $locked->fresh();
         });

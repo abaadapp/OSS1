@@ -40,6 +40,11 @@ return Application::configure(basePath: dirname(__DIR__))
             AddLinkHeadersForPreloadedAssets::class,
         ]);
         $middleware->redirectGuestsTo(fn () => route('login'));
+        /*
+         * أخبارُ المزوّدين تأتي من خادمٍ لا متصفّح — لا جلسةَ لها ولا رمزَ
+         * CSRF. ويحرسها سرٌّ أو توقيعٌ في متحكّمها — انظر `Webhooks\*`.
+         */
+        $middleware->validateCsrfTokens(except: ['webhooks/*']);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         /*

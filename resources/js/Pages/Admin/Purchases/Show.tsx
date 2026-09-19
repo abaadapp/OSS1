@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react';
 import { router, usePage } from '@inertiajs/react';
-import { FileText, PackageCheck, Paperclip, Trash2 } from 'lucide-react';
+import { FileText, Lock, PackageCheck, Paperclip, Trash2 } from 'lucide-react';
 import AdminLayout from '@/Layouts/AdminLayout';
 import PageHeader from '@/Components/PageHeader';
 import BackLink from '@/Components/BackLink';
@@ -49,6 +49,8 @@ interface Order {
     ordered_at: string | null;
     expected_delivery_at: string | null;
     received_at: string | null;
+    closed_at: string | null;
+    closing_note: string | null;
     items_subtotal: number;
     supplier_discount: number;
     shipping_cost: number;
@@ -101,7 +103,7 @@ interface Props {
     receipts: Receipt[];
     invoices: Invoice[];
     timeline: Event[];
-    can: { receive: boolean; delete: boolean };
+    can: { receive: boolean; delete: boolean; close: boolean };
     /** الورقةُ كما تُطبع — من الباني نفسِه الذي يُطبع منه */
     paper: { html: string; size: string };
 }
@@ -131,6 +133,8 @@ export default function PurchaseOrderShow() {
     const [receiving, setReceiving] = useState(false);
     const [deleting, setDeleting] = useState(false);
     const [previewing, setPreviewing] = useState(false);
+    const [closing, setClosing] = useState(false);
+    const [closingNote, setClosingNote] = useState('');
 
     /*
      * ما يُتاح تسجيلُه من كلّ بند: المتبقّي ناقصَ ما ينتظر الاعتماد.
@@ -210,6 +214,14 @@ export default function PurchaseOrderShow() {
                             </Button>
                         )}
 
+                        {/* أمرٌ استُلم كلُّه وفُوتر بأقلّ: الباقي يُقفَل بسببٍ لا يبقى التزامًا */}
+                        {can.close && (
+                            <Button variant="outline" onClick={() => setClosing(true)}>
+                                <Lock />
+                                {t('إقفال الأمر')}
+                            </Button>
+                        )}
+
                         {can.delete && (
                             <Button variant="outline" className="text-[#b91c1c]" onClick={() => setDeleting(true)}>
                                 <Trash2 />
@@ -260,6 +272,10 @@ export default function PurchaseOrderShow() {
                                 label: 'تاريخ الاستلام',
                                 value: order.received_at,
                                 ltr: true,
+                            },
+                            order.closed_at !== null && {
+                                label: 'أُقفل بفرق',
+                                value: `${order.closed_at} — ${order.closing_note ?? ''}`,
                             },
                             order.supplier_reference !== null && {
                                 label: 'مرجع المورّد',
@@ -527,6 +543,40 @@ export default function PurchaseOrderShow() {
                             {t('تسجيل الاستلام')}
                         </Button>
                         <Button variant="outline" onClick={() => setReceiving(false)}>
+                            {t('إلغاء')}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            <Dialog open={closing} onOpenChange={(v) => !v && setClosing(false)}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>{t('إقفال أمر الشراء')} — {order.number}</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-3 px-5 pb-5">
+                        <p className="text-[13px] text-[#4b4b4b]">
+                            {t('استُلم الأمر كلُّه وفوتره المورّد بأقلّ من قيمته. اكتب لماذا لن يأتي سندٌ بالباقي — فيخرج من التزامات المشروع.')}
+                        </p>
+                        <Input
+                            value={closingNote}
+                            onChange={(e) => setClosingNote(e.target.value)}
+                            placeholder={t('سبب الإقفال')}
+                            maxLength={255}
+                        />
+                    </div>
+                    <DialogFooter>
+                        <Button
+                            disabled={closingNote.trim() === ''}
+                            onClick={() =>
+                                router.post(route('admin.purchases.close', order.id), { note: closingNote }, {
+                                    onSuccess: () => setClosing(false),
+                                })
+                            }
+                        >
+                            {t('إقفال')}
+                        </Button>
+                        <Button variant="outline" onClick={() => setClosing(false)}>
                             {t('إلغاء')}
                         </Button>
                     </DialogFooter>

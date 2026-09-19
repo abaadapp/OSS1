@@ -192,6 +192,8 @@ final class CustomerInvoices
             'customer_cr' => $customer?->commercial_registration,
             'customer_address' => $customer?->billing_address ?: $customer?->address,
             'po_number' => $data['po_number'] ?? null,
+            /* والمشروعُ بُعدٌ يُقرأ لا مستندٌ يُقيَّد — ربطُ الإيراد به وحده (§8.2) */
+            'project_id' => $data['project_id'] ?? null,
             'contract_number' => $data['contract_number'] ?? null,
             'external_reference' => $data['external_reference'] ?? null,
             'department' => $data['department'] ?? $customer?->department,

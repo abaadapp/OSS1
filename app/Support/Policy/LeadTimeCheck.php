@@ -2,6 +2,7 @@
 
 namespace App\Support\Policy;
 
+use App\Models\ChangeOrder;
 use App\Models\CompanyPolicy;
 use App\Models\Quotation;
 use Illuminate\Support\Carbon;
@@ -17,11 +18,12 @@ use Illuminate\Support\Carbon;
  */
 final class LeadTimeCheck implements Check
 {
-    public function evaluate(CompanyPolicy $policy, Quotation $subject): ?Finding
+    public function evaluate(CompanyPolicy $policy, Quotation|ChangeOrder $subject): ?Finding
     {
         $required = max(0, (int) $policy->param('days', 0));
 
-        if ($required === 0 || $subject->event_starts_at === null) {
+        /* ومهلةُ الطلب على العرض وحده — وتأجيلُ موعدٍ قائم شأنُ `PostponementWindowCheck` */
+        if (! $subject instanceof Quotation || $required === 0 || $subject->event_starts_at === null) {
             return null;
         }
 

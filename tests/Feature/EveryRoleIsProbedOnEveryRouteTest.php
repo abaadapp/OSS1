@@ -118,16 +118,22 @@ class EveryRoleIsProbedOnEveryRouteTest extends TestCase
         $this->assertSame([
             'admin' => ['*'],
             'manager' => ['*'],
+            /*
+             * و«المشاريع» مُنحت للأدوار الأربعة عمدًا في المرحلة 4 (§23): المحاسبُ
+             * يقرأ ماليّتَها، والبائعُ يكتب أوامرَ تغييرها، وأمينُ المخزن يرى ما
+             * يُطلب، والمنسّقُ الميدانيّ يقرأ ما ينفّذه. والقسمُ يفتح الشاشة؛ وما
+             * يمسّ النطاقَ أو المالَ أفعالٌ تُمنح بالاسم.
+             */
             'accountant' => ['dashboard', 'orders', 'customers', 'finance', 'expenses',
-                'employees', 'reports', 'suppliers', 'purchases'],
-            'inventory' => ['dashboard', 'products', 'inventory', 'suppliers', 'purchases'],
+                'employees', 'reports', 'suppliers', 'purchases', 'projects'],
+            'inventory' => ['dashboard', 'products', 'inventory', 'suppliers', 'purchases', 'projects'],
             /*
              * والبائعُ مُنح «عروض الأسعار» عمدًا في المرحلة 2: هي بابُ عمله
              * الأوّل في Event Plus — يعرض قبل أن يُفوتر. ولم يُمنحها المحاسب:
              * مستندٌ تجاريٌّ قبل البيع لا أثرَ له في الدفتر.
              */
-            'sales' => ['dashboard', 'quotations', 'orders', 'customers', 'products'],
-            'delivery' => ['dashboard', 'orders'],
+            'sales' => ['dashboard', 'quotations', 'projects', 'orders', 'customers', 'products'],
+            'delivery' => ['dashboard', 'orders', 'projects'],
         ], Permissions::MAP, 'تغيّر ما يُمنح لدورٍ — إن كان عمدًا فحدّث هذا الحارس');
     }
 

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\DismissedNotification;
+use App\Models\InternalNotification;
 use App\Models\Order;
 use App\Support\Demo;
 use Illuminate\Http\Request;
@@ -42,6 +43,12 @@ class NotificationController extends Controller
             'user_id' => auth()->id(),
             'notif_key' => $data['key'],
         ]);
+
+        /* وتنبيهُ الأتمتة يُطوى بقراءته — فلا يبقى «غيرَ مقروء» في سجلّه بعد أن أُخفي */
+        if (str_starts_with($data['key'], 'internal-')) {
+            InternalNotification::where('user_id', auth()->id())
+                ->whereKey((int) substr($data['key'], 9))->whereNull('read_at')->update(['read_at' => now()]);
+        }
 
         return response()->json(['ok' => true]);
     }

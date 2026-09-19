@@ -4,6 +4,7 @@ import { Check, Copy, Download, Eye, Mail, Pencil, Send, ShieldAlert, ShieldChec
 import AdminLayout from '@/Layouts/AdminLayout';
 import BackLink from '@/Components/BackLink';
 import PageHeader from '@/Components/PageHeader';
+import CommunicationHistory from '@/Components/CommunicationHistory';
 import PaperFrame from '@/Components/PaperFrame';
 import SmartLink from '@/Components/SmartLink';
 import CopyButton from '@/Components/CopyButton';
@@ -562,6 +563,9 @@ export default function QuotationShow({ quotation: q, paper, chain, may }: Props
                             </dl>
                         </Card>
                     )}
+
+                    {/* المراسلات — المرحلة 6: ما أُرسل عن هذا العرض، وزرُّ الإرسال بريدًا وواتساب */}
+                    {q.status !== 'draft' && <CommunicationHistory subjectType="quotation" subjectId={q.id} />}
 
                     {q.internal_notes && (
                         <Card className="p-4">

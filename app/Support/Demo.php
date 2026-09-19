@@ -18,6 +18,7 @@ use App\Models\DismissedNotification;
 use App\Models\Expense;
 use App\Models\ExpenseType;
 use App\Models\GoodsReceiptNote;
+use App\Models\InternalNotification;
 use App\Models\InventoryMovement;
 use App\Models\Order;
 use App\Models\OrderEdit;
@@ -2583,6 +2584,26 @@ class Demo
         };
 
         $bid = self::bid();
+
+        /*
+         * ═══ تنبيهاتُ الأتمتة — المرحلة 8 ═══
+         *
+         * ما كتبه المحرّكُ لهذا الموظّف بعينه: مهمّةٌ متأخّرة، مشروعٌ يبدأ غدًا،
+         * رسالةٌ لم تصل. مخزَّنةٌ لا مشتقّة — لأنّها أُرسلت في لحظةٍ ولها
+         * سببٌ يُقرأ — وتُطوى بقراءتها لا بحذفها.
+         */
+        if ($u) {
+            $internal = InternalNotification::where('user_id', $u->id)->whereNull('read_at')
+                ->orderByDesc('id')->limit($limit)->get();
+            foreach ($internal as $n) {
+                $add('internal-'.$n->id, [
+                    'text' => $n->title,
+                    'time' => $n->created_at?->diffForHumans() ?? '',
+                    'icon' => 'zap', 'color' => 'warning',
+                    'url' => $n->url ?: route('admin.command.index'),
+                ]);
+            }
+        }
 
         /*
          * ═══ رسائلُ واتساب لم تصل ═══

@@ -40,7 +40,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="robots" content="noindex, nofollow">
-    <title>{{ __('عرض سعر') }} {{ $label ?? '' }}</title>
+    <title>{{ $docTitle ?? __('عرض سعر') }} {{ $label ?? '' }}</title>
     <style>
         html, body { margin: 0; padding: 0; background: #f5f5f4; font-family: Tahoma, Arial, sans-serif; color: #1f2937; }
         /*

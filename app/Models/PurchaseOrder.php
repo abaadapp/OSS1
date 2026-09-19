@@ -21,6 +21,7 @@ class PurchaseOrder extends Model
         // موعدٌ متوقَّع لا لحظةُ وقوع: يومٌ بلا ساعة
         'expected_delivery_at' => 'date',
         'received_at' => 'datetime',
+        'closed_at' => 'datetime',
     ];
 
     public function supplier(): BelongsTo
@@ -42,5 +43,11 @@ class PurchaseOrder extends Model
     public function invoices(): HasMany
     {
         return $this->hasMany(SupplierInvoice::class);
+    }
+
+    /** المشروعُ الذي يُقرأ هذا المستندُ تحته — بُعدٌ لا قيد (§16) */
+    public function project(): BelongsTo
+    {
+        return $this->belongsTo(Project::class);
     }
 }

@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Expense;
+use App\Models\Project;
 use App\Models\Transaction;
 use App\Support\Activity;
 use App\Support\Books;
@@ -16,6 +17,7 @@ use App\Support\Sort;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Throwable;
@@ -86,6 +88,9 @@ class ExpenseController extends Controller
         $mayRead = (bool) auth()->user()?->may(Permissions::ATTACHMENT_VIEW);
 
         return Inertia::render('Admin/Expenses/Index', [
+            /* والمشاريعُ القائمة — ليُنسَب المصروفُ إلى مشروعه */
+            'projects' => Project::where('business_id', $this->bid())->open()->orderByDesc('id')
+                ->get(['id', 'code', 'name'])->all(),
             'expenses' => collect($expenses->items())->map(fn ($e) => [
                 'id' => $e->id,
                 'reference' => $e->reference,
@@ -148,7 +153,11 @@ class ExpenseController extends Controller
             // كان عمودًا يُعرض في الجدول ويُرشَّح به ولا سبيل لإدخاله: النموذج
             // لا يرسله والخادم لا يقبله، فيقول «—» إلى الأبد
             'due_date' => ['nullable', 'date'],
-            'status' => ['nullable', 'string', 'max:50'],
+            /* حالٌ من قائمةٍ مغلقة: نصٌّ حرٌّ غيرُ «مدفوع» يُقرأ التزامًا على مشروعه فيمنع إقفاله */
+            'status' => ['nullable', Rule::in(Expense::STATUSES)],
+            /* والمشروعُ من شركة الطالب وقائمٌ — تكلفةٌ مباشرة تُقرأ تحته (§16) */
+            'project_id' => ['nullable', 'integer', Rule::exists('projects', 'id')
+                ->where('business_id', $bid)->whereIn('status', Project::OPEN)],
             'attachment' => ['nullable', 'file', 'max:10240', 'extensions:jpg,jpeg,png,pdf,webp,heic'],
         ], [
             'attachment.extensions' => __('الصيغ المدعومة: JPG، PNG، PDF، WEBP، HEIC.'),
@@ -167,7 +176,7 @@ class ExpenseController extends Controller
 
         $data['business_id'] = $bid;
         $data['method'] = $data['method'] ?? 'نقدي';
-        $data['status'] = $data['status'] ?? 'مدفوع';
+        $data['status'] = $data['status'] ?? Expense::PAID;
         $data['spent_at'] = $data['spent_at'] ?? now();
         $data['employee_name'] = auth()->user()->name;
         $data['reference'] = $this->nextReference($bid);

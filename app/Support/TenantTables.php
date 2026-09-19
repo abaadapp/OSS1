@@ -55,6 +55,21 @@ class TenantTables
          * يشير إلى `users` وقد سبقت.
          */
         'company_policies',
+        /*
+         * وعروضُ الأسعار بعد العملاء والمنتجات — وتشير إلى نفسها بـ`root_id`.
+         *
+         * والإشارةُ الذاتيّة لا تحتاج `DEFERRED`: الجذرُ يُكتب قبل تنقيحه
+         * دائمًا (معرّفُه أصغر)، والإدراجُ يمشي بترتيب المعرّفات.
+         *
+         * والمشروعُ بعد العرض ويسبق المستنداتِ الماليّةَ كلَّها: الفاتورةُ
+         * والمصروفُ وأمرُ الشراء وسندُ المورّد وتسويةُ المخزون تشير إليه.
+         * وأمرُ التغيير قبل بنود المشروع: البندُ يقول أيُّ أمرٍ أضافه — وبندُ
+         * الأمر يقول أيَّ بندٍ يعدّل، فالحلقةُ الوحيدة تُحلّ بالتأجيل (انظر
+         * `DEFERRED`).
+         */
+        'quotations', 'quotation_items',
+        'projects', 'project_members', 'project_tasks', 'change_orders',
+        'project_items', 'project_requirements', 'change_order_items',
         'bank_accounts', 'bank_statement_lines',
         'journal_entries', 'journal_lines',
         'transactions', 'expenses',
@@ -81,29 +96,44 @@ class TenantTables
         'customer_payments', 'customer_payment_allocations',
         'customer_credit_notes',
         /*
-         * وعروضُ الأسعار بعد العملاء والمنتجات — وتشير إلى نفسها بـ`root_id`.
-         *
-         * والإشارةُ الذاتيّة لا تحتاج `DEFERRED`: الجذرُ يُكتب قبل تنقيحه
-         * دائمًا (معرّفُه أصغر)، والإدراجُ يمشي بترتيب المعرّفات.
-         */
-        'quotations', 'quotation_items',
-        /*
-         * وما يتبع العرضَ بعده: قرارُ العميل (دليلٌ متعدّدُ الأشكال) واستثناءاتُ
-         * السياسات — وكلاهما يحمل `business_id` فيُقرأ رأسًا لا من خلال أبيه.
+         * وما يتبع العرضَ والمشروعَ بعدهما: قرارُ العميل (دليلٌ متعدّدُ الأشكال)
+         * واستثناءاتُ السياسات — وكلاهما يحمل `business_id` فيُقرأ رأسًا لا من
+         * خلال أبيه.
          */
         'document_approvals', 'policy_exceptions',
         'delivery_notes', 'delivery_note_items',
+        /* وحزمُ التسليم بعد العروض والعملاء: تشير إليهما — المرحلة 5 */
+        'delivery_packages', 'delivery_package_items',
         'payroll_runs', 'payroll_lines',
+        /*
+         * والمراسلاتُ آخرَ الكلّ: الرسالةُ تشير إلى العميل والمشروع والموظّف،
+         * وإلى موضوعٍ متعدّد الأشكال بلا مفتاح. وإشارتُها إلى أصلها
+         * (`retry_of_id`) ذاتيّة: الأصلُ أصغرُ معرّفًا فيُكتب أوّلًا — المرحلة 6
+         */
+        'communications', 'communication_events', 'communication_templates',
+        /* والأتمتةُ بعد المراسلات: التنفيذُ يشير إلى الرسالة التي أخرجها — المرحلة 8 */
+        'automation_rules', 'automation_runs', 'internal_notifications',
     ];
 
     /**
      * أعمدةٌ تُترك فارغةً عند الإدراج ثمّ تُكتب في جولةٍ ثانية.
      *
-     * لحلقةِ مفتاحين لا تُحلّ بترتيب: جدولٌ يشير إلى آخرَ يشير إليه. ولا
-     * حلقةَ في الجداول اليوم — والقائمةُ تبقى لأنّ `BackupController`
-     * يقرؤها، فأوّلُ حلقةٍ تُستحدَث تُكتب هنا لا في الاستعادة.
+     * لحلقةِ مفتاحين لا تُحلّ بترتيب: جدولٌ يشير إلى آخرَ يشير إليه.
+     *
+     * والحلقةُ الوحيدة اليوم بين بند المشروع وبند أمر التغيير: بندُ الأمر
+     * يقول أيَّ بندٍ يعدّل (`project_item_id`)، والبندُ الذي **ولّده** أمرٌ
+     * يقول أيَّ سطرٍ ولّده (`change_order_item_id`). فيُدرَج البندُ بلا
+     * الأخير، ويُكتب في جولةٍ ثانية بعد بنود الأمر.
      */
-    public const DEFERRED = [];
+    public const DEFERRED = [
+        'project_items' => ['change_order_item_id'],
+        /*
+         * وحلقةٌ ثانية بين المشروع وفاتورة العميل: الفاتورةُ تقول أيَّ مشروعٍ
+         * تتبع (`project_id`)، والمشروعُ الملغى يقول أيَّ فاتورةٍ حملت رسمَ
+         * إلغائه. فيُدرَج المشروعُ بلا الأخيرة، وتُكتب بعد الفواتير.
+         */
+        'projects' => ['cancellation_fee_invoice_id'],
+    ];
 
     /**
      * جداولُ الأبناء: لا `business_id` فيها، وتُقرأ من خلال أبيها.
@@ -120,6 +150,7 @@ class TenantTables
         'order_items' => ['orders', 'order_id'],
         'customer_invoice_items' => ['customer_invoices', 'customer_invoice_id'],
         'quotation_items' => ['quotations', 'quotation_id'],
+        'change_order_items' => ['change_orders', 'change_order_id'],
         'customer_invoice_orders' => ['customer_invoices', 'customer_invoice_id'],
         'customer_payment_allocations' => ['customer_payments', 'customer_payment_id'],
         'payroll_lines' => ['payroll_runs', 'payroll_run_id'],

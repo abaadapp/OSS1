@@ -2,6 +2,7 @@
 
 namespace App\Support;
 
+use App\Models\ChangeOrder;
 use App\Models\CompanyPolicy;
 use App\Models\Product;
 use App\Models\Quotation;
@@ -42,13 +43,18 @@ class CompanyPolicies
      *
      * @return Collection<int, CompanyPolicy>
      */
-    public static function applicable(int $businessId, Quotation $quotation): Collection
+    public static function applicable(int $businessId, Quotation|ChangeOrder $quotation): Collection
     {
         $policies = self::inForce($businessId);
 
         if ($policies->isEmpty()) {
             return $policies;
         }
+
+        /* وأمرُ التغيير عميلُه عميلُ مشروعه — ولا عمودَ له يكرّره */
+        $customerId = $quotation instanceof ChangeOrder
+            ? (int) $quotation->project?->customer_id
+            : (int) $quotation->customer_id;
 
         $productIds = $quotation->items->pluck('product_id')->filter()->map(fn ($id) => (int) $id)->unique();
         $categoryIds = $productIds->isEmpty()
@@ -58,7 +64,7 @@ class CompanyPolicies
 
         $matching = $policies->filter(fn (CompanyPolicy $p) => match ($p->scope_type) {
             null, '' => true,
-            CompanyPolicy::SCOPE_CUSTOMER => (int) $p->scope_id === (int) $quotation->customer_id,
+            CompanyPolicy::SCOPE_CUSTOMER => (int) $p->scope_id === $customerId,
             CompanyPolicy::SCOPE_PRODUCT => $productIds->contains((int) $p->scope_id),
             CompanyPolicy::SCOPE_CATEGORY => $categoryIds->contains((int) $p->scope_id),
             default => false,
@@ -83,7 +89,7 @@ class CompanyPolicies
      *
      * @return list<Finding>
      */
-    public static function findings(int $businessId, Quotation $quotation): array
+    public static function findings(int $businessId, Quotation|ChangeOrder $quotation): array
     {
         $findings = [];
 
@@ -107,7 +113,7 @@ class CompanyPolicies
      *
      * @return list<array<string, mixed>>
      */
-    public static function snapshot(int $businessId, Quotation $quotation): array
+    public static function snapshot(int $businessId, Quotation|ChangeOrder $quotation): array
     {
         return self::applicable($businessId, $quotation)->map(fn (CompanyPolicy $p) => [
             'key' => $p->key,
@@ -124,7 +130,7 @@ class CompanyPolicies
      *
      * @return list<array{cap: string, text: string}>
      */
-    public static function texts(Quotation $quotation, ?string $locale = null): array
+    public static function texts(Quotation|ChangeOrder $quotation, ?string $locale = null): array
     {
         $locale ??= app()->getLocale();
 

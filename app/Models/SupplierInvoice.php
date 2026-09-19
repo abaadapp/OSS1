@@ -84,4 +84,10 @@ class SupplierInvoice extends Model
         return $this->owed() && $this->due_at !== null
             && $this->outstanding() > 0 && $this->due_at->isPast();
     }
+
+    /** المشروعُ الذي يُقرأ هذا المستندُ تحته — بُعدٌ لا قيد (§16) */
+    public function project(): BelongsTo
+    {
+        return $this->belongsTo(Project::class);
+    }
 }

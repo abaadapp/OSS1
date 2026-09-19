@@ -1,13 +1,19 @@
 <?php
 
 use App\Http\Controllers\ActivityController;
+use App\Http\Controllers\Admin\AutomationController;
 use App\Http\Controllers\Admin\BankStatementController;
 use App\Http\Controllers\Admin\BranchController;
 use App\Http\Controllers\Admin\CatalogQuickAddController;
+use App\Http\Controllers\Admin\ChangeOrderController;
 use App\Http\Controllers\Admin\ChequeController;
+use App\Http\Controllers\Admin\CommandCenterController;
+use App\Http\Controllers\Admin\CommunicationController;
+use App\Http\Controllers\Admin\CommunicationTemplateController;
 use App\Http\Controllers\Admin\CurrencyController;
 use App\Http\Controllers\Admin\CustomAlertController;
 use App\Http\Controllers\Admin\CustomerController;
+use App\Http\Controllers\Admin\DeliveryPackageController;
 use App\Http\Controllers\Admin\CustomerImportExportController;
 use App\Http\Controllers\Admin\CustomerInvoiceController;
 use App\Http\Controllers\Admin\DocumentPrintController;
@@ -36,6 +42,7 @@ use App\Http\Controllers\Admin\Payroll\PayrollRunController;
 use App\Http\Controllers\Admin\PolicyController;
 use App\Http\Controllers\Admin\ProductCompositionController;
 use App\Http\Controllers\Admin\ProductController;
+use App\Http\Controllers\Admin\ProjectController;
 use App\Http\Controllers\Admin\ProductImageController;
 use App\Http\Controllers\Admin\ProductImportExportController;
 use App\Http\Controllers\Admin\PurchaseOrderController;
@@ -65,7 +72,10 @@ use App\Http\Controllers\HealthController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\PdfController;
 use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\PublicDeliveryController;
 use App\Http\Controllers\PublicDocumentController;
+use App\Http\Controllers\Webhooks\PostmarkWebhookController;
+use App\Http\Controllers\Webhooks\WhatsAppWebhookController;
 use App\Http\Controllers\SearchController;
 use App\Support\Permissions;
 use Illuminate\Support\Facades\Route;
@@ -510,6 +520,8 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'tenant', 'business'
     Route::post('/purchases/receipts/{id}/approve', [PurchaseOrderController::class, 'approveReceipt'])->name('purchases.receipts.approve');
     Route::post('/purchases/receipts/{id}/reject', [PurchaseOrderController::class, 'rejectReceipt'])->name('purchases.receipts.reject');
     Route::delete('/purchases/{id}', [PurchaseOrderController::class, 'destroy'])->name('purchases.destroy');
+    /* أمرٌ استُلم وفُوتر بأقلّ يُقفَل بسببٍ — فيخرج باقيه من ملتزَم المشروع */
+    Route::post('/purchases/{id}/close', [PurchaseOrderController::class, 'close'])->name('purchases.close');
     Route::get('/purchases/{id}/pdf', [DocumentPrintController::class, 'purchase'])->name('purchases.pdf');
     /*
      * صفحةُ الأمر الواحد.
@@ -585,6 +597,36 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'tenant', 'business'
     /* وإرسالُ الرابط بالبريد إيصالٌ لا تحويلُ حال — انظر `Quotations::email` */
     Route::post('/quotations/{id}/email', [QuotationController::class, 'email'])->name('quotations.email');
     Route::get('/quotations/{id}/pdf', [PdfController::class, 'quotation'])->name('quotations.pdf');
+
+    /*
+     * المشاريع — المرحلة 4. القسمُ `projects`، وأوامرُ التغيير تحته
+     * (`ALIASES['changeOrders']`). ولا `create` للمشروع: يُنشأ من قبول العرض.
+     */
+    Route::get('/projects', [ProjectController::class, 'index'])->name('projects.index');
+    Route::get('/projects/{id}', [ProjectController::class, 'show'])->name('projects.show');
+    Route::put('/projects/{id}', [ProjectController::class, 'update'])->name('projects.update');
+    Route::post('/projects/{id}/baseline', [ProjectController::class, 'baseline'])->name('projects.baseline');
+    Route::post('/projects/{id}/transition', [ProjectController::class, 'transition'])->name('projects.transition');
+    Route::post('/projects/{id}/close', [ProjectController::class, 'close'])->name('projects.close');
+    Route::post('/projects/{id}/reopen', [ProjectController::class, 'reopen'])->name('projects.reopen');
+    Route::post('/projects/{id}/requirements', [ProjectController::class, 'storeRequirement'])->name('projects.requirements.store');
+    Route::put('/projects/{id}/requirements/{rid}', [ProjectController::class, 'updateRequirement'])->name('projects.requirements.update');
+    Route::delete('/projects/{id}/requirements/{rid}', [ProjectController::class, 'destroyRequirement'])->name('projects.requirements.destroy');
+    Route::post('/projects/{id}/members', [ProjectController::class, 'storeMember'])->name('projects.members.store');
+    Route::delete('/projects/{id}/members/{mid}', [ProjectController::class, 'destroyMember'])->name('projects.members.destroy');
+    Route::post('/projects/{id}/tasks', [ProjectController::class, 'storeTask'])->name('projects.tasks.store');
+    Route::put('/projects/{id}/tasks/{tid}', [ProjectController::class, 'updateTask'])->name('projects.tasks.update');
+    Route::delete('/projects/{id}/tasks/{tid}', [ProjectController::class, 'destroyTask'])->name('projects.tasks.destroy');
+    Route::get('/projects/{id}/change-orders/create', [ChangeOrderController::class, 'create'])->name('changeOrders.create');
+    Route::post('/projects/{id}/change-orders', [ChangeOrderController::class, 'store'])->name('changeOrders.store');
+    Route::get('/change-orders/{id}', [ChangeOrderController::class, 'show'])->name('changeOrders.show');
+    Route::get('/change-orders/{id}/edit', [ChangeOrderController::class, 'edit'])->name('changeOrders.edit');
+    Route::put('/change-orders/{id}', [ChangeOrderController::class, 'update'])->name('changeOrders.update');
+    Route::post('/change-orders/{id}/approve', [ChangeOrderController::class, 'approve'])->name('changeOrders.approve');
+    Route::post('/change-orders/{id}/send', [ChangeOrderController::class, 'send'])->name('changeOrders.send');
+    Route::post('/change-orders/{id}/cancel', [ChangeOrderController::class, 'cancel'])->name('changeOrders.cancel');
+    Route::post('/change-orders/{id}/decision', [ChangeOrderController::class, 'decision'])->name('changeOrders.decision');
+    Route::post('/change-orders/{id}/email', [ChangeOrderController::class, 'email'])->name('changeOrders.email');
 
     /*
      * فواتيرُ العملاء والذمم.
@@ -886,6 +928,80 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'tenant', 'business'
     Route::put('/settings/policies/{id}', [PolicyController::class, 'update'])->name('settings.policies.update');
     Route::delete('/settings/policies/{id}', [PolicyController::class, 'destroy'])->name('settings.policies.destroy');
 
+    /*
+     * حزمُ التسليم — المرحلة 5. ما تسلّمه الشركةُ للعميل ويقبله من رابطه.
+     *
+     * وقسمُها `quotations` (`ALIASES['deliveries']`): من يعرض على العميل
+     * يسلّمه. والدورةُ في `App\Support\DeliveryPackages`.
+     */
+    Route::get('/deliveries', [DeliveryPackageController::class, 'index'])->name('deliveries.index');
+    Route::get('/deliveries/create', [DeliveryPackageController::class, 'create'])->name('deliveries.create');
+    Route::post('/deliveries', [DeliveryPackageController::class, 'store'])->name('deliveries.store');
+    Route::get('/deliveries/{id}', [DeliveryPackageController::class, 'show'])->name('deliveries.show');
+    Route::put('/deliveries/{id}', [DeliveryPackageController::class, 'update'])->name('deliveries.update');
+    Route::post('/deliveries/{id}/items', [DeliveryPackageController::class, 'addItem'])->name('deliveries.items.store');
+    Route::delete('/deliveries/{id}/items/{item}', [DeliveryPackageController::class, 'removeItem'])->name('deliveries.items.destroy');
+    Route::get('/deliveries/{id}/files/{item}', [DeliveryPackageController::class, 'file'])->name('deliveries.file');
+    Route::post('/deliveries/{id}/ready', [DeliveryPackageController::class, 'ready'])->name('deliveries.ready');
+    Route::post('/deliveries/{id}/reopen', [DeliveryPackageController::class, 'reopen'])->name('deliveries.reopen');
+    Route::post('/deliveries/{id}/send', [DeliveryPackageController::class, 'send'])->name('deliveries.send');
+    Route::post('/deliveries/{id}/email', [DeliveryPackageController::class, 'email'])->name('deliveries.email');
+    Route::post('/deliveries/{id}/decision', [DeliveryPackageController::class, 'decision'])->name('deliveries.decision');
+    Route::post('/deliveries/{id}/cancel', [DeliveryPackageController::class, 'cancel'])->name('deliveries.cancel');
+    Route::post('/deliveries/{id}/revise', [DeliveryPackageController::class, 'revise'])->name('deliveries.revise');
+
+    /*
+     * مركزُ العمليات — المرحلة 7: ما يحتاج يدًا اليوم، من كلّ الأقسام في شاشةٍ واحدة.
+     * قسمٌ باسمه: للمالك والمدير بـ`*`، ويُمنح لغيرهما بالاسم — انظر `CommandCenter`.
+     */
+    Route::get('/command', [CommandCenterController::class, 'index'])->name('command.index');
+
+    /*
+     * الأتمتة — المرحلة 8: القواعدُ وإعداداتُها وسجلُّ ما فعله المحرّك.
+     * القسمُ يقرأ؛ والضبطُ `automation.manage`، والإيقافُ `automation.pause`.
+     */
+    Route::get('/automation', [AutomationController::class, 'index'])->name('automation.index');
+    Route::put('/automation/rules/{id}', [AutomationController::class, 'updateRule'])->whereNumber('id')->name('automation.rules.update');
+    Route::post('/automation/settings', [AutomationController::class, 'settings'])->name('automation.settings');
+    Route::post('/automation/pause', [AutomationController::class, 'pause'])->name('automation.pause');
+    Route::post('/automation/evaluate', [AutomationController::class, 'evaluate'])->name('automation.evaluate');
+    Route::get('/automation/history', [AutomationController::class, 'history'])->name('automation.history');
+    Route::get('/automation/history/{id}', [AutomationController::class, 'show'])->whereNumber('id')->name('automation.history.show');
+    Route::post('/automation/history/{id}/cancel', [AutomationController::class, 'cancel'])->whereNumber('id')->name('automation.runs.cancel');
+    Route::post('/notifications/internal/{id}/read', [AutomationController::class, 'read'])->whereNumber('id')->name('notifications.internal.read');
+
+    /*
+     * المراسلات — المرحلة 6.
+     *
+     * سجلُّ الشركة كلُّه في قسم «المراسلات»؛ ونافذةُ كلّ مستندٍ (مراسلاتُه،
+     * ونافذةُ الإرسال منه) تحت مسار المستند نفسِه فتتبع قسمَه: البائعُ يرسل
+     * من عرضه بلا أن يُمنح السجلَّ كلَّه — انظر `CommunicationController`.
+     */
+    Route::get('/communications', [CommunicationController::class, 'index'])->name('communications.index');
+    Route::get('/communications/templates', [CommunicationTemplateController::class, 'index'])->name('communications.templates');
+    Route::post('/communications/templates', [CommunicationTemplateController::class, 'update'])->name('communications.templates.update');
+    Route::post('/communications/templates/preview', [CommunicationTemplateController::class, 'preview'])->name('communications.templates.preview');
+    Route::get('/communications/{id}', [CommunicationController::class, 'show'])->name('communications.show');
+    Route::post('/communications/{id}/retry', [CommunicationController::class, 'retry'])->name('communications.retry');
+
+    /* اسمُ المسار · مسارُه في العنوان · نوعُ الموضوع في `Subjects::TYPES` */
+    foreach ([
+        ['quotations', 'quotations', 'quotation'],
+        ['projects', 'projects', 'project'],
+        ['customerInvoices', 'customer-invoices', 'customer_invoice'],
+        ['deliveries', 'deliveries', 'delivery_package'],
+        ['changeOrders', 'change-orders', 'change_order'],
+        ['customers', 'customers', 'customer'],
+    ] as [$name, $path, $type]) {
+        Route::get("/{$path}/{id}/communications", [CommunicationController::class, 'history'])
+            ->whereNumber('id')->name("{$name}.communications")->defaults('type', $type);
+        Route::get("/{$path}/{id}/communications/compose", [CommunicationController::class, 'compose'])
+            ->whereNumber('id')->name("{$name}.communications.compose")->defaults('type', $type);
+        Route::post("/{$path}/{id}/communications", [CommunicationController::class, 'send'])
+            ->whereNumber('id')->name("{$name}.communications.send")->defaults('type', $type);
+    }
+    Route::get('/projects/{id}/timeline', [CommunicationController::class, 'timeline'])->name('projects.timeline');
+
     // تنبيهات يعرّفها صاحب النشاط — قواعد على مقاييس النظام، وتذكيرات بموعد
     Route::post('/alerts', [CustomAlertController::class, 'store'])->name('alerts.store');
     Route::put('/alerts/{id}', [CustomAlertController::class, 'update'])->name('alerts.update');
@@ -915,3 +1031,31 @@ Route::post('/i/{token}/decision', [PublicDocumentController::class, 'decide'])
     ->where('token', '[A-Za-z0-9]{22}')
     ->name('paper.decide');
 
+/*
+ * حزمةُ التسليم من رابط العميل — تُقرأ ويُقرَّر منها وتُفتح ملفّاتُها.
+ *
+ * الرمزُ رمزُ `document_links` نفسُه، والبابُ مستقلٌّ عن `/i/` كي لا يُمسّ
+ * ذاك — انظر `PublicDeliveryController`.
+ */
+Route::get('/d/{token}', [PublicDeliveryController::class, 'show'])
+    ->where('token', '[A-Za-z0-9]{22}')
+    ->name('delivery.show');
+Route::post('/d/{token}/decision', [PublicDeliveryController::class, 'decide'])
+    ->where('token', '[A-Za-z0-9]{22}')
+    ->name('delivery.decide');
+Route::get('/d/{token}/files/{item}', [PublicDeliveryController::class, 'file'])
+    ->where(['token' => '[A-Za-z0-9]{22}', 'item' => '[0-9]+'])
+    ->name('delivery.file');
+
+/*
+ * أخبارُ المزوّدين عن رسائلنا — المرحلة 6.
+ *
+ * بلا جلسةٍ ولا CSRF (انظر `bootstrap/app.php`): المنادي خادمٌ لا متصفّح.
+ * ويحرسهما سرٌّ: Postmark بهويّةٍ في عنوانها، وMeta بتوقيع HMAC على الجسد.
+ * والخنقُ يمنع أن يُغرق مجهولٌ السجلَّ بأخبارٍ لا تُقبل أصلًا.
+ */
+Route::middleware('throttle:240,1')->group(function () {
+    Route::post('/webhooks/postmark', [PostmarkWebhookController::class, 'handle'])->name('webhooks.postmark');
+    Route::get('/webhooks/whatsapp', [WhatsAppWebhookController::class, 'verify'])->name('webhooks.whatsapp.verify');
+    Route::post('/webhooks/whatsapp', [WhatsAppWebhookController::class, 'handle'])->name('webhooks.whatsapp');
+});

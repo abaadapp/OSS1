@@ -2,7 +2,9 @@
 
 namespace App\Support;
 
+use App\Models\ChangeOrder;
 use App\Models\CustomerInvoice;
+use App\Models\DeliveryPackage;
 use App\Models\DocumentLink;
 use App\Models\Order;
 use App\Models\Quotation;
@@ -60,7 +62,7 @@ class PublicDocument
      *
      * @var list<class-string>
      */
-    private const PUBLIC = [Order::class, CustomerInvoice::class, Quotation::class];
+    private const PUBLIC = [Order::class, CustomerInvoice::class, Quotation::class, ChangeOrder::class, DeliveryPackage::class];
 
     /** أيُمنح هذا النوعُ وجهًا عامًّا؟ */
     public static function allows(?Model $document): bool

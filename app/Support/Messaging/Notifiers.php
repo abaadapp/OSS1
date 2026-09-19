@@ -2,16 +2,33 @@
 
 namespace App\Support\Messaging;
 
+use RuntimeException;
+
 /**
- * القنواتُ المتاحة — بريدٌ وحدَه اليوم.
+ * القنواتُ المتاحة — بريدٌ وواتساب.
  *
- * و`for('whatsapp')` يومَ يُبنى يعيد تنفيذًا آخر من هنا، ولا يتغيّر من
- * يناديه: `Quotations::email` تطلب قناةً وترسل نيّةً.
+ * ومن يناديها يطلب قناةً ويرسل نيّةً: `Quotations::email` لا تعرف SMTP من
+ * Postmark، و`Communications::send` لا تعرف Graph API — كلٌّ خلف بابه.
  */
 class Notifiers
 {
     public static function email(): Notifier
     {
         return new EmailNotifier;
+    }
+
+    public static function whatsapp(): Notifier
+    {
+        return new WhatsAppNotifier;
+    }
+
+    /** القناةُ باسمها — `email` · `whatsapp` */
+    public static function for(string $channel): Notifier
+    {
+        return match ($channel) {
+            'email' => self::email(),
+            'whatsapp' => self::whatsapp(),
+            default => throw new RuntimeException(__('قناةٌ غير معروفة.')),
+        };
     }
 }

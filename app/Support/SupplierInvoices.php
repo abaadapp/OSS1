@@ -76,6 +76,10 @@ final class SupplierInvoices
                 'business_id' => $businessId,
                 'supplier_id' => $data['supplier_id'],
                 'purchase_order_id' => $data['purchase_order_id'] ?? null,
+                /* والمشروعُ يُورَث من أمر الشراء إن لم يُذكر: سندٌ على أمرِ مشروعٍ سندُ ذلك المشروع */
+                'project_id' => $data['project_id'] ?? (isset($data['purchase_order_id'])
+                    ? PurchaseOrder::where('business_id', $businessId)->whereKey($data['purchase_order_id'])->value('project_id')
+                    : null),
                 'supplier_ref' => $data['supplier_ref'],
                 'issued_at' => $data['issued_at'],
                 'due_at' => $data['due_at'] ?? null,

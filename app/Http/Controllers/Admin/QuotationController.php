@@ -8,6 +8,7 @@ use App\Models\DocumentApproval;
 use App\Models\PolicyException;
 use App\Models\Product;
 use App\Models\Quotation;
+use App\Support\Communication\Communications;
 use App\Support\CompanyPolicies;
 use App\Support\Demo;
 use App\Support\Document\Branding;
@@ -616,7 +617,8 @@ class QuotationController extends Controller
         $quotation = $this->find($id);
 
         try {
-            Quotations::email($quotation, $data['to'], $data['note'] ?? null, auth()->user());
+            /* ويُقيَّد الإرسالُ على العرض في سجلّ المراسلات — المرحلة 6 */
+            Communications::about($quotation, fn () => Quotations::email($quotation, $data['to'], $data['note'] ?? null, auth()->user()));
         } catch (RuntimeException $e) {
             return back()->withErrors(['email' => $e->getMessage()]);
         }

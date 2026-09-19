@@ -14,6 +14,12 @@ class Expense extends Model
     /** الحالة التي تعني أن المال خرج فعلًا */
     public const PAID = 'مدفوع';
 
+    /** التزامٌ لم يخرج من الدرج بعد — يُقرأ ملتزَمًا على مشروعه حتى يُسدَّد */
+    public const UNPAID = 'غير مدفوع';
+
+    /** ما يقبله النظام حالًا — وما عداه يُردّ: حالٌ مجهولة تُقرأ «غير مدفوع» فتمنع إقفالًا إلى الأبد */
+    public const STATUSES = [self::PAID, self::UNPAID];
+
     protected $guarded = [];
     protected $casts = ['amount' => 'decimal:3', 'spent_at' => 'date', 'due_date' => 'date'];
     public function business(): BelongsTo { return $this->belongsTo(Business::class); }
@@ -43,5 +49,11 @@ class Expense extends Model
     public function isPaid(): bool
     {
         return $this->status === null || $this->status === self::PAID;
+    }
+
+    /** المشروعُ الذي يُقرأ هذا المستندُ تحته — بُعدٌ لا قيد (§16) */
+    public function project(): BelongsTo
+    {
+        return $this->belongsTo(Project::class);
     }
 }

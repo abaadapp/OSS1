@@ -2,10 +2,14 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Admin\ChangeOrderController;
 use App\Http\Controllers\Admin\QuotationController;
+use App\Models\ChangeOrder;
 use App\Models\CustomerInvoice;
 use App\Models\Order;
 use App\Models\Quotation;
+use App\Support\ChangeOrders;
+use App\Support\Communication\Communications;
 use App\Support\Document\Branding;
 use App\Support\DocumentPaper;
 use App\Support\InvoiceBranding;
@@ -127,6 +131,28 @@ class PublicDocumentController extends Controller
             ]));
         }
 
+        /* وأمرُ التغيير يمرّ من الباب نفسِه — ورقةٌ تُقرأ وتُقبل كالعرض */
+        if ($document instanceof ChangeOrder) {
+            abort_if($document->status === ChangeOrder::DRAFT
+                || $document->status === ChangeOrder::PENDING_APPROVAL, 404);
+
+            $document->loadMissing('items', 'project');
+            ChangeOrders::markViewed($document);
+            $document->loadMissing('approval');
+
+            return InvoiceBranding::render($link->business_id, null, fn () => view('public.quotation', [
+                'paper' => ChangeOrderController::paper($link->business_id, $document)->render(),
+                'quotation' => $document,
+                'label' => ChangeOrders::label($document),
+                'docTitle' => __('أمر تغيير'),
+                'company' => (string) ($link->business->name ?? ''),
+                'decidable' => $document->isDecidable(),
+                'approval' => $document->approval,
+                'decideUrl' => route('paper.decide', $token),
+                'consent' => self::consent($link->business->name ?? '', $document),
+            ]));
+        }
+
         abort_unless($document instanceof CustomerInvoice, 404);
 
         /*
@@ -177,7 +203,8 @@ class PublicDocumentController extends Controller
 
         $document = $link->linkable;
 
-        abort_unless($document instanceof Quotation, 404);
+        /* عرضُ سعرٍ أو أمرُ تغيير — والحالتان المحجوبتان تحملان الاسمَين نفسَيهما */
+        abort_unless($document instanceof Quotation || $document instanceof ChangeOrder, 404);
         abort_if($document->status === Quotation::DRAFT || $document->status === Quotation::PENDING_APPROVAL, 404);
 
         $data = $request->validate([
@@ -195,18 +222,20 @@ class PublicDocumentController extends Controller
             'name' => __('الاسم'), 'email' => __('البريد الإلكتروني'), 'decline_reason' => __('سبب الاعتذار'),
         ]);
 
+        $signer = [
+            'name' => $data['name'],
+            'title' => $data['title'] ?? null,
+            'email' => $data['email'] ?? null,
+            'phone' => $data['phone'] ?? null,
+            'decline_reason' => $data['decline_reason'] ?? null,
+            'consent' => $data['decision'] === 'accepted' ? self::consent($link->business->name, $document) : null,
+        ];
+        $meta = ['ip' => $request->ip(), 'user_agent' => (string) $request->userAgent()];
+
         try {
-            $decided = Quotations::decide($document, $data['decision'], [
-                'name' => $data['name'],
-                'title' => $data['title'] ?? null,
-                'email' => $data['email'] ?? null,
-                'phone' => $data['phone'] ?? null,
-                'decline_reason' => $data['decline_reason'] ?? null,
-                'consent' => $data['decision'] === 'accepted' ? self::consent($link->business->name) : null,
-            ], [
-                'ip' => $request->ip(),
-                'user_agent' => (string) $request->userAgent(),
-            ]);
+            $decided = $document instanceof ChangeOrder
+                ? ChangeOrders::decide($document, $data['decision'], $signer, $meta)
+                : Quotations::decide($document, $data['decision'], $signer, $meta);
         } catch (RuntimeException $e) {
             throw ValidationException::withMessages(['decision' => $e->getMessage()]);
         }
@@ -214,7 +243,9 @@ class PublicDocumentController extends Controller
         RateLimiter::clear($key);
 
         /* والخبرُ إلى الشركة بعد أن ثبت القرار — وبأفضل جهد: بريدٌ يسقط لا يُسقطه */
-        Quotations::notifyDecision($decided, $decided->approval);
+        Communications::about($decided, fn () => $decided instanceof ChangeOrder
+            ? ChangeOrders::notifyDecision($decided, $decided->approval)
+            : Quotations::notifyDecision($decided, $decided->approval));
 
         return redirect()->route('paper.show', $token)->with('decided', $data['decision']);
     }
@@ -225,8 +256,14 @@ class PublicDocumentController extends Controller
      * ويُبنى في موضعٍ واحدٍ تقرؤه الشاشةُ والكتابةُ معًا: نصٌّ يُعرض
      * ونصٌّ آخر يُحفظ يجعل الدليلَ يشهد على ما لم يُقرأ.
      */
-    public static function consent(string $company): string
+    public static function consent(string $company, mixed $document = null): string
     {
+        if ($document instanceof ChangeOrder) {
+            return __('أقرّ بأنني مخوّل بقبول أمر التغيير هذا نيابة عن الجهة المذكورة فيه، وأنني قرأت ما يغيّره على النطاق المعتمَد وأثره على القيمة والموعد وسياسات :company المرفقة، وأوافق عليه.', [
+                'company' => $company,
+            ]);
+        }
+
         return __('أقرّ بأنني مخوّل بقبول هذا العرض نيابة عن الجهة المذكورة فيه، وأنني قرأت بنوده ونطاق العمل وشروطه وسياسات :company المرفقة، وأوافق عليها.', [
             'company' => $company,
         ]);

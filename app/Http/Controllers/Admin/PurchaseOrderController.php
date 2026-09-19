@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Branch;
 use App\Models\GoodsReceiptNote;
 use App\Models\Product;
+use App\Models\Project;
 use App\Models\PurchaseOrder;
 use App\Models\PurchaseOrderItem;
 use App\Models\Setting;
@@ -34,6 +35,7 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
+use RuntimeException;
 use Throwable;
 
 class PurchaseOrderController extends Controller
@@ -50,6 +52,9 @@ class PurchaseOrderController extends Controller
         $mayRead = (bool) auth()->user()?->may(Permissions::ATTACHMENT_VIEW);
 
         return Inertia::render('Admin/Purchases/Index', [
+            /* والمشاريعُ القائمة — ليُنسَب الأمرُ إلى مشروعه */
+            'projects' => Project::where('business_id', $this->bid())->open()->orderByDesc('id')
+                ->get(['id', 'code', 'name'])->all(),
             'stats' => [
                 ['label' => __('إجمالي الأوامر'), 'value' => (string) $s['total'], 'icon' => 'clipboard-list', 'color' => 'primary'],
                 ['label' => __('قيد التنفيذ'), 'value' => (string) $s['pending'], 'icon' => 'clock', 'color' => 'warning'],
@@ -146,9 +151,13 @@ class PurchaseOrderController extends Controller
                 'supplier_reference' => $po->supplier_reference,
                 'branch' => $branch?->name,
                 'notes' => $po->notes,
+                'project_id' => $po->project_id,
+                'project_code' => $po->project_id ? $po->project?->code : null,
                 'ordered_at' => optional($po->ordered_at)->format('Y-m-d'),
                 'expected_delivery_at' => optional($po->expected_delivery_at)->format('Y-m-d'),
                 'received_at' => optional($po->received_at)->format('Y-m-d'),
+                'closed_at' => optional($po->closed_at)->format('Y-m-d'),
+                'closing_note' => $po->closing_note,
                 'items_subtotal' => (float) $po->items_subtotal,
                 'supplier_discount' => (float) $po->supplier_discount,
                 'shipping_cost' => (float) $po->shipping_cost,
@@ -219,6 +228,11 @@ class PurchaseOrderController extends Controller
                 'receive' => (bool) $user?->may(Permissions::RECEIPT_CREATE)
                     && ! in_array($po->status, [PurchaseOrders::RECEIVED, 'ملغي'], true),
                 'delete' => $notes->isEmpty() && $invoices->isEmpty(),
+                /* والإقفالُ لما استُلم كلُّه وفُوتر بأقلّ — انظر `PurchaseOrders::close` */
+                'close' => (bool) $user?->may(Permissions::INVOICE_OVERRIDE)
+                    && $po->closed_at === null
+                    && $po->status === PurchaseOrders::RECEIVED
+                    && $invoices->contains(fn ($i) => $i->approval_status === SupplierInvoices::APPROVED),
             ],
             /*
              * والورقةُ إلى جانب تفاصيلها — HTML لا PDF.
@@ -575,6 +589,9 @@ class PurchaseOrderController extends Controller
             'notes' => ['nullable', 'string', 'max:1000'],
             /* وما لا يُطبع: عمودٌ آخر لا يبلغ ورقةَ المورّد — انظر `DocumentPaper::forPurchase` */
             'internal_notes' => ['nullable', 'string', 'max:1000'],
+            /* والمشروعُ من شركة الطالب وقائمٌ — شراءٌ لأجله يُقرأ التزامًا عليه (§16) */
+            'project_id' => ['nullable', 'integer', Rule::exists('projects', 'id')
+                ->where('business_id', $bid)->whereIn('status', Project::OPEN)],
             /*
              * ═══ وطريقةُ السداد **مطلوبة** — ونيّةٌ لا حدث ═══
              *
@@ -705,6 +722,7 @@ class PurchaseOrderController extends Controller
                     'total' => $totals['total'],
                     'notes' => $data['notes'] ?? null,
                     'internal_notes' => $data['internal_notes'] ?? null,
+                    'project_id' => $data['project_id'] ?? null,
                     /*
                      * وخطّةُ السداد تُحفظ ولا تُنفَّذ.
                      *
@@ -986,6 +1004,23 @@ class PurchaseOrderController extends Controller
      *
      * فيبقى الحذف لما لم يقع منه شيء: أمرٌ كُتب خطأً ولم يصل ولم يُفوتَر.
      */
+    /** إقفالُ أمرٍ استُلم وفُوتر بأقلّ — بسببٍ، ومن يملك تجاوزَ المطابقة */
+    public function close(Request $request, $id)
+    {
+        abort_if(! auth()->user()?->may(Permissions::INVOICE_OVERRIDE), 403);
+
+        $data = $request->validate(['note' => ['required', 'string', 'max:255']], [], ['note' => __('سبب الإقفال')]);
+        $po = PurchaseOrder::where('business_id', $this->bid())->findOrFail($id);
+
+        try {
+            PurchaseOrders::close($po, $data['note'], auth()->user());
+        } catch (RuntimeException $e) {
+            return back()->withErrors(['close' => $e->getMessage()]);
+        }
+
+        return back()->with('toast', ['msg' => __('أُقفل أمر الشراء — والباقي لم يعد التزامًا'), 'type' => 'success']);
+    }
+
     public function destroy($id)
     {
         $po = PurchaseOrder::where('business_id', $this->bid())->findOrFail($id);

@@ -11,6 +11,7 @@ use App\Models\CustomerInvoice;
 use App\Models\CustomerInvoiceAttachment;
 use App\Models\CustomerPayment;
 use App\Models\Product;
+use App\Models\Project;
 use App\Models\Setting;
 use App\Support\Activity;
 use App\Support\CustomerInvoices;
@@ -30,6 +31,7 @@ use App\Support\Money;
 use App\Support\Pagination;
 use App\Support\Paper;
 use App\Support\Permissions;
+use App\Support\ProjectScope;
 use App\Support\Receivables;
 use App\Support\Search;
 use App\Support\Vat;
@@ -177,6 +179,8 @@ class CustomerInvoiceController extends Controller
             'outstanding' => $i->outstanding(),
             'days_overdue' => $i->daysOverdue(),
             'po_number' => $i->po_number,
+            'project_id' => $i->project_id,
+            'project_code' => $i->project_id ? $i->project?->code : null,
         ];
     }
 
@@ -444,6 +448,10 @@ class CustomerInvoiceController extends Controller
                 ? (float) (Setting::where('business_id', $bid)->where('key', 'vat_rate')->value('value') ?? 5)
                 : 0.0,
             'today' => now()->toDateString(),
+            /* والمشاريعُ القائمة — لتُربط الفاتورةُ بمشروعها فيُقرأ إيرادُه */
+            'projects' => Project::where('business_id', $bid)->open()->orderByDesc('id')
+                ->get(['id', 'code', 'name', 'customer_id'])->all(),
+            'preset_project_id' => $request->integer('project_id') ?: null,
             'may' => $this->may(),
             /*
              * ووسائلُ السداد من مالكها لا مكتوبةً هنا.
@@ -893,6 +901,9 @@ class CustomerInvoiceController extends Controller
     {
         $data = $request->validate([
             'customer_id' => ['required', 'integer'],
+            /* والمشروعُ من شركة الطالب — وقائمٌ: لا تُفوتَر ورقةٌ على مشروعٍ مُقفَل أو ملغى */
+            'project_id' => ['nullable', 'integer', Rule::exists('projects', 'id')
+                ->where('business_id', $this->bid())->whereIn('status', Project::OPEN)],
             'issued_at' => ['nullable', 'date'],
             'due_at' => ['nullable', 'date'],
             'payment_terms_days' => ['nullable', 'integer', 'min:0', 'max:365'],
@@ -1090,12 +1101,25 @@ class CustomerInvoiceController extends Controller
             throw $e;
         }
 
+        /*
+         * وفاتورةٌ على مشروعٍ تُقاس بقيمته المعتمَدة **الحاليّة** — وتُحذَّر
+         * ولا تُمنع (§7): مشروعٌ زِيد نطاقُه يُفوتَر أكثر، وهذا مشروع. والإشعارُ
+         * الدائن — إن لزم — بيد المحاسب لا تلقائيًّا.
+         */
+        $project = $invoice->project_id ? Project::where('business_id', $this->bid())->find($invoice->project_id) : null;
+        $over = $project !== null && $invoice->status === CustomerInvoice::ISSUED
+            && $project->invoicedTotal() > ProjectScope::currentValue($project) + 0.0005;
+
         return redirect()->route('admin.customerInvoices.show', $invoice->id)->with('toast', [
             // ومسودّةٌ لا رقمَ لها: لا يُقال «أُنشئت الفاتورة » وينتهي عند فراغ
-            'msg' => $invoice->number
-                ? __('أُنشئت الفاتورة :n', ['n' => $invoice->number])
-                : __('حُفظت مسودّة الفاتورة'),
-            'type' => 'success',
+            'msg' => $over
+                ? __('أُنشئت الفاتورة :n — والمفوتَر على المشروع :code صار فوق قيمته المعتمَدة', [
+                    'n' => $invoice->number, 'code' => $project->code,
+                ])
+                : ($invoice->number
+                    ? __('أُنشئت الفاتورة :n', ['n' => $invoice->number])
+                    : __('حُفظت مسودّة الفاتورة')),
+            'type' => $over ? 'warning' : 'success',
         ]);
     }
 

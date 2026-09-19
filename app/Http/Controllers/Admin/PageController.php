@@ -13,6 +13,7 @@ use App\Models\CustomerAddress;
 use App\Models\JobTitle;
 use App\Models\Order;
 use App\Models\Product;
+use App\Models\Project;
 use App\Models\User;
 use App\Support\Demo;
 use App\Support\DocumentTemplates;
@@ -517,6 +518,9 @@ class PageController extends Controller
         $bid = auth()->user()->business_id ?? Demo::bid();
 
         return Inertia::render('Admin/Purchases/Create', [
+            /* والمشاريعُ القائمة — شراءٌ لأجل مشروعٍ يُقرأ التزامًا عليه (§16) */
+            'projects' => Project::where('business_id', $bid)->open()->orderByDesc('id')
+                ->get(['id', 'code', 'name'])->all(),
             'suppliers' => Demo::suppliers(),
             'products' => Demo::products(),
             'reorderSuggestions' => Demo::reorderSuggestions(),

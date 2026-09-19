@@ -65,11 +65,13 @@ interface Props {
     /** الشهور التي فيها مصروفٌ فعلًا — أحدثها أوّلًا */
     months: string[];
     today: string;
+    /** المشاريعُ القائمة — تكلفةٌ مباشرة تُقرأ تحت مشروعها (§16) */
+    projects: { id: number; code: string; name: string }[];
 }
 
 export default function ExpensesIndex() {
     const { expenses, pagination, types, accountOptions, filters, sorts, totalAmount, totalCount, unpaidAmount, unpaidCount,
-        dueSoonCount, overdueCount, month, monthTotal, monthUnpaid, monthCount, months, today, context } =
+        dueSoonCount, overdueCount, month, monthTotal, monthUnpaid, monthCount, months, today, projects, context } =
         usePage<PageProps<Props>>().props;
     const t = useTranslate();
     const currency = context!.currency;
@@ -87,6 +89,7 @@ export default function ExpensesIndex() {
         due_date: string;
         method: string;
         status: string;
+        project_id: string;
         attachment: File | null;
     }>({
         type: '',
@@ -96,6 +99,7 @@ export default function ExpensesIndex() {
         due_date: '',
         method: 'نقدي',
         status: 'مدفوع',
+        project_id: '',
         attachment: null,
     });
 
@@ -523,6 +527,17 @@ export default function ExpensesIndex() {
                                     type="date"
                                     value={expense.data.due_date}
                                     onChange={(e) => expense.setData('due_date', e.target.value)}
+                                />
+                            </Field>
+                        )}
+
+                        {(projects ?? []).length > 0 && (
+                            <Field label="المشروع" hint="اختياري — تُقرأ تكلفةً مباشرة على المشروع" error={expense.errors.project_id}>
+                                <Select
+                                    placeholder="بلا مشروع"
+                                    value={expense.data.project_id}
+                                    onChange={(e) => expense.setData('project_id', e.target.value)}
+                                    options={projects.map((pr) => ({ label: `${pr.code} — ${pr.name}`, value: pr.id }))}
                                 />
                             </Field>
                         )}

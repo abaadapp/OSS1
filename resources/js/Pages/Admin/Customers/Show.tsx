@@ -6,6 +6,7 @@ import {
 import AdminLayout from '@/Layouts/AdminLayout';
 import BackLink from '@/Components/BackLink';
 import PageHeader from '@/Components/PageHeader';
+import CommunicationHistory from '@/Components/CommunicationHistory';
 import StatCard from '@/Components/StatCard';
 import Tabs from '@/Components/Tabs';
 import SmartLink from '@/Components/SmartLink';
@@ -216,6 +217,9 @@ export default function CustomerShow() {
                             </Button>
                         </form>
                     </Card>
+
+                    {/* المراسلات — المرحلة 6: كلُّ ما أُرسل إلى هذا العميل عن مستنداته */}
+                    <CommunicationHistory subjectType="customer" subjectId={customer.id} />
                 </div>
 
                 <Card className="overflow-hidden lg:col-span-2">

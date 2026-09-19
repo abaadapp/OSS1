@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin\Purchasing;
 
 use App\Http\Controllers\Controller;
 use App\Models\JournalEntry;
+use App\Models\Project;
 use App\Models\PurchaseOrder;
 use App\Models\Supplier;
 use App\Models\SupplierInvoice;
@@ -108,6 +109,9 @@ class SupplierInvoiceController extends Controller
             ->pluck('sourceable_id')->unique()->flip();
 
         return Inertia::render('Admin/Purchases/Invoices', [
+            /* والمشاريعُ القائمة — ليُنسَب السندُ إلى مشروعه */
+            'projects' => Project::where('business_id', $bid)->open()->orderByDesc('id')
+                ->get(['id', 'code', 'name'])->all(),
             'invoices' => collect($invoices->items())->map(fn ($i) => [
                 'id' => $i->id,
                 'supplier' => $i->supplier?->name ?? '—',
@@ -270,6 +274,8 @@ class SupplierInvoiceController extends Controller
                 'rejection_reason' => $invoice->rejection_reason,
                 'overdue' => $invoice->isOverdue(),
                 'notes' => $invoice->notes,
+                'project_id' => $invoice->project_id,
+                'project_code' => $invoice->project_id ? $invoice->project?->code : null,
                 'submitted_by' => $actors[$invoice->submitted_by] ?? null,
                 'approved_at' => optional($invoice->approved_at)->format('Y-m-d'),
                 'approved_by' => $actors[$invoice->approved_by] ?? null,
@@ -348,6 +354,9 @@ class SupplierInvoiceController extends Controller
             'subtotal' => ['required', 'numeric', 'min:0'],
             'tax' => ['nullable', 'numeric', 'min:0'],
             'notes' => ['nullable', 'string', 'max:1000'],
+            /* والمشروعُ من شركة الطالب وقائمٌ — وإن لم يُذكر وُرث من أمر الشراء */
+            'project_id' => ['nullable', 'integer', Rule::exists('projects', 'id')
+                ->where('business_id', $bid)->whereIn('status', Project::OPEN)],
             'attachment' => ['nullable', 'file', 'max:10240', 'extensions:jpg,jpeg,png,pdf,webp,heic'],
             'approve_now' => ['nullable', 'boolean'],
             'override_reason' => ['nullable', 'string', 'max:200'],

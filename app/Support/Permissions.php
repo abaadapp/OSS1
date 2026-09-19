@@ -30,17 +30,23 @@ class Permissions
          * يستلم البضاعة بيده، والاعتمادُ والصرفُ لمن يملك المال. ومن يُقيّد
          * لا يعتمد ما قيّده.
          */
+        /*
+         * و«المشاريع» للجميع — كلٌّ بحاجته (§23): المحاسبُ يقرأ ماليّتَها،
+         * والبائعُ يكتب أوامرَ تغييرها، وأمينُ المخزن يرى ما يُطلب ومتى،
+         * والمنسّقُ الميدانيّ يقرأ ما سينفّذه. والقسمُ يفتح الشاشة؛ وما يمسّ
+         * النطاقَ أو المالَ أفعالٌ تُمنح بالاسم.
+         */
         'accountant' => ['dashboard', 'orders', 'customers', 'finance', 'expenses',
-            'employees', 'reports', 'suppliers', 'purchases'],
-        'inventory' => ['dashboard', 'products', 'inventory', 'suppliers', 'purchases'],
+            'employees', 'reports', 'suppliers', 'purchases', 'projects'],
+        'inventory' => ['dashboard', 'products', 'inventory', 'suppliers', 'purchases', 'projects'],
         /*
          * والبائعُ يفتح «عروض الأسعار»: هي بابُ عمله الأوّل في Event Plus —
          * يعرض قبل أن يُفوتر. ولا يفتحها المحاسب: مستندٌ تجاريٌّ قبل البيع
          * لا أثرَ له في الدفتر.
          */
-        'sales' => ['dashboard', 'quotations', 'orders', 'customers', 'products'],
+        'sales' => ['dashboard', 'quotations', 'projects', 'orders', 'customers', 'products'],
         // والسائق يقرأ ما سيحمله: العنوان والموعد والمستلِم
-        'delivery' => ['dashboard', 'orders'],
+        'delivery' => ['dashboard', 'orders', 'projects'],
     ];
 
     /**
@@ -171,8 +177,80 @@ class Permissions
      */
     public const POLICY_OVERRIDE = 'policy.override';
 
-    /** الإرسالُ من بريد الشركة إلى العميل — رابطُ العرض وتذكيرُه */
+    /**
+     * الإرسالُ من بريد الشركة إلى العميل — رابطُ العرض وتذكيرُه.
+     *
+     * وهو `communication.send` في المرحلة 6: القناةُ صارت بريدًا وواتساب،
+     * والمفتاحُ يبقى — من مُنحه أمسِ يُرسل اليوم من القناتين.
+     */
     public const MESSAGING_SEND = 'messaging.send';
+
+    /*
+     * ═══ المراسلات — المرحلة 6 ═══
+     *
+     * قسمُ «المراسلات» يفتح سجلَّ الشركة كلَّه؛ وهذه الأفعالُ تُمنح بالاسم:
+     * القراءةُ داخل المستند (تبويبُ المشروع وبطاقةُ العرض) لمن يعمل عليه،
+     * والإعادةُ لمن يُسأل عن رسالةٍ ماليّة تصل مرّتين، والقوالبُ لمن يقرّر
+     * ما تقوله الشركةُ باسمها.
+     */
+
+    /** رؤيةُ مراسلات مستندٍ من داخله */
+    public const COMMUNICATION_VIEW = 'communication.view';
+
+    /** إعادةُ إرسالِ رسالةٍ فشلت */
+    public const COMMUNICATION_RETRY = 'communication.retry';
+
+    /** ضبطُ قوالب الرسائل: أسماؤها عند المزوّد وحالُها */
+    public const COMMUNICATION_TEMPLATES_MANAGE = 'communication.templates.manage';
+
+    /*
+     * ═══ الأتمتة — المرحلة 8 ═══
+     *
+     * قسمُ «الأتمتة» يفتح القواعدَ والسجلّ للقراءة؛ والتغييرُ فعلان بالاسم:
+     * ضبطُ القواعد وتشغيلُها (ومنها ما يبلغ العميل)، وإيقافُ الأتمتة كلِّها
+     * واستئنافُها — مفتاحُ الأمان.
+     */
+
+    /** ضبطُ قواعد الأتمتة ووضعِها: تفعيلٌ وإيقاف وتبديلُ مراقبة/تشغيل */
+    public const AUTOMATION_MANAGE = 'automation.manage';
+
+    /** إيقافُ الأتمتة كلِّها واستئنافُها */
+    public const AUTOMATION_PAUSE = 'automation.pause';
+
+    /*
+     * ═══ المشروع — المرحلة 4 ═══
+     *
+     * ولا `project.create`: المشروعُ يُنشأ من قبول العرض لا بيد، ومقبضٌ لا
+     * يحرس بابًا لا يُكتب.
+     */
+
+    /** إدارةُ المشروع: بياناتُه وفريقُه ومهامُّه ومتطلّباتُه قبل التثبيت — والتثبيتُ نفسُه */
+    public const PROJECT_MANAGE = 'project.manage';
+
+    /** رؤيةُ تكلفته وربحيّته — المالُ لا النطاق */
+    public const PROJECT_BUDGET_VIEW = 'project.budget.view';
+
+    /** إقفالُ مشروع — يُجمّد أرقامَه */
+    public const PROJECT_CLOSE = 'project.close';
+
+    /** إعادةُ فتح مشروعٍ مُقفَل */
+    public const PROJECT_REOPEN = 'project.reopen';
+
+    /**
+     * أمرُ التغيير: أربعةُ أفعال — والتسعيرُ بأفعال العرض نفسِها.
+     *
+     * خصمُ بندٍ فيه وبيعُه فوق الكتالوج واعتمادُ ما تجاوز الحدَّ تمرّ بـ
+     * `quotation.discount` و`overridePrice` و`approve`: الكودُ الذي يفرضها
+     * واحد (`Quotations::price`)، ومن يُؤذَن له بخصمٍ في العرض يُؤذَن له
+     * في تعديله.
+     */
+    public const CHANGE_ORDER_CREATE = 'changeOrder.create';
+
+    public const CHANGE_ORDER_SEND = 'changeOrder.send';
+
+    public const CHANGE_ORDER_RECORD_DECISION = 'changeOrder.recordDecision';
+
+    public const CHANGE_ORDER_CANCEL = 'changeOrder.cancel';
 
     public const ACTIONS = [
         'order.edit' => 'تصحيح فاتورة مكتملة',
@@ -249,13 +327,26 @@ class Permissions
          */
         self::QUOTATION_CREATE => 'كتابة عرض سعر',
         self::QUOTATION_SEND => 'إرسال عرض سعر للعميل',
-        self::QUOTATION_DISCOUNT => 'منح خصم على عرض سعر',
+        self::QUOTATION_DISCOUNT => 'منح خصم على عرض سعر أو أمر تغيير',
         self::QUOTATION_OVERRIDE_PRICE => 'البيع فوق سعر الكتالوج',
         self::QUOTATION_APPROVE => 'اعتماد خصم تجاوز الحدّ',
         self::QUOTATION_CANCEL => 'إلغاء عرض سعر',
         self::QUOTATION_RECORD_DECISION => 'تسجيل قبول العميل أو رفضه',
         self::POLICY_OVERRIDE => 'اعتماد استثناء من سياسة الشركة',
         self::MESSAGING_SEND => 'الإرسال من بريد الشركة',
+        self::COMMUNICATION_VIEW => 'رؤية مراسلات العميل داخل المستند',
+        self::COMMUNICATION_RETRY => 'إعادة إرسال رسالة فشلت',
+        self::COMMUNICATION_TEMPLATES_MANAGE => 'ضبط قوالب الرسائل',
+        self::AUTOMATION_MANAGE => 'ضبط قواعد الأتمتة وتشغيلها',
+        self::AUTOMATION_PAUSE => 'إيقاف الأتمتة واستئنافها',
+        self::PROJECT_MANAGE => 'إدارة المشروع وفريقه ومهامّه وتثبيت متطلّباته',
+        self::PROJECT_BUDGET_VIEW => 'رؤية تكلفة المشروع وربحيّته',
+        self::PROJECT_CLOSE => 'إقفال مشروع',
+        self::PROJECT_REOPEN => 'إعادة فتح مشروع مُقفَل',
+        self::CHANGE_ORDER_CREATE => 'كتابة أمر تغيير',
+        self::CHANGE_ORDER_SEND => 'إرسال أمر تغيير للعميل',
+        self::CHANGE_ORDER_RECORD_DECISION => 'تسجيل قبول العميل لأمر التغيير أو رفضه',
+        self::CHANGE_ORDER_CANCEL => 'إلغاء أمر تغيير',
     ];
 
     /**
@@ -336,6 +427,29 @@ class Permissions
         self::POLICY_OVERRIDE => ['admin', 'manager'],
         /* والبائعُ يرسل من بريد الشركة: هو من يكتب العرضَ ويتابعه */
         self::MESSAGING_SEND => ['admin', 'manager', 'sales'],
+        /*
+         * والمراسلات: يقرؤها من يعمل على المستند (البائعُ والمحاسب)، ويعيد
+         * ما فشل ويضبط القوالبَ من يملك القسمَ كلَّه — المرحلة 6.
+         */
+        self::COMMUNICATION_VIEW => ['admin', 'manager', 'sales', 'accountant'],
+        self::COMMUNICATION_RETRY => ['admin', 'manager'],
+        self::COMMUNICATION_TEMPLATES_MANAGE => ['admin', 'manager'],
+        /* والأتمتةُ للمالك والمدير: ما يبلغ العميلَ وحده لا يُترك لغيرهما */
+        self::AUTOMATION_MANAGE => ['admin', 'manager'],
+        self::AUTOMATION_PAUSE => ['admin', 'manager'],
+        /*
+         * والمشروع: إدارتُه وإقفالُه للمالك ومدير الفرع، وإعادةُ الفتح
+         * للمالك وحده — تُعيد أرقامًا جُمّدت. والمحاسبُ يرى المال لأنّه عملُه.
+         * وأمرُ التغيير كالعرض: البائعُ يكتب ويُرسل ويسجّل، ولا يُلغي.
+         */
+        self::PROJECT_MANAGE => ['admin', 'manager'],
+        self::PROJECT_BUDGET_VIEW => ['admin', 'manager', 'accountant'],
+        self::PROJECT_CLOSE => ['admin', 'manager'],
+        self::PROJECT_REOPEN => ['admin'],
+        self::CHANGE_ORDER_CREATE => ['admin', 'manager', 'sales'],
+        self::CHANGE_ORDER_SEND => ['admin', 'manager', 'sales'],
+        self::CHANGE_ORDER_RECORD_DECISION => ['admin', 'manager', 'sales'],
+        self::CHANGE_ORDER_CANCEL => ['admin', 'manager'],
     ];
 
     /**
@@ -520,9 +634,15 @@ class Permissions
 
     /** كل الأقسام التي تظهر في لوحة النشاط — مصدر واحد تقرأ منه الواجهة */
     public const SECTIONS = [
-        'dashboard', 'customers', 'products', 'quotations', 'orders',
+        'dashboard', 'customers', 'products', 'quotations', 'projects', 'orders',
         'inventory', 'finance', 'expenses', 'settings',
         'suppliers', 'purchases', 'employees', 'reports',
+        // سجلُّ المراسلات وقوالبُها — المرحلة 6. للمالك والمدير بـ`*`، ويُمنح بالاسم لغيرهما
+        'communications',
+        // مركزُ العمليات — المرحلة 7: ما يحتاج يدًا اليوم. للمالك والمدير، ويُمنح بالاسم
+        'command',
+        // الأتمتة — المرحلة 8: القواعدُ والسجلّ. للمالك والمدير، ويُمنح بالاسم
+        'automation',
     ];
 
     /**
@@ -621,6 +741,10 @@ class Permissions
         // مفتاحٍ ناقص داخل HandleInertiaRequests — أي ٥٠٠ على كل صفحةٍ يفتحها
         'reports' => 'admin.reports.index',
         'quotations' => 'admin.quotations.index',
+        'projects' => 'admin.projects.index',
+        'communications' => 'admin.communications.index',
+        'command' => 'admin.command.index',
+        'automation' => 'admin.automation.index',
     ];
 
     /**
@@ -669,6 +793,10 @@ class Permissions
             // كانت ساقطةً فتُعرض «reports» بحروفٍ لاتينية في قائمة صلاحيات عربية
             'reports' => 'التقارير',
             'quotations' => 'عروض الأسعار',
+            'projects' => 'المشاريع',
+            'communications' => 'المراسلات',
+            'command' => 'مركز العمليات',
+            'automation' => 'الأتمتة',
         ];
 
         return collect(self::SECTIONS)
@@ -720,6 +848,8 @@ class Permissions
     public const SHELL = [
         'admin.search', 'admin.currency.switch', 'admin.language.update',
         'admin.notifications.feed', 'admin.notifications.dismiss', 'admin.notifications.clear',
+        // وقراءةُ تنبيهٍ داخليّ من الجرس — لكلّ من دخل اللوحة، والتنبيهُ لصاحبه وحده — المرحلة 8
+        'admin.notifications.internal.read',
     ];
 
     /**
@@ -751,9 +881,13 @@ class Permissions
         'customerInvoices' => 'orders',
         // والتحصيلُ مالٌ يدخل الصندوق: بابُه المالية
         'customerPayments' => 'finance',
+        // وحزمُ التسليم تتبع عروضَ الأسعار: من يعرض على العميل يسلّمه — المرحلة 5
+        'deliveries' => 'quotations',
         // تهيئةُ المتجر أوّلَ مرّة تكتب بيانات النشاط — فتتبع بابَها
         'setup' => 'settings',
         'activity' => 'settings',
+        // وأمرُ التغيير تعديلٌ على مشروع: بابُه بابُ المشاريع، ولا قسمَ له
+        'changeOrders' => 'projects',
     ];
 
     /**

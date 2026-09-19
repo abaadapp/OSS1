@@ -10,16 +10,21 @@ import {
 import {
     BarChart3,
     Boxes,
+    Briefcase,
     FileSignature,
     FileText,
     LayoutDashboard,
+    MessageSquare,
+    Radar,
     Package,
+    PackageCheck,
     Settings,
     ShoppingCart,
     Truck,
     UserCog,
     Users,
     Wallet,
+    Zap,
 } from 'lucide-react';
 
 export interface NavItem {
@@ -71,6 +76,8 @@ export const NAV: NavGroup[] = [
     {
         items: [
             { label: 'لوحة التحكم', icon: LayoutDashboard, route: 'admin.dashboard', section: 'dashboard' },
+            /* ومركزُ العمليات بعدها مباشرةً: ما يحتاج يدًا اليوم — المرحلة 7 */
+            { label: 'مركز العمليات', icon: Radar, route: 'admin.command.index', section: 'command' },
             {
                 label: 'العملاء',
                 icon: Users,
@@ -94,6 +101,25 @@ export const NAV: NavGroup[] = [
                 route: 'admin.quotations.index',
                 section: 'quotations',
                 covers: ['admin.quotations.show', 'admin.quotations.create'],
+            },
+            /*
+             * والمشاريعُ بعد العروض: العرضُ المقبول يصير مشروعًا. وأوامرُ
+             * التغيير صفحاتٌ تحته لا مدخلَ لها.
+             */
+            {
+                label: 'المشاريع',
+                icon: Briefcase,
+                route: 'admin.projects.index',
+                section: 'projects',
+                covers: ['admin.projects.show', 'admin.changeOrders.show', 'admin.changeOrders.create', 'admin.changeOrders.edit'],
+            },
+            // وحزمُ التسليم: ما تسلّمه الشركةُ في ختام العمل ويقبله العميل — المرحلة 5
+            {
+                label: 'حزم التسليم',
+                icon: PackageCheck,
+                route: 'admin.deliveries.index',
+                section: 'quotations',
+                covers: ['admin.deliveries.show', 'admin.deliveries.create'],
             },
             // «الطلبات» سابقًا: المتجر يبيع ولا يستقبل طلبات وحسب
             { label: 'المبيعات', icon: ShoppingCart, route: 'admin.orders.index', section: 'orders' },
@@ -147,7 +173,28 @@ export const NAV: NavGroup[] = [
     },
     {
         /* التقارير مجموعةٌ وحدها: بابٌ لا شاشةُ أرقام — تجمع ما تفرّق وتقود إليه */
-        items: [{ label: 'التقارير', icon: BarChart3, route: 'admin.reports.index', section: 'reports' }],
+        items: [
+            { label: 'التقارير', icon: BarChart3, route: 'admin.reports.index', section: 'reports' },
+            /*
+             * والمراسلات بجانبها: سجلٌّ يُقرأ لا شاشةُ عمل — ما قيل للعملاء
+             * وماذا صار إليه. والإرسالُ نفسُه من شاشة المستند — المرحلة 6
+             */
+            {
+                label: 'المراسلات',
+                icon: MessageSquare,
+                route: 'admin.communications.index',
+                section: 'communications',
+                covers: ['admin.communications.show', 'admin.communications.templates'],
+            },
+            /* والأتمتة بعدها: ما يتابعه النظام وحده — قواعدُه وسجلُّه — المرحلة 8 */
+            {
+                label: 'الأتمتة',
+                icon: Zap,
+                route: 'admin.automation.index',
+                section: 'automation',
+                covers: ['admin.automation.history'],
+            },
+        ],
     },
     {
         /*

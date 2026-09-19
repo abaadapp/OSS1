@@ -286,4 +286,10 @@ class CustomerInvoice extends Model
 
         return max(0, (int) $this->due_at->endOfDay()->diffInDays(now(), absolute: false));
     }
+
+    /** المشروعُ الذي يُقرأ هذا المستندُ تحته — بُعدٌ لا قيد (§16) */
+    public function project(): BelongsTo
+    {
+        return $this->belongsTo(Project::class);
+    }
 }

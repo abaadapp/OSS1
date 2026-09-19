@@ -6,7 +6,9 @@ use App\Models\Business;
 use App\Models\PurchaseOrder;
 use App\Models\Setting;
 use App\Models\Supplier;
+use App\Models\User;
 use Illuminate\Support\Facades\DB;
+use RuntimeException;
 
 /**
  * أمرُ الشراء — حالاتُه ورقمُه.
@@ -156,6 +158,61 @@ final class PurchaseOrders
             $n = max($highest, $last ? (int) substr($last, 3) : 0) + 1;
 
             return 'PO-'.str_pad((string) $n, 6, '0', STR_PAD_LEFT);
+        });
+    }
+
+    /* ─────────────────────────── الإقفال ─────────────────────────── */
+
+    /**
+     * إقفالُ أمرٍ استُلم كلُّه وفُوتر بأقلّ من قيمته — فالباقي ليس التزامًا.
+     *
+     * ═══ لمَ بابٌ صريح لا قاعدةٌ ضمنيّة ═══
+     *
+     * أمرٌ مستلَمٌ عليه سندٌ معتمَدٌ بأقلّ قد يكون خصمًا من المورّد، وقد يكون
+     * سندًا أوّلَ يتبعه ثانٍ. والنظامُ لا يعرف أيَّهما — فيسأل من يعرف: من
+     * يملك تجاوزَ مطابقة السند (`INVOICE_OVERRIDE`) يقول «الباقي لن يأتي»
+     * بسببٍ مكتوب، فيخرج الرصيدُ من ملتزَم المشروع (`ProjectFinancials`).
+     * ولا يُقفَل ما لم يُستلَم كلُّه أو لم يُفوتَر بعد: هذا التزامٌ حقيقيّ.
+     */
+    public static function close(PurchaseOrder $order, string $note, ?User $actor = null): PurchaseOrder
+    {
+        $note = trim($note);
+
+        if ($note === '') {
+            throw new RuntimeException(__('اكتب سبب الإقفال — لماذا لن يأتي سندٌ بالباقي؟'));
+        }
+
+        if (! ($actor?->may(Permissions::INVOICE_OVERRIDE) ?? false)) {
+            throw new RuntimeException(__('إقفالُ أمر الشراء بفرقٍ يحتاج صلاحية تجاوز مطابقة السند.'));
+        }
+
+        return DB::transaction(function () use ($order, $note, $actor) {
+            $locked = PurchaseOrder::where('business_id', $order->business_id)
+                ->lockForUpdate()->findOrFail($order->id);
+
+            if ($locked->closed_at !== null) {
+                return $locked;
+            }
+
+            if ($locked->status !== self::RECEIVED) {
+                throw new RuntimeException(__('لا يُقفَل إلا أمرٌ استُلم كلُّه — ما لم يصل بعدُ التزامٌ قائم.'));
+            }
+
+            if (! $locked->invoices()->where('approval_status', SupplierInvoices::APPROVED)->exists()) {
+                throw new RuntimeException(__('لا يُقفَل أمرٌ لم يُفوتَر بعد — انتظر سندَ المورّد أو أدخله.'));
+            }
+
+            $locked->update([
+                'closed_at' => now(),
+                'closed_by' => $actor?->id,
+                'closing_note' => mb_substr($note, 0, 255),
+            ]);
+
+            Activity::log('status', 'أقفل أمر الشراء '.$locked->number.' بفرقٍ لن يُفوتَر — '.$note, [
+                'subject_id' => $locked->id, 'subject_type' => 'purchase_order', 'icon' => 'lock',
+            ]);
+
+            return $locked->fresh();
         });
     }
 }

@@ -16,6 +16,41 @@ return [
 
     'postmark' => [
         'key' => env('POSTMARK_API_KEY'),
+        /*
+         * سرُّ webhook التسليم — المرحلة 6.
+         *
+         * Postmark تنادي `/webhooks/postmark` بخبر الوصول والارتداد والفتح، ولا
+         * توقّع طلبها. فتُعطى في عنوان الـwebhook هويّةً (`https://x:SECRET@…`)
+         * تُقارَن هنا بزمنٍ ثابت — وبلا سرٍّ مضبوطٍ يُغلق الباب كلُّه، فلا
+         * يكتب مجهولٌ «وصلت» على رسالةٍ لم تصل.
+         */
+        'webhook_secret' => env('POSTMARK_WEBHOOK_SECRET'),
+    ],
+
+    /*
+     * واتساب — WhatsApp Cloud API من Meta — المرحلة 6.
+     *
+     * ═══ في البيئة لا في القاعدة ═══
+     *
+     * رمزُ الوصول يُرسل باسم رقم الشركة إلى أيّ رقم، وما يُخزَّن في القاعدة
+     * يخرج مع كلّ نسخةٍ احتياطيّة. فالأربعةُ هنا سرائرُ خادم: لا تُعرض في
+     * شاشة، ولا تُكتب في سجلّ، ولا تُرسَل إلى الواجهة — انظر `WhatsAppNotifier`.
+     *
+     * ═══ وغيابُها يعني «غيرُ موصول» ═══
+     *
+     * `configured()` تسأل عن الرمز ومعرّف الرقم معًا؛ وما دونهما تُخفي الشاشةُ
+     * بابَ واتساب ولا تدّعي أنّه يعمل — درسُ `Mailer::configured()` نفسُه.
+     *
+     * - `app_secret`: يوقّع Meta به كلَّ webhook (`X-Hub-Signature-256`)
+     * - `verify_token`: ما نختاره نحن ويُعاد لنا عند تسجيل الـwebhook
+     */
+    'whatsapp' => [
+        'token' => env('WHATSAPP_ACCESS_TOKEN'),
+        'phone_number_id' => env('WHATSAPP_PHONE_NUMBER_ID'),
+        'business_account_id' => env('WHATSAPP_BUSINESS_ACCOUNT_ID'),
+        'app_secret' => env('WHATSAPP_APP_SECRET'),
+        'verify_token' => env('WHATSAPP_VERIFY_TOKEN'),
+        'api_version' => env('WHATSAPP_API_VERSION', 'v21.0'),
     ],
 
     'ses' => [

@@ -3,6 +3,7 @@ import { router, useForm, usePage } from '@inertiajs/react';
 import { FileText, Paperclip, Trash2, Undo2 } from 'lucide-react';
 import AdminLayout from '@/Layouts/AdminLayout';
 import PageHeader from '@/Components/PageHeader';
+import CommunicationHistory from '@/Components/CommunicationHistory';
 import DocumentMeta from '@/Components/DocumentMeta';
 import DocumentPanel, { DocumentAside } from '@/Components/DocumentPanel';
 import SmartLink from '@/Components/SmartLink';
@@ -367,6 +368,9 @@ export default function CustomerInvoiceShow() {
                             </ul>
                         )}
                     </Card>
+
+                    {/* المراسلات — المرحلة 6: رابطُ الفاتورة وتذكيرُ سدادها */}
+                    {invoice.status === 'صادرة' && <CommunicationHistory subjectType="customer_invoice" subjectId={invoice.id} />}
 
                     {/* والملاحظةُ الداخليّة لا تُطبع ولا تصل العميل */}
                     <Card className="p-4">

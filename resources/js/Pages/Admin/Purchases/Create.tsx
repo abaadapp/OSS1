@@ -78,6 +78,8 @@ interface Props {
     documentLanguage: string;
     /** أيملك من يقرأ تبديلَ قالب الورقة؟ — قسمُ «الإعدادات» */
     mayBrand: boolean;
+    /** المشاريعُ القائمة — شراءٌ لأجل مشروعٍ يُقرأ التزامًا عليه (§16) */
+    projects: { id: number; code: string; name: string }[];
 }
 
 /**
@@ -115,7 +117,7 @@ export default function PurchaseCreate() {
     const {
         suppliers, products, reorderSuggestions, branches, currentBranchId, fromReorder, today,
         taxRate, formToken, newSupplierId, units: knownUnits, context,
-        defaultSupplierId, methods, terms, documentLanguage, mayBrand,
+        defaultSupplierId, methods, terms, documentLanguage, mayBrand, projects,
     } = usePage<PageProps<Props>>().props;
     const t = useTranslate();
     const currency = context!.currency;
@@ -199,6 +201,8 @@ export default function PurchaseCreate() {
         notes: '',
         /* وما لا يُطبع: عمودٌ آخر لا يبلغ ورقةَ المورّد */
         internal_notes: '',
+        /* والمشروعُ بُعدٌ يُقرأ: أمرُ شراءٍ لأجل فعاليّةٍ التزامٌ عليها حتى يُفوتَر */
+        project_id: '',
         /*
          * وطريقةُ السداد **نيّةٌ لا حدث**: تُحفظ على الورقة ولا تكتب قيدًا.
          * ورأسُ القائمة من الخادم لا قيمةٌ مكتوبةٌ هنا.
@@ -977,6 +981,18 @@ export default function PurchaseCreate() {
                             onChange={(e) => form.setData('internal_notes', e.target.value)}
                             placeholder={t('لفريقك وحده…')}
                         />
+                        {(projects ?? []).length > 0 && (
+                            <div className="mt-3">
+                                <Field label="المشروع" hint="اختياري — يُقرأ الأمرُ التزامًا على المشروع حتى يصل سند المورّد" error={form.errors.project_id as string | undefined}>
+                                    <Select
+                                        placeholder="بلا مشروع"
+                                        value={form.data.project_id}
+                                        onChange={(e) => form.setData('project_id', e.target.value)}
+                                        options={projects.map((pr) => ({ label: `${pr.code} — ${pr.name}`, value: pr.id }))}
+                                    />
+                                </Field>
+                            </div>
+                        )}
                     </Card>
 
                     <Card className="p-5">

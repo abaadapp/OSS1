@@ -80,12 +80,14 @@ interface Props {
     canCreate: boolean;
     canPay: boolean;
     canSeeAttachment: boolean;
+    /** المشاريعُ القائمة — وسندٌ على أمرِ مشروعٍ يرث مشروعَه إن تُرك فارغًا */
+    projects: { id: number; code: string; name: string }[];
 }
 
 export default function SupplierInvoices() {
     const { invoices, pagination, filters, sorts, suppliers, orders, summary, today,
         pendingCount, canApprove, canOverride, canReject, canCreate, canPay,
-        canSeeAttachment, context } = usePage<PageProps<Props>>().props;
+        canSeeAttachment, projects, context } = usePage<PageProps<Props>>().props;
     const t = useTranslate();
     // نافذةُ التأكيد من النظام لا من المتصفّح — انظر ConfirmDialog
     const [ask, confirmDialog] = useConfirm();
@@ -114,6 +116,7 @@ export default function SupplierInvoices() {
         subtotal: '',
         tax: '0',
         notes: '',
+        project_id: '',
     });
 
     const payForm = useForm({ amount: '', paid_at: today, from: 'cash' });
@@ -497,6 +500,17 @@ export default function SupplierInvoices() {
                         <Field label="ملاحظات" error={form.errors.notes}>
                             <Input value={form.data.notes} onChange={(e) => form.setData('notes', e.target.value)} />
                         </Field>
+
+                        {(projects ?? []).length > 0 && (
+                            <Field label="المشروع" hint="اختياري — وسندٌ على أمر شراء مشروعٍ يرثه إن تُرك فارغًا" error={form.errors.project_id}>
+                                <Select
+                                    placeholder="بلا مشروع"
+                                    value={form.data.project_id}
+                                    onChange={(e) => form.setData('project_id', e.target.value)}
+                                    options={projects.map((pr) => ({ label: `${pr.code} — ${pr.name}`, value: pr.id }))}
+                                />
+                            </Field>
+                        )}
 
                         <div className="flex justify-end gap-2 pt-2">
                             <Button type="button" variant="ghost" onClick={() => setAdding(false)}>

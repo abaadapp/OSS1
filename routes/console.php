@@ -45,3 +45,12 @@ Schedule::command('report:daily-summary')->dailyAt('23:55')->withoutOverlapping(
  * يتخطّى المتاجر المرحَّلة ملخَّصًا شهريًّا ما لم يُجبَر.
  */
 Schedule::command('finance:post-missing-sales')->dailyAt('01:30')->withoutOverlapping();
+
+/*
+ * الأتمتة — المرحلة 8: دورةٌ واحدة كلَّ ربع ساعة تكشف وتؤهّل وتنفّذ ما حان.
+ *
+ * مدخلٌ واحد لا عشرة: الموجزُ الصباحيّ وتذكيرُ الفاتورة وتنبيهُ المهمّة كلُّها
+ * قواعدُ يقرؤها المحرّك بساعة الشركة لا بساعة الخادم. و`withoutOverlapping`
+ * راحةٌ لا حارس — الحارسُ القيدُ الفريد في `automation_runs`.
+ */
+Schedule::command('automation:run')->everyFifteenMinutes()->withoutOverlapping(30);

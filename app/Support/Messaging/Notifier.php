@@ -26,5 +26,8 @@ interface Notifier
     /** أتُوصِل هذه القناةُ شيئًا إلى أحدٍ فعلًا؟ */
     public function configured(): bool;
 
+    /** من يُوصِل فعلًا — `postmark` · `smtp` · `meta` — كما يُكتب في السجلّ ويُقرأ في الـwebhook */
+    public function provider(): string;
+
     public function send(MessageIntent $intent): MessageResult;
 }
