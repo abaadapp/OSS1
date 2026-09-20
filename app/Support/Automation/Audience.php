@@ -2,10 +2,14 @@
 
 namespace App\Support\Automation;
 
+use App\Models\AssetReservation;
 use App\Models\AutomationRule;
 use App\Models\Communication;
 use App\Models\CustomerInvoice;
 use App\Models\DeliveryPackage;
+use App\Models\EventOperation;
+use App\Models\OperationCrewAssignment;
+use App\Models\OperationIncident;
 use App\Models\Project;
 use App\Models\ProjectTask;
 use App\Models\Quotation;
@@ -39,7 +43,10 @@ final class Audience
 
     public const CUSTOM = 'custom';
 
-    public const ALL = [self::CUSTOMER, self::ASSIGNEE, self::OWNER, self::CREATOR, self::INITIATOR, self::FINANCE, self::MANAGEMENT, self::CUSTOM];
+    /** قائدُ عمليات الفعاليّة — المرحلة 10 */
+    public const LEAD = 'lead';
+
+    public const ALL = [self::CUSTOMER, self::ASSIGNEE, self::OWNER, self::CREATOR, self::INITIATOR, self::FINANCE, self::MANAGEMENT, self::CUSTOM, self::LEAD];
 
     public const LABELS = [
         self::CUSTOMER => 'العميل',
@@ -50,6 +57,7 @@ final class Audience
         self::FINANCE => 'المالية',
         self::MANAGEMENT => 'الإدارة',
         self::CUSTOM => 'قائمة محدَّدة',
+        self::LEAD => 'قائد عمليات الفعاليّة',
     ];
 
     public static function isExternal(string $audience): bool
@@ -67,7 +75,13 @@ final class Audience
         $active = fn () => User::where('business_id', $businessId)->where('status', 'نشط');
 
         $ids = match ($audience) {
-            self::ASSIGNEE => $target instanceof ProjectTask ? [$target->assignee_id] : [],
+            self::ASSIGNEE => match (true) {
+                $target instanceof ProjectTask => [$target->assignee_id],
+                $target instanceof OperationCrewAssignment => [$target->user_id],
+                $target instanceof OperationIncident => [$target->assigned_to],
+                default => [],
+            },
+            self::LEAD => [self::operationOf($target)?->operations_lead_id],
             self::OWNER => [self::projectOf($target)?->owner_id],
             self::CREATOR => [$target->created_by ?? null],
             self::INITIATOR => $target instanceof Communication ? [$target->initiated_by] : [],
@@ -95,6 +109,17 @@ final class Audience
             $target instanceof Project => $target,
             $target instanceof ProjectTask, $target instanceof DeliveryPackage, $target instanceof CustomerInvoice => $target->project,
             $target instanceof Quotation => Project::where('quotation_id', $target->id)->first(),
+            $target instanceof EventOperation, $target instanceof AssetReservation, $target instanceof OperationCrewAssignment, $target instanceof OperationIncident => self::operationOf($target)?->project,
+            default => null,
+        };
+    }
+
+    /** الفعاليّةُ التي يتبعها الهدف — لقائدها (المرحلة 10) */
+    public static function operationOf(?Model $target): ?EventOperation
+    {
+        return match (true) {
+            $target instanceof EventOperation => $target,
+            $target instanceof AssetReservation, $target instanceof OperationCrewAssignment, $target instanceof OperationIncident => $target->operation,
             default => null,
         };
     }

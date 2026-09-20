@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\ActivityController;
+use App\Http\Controllers\Admin\AssetController;
 use App\Http\Controllers\Admin\AutomationController;
 use App\Http\Controllers\Admin\BankStatementController;
 use App\Http\Controllers\Admin\BranchController;
@@ -19,6 +20,7 @@ use App\Http\Controllers\Admin\CustomerInvoiceController;
 use App\Http\Controllers\Admin\DataImportController;
 use App\Http\Controllers\Admin\DocumentPrintController;
 use App\Http\Controllers\Admin\EmployeeController;
+use App\Http\Controllers\Admin\EventOperationController;
 use App\Http\Controllers\Admin\ExpenseController;
 use App\Http\Controllers\Admin\ExpenseTypeController;
 use App\Http\Controllers\Admin\Finance\BankAccountController;
@@ -994,6 +996,69 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'tenant', 'business'
     Route::post('/imports/{id}/cancel', [DataImportController::class, 'cancel'])->whereNumber('id')->name('imports.cancel');
     Route::post('/imports/{id}/templates', [DataImportController::class, 'saveTemplate'])->whereNumber('id')->name('imports.templates.store');
     Route::post('/imports/{id}/templates/apply', [DataImportController::class, 'applyTemplate'])->whereNumber('id')->name('imports.templates.apply');
+
+    /*
+     * تشغيلُ الفعاليّات — المرحلة 10. القسمُ `operations` يقرأ ويفتح شاشةَ
+     * الموقع؛ والإنشاءُ والجدولُ والمتطلّباتُ بـ`operations.manage`، ونقلُ
+     * الحال بـ`operations.status`، والحوادثُ بـ`operations.incidents`، والفريقُ
+     * بـ`crew.manage`، والحجزُ والتسليمُ والردُّ بأفعال المعدّات، والإعفاءُ
+     * بـ`checklist.manage`. وكلُّ فعلٍ يمرّ بخدمته لا بالمتحكّم.
+     */
+    Route::get('/operations', [EventOperationController::class, 'index'])->name('operations.index');
+    Route::post('/operations', [EventOperationController::class, 'store'])->name('operations.store');
+    Route::get('/operations/templates', [EventOperationController::class, 'templates'])->name('operations.templates');
+    Route::post('/operations/templates', [EventOperationController::class, 'storeTemplate'])->name('operations.templates.store');
+    Route::put('/operations/templates/{tid}', [EventOperationController::class, 'updateTemplate'])->whereNumber('tid')->name('operations.templates.update');
+    Route::delete('/operations/templates/{tid}', [EventOperationController::class, 'destroyTemplate'])->whereNumber('tid')->name('operations.templates.destroy');
+    Route::get('/operations/{id}', [EventOperationController::class, 'show'])->whereNumber('id')->name('operations.show');
+    Route::put('/operations/{id}', [EventOperationController::class, 'update'])->whereNumber('id')->name('operations.update');
+    Route::get('/operations/{id}/onsite', [EventOperationController::class, 'onsite'])->whereNumber('id')->name('operations.onsite');
+    Route::post('/operations/{id}/transition', [EventOperationController::class, 'transition'])->whereNumber('id')->name('operations.transition');
+    Route::post('/operations/{id}/complete', [EventOperationController::class, 'complete'])->whereNumber('id')->name('operations.complete');
+    Route::post('/operations/{id}/cancel', [EventOperationController::class, 'cancel'])->whereNumber('id')->name('operations.cancel');
+    Route::post('/operations/{id}/schedule', [EventOperationController::class, 'storeScheduleItem'])->whereNumber('id')->name('operations.schedule.store');
+    Route::put('/operations/{id}/schedule/{sid}', [EventOperationController::class, 'updateScheduleItem'])->whereNumber('id')->whereNumber('sid')->name('operations.schedule.update');
+    Route::delete('/operations/{id}/schedule/{sid}', [EventOperationController::class, 'destroyScheduleItem'])->whereNumber('id')->whereNumber('sid')->name('operations.schedule.destroy');
+    Route::post('/operations/{id}/schedule/{sid}/status', [EventOperationController::class, 'scheduleStatus'])->whereNumber('id')->whereNumber('sid')->name('operations.schedule.status');
+    Route::post('/operations/{id}/requirements', [EventOperationController::class, 'storeRequirement'])->whereNumber('id')->name('operations.requirements.store');
+    Route::put('/operations/{id}/requirements/{rid}', [EventOperationController::class, 'updateRequirement'])->whereNumber('id')->whereNumber('rid')->name('operations.requirements.update');
+    Route::delete('/operations/{id}/requirements/{rid}', [EventOperationController::class, 'destroyRequirement'])->whereNumber('id')->whereNumber('rid')->name('operations.requirements.destroy');
+    Route::post('/operations/{id}/reservations', [EventOperationController::class, 'reserve'])->whereNumber('id')->name('operations.reservations.store');
+    Route::post('/operations/{id}/reservations/{rid}/cancel', [EventOperationController::class, 'cancelReservation'])->whereNumber('id')->whereNumber('rid')->name('operations.reservations.cancel');
+    Route::post('/operations/{id}/reservations/{rid}/checkout', [EventOperationController::class, 'checkOut'])->whereNumber('id')->whereNumber('rid')->name('operations.reservations.checkout');
+    Route::post('/operations/{id}/reservations/{rid}/return', [EventOperationController::class, 'giveBack'])->whereNumber('id')->whereNumber('rid')->name('operations.reservations.return');
+    Route::post('/operations/{id}/crew', [EventOperationController::class, 'storeCrew'])->whereNumber('id')->name('operations.crew.store');
+    Route::put('/operations/{id}/crew/{cid}', [EventOperationController::class, 'updateCrew'])->whereNumber('id')->whereNumber('cid')->name('operations.crew.update');
+    Route::delete('/operations/{id}/crew/{cid}', [EventOperationController::class, 'destroyCrew'])->whereNumber('id')->whereNumber('cid')->name('operations.crew.destroy');
+    Route::post('/operations/{id}/crew/{cid}/check-in', [EventOperationController::class, 'crewCheckIn'])->whereNumber('id')->whereNumber('cid')->name('operations.crew.checkIn');
+    Route::post('/operations/{id}/crew/{cid}/check-out', [EventOperationController::class, 'crewCheckOut'])->whereNumber('id')->whereNumber('cid')->name('operations.crew.checkOut');
+    Route::post('/operations/{id}/crew/{cid}/notify', [EventOperationController::class, 'notifyCrew'])->whereNumber('id')->whereNumber('cid')->name('operations.crew.notify');
+    Route::post('/operations/{id}/crew-alert', [EventOperationController::class, 'alertCrew'])->whereNumber('id')->name('operations.crew.alert');
+    Route::post('/operations/{id}/checklists', [EventOperationController::class, 'attachChecklist'])->whereNumber('id')->name('operations.checklists.store');
+    Route::post('/operations/{id}/checklists/{clid}/items', [EventOperationController::class, 'storeChecklistItem'])->whereNumber('id')->whereNumber('clid')->name('operations.checklists.items.store');
+    Route::post('/operations/{id}/checklist-items/{iid}/complete', [EventOperationController::class, 'completeChecklistItem'])->whereNumber('id')->whereNumber('iid')->name('operations.checklistItems.complete');
+    Route::post('/operations/{id}/checklist-items/{iid}/reopen', [EventOperationController::class, 'reopenChecklistItem'])->whereNumber('id')->whereNumber('iid')->name('operations.checklistItems.reopen');
+    Route::post('/operations/{id}/checklist-items/{iid}/block', [EventOperationController::class, 'blockChecklistItem'])->whereNumber('id')->whereNumber('iid')->name('operations.checklistItems.block');
+    Route::post('/operations/{id}/checklist-items/{iid}/waive', [EventOperationController::class, 'waiveChecklistItem'])->whereNumber('id')->whereNumber('iid')->name('operations.checklistItems.waive');
+    Route::post('/operations/{id}/incidents', [EventOperationController::class, 'storeIncident'])->whereNumber('id')->name('operations.incidents.store');
+    Route::put('/operations/{id}/incidents/{iid}', [EventOperationController::class, 'updateIncident'])->whereNumber('id')->whereNumber('iid')->name('operations.incidents.update');
+    Route::post('/operations/{id}/incidents/{iid}/resolve', [EventOperationController::class, 'resolveIncident'])->whereNumber('id')->whereNumber('iid')->name('operations.incidents.resolve');
+    Route::post('/operations/{id}/incidents/{iid}/close', [EventOperationController::class, 'closeIncident'])->whereNumber('id')->whereNumber('iid')->name('operations.incidents.close');
+    Route::post('/operations/{id}/incidents/{iid}/reopen', [EventOperationController::class, 'reopenIncident'])->whereNumber('id')->whereNumber('iid')->name('operations.incidents.reopen');
+    Route::post('/operations/{id}/incidents/{iid}/carry-forward', [EventOperationController::class, 'carryForwardIncident'])->whereNumber('id')->whereNumber('iid')->name('operations.incidents.carryForward');
+
+    /*
+     * المعدّاتُ ذاتُ الهويّة — المرحلة 10. القسمُ `assets` يقرأ السجلَّ
+     * والتقويم؛ والتسجيلُ وتغييرُ الحال بـ`assets.manage`، والردُّ من بطاقة
+     * القطعة بـ`assets.return`.
+     */
+    Route::get('/assets', [AssetController::class, 'index'])->name('assets.index');
+    Route::post('/assets', [AssetController::class, 'store'])->name('assets.store');
+    Route::get('/assets/calendar', [AssetController::class, 'calendar'])->name('assets.calendar');
+    Route::get('/assets/{id}', [AssetController::class, 'show'])->whereNumber('id')->name('assets.show');
+    Route::put('/assets/{id}', [AssetController::class, 'update'])->whereNumber('id')->name('assets.update');
+    Route::post('/assets/{id}/status', [AssetController::class, 'status'])->whereNumber('id')->name('assets.status');
+    Route::post('/assets/{id}/reservations/{rid}/return', [AssetController::class, 'giveBack'])->whereNumber('id')->whereNumber('rid')->name('assets.reservations.return');
 
     /*
      * المراسلات — المرحلة 6.

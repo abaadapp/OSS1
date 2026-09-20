@@ -35,6 +35,8 @@ final class Brief
         $today = collect($c['upcoming']['rows'])->filter(fn ($p) => $p['running'] || $p['days_to_start'] === 0)->count();
         $lateTasks = collect($c['late']['rows'])->where('kind', 'task')->count();
 
+        $ops = $c['operations'] ?? null;
+
         $numbers = [
             __('مشاريع اليوم: :n', ['n' => $today]),
             __('يحتاج قرارًا: :n', ['n' => $c['summary']['decisions']]),
@@ -42,6 +44,10 @@ final class Brief
         ];
         if ($c['sees_money'] && $c['money'] !== null) {
             $numbers[] = __('مال يُحصَّل (متأخّر): :amount', ['amount' => Money::format((float) $c['money']['receivables']['overdue'], Money::of($businessId))]);
+        }
+        /* والفعاليّاتُ على الأرض — المرحلة 10: ما يبدأ اليوم وما ليس جاهزًا */
+        if ($ops !== null && ($ops['counts']['today'] > 0 || $ops['live'] > 0 || $ops['not_ready'] > 0)) {
+            $numbers[] = __('فعاليّات اليوم: :n · على الهواء: :live · غير جاهزة: :nr', ['n' => $ops['counts']['today'], 'live' => $ops['live'], 'nr' => $ops['not_ready']]);
         }
         $numbers[] = __('تسليمات تنتظر: :n', ['n' => $c['summary']['delivery']]);
         $numbers[] = __('رسائل لم تصل: :n', ['n' => $c['summary']['communications']]);

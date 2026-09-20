@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { router, usePage } from '@inertiajs/react';
-import { Check, Lock, PackageCheck, Pause, Play, Plus, ShieldCheck, Slash, Trash2, Unlock, Wallet } from 'lucide-react';
+import { AlertTriangle, CalendarCheck, Check, CheckCircle2, Lock, PackageCheck, Pause, Play, Plus, ShieldCheck, Slash, Smartphone, Trash2, Unlock, Wallet } from 'lucide-react';
 import AdminLayout from '@/Layouts/AdminLayout';
 import BackLink from '@/Components/BackLink';
 import PageHeader from '@/Components/PageHeader';
@@ -22,6 +22,7 @@ import { money, number } from '@/lib/format';
 import { useTranslate } from '@/lib/i18n';
 import { CO_STATE_LABEL, coTone, PARTY_LABEL, PROJECT_STATUS_LABEL, projectTone } from '@/lib/projects';
 import { DELIVERY_STATE_LABEL, deliveryTone } from '@/lib/deliveries';
+import { operationTone } from '@/lib/operations';
 import CommunicationsTab from './partials/CommunicationsTab';
 import type { PageProps } from '@/types';
 
@@ -131,6 +132,30 @@ interface Scope {
     current: { items: ScopeItem[]; requirements: { id: number; title: string }[]; starts_at: string | null; ends_at: string | null; current_value: number | null };
 }
 
+/** التشغيل — المرحلة 10: فعاليّاتُ المشروع بجاهزيّتها، ملخّصًا لا شاشةً */
+interface OperationRow {
+    id: number;
+    code: string;
+    name: string;
+    status: string;
+    status_label: string;
+    venue_name: string | null;
+    event_starts_at: string | null;
+    event_ends_at: string | null;
+    lead: string | null;
+    ready: boolean;
+    blockers: string[];
+    warnings: number;
+    conflicts: number;
+    critical_conflicts: number;
+    crew: { expected: number; checked_in: number; missing: number };
+    equipment: { required: number; assigned: number; reserved: number; outstanding: number };
+    checklist: { total: number; done: number; required_pending: number };
+    incidents: { open: number; total: number };
+    url: string;
+    onsite_url: string;
+}
+
 interface Member { id: number; user_id: number; name: string | null; role: string | null }
 interface Task { id: number; title: string; description: string | null; assignee_id: number | null; assignee: string | null; due_at: string | null; status: string; priority: string; completed_at: string | null }
 interface ChangeOrderRow { id: number; label: string; sequence: number; title: string; status: string; state: string; total_delta: number | null; new_starts_at: string | null; requested_by_party: string; sent_at: string | null; decided_at: string | null }
@@ -145,8 +170,9 @@ interface Props {
     financials: Record<string, number | boolean> | null;
     delivery: Delivery;
     cancellation: Cancellation | null;
+    operations: OperationRow[] | null;
     users: { id: number; name: string }[];
-    may: { manage: boolean; budget: boolean; close: boolean; reopen: boolean; change_order: boolean; override_policy: boolean; delivery: boolean };
+    may: { manage: boolean; budget: boolean; close: boolean; reopen: boolean; change_order: boolean; override_policy: boolean; delivery: boolean; operations: boolean; operations_manage: boolean };
 }
 
 /**
@@ -158,7 +184,7 @@ interface Props {
  * المقبولة)، وما يجب على الفريق تنفيذَه الآن (الحاليّ). والقيمةُ الحاليّة
  * تُشتقّ في الخادم — انظر `ProjectScope`.
  */
-export default function ProjectShow({ project: p, scope, requirements, members, tasks, change_orders, financials, delivery, cancellation, users, may }: Props) {
+export default function ProjectShow({ project: p, scope, requirements, members, tasks, change_orders, financials, delivery, cancellation, operations, users, may }: Props) {
     const t = useTranslate();
     const { context } = usePage<PageProps>().props;
     const { errors } = usePage().props as { errors?: Record<string, string> };
@@ -186,6 +212,8 @@ export default function ProjectShow({ project: p, scope, requirements, members, 
         { key: 'delivery', label: 'التسليم', count: delivery.packages.length, alert: open && !delivery.readiness.ready && delivery.packages.length > 0 },
         /* المراسلات — المرحلة 6: ما قيل للعميل وما جرى، بترتيبه */
         { key: 'communications', label: 'المراسلات' },
+        /* العمليات — المرحلة 10: التنفيذُ على الأرض؛ لمن يفتح القسم */
+        ...(operations !== null ? [{ key: 'operations', label: 'العمليات', count: operations.filter((o) => !['completed', 'cancelled'].includes(o.status)).length, alert: operations.some((o) => !o.ready && !['completed', 'cancelled', 'ready', 'live', 'teardown'].includes(o.status)) }] : []),
         ...(may.budget ? [{ key: 'financials', label: 'المال' }] : []),
     ];
 
@@ -289,6 +317,7 @@ export default function ProjectShow({ project: p, scope, requirements, members, 
             {tab === 'change_orders' && <ChangeOrdersTab p={p} rows={change_orders} m={m} may={may} open={open} />}
             {tab === 'delivery' && <DeliveryTab p={p} delivery={delivery} may={may} open={open} />}
             {tab === 'communications' && <CommunicationsTab projectId={p.id} open={open} />}
+            {tab === 'operations' && operations !== null && <OperationsTab p={p} rows={operations} may={may} open={open} />}
             {tab === 'financials' && financials && <FinancialsTab f={financials} m={m} frozen={p.financials_frozen} />}
 
             <Dialog open={baselining} onOpenChange={setBaselining}>
@@ -799,6 +828,89 @@ function ChangeOrdersTab({ p, rows, m, may, open }: { p: Project; rows: ChangeOr
 }
 
 /* ─────────────────────────── المال ─────────────────────────── */
+
+/**
+ * العمليات — المرحلة 10: فعاليّاتُ المشروع بجاهزيّتها.
+ *
+ * ملخّصٌ يقود إلى شاشة الفعاليّة، لا الشاشةَ نفسَها: الجاهزيّةُ والفريقُ
+ * والمعدّاتُ والقوائمُ والحوادثُ أرقامًا، والتفصيلُ خلف الرابط. ولا يُنقل
+ * شيءٌ تجاريّ إلى هنا.
+ */
+function OperationsTab({ p, rows, may, open }: { p: Project; rows: OperationRow[]; may: Props['may']; open: boolean }) {
+    const t = useTranslate();
+
+    return (
+        <div className="space-y-3">
+            {may.operations_manage && open && (
+                <div className="flex justify-end">
+                    <Button onClick={() => router.post(route('admin.operations.store'), { project_id: p.id })}>
+                        <Plus />
+                        {t('فعاليّة جديدة')}
+                    </Button>
+                </div>
+            )}
+            {rows.length === 0 && (
+                <Card className="p-8 text-center text-[13px] text-[#9ca3af]">
+                    <CalendarCheck className="mx-auto mb-2 size-6" />
+                    {t('لا فعاليّات تشغيليّة بعد — أنشئ واحدةً ليُخطَّط الموعدُ والفريقُ والمعدّات')}
+                </Card>
+            )}
+            {rows.map((o) => (
+                <Card key={o.id} className="p-4">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div className="min-w-0">
+                            <div className="flex flex-wrap items-center gap-2">
+                                <SmartLink routeName="admin.operations.show" href={o.url} className="font-mono text-[12px] text-[#1d4ed8]">{o.code}</SmartLink>
+                                <span className="font-semibold">{o.name}</span>
+                                <span className={'rounded-full px-2 py-0.5 text-[11px] ' + operationTone(o.status)}>{o.status_label}</span>
+                                {!['completed', 'cancelled'].includes(o.status) && (
+                                    <span className={'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] ' + (o.ready ? 'bg-[#ecfdf5] text-[#065f46]' : 'bg-[#fef2f2] text-[#b91c1c]')}>
+                                        {o.ready ? <CheckCircle2 className="size-3" /> : <AlertTriangle className="size-3" />}
+                                        {o.ready ? t('جاهزة') : t(':n موانع', { n: String(o.blockers.length) })}
+                                    </span>
+                                )}
+                            </div>
+                            <div className="mt-1 text-[12px] text-[#6b7280]">
+                                <span dir="ltr" className="tabular-nums">{o.event_starts_at ?? '—'}</span>
+                                {o.venue_name && ` · ${o.venue_name}`}
+                                {o.lead && ` · ${t('القائد')}: ${o.lead}`}
+                            </div>
+                            {!o.ready && o.blockers.length > 0 && !['completed', 'cancelled'].includes(o.status) && (
+                                <div className="mt-1 text-[12px] text-[#b91c1c]">{o.blockers.slice(0, 3).join(' · ')}{o.blockers.length > 3 ? ` +${o.blockers.length - 3}` : ''}</div>
+                            )}
+                        </div>
+                        <Button variant="outline" size="sm" asChild>
+                            <SmartLink routeName="admin.operations.onsite" href={o.onsite_url}><Smartphone />{t('شاشة الموقع')}</SmartLink>
+                        </Button>
+                    </div>
+                    <dl className="mt-3 grid grid-cols-2 gap-2 text-[12px] sm:grid-cols-5">
+                        <Figure label="الفريق" value={`${o.crew.checked_in}/${o.crew.expected}`} tone={o.crew.expected === 0 ? 'danger' : undefined} />
+                        <Figure label="المعدّات" value={`${o.equipment.assigned}/${o.equipment.required}`} tone={o.equipment.assigned < o.equipment.required ? 'warning' : undefined} />
+                        <Figure label="لم تُردّ" value={String(o.equipment.outstanding)} tone={o.equipment.outstanding > 0 ? 'warning' : undefined} />
+                        <Figure label="القوائم" value={`${o.checklist.done}/${o.checklist.total}`} tone={o.checklist.required_pending > 0 ? 'warning' : undefined} />
+                        <Figure label="حوادث مفتوحة" value={String(o.incidents.open)} tone={o.incidents.open > 0 ? 'danger' : undefined} />
+                    </dl>
+                    {o.conflicts > 0 && (
+                        <div className={'mt-2 text-[12px] ' + (o.critical_conflicts > 0 ? 'text-[#b91c1c]' : 'text-[#b45309]')}>
+                            {t(':n تعارضات في المعدّات أو الفريق', { n: String(o.conflicts) })}
+                        </div>
+                    )}
+                </Card>
+            ))}
+        </div>
+    );
+}
+
+function Figure({ label, value, tone }: { label: string; value: string; tone?: 'danger' | 'warning' }) {
+    const t = useTranslate();
+
+    return (
+        <div className="rounded-lg bg-[#fafafa] px-3 py-2">
+            <dt className="text-[11px] text-[#9ca3af]">{t(label)}</dt>
+            <dd className={'text-[15px] font-semibold tabular-nums ' + (tone === 'danger' ? 'text-[#b91c1c]' : tone === 'warning' ? 'text-[#b45309]' : '')}>{value}</dd>
+        </div>
+    );
+}
 
 function FinancialsTab({ f, m, frozen }: { f: Record<string, number | boolean>; m: (v: number | null | undefined) => string; frozen: Record<string, number> | null }) {
     const t = useTranslate();

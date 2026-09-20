@@ -38,7 +38,12 @@ class Permissions
          */
         'accountant' => ['dashboard', 'orders', 'customers', 'finance', 'expenses',
             'employees', 'reports', 'suppliers', 'purchases', 'projects'],
-        'inventory' => ['dashboard', 'products', 'inventory', 'suppliers', 'purchases', 'projects'],
+        /*
+         * وأمينُ المخزن يفتح «المعدّات» — المرحلة 10: القطعُ ذاتُ الهويّة
+         * (حواسيبُ وطابعاتٌ وماسحات) في عهدته كما البضاعةُ في عهدته. والقسمُ
+         * يفتح السجلّ؛ والحجزُ والتسليمُ والردُّ أفعالٌ تُمنح بالاسم.
+         */
+        'inventory' => ['dashboard', 'products', 'inventory', 'suppliers', 'purchases', 'projects', 'assets'],
         /*
          * والبائعُ يفتح «عروض الأسعار»: هي بابُ عمله الأوّل في Event Plus —
          * يعرض قبل أن يُفوتر. ولا يفتحها المحاسب: مستندٌ تجاريٌّ قبل البيع
@@ -46,6 +51,13 @@ class Permissions
          */
         'sales' => ['dashboard', 'quotations', 'projects', 'orders', 'customers', 'products'],
         // والسائق يقرأ ما سيحمله: العنوان والموعد والمستلِم
+        /*
+         * ولا يُمنح «العمليات» بالدور — المرحلة 10: المنفّذُ الميدانيّ دورُه
+         * أدنى الأدوار، والمحاسبُ يوظّفه؛ فما يُضاف إلى دوره يصير فوق ما يملك
+         * المحاسب فلا يعود يوظّفه (انظر `StaffCannotOutrankThemselvesTest`).
+         * وشاشةُ الموقع تُمنح له بالاسم: القسمُ `operations` مع `operations.status`
+         * و`operations.incidents` و`assets.checkout` و`assets.return`.
+         */
         'delivery' => ['dashboard', 'orders', 'projects'],
     ];
 
@@ -238,6 +250,46 @@ class Permissions
     public const IMPORT_ROLLBACK = 'import.rollback';
 
     /*
+     * ═══ تشغيلُ الفعاليّة والمعدّات — المرحلة 10 ═══
+     *
+     * قسمُ «العمليات» يفتح الفعاليّاتِ وشاشةَ الموقع للقراءة، وقسمُ
+     * «المعدّات» يفتح سجلَّ القطع. والأفعالُ بالاسم: إدارةُ الفعاليّة
+     * (جدولٌ ومتطلّبات)، ونقلُ حالها، وتجاوزُ الجاهزيّة (أشدُّها — للمالك
+     * وحده وبسببٍ يُكتب)، والحوادثُ، وإدارةُ القطع، وحجزُها، وتسليمُها،
+     * وردُّها، والفريقُ، وقوائمُ التحقّق.
+     */
+
+    /** إنشاءُ الفعاليّة وتعديلُها وجدولُها ومتطلّباتُها */
+    public const OPERATIONS_MANAGE = 'operations.manage';
+
+    /** نقلُ حال الفعاليّة: تجهيزٌ وجاهزيّةٌ وبثٌّ وفكٌّ وإتمام */
+    public const OPERATIONS_STATUS = 'operations.status';
+
+    /** تجاوزُ موانع الجاهزيّة — بسببٍ يُكتب وأثرٍ يبقى */
+    public const OPERATIONS_OVERRIDE = 'operations.override';
+
+    /** تسجيلُ حادثٍ ومعالجتُه */
+    public const OPERATIONS_INCIDENTS = 'operations.incidents';
+
+    /** تسجيلُ قطعةٍ وتعديلُها وتغييرُ حالها (صيانةٌ وتلفٌ وفقدٌ وسحب) */
+    public const ASSETS_MANAGE = 'assets.manage';
+
+    /** حجزُ قطعةٍ لفعاليّة وإلغاءُ الحجز */
+    public const ASSETS_RESERVE = 'assets.reserve';
+
+    /** تسليمُ قطعةٍ محجوزة — خرجت من المكتب */
+    public const ASSETS_CHECKOUT = 'assets.checkout';
+
+    /** ردُّ قطعةٍ — عادت وبأيّ حال */
+    public const ASSETS_RETURN = 'assets.return';
+
+    /** تعيينُ فريق الفعاليّة وإزالتُه */
+    public const CREW_MANAGE = 'crew.manage';
+
+    /** قوالبُ قوائم التحقّق، وإلحاقُها بالفعاليّة، وإعفاءُ بندٍ إلزاميّ */
+    public const CHECKLIST_MANAGE = 'checklist.manage';
+
+    /*
      * ═══ المشروع — المرحلة 4 ═══
      *
      * ولا `project.create`: المشروعُ يُنشأ من قبول العرض لا بيد، ومقبضٌ لا
@@ -363,6 +415,16 @@ class Permissions
         self::IMPORT_EXECUTE => 'اعتماد الاستيراد وتنفيذه',
         self::IMPORT_FINANCIAL => 'استيراد البيانات المالية إلى الدفتر',
         self::IMPORT_ROLLBACK => 'التراجع عن استيراد',
+        self::OPERATIONS_MANAGE => 'إدارة الفعاليّة وجدولها ومتطلّباتها',
+        self::OPERATIONS_STATUS => 'نقل حال الفعاليّة: تجهيز وبثّ وفكّ وإتمام',
+        self::OPERATIONS_OVERRIDE => 'تجاوز موانع جاهزيّة الفعاليّة',
+        self::OPERATIONS_INCIDENTS => 'تسجيل حوادث الفعاليّة ومعالجتها',
+        self::ASSETS_MANAGE => 'تسجيل المعدّات وتغيير حالها',
+        self::ASSETS_RESERVE => 'حجز المعدّات لفعاليّة',
+        self::ASSETS_CHECKOUT => 'تسليم المعدّات للميدان',
+        self::ASSETS_RETURN => 'ردّ المعدّات وتسجيل حالها',
+        self::CREW_MANAGE => 'تعيين فريق الفعاليّة',
+        self::CHECKLIST_MANAGE => 'قوالب قوائم التحقّق وإعفاء بندٍ إلزاميّ',
         self::PROJECT_MANAGE => 'إدارة المشروع وفريقه ومهامّه وتثبيت متطلّباته',
         self::PROJECT_BUDGET_VIEW => 'رؤية تكلفة المشروع وربحيّته',
         self::PROJECT_CLOSE => 'إقفال مشروع',
@@ -466,6 +528,23 @@ class Permissions
         self::IMPORT_EXECUTE => ['admin', 'manager'],
         self::IMPORT_FINANCIAL => ['admin'],
         self::IMPORT_ROLLBACK => ['admin'],
+        /*
+         * والتشغيلُ — المرحلة 10: الإدارةُ والفريقُ والقوائمُ ونقلُ الحال
+         * والحوادثُ للمالك والمدير؛ والقطعُ لأمين المخزن أيضًا: يسجّل ويحجز
+         * ويسلّم ويستردّ. والتجاوزُ للمالك وحده. ومن يقف في الموقع — المنفّذُ
+         * الميدانيّ — يُمنح نقلَ الحال والحوادثَ والتسليمَ والردَّ بالاسم (انظر
+         * `MAP`): دورُه لا يحمل فوق ما يملك من يوظّفه.
+         */
+        self::OPERATIONS_MANAGE => ['admin', 'manager'],
+        self::OPERATIONS_STATUS => ['admin', 'manager'],
+        self::OPERATIONS_OVERRIDE => ['admin'],
+        self::OPERATIONS_INCIDENTS => ['admin', 'manager'],
+        self::ASSETS_MANAGE => ['admin', 'manager', 'inventory'],
+        self::ASSETS_RESERVE => ['admin', 'manager', 'inventory'],
+        self::ASSETS_CHECKOUT => ['admin', 'manager', 'inventory'],
+        self::ASSETS_RETURN => ['admin', 'manager', 'inventory'],
+        self::CREW_MANAGE => ['admin', 'manager'],
+        self::CHECKLIST_MANAGE => ['admin', 'manager'],
         /*
          * والمشروع: إدارتُه وإقفالُه للمالك ومدير الفرع، وإعادةُ الفتح
          * للمالك وحده — تُعيد أرقامًا جُمّدت. والمحاسبُ يرى المال لأنّه عملُه.
@@ -674,6 +753,10 @@ class Permissions
         'automation',
         // استيرادُ البيانات التاريخيّة — المرحلة 9. للمالك والمدير بـ`*`، ويُمنح بالاسم
         'imports',
+        // تشغيلُ الفعاليّات — المرحلة 10: الفعاليّاتُ وشاشةُ الموقع. وللمنفّذ الميدانيّ
+        'operations',
+        // والمعدّاتُ ذاتُ الهويّة — المرحلة 10. ولأمين المخزن
+        'assets',
     ];
 
     /**
@@ -777,6 +860,8 @@ class Permissions
         'command' => 'admin.command.index',
         'automation' => 'admin.automation.index',
         'imports' => 'admin.imports.index',
+        'operations' => 'admin.operations.index',
+        'assets' => 'admin.assets.index',
     ];
 
     /**
@@ -830,6 +915,8 @@ class Permissions
             'command' => 'مركز العمليات',
             'automation' => 'الأتمتة',
             'imports' => 'استيراد البيانات',
+            'operations' => 'العمليات',
+            'assets' => 'المعدّات',
         ];
 
         return collect(self::SECTIONS)

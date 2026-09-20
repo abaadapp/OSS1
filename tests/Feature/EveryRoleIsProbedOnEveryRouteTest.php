@@ -126,13 +126,23 @@ class EveryRoleIsProbedOnEveryRouteTest extends TestCase
              */
             'accountant' => ['dashboard', 'orders', 'customers', 'finance', 'expenses',
                 'employees', 'reports', 'suppliers', 'purchases', 'projects'],
-            'inventory' => ['dashboard', 'products', 'inventory', 'suppliers', 'purchases', 'projects'],
+            /*
+             * و«المعدّات» مُنحت لأمين المخزن عمدًا في المرحلة 10: القطعُ ذاتُ
+             * الهويّة في عهدته كما البضاعة. والقسمُ يفتح السجلّ؛ والحجزُ
+             * والتسليمُ والردُّ أفعالٌ تُمنح بالاسم.
+             */
+            'inventory' => ['dashboard', 'products', 'inventory', 'suppliers', 'purchases', 'projects', 'assets'],
             /*
              * والبائعُ مُنح «عروض الأسعار» عمدًا في المرحلة 2: هي بابُ عمله
              * الأوّل في Event Plus — يعرض قبل أن يُفوتر. ولم يُمنحها المحاسب:
              * مستندٌ تجاريٌّ قبل البيع لا أثرَ له في الدفتر.
              */
             'sales' => ['dashboard', 'quotations', 'projects', 'orders', 'customers', 'products'],
+            /*
+             * و«العمليات» (المرحلة 10) لا تُمنح للمنفّذ بالدور: دورُه أدنى
+             * الأدوار ويوظّفه المحاسب، فما يُضاف إليه يصير فوق ما يملك المحاسب.
+             * تُمنح له بالاسم مع أفعال الموقع.
+             */
             'delivery' => ['dashboard', 'orders', 'projects'],
         ], Permissions::MAP, 'تغيّر ما يُمنح لدورٍ — إن كان عمدًا فحدّث هذا الحارس');
     }

@@ -119,6 +119,16 @@ class TenantTables
          * والأثرُ متعدّدُ الأشكال بلا مفتاح — يُقرأ بعد كلّ ما يشير إليه.
          */
         'import_mapping_templates', 'import_datasets', 'import_runs', 'import_rows', 'import_links',
+        /*
+         * والتشغيلُ — المرحلة 10 — بعد المشاريع والمستخدمين والمنتجات ودفتر
+         * الإهلاك: القطعةُ تشير إلى صفّ إهلاكها، والفعاليّةُ إلى مشروعها، والحجزُ
+         * إلى القطعة والفعاليّة والمتطلَّب، والقائمةُ إلى قالبها، والحادثُ إلى
+         * القطعة. وبنودُ القالب بلا `business_id` تُقرأ من خلاله.
+         */
+        'assets', 'operation_checklist_templates', 'operation_checklist_template_items',
+        'event_operations', 'operation_schedule_items', 'operation_equipment_requirements',
+        'asset_reservations', 'operation_crew_assignments',
+        'operation_checklists', 'operation_checklist_items', 'operation_incidents',
     ];
 
     /**
@@ -163,6 +173,7 @@ class TenantTables
         'customer_payment_allocations' => ['customer_payments', 'customer_payment_id'],
         'payroll_lines' => ['payroll_runs', 'payroll_run_id'],
         'purchase_order_items' => ['purchase_orders', 'purchase_order_id'],
+        'operation_checklist_template_items' => ['operation_checklist_templates', 'template_id'],
     ];
 
     /**

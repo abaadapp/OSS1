@@ -7,6 +7,7 @@ use App\Models\ChangeOrder;
 use App\Models\Communication;
 use App\Models\CustomerInvoice;
 use App\Models\DeliveryPackage;
+use App\Models\EventOperation;
 use App\Models\Expense;
 use App\Models\ImportDataset;
 use App\Models\PolicyException;
@@ -21,6 +22,11 @@ use App\Support\Automation\Engine;
 use App\Support\Automation\Settings as AutomationSettings;
 use App\Support\Communication\Subjects;
 use App\Support\Communication\Templates;
+use App\Support\Operations\Crew;
+use App\Support\Operations\Incidents;
+use App\Support\Operations\OperationReadiness;
+use App\Support\Operations\Reservations;
+use App\Support\Operations\ResourceConflicts;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 
@@ -74,6 +80,7 @@ final class CommandCenter
         $team = self::team($businessId);
         $automation = self::automation($businessId);
         $migration = self::migration($businessId);
+        $operations = self::operations($businessId);
 
         return [
             'generated_at' => now()->format('Y-m-d H:i'),
@@ -87,6 +94,7 @@ final class CommandCenter
                 'blockers' => $blockers['total'],
                 'automation' => $automation['total'],
                 'migration' => $migration['total'],
+                'operations' => $operations['total'],
             ],
             'decisions' => $decisions,
             'late' => $late,
@@ -97,7 +105,133 @@ final class CommandCenter
             'team' => $team,
             'automation' => $automation,
             'migration' => $migration,
+            'operations' => $operations,
             'money' => $money ? self::money($businessId) : null,
+        ];
+    }
+
+    /* ─────────────────────────── التشغيل ─────────────────────────── */
+
+    /**
+     * الفعاليّاتُ على الأرض — المرحلة 10.
+     *
+     * ما على الهواء الآن، وما يبدأ اليوم وغدًا وخلال أسبوع بجاهزيّته،
+     * وما ليس جاهزًا وموعدُه قريب، وتعارضاتُ المعدّات والفريق، وما خرج ولم
+     * يعد، والحوادثُ الحرجة المفتوحة. والجاهزيّةُ من `OperationReadiness`
+     * والتعارضاتُ من `ResourceConflicts` — لا تُعاد كتابتُها هنا.
+     *
+     * والاستعلامُ محدود: الفعاليّاتُ القائمة في نافذة أسبوعين مع ما على
+     * الأرض، بعلاقاتها محمَّلةً مرّةً.
+     *
+     * @return array<string, mixed>
+     */
+    public static function operations(int $bid): array
+    {
+        $today = now()->startOfDay();
+        $tomorrow = $today->copy()->addDay();
+        $week = $today->copy()->addDays(self::HORIZON_DAYS);
+        $until = $today->copy()->addDays(self::UPCOMING_DAYS)->endOfDay();
+
+        $operations = EventOperation::where('business_id', $bid)->active()
+            ->where(fn ($q) => $q->whereBetween('event_starts_at', [$today, $until])->orWhereIn('status', EventOperation::ON_SITE))
+            ->with('project:id,code,name,status', 'lead:id,name', 'requirements', 'reservations.asset', 'reservations.requirement',
+                'crew.user', 'checklists.items', 'scheduleItems')
+            ->orderBy('event_starts_at')->limit(self::LIMIT * 2)->get();
+
+        $rows = [];
+        $conflictRows = collect();
+        $notReady = 0;
+        $live = 0;
+
+        foreach ($operations as $op) {
+            $readiness = $op->status === EventOperation::LIVE ? OperationReadiness::live($op) : OperationReadiness::for($op);
+            $conflicts = ResourceConflicts::all($op);
+            $attendance = Crew::attendance($op);
+            $daysToStart = $op->event_starts_at === null ? null : (int) $today->diffInDays($op->event_starts_at->copy()->startOfDay(), false);
+
+            $bucket = match (true) {
+                $op->status === EventOperation::LIVE => 'live',
+                $op->isOnSite() => 'on_site',
+                $op->event_starts_at !== null && $op->event_starts_at->lt($tomorrow) => 'today',
+                $op->event_starts_at !== null && $op->event_starts_at->lt($tomorrow->copy()->addDay()) => 'tomorrow',
+                $op->event_starts_at !== null && $op->event_starts_at->lt($week) => 'week',
+                default => 'later',
+            };
+
+            $critical = count(array_filter($conflicts, fn ($c) => $c['severity'] === ResourceConflicts::CRITICAL));
+            $isNotReady = ! $readiness->ready && ! in_array($op->status, [EventOperation::READY, EventOperation::LIVE, EventOperation::TEARDOWN], true);
+            if ($isNotReady && $daysToStart !== null && $daysToStart <= self::HORIZON_DAYS) {
+                $notReady++;
+            }
+            if ($op->status === EventOperation::LIVE) {
+                $live++;
+            }
+
+            $rows[] = [
+                'id' => $op->id,
+                'code' => $op->code,
+                'name' => $op->name,
+                'project' => $op->project?->code,
+                'project_id' => $op->project_id,
+                'venue' => $op->venue_name,
+                'status' => $op->status,
+                'lead' => $op->lead?->name,
+                'starts_at' => $op->event_starts_at?->format('Y-m-d H:i'),
+                'ends_at' => $op->event_ends_at?->format('Y-m-d H:i'),
+                'days_to_start' => $daysToStart,
+                'bucket' => $bucket,
+                'ready' => $readiness->ready,
+                'blockers' => array_slice($readiness->blockerMessages(), 0, 4),
+                'blocker_count' => count($readiness->blockers),
+                'warning_count' => count($readiness->warnings),
+                'conflicts' => ['critical' => $critical, 'warning' => count($conflicts) - $critical],
+                'crew' => $attendance,
+                'severity' => $critical > 0 || ($isNotReady && $daysToStart !== null && $daysToStart <= 1) ? 'danger' : ($isNotReady ? 'warning' : 'ok'),
+                'url' => route('admin.operations.show', $op->id),
+                'onsite_url' => route('admin.operations.onsite', $op->id),
+            ];
+
+            foreach ($conflicts as $c) {
+                $conflictRows->push(self::row('operation_conflict_'.$c['kind'], $c['severity'] === ResourceConflicts::CRITICAL ? 'danger' : 'warning',
+                    __('الفعاليّة :code — :name', ['code' => $op->code, 'name' => $op->name]), $c['message'],
+                    $c['severity'] === ResourceConflicts::CRITICAL ? __('حلّ التعارض قبل الموعد') : __('راجع'), route('admin.operations.show', $op->id), $op->event_starts_at));
+            }
+        }
+
+        $outstanding = collect();
+        foreach (Reservations::outstanding($bid, self::LIMIT) as $r) {
+            $outstanding->push(self::row('asset_outstanding', $r->reserved_until !== null && $r->reserved_until->lt(now()) ? 'danger' : 'warning',
+                __('القطعة :asset لم تُردّ', ['asset' => (string) $r->asset?->label()]),
+                __('الفعاليّة :op · في عهدة :who', ['op' => (string) $r->operation?->code, 'who' => (string) ($r->custodian?->name ?? '—')]),
+                __('سجّل الردّ'), route('admin.assets.show', $r->asset_id), $r->reserved_until));
+        }
+
+        $incidents = collect();
+        foreach (Incidents::active($bid, self::LIMIT) as $i) {
+            $incidents->push(self::row('incident_'.$i->severity, $i->severity === 'critical' ? 'danger' : 'warning',
+                __('حادث :severity — :title', ['severity' => __(Incidents::SEVERITY_LABELS[$i->severity] ?? $i->severity), 'title' => $i->title]),
+                __('الفعاليّة :op · :assignee', ['op' => (string) $i->operation?->code, 'assignee' => (string) ($i->assignee?->name ?? __('غير مسنَد'))]),
+                __('عالج الحادث'), route('admin.operations.show', $i->event_operation_id), $i->occurred_at));
+        }
+
+        $conflictSection = self::section($conflictRows);
+        $outstandingSection = self::section($outstanding);
+        $incidentSection = self::section($incidents);
+
+        return [
+            'rows' => array_slice($rows, 0, self::LIMIT),
+            'total' => $notReady + $conflictSection['total'] + $outstandingSection['total'] + $incidentSection['total'],
+            'live' => $live,
+            'not_ready' => $notReady,
+            'counts' => [
+                'live' => $live,
+                'today' => count(array_filter($rows, fn ($r) => $r['bucket'] === 'today')),
+                'tomorrow' => count(array_filter($rows, fn ($r) => $r['bucket'] === 'tomorrow')),
+                'week' => count(array_filter($rows, fn ($r) => in_array($r['bucket'], ['today', 'tomorrow', 'week'], true))),
+            ],
+            'conflicts' => $conflictSection,
+            'outstanding' => $outstandingSection,
+            'incidents' => $incidentSection,
         ];
     }
 

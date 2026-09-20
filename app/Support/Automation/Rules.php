@@ -87,6 +87,37 @@ final class Rules
             'steps' => [['offset' => 3, 'audience' => 'customer'], ['offset' => 7, 'audience' => 'customer'], ['offset' => 7, 'audience' => 'finance'], ['offset' => 14, 'audience' => 'management']],
             'enabled' => false, 'mode' => 'observe', 'cooldown_hours' => 72, 'business_hours' => true,
         ],
+        /*
+         * التشغيلُ — المرحلة 10: داخليٌّ كلُّه، ويُكتب على «مراقبة».
+         *
+         * الشركةُ تشغّله بيدها بعد أن تقرأ ما كان سيُقال — قاعدةٌ جديدة لا
+         * تبدأ بالكلام. ولا خطوةَ فيها إلى العميل.
+         */
+        'operation.start' => [
+            'name' => 'اقتراب موعد الفعاليّة', 'trigger' => 'operation_start', 'kind' => 'internal', 'channel' => 'internal',
+            'steps' => [['offset' => -7, 'audience' => 'lead'], ['offset' => -3, 'audience' => 'lead'], ['offset' => -1, 'audience' => 'lead'], ['offset' => -1, 'audience' => 'management'], ['offset' => 0, 'audience' => 'lead']],
+            'enabled' => true, 'mode' => 'observe', 'cooldown_hours' => 20, 'business_hours' => false,
+        ],
+        'crew.assignment' => [
+            'name' => 'تذكير الفريق بتعيينه', 'trigger' => 'crew_assignment', 'kind' => 'internal', 'channel' => 'internal',
+            'steps' => [['offset' => -1, 'audience' => 'assignee'], ['offset' => 0, 'audience' => 'assignee']],
+            'enabled' => true, 'mode' => 'observe', 'cooldown_hours' => 20, 'business_hours' => false,
+        ],
+        'equipment.checkout' => [
+            'name' => 'تذكير بتسليم المعدّات', 'trigger' => 'equipment_checkout', 'kind' => 'internal', 'channel' => 'internal',
+            'steps' => [['offset' => -1, 'audience' => 'lead'], ['offset' => 0, 'audience' => 'lead']],
+            'enabled' => true, 'mode' => 'observe', 'cooldown_hours' => 20, 'business_hours' => false,
+        ],
+        'equipment.unreturned' => [
+            'name' => 'معدّات لم تُردّ', 'trigger' => 'equipment_unreturned', 'kind' => 'internal', 'channel' => 'internal',
+            'steps' => [['offset' => 1, 'audience' => 'lead'], ['offset' => 3, 'audience' => 'management']],
+            'enabled' => true, 'mode' => 'observe', 'cooldown_hours' => 48, 'business_hours' => false,
+        ],
+        'operation.closeout' => [
+            'name' => 'فعاليّة انتهت ولم تُتمّ', 'trigger' => 'operation_closeout', 'kind' => 'internal', 'channel' => 'internal',
+            'steps' => [['offset' => 1, 'audience' => 'lead'], ['offset' => 3, 'audience' => 'management']],
+            'enabled' => true, 'mode' => 'observe', 'cooldown_hours' => 48, 'business_hours' => false,
+        ],
         'delivery.followup' => [
             'name' => 'متابعة حزمة التسليم مع العميل', 'trigger' => 'delivery_awaiting', 'kind' => 'external', 'channel' => 'email', 'template_key' => 'delivery.reminder',
             'steps' => [['offset' => 2, 'audience' => 'customer'], ['offset' => 5, 'audience' => 'customer']],

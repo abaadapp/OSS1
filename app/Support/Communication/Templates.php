@@ -143,6 +143,15 @@ final class Templates
             'name' => 'الموجز الصباحي', 'subject' => 'project', 'purpose' => 'notice',
             'channels' => ['email'], 'variables' => [], 'internal' => true,
         ],
+        /* والتشغيلُ — المرحلة 10: تعيينُ الفريق وتنبيهٌ تشغيليّ — داخليّان عن المشروع، لا يُرسَلان للعميل */
+        'operation.crew_assignment' => [
+            'name' => 'تعيين في فريق فعاليّة (إلى الموظّف)', 'subject' => 'project', 'purpose' => 'notice',
+            'channels' => ['email'], 'variables' => [], 'internal' => true,
+        ],
+        'operation.alert' => [
+            'name' => 'تنبيه تشغيلي (إلى الفريق)', 'subject' => 'project', 'purpose' => 'notice',
+            'channels' => ['email'], 'variables' => [], 'internal' => true,
+        ],
     ];
 
     /** وصفُ قالبٍ من الكتالوج — أو استثناءٌ لمفتاحٍ لا يُعرف */

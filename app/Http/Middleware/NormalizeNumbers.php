@@ -61,6 +61,8 @@ class NormalizeNumbers
          * أمامه. وكشفه `ArabicNumeralsTest` قبل أن يصل الخادم.
          */
         'paid_amount',
+        // وتكلفةُ شراء قطعة المعدّات — المرحلة 10: تُكتب «٤٥٠٫٥» بلوحةٍ عربيّة كغيرها
+        'purchase_cost',
 
         // الرواتب — وكانت كلُّها خارج القائمة
         'salary', 'basic_salary', 'basic', 'allowances', 'deductions', 'overtime',

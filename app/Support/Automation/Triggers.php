@@ -3,10 +3,15 @@
 namespace App\Support\Automation;
 
 use App\Support\Automation\Triggers\CommunicationFailed;
+use App\Support\Automation\Triggers\CrewAssignment;
 use App\Support\Automation\Triggers\DeliveryAwaiting;
+use App\Support\Automation\Triggers\EquipmentCheckout;
+use App\Support\Automation\Triggers\EquipmentUnreturned;
 use App\Support\Automation\Triggers\ExpenseUnpaid;
 use App\Support\Automation\Triggers\InvoiceDue;
 use App\Support\Automation\Triggers\MorningBrief;
+use App\Support\Automation\Triggers\OperationCloseout;
+use App\Support\Automation\Triggers\OperationStart;
 use App\Support\Automation\Triggers\ProjectClosable;
 use App\Support\Automation\Triggers\ProjectStart;
 use App\Support\Automation\Triggers\PurchaseOrderLate;
@@ -33,6 +38,12 @@ final class Triggers
         'communication_failed' => CommunicationFailed::class,
         'project_closable' => ProjectClosable::class,
         'morning_brief' => MorningBrief::class,
+        /* التشغيلُ — المرحلة 10: داخليٌّ كلُّه، ولا يبلغ العميل */
+        'operation_start' => OperationStart::class,
+        'crew_assignment' => CrewAssignment::class,
+        'equipment_checkout' => EquipmentCheckout::class,
+        'equipment_unreturned' => EquipmentUnreturned::class,
+        'operation_closeout' => OperationCloseout::class,
     ];
 
     public static function for(string $key): Trigger

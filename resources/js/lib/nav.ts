@@ -10,6 +10,7 @@ import {
 import {
     BarChart3,
     Boxes,
+    CalendarCheck,
     Database,
     Briefcase,
     FileSignature,
@@ -23,6 +24,7 @@ import {
     ShoppingCart,
     Truck,
     UserCog,
+    Wrench,
     Users,
     Wallet,
     Zap,
@@ -114,6 +116,17 @@ export const NAV: NavGroup[] = [
                 section: 'projects',
                 covers: ['admin.projects.show', 'admin.changeOrders.show', 'admin.changeOrders.create', 'admin.changeOrders.edit'],
             },
+            /*
+             * والعمليات بعد المشاريع: تنفيذُ الفعاليّة على الأرض — الموعدُ
+             * والفريقُ والمعدّاتُ وشاشةُ الموقع — المرحلة 10
+             */
+            {
+                label: 'العمليات',
+                icon: CalendarCheck,
+                route: 'admin.operations.index',
+                section: 'operations',
+                covers: ['admin.operations.show', 'admin.operations.onsite', 'admin.operations.templates'],
+            },
             // وحزمُ التسليم: ما تسلّمه الشركةُ في ختام العمل ويقبله العميل — المرحلة 5
             {
                 label: 'حزم التسليم',
@@ -169,6 +182,14 @@ export const NAV: NavGroup[] = [
                 route: 'admin.inventory.index',
                 section: 'inventory',
                 covers: covers(INVENTORY_TABS),
+            },
+            /* والمعدّاتُ ذاتُ الهويّة بجانب المخزون — وليست منه: قطعٌ لا كمّيّات — المرحلة 10 */
+            {
+                label: 'المعدّات',
+                icon: Wrench,
+                route: 'admin.assets.index',
+                section: 'assets',
+                covers: ['admin.assets.show', 'admin.assets.calendar'],
             },
         ],
     },

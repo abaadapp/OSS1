@@ -10,6 +10,7 @@ import {
     Gavel,
     MessageSquareWarning,
     PackageCheck,
+    Radio,
     ShieldAlert,
     Users,
     Zap,
@@ -21,6 +22,7 @@ import { Card } from '@/Components/ui/card';
 import { money, number } from '@/lib/format';
 import { useTranslate } from '@/lib/i18n';
 import { PROJECT_STATUS_LABEL, projectTone } from '@/lib/projects';
+import { operationTone } from '@/lib/operations';
 import type { PageProps } from '@/types';
 
 interface ActionRow {
@@ -108,10 +110,45 @@ interface Money {
     net: number;
 }
 
+/** التشغيل — المرحلة 10: فعاليّةٌ على الأرض بجاهزيّتها وتعارضاتها */
+interface OperationRow {
+    id: number;
+    code: string;
+    name: string;
+    project: string | null;
+    venue: string | null;
+    status: string;
+    lead: string | null;
+    starts_at: string | null;
+    ends_at: string | null;
+    days_to_start: number | null;
+    bucket: string;
+    ready: boolean;
+    blockers: string[];
+    blocker_count: number;
+    warning_count: number;
+    conflicts: { critical: number; warning: number };
+    crew: { expected: number; checked_in: number; missing: number };
+    severity: 'ok' | 'warning' | 'danger';
+    url: string;
+    onsite_url: string;
+}
+
+interface Operations {
+    rows: OperationRow[];
+    total: number;
+    live: number;
+    not_ready: number;
+    counts: { live: number; today: number; tomorrow: number; week: number };
+    conflicts: Section;
+    outstanding: Section;
+    incidents: Section;
+}
+
 interface Center {
     generated_at: string;
     sees_money: boolean;
-    summary: { decisions: number; late: number; delivery: number; communications: number; upcoming: number; blockers: number; automation: number; migration: number };
+    summary: { decisions: number; late: number; delivery: number; communications: number; upcoming: number; blockers: number; automation: number; migration: number; operations: number };
     decisions: Section;
     late: Section;
     delivery: Section;
@@ -123,6 +160,8 @@ interface Center {
     automation: Section & { paused: boolean; mode: string; configured: boolean; pending: number };
     /* نقلُ البيانات — المرحلة 9: فحصٌ فشل أو تعارضاتٌ أو استيرادٌ لم يوازن — والناجحُ لا يُذكر */
     migration: Section;
+    /* التشغيل — المرحلة 10 */
+    operations: Operations;
     money: Money | null;
 }
 
@@ -163,6 +202,7 @@ export default function CommandIndex({ center: c }: { center: Center }) {
         { key: 'blockers', label: 'مشاريع معطَّلة', count: c.summary.blockers, icon: ShieldAlert, tone: 'warning' },
         { key: 'automation', label: 'أتمتة تحتاج يدًا', count: c.summary.automation + (c.automation.paused ? 1 : 0), icon: Zap, tone: 'warning' },
         ...(c.summary.migration > 0 ? [{ key: 'migration', label: 'نقل بيانات يحتاج يدًا', count: c.summary.migration, icon: Database, tone: 'warning' }] : []),
+        { key: 'operations', label: 'فعاليّات تحتاج يدًا', count: c.summary.operations, icon: Radio, tone: c.operations.live > 0 ? 'ok' : 'warning' },
     ];
 
     const jump = (key: string) => document.getElementById(`cc-${key}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -215,6 +255,7 @@ export default function CommandIndex({ center: c }: { center: Center }) {
                 />
 
                 <UpcomingSection data={c.upcoming} />
+                <OperationsSection data={c.operations} m={m} />
                 <BlockersSection data={c.blockers} />
                 <TeamSection data={c.team} />
 
@@ -387,6 +428,79 @@ function Figure({ label, value, tone, sub }: { label: string; value: string | nu
             <dt className="text-[11px] text-[#9ca3af]">{t(label)}</dt>
             <dd className={'tabular-nums font-bold ' + color}>{value ?? '—'}</dd>
             {sub && <dd className="text-[11px] text-[#9ca3af]">{sub}</dd>}
+        </div>
+    );
+}
+
+/* ─────────────────────────── التشغيل ─────────────────────────── */
+
+const BUCKET_LABEL: Record<string, string> = {
+    live: 'على الهواء',
+    on_site: 'في الموقع',
+    today: 'اليوم',
+    tomorrow: 'غدًا',
+    week: 'خلال أسبوع',
+    later: 'لاحقًا',
+};
+
+/**
+ * الفعاليّاتُ على الأرض — المرحلة 10.
+ *
+ * ما على الهواء، وما يبدأ اليوم وغدًا وخلال أسبوع بجاهزيّته، ثمّ التعارضاتُ
+ * وما خرج ولم يعد والحوادثُ الحرجة — كلٌّ يقود إلى شاشته أو إلى شاشة الموقع.
+ */
+function OperationsSection({ data, m }: { data: Operations; m: (v: number | null | undefined) => string | null }) {
+    const t = useTranslate();
+
+    return (
+        <div id="cc-operations" className="scroll-mt-4 space-y-4">
+            <Card className="p-4">
+                <SectionHead
+                    icon={Radio}
+                    title={t('الفعاليّات على الأرض')}
+                    hint={t('على الهواء: :live · اليوم: :today · غدًا: :tomorrow · خلال أسبوع: :week · غير جاهزة وقريبة: :nr', {
+                        live: String(data.counts.live), today: String(data.counts.today), tomorrow: String(data.counts.tomorrow), week: String(data.counts.week), nr: String(data.not_ready),
+                    })}
+                    count={data.rows.length}
+                />
+                {data.rows.length === 0 ? (
+                    <p className="text-[13px] text-[#9ca3af]">{t('لا فعاليّات خلال أسبوعين')}</p>
+                ) : (
+                    <ul className="divide-y divide-[#f3f4f6]">
+                        {data.rows.map((o) => (
+                            <li key={o.id} className="flex items-start gap-3 py-2.5">
+                                <span className={'mt-2 size-2 shrink-0 rounded-full ' + SEVERITY[o.severity]} />
+                                <div className="min-w-0 flex-1">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        <a href={o.url} className="font-medium text-[#111] hover:text-[#1d4ed8]">
+                                            {o.code} — {o.name}
+                                        </a>
+                                        <span className={'rounded-full px-2 py-0.5 text-[11px] ' + operationTone(o.status)}>{t(BUCKET_LABEL[o.bucket] ?? o.bucket)}</span>
+                                        {!o.ready && <span className="rounded-full bg-[#fef2f2] px-2 py-0.5 text-[11px] text-[#b91c1c]">{t(':n موانع', { n: String(o.blocker_count) })}</span>}
+                                        {o.ready && <span className="rounded-full bg-[#ecfdf5] px-2 py-0.5 text-[11px] text-[#047857]">{t('جاهزة')}</span>}
+                                        {o.conflicts.critical > 0 && <span className="rounded-full bg-[#fef2f2] px-2 py-0.5 text-[11px] text-[#b91c1c]">{t(':n تعارضات', { n: String(o.conflicts.critical) })}</span>}
+                                    </div>
+                                    <div className="text-[12px] text-[#6b7280]">
+                                        <span dir="ltr" className="tabular-nums">{o.starts_at ?? '—'}</span>
+                                        {o.venue ? ` · ${o.venue}` : ''}
+                                        {o.lead ? ` · ${o.lead}` : ''}
+                                        {` · ${t('الفريق')} ${o.crew.checked_in}/${o.crew.expected}`}
+                                    </div>
+                                    {!o.ready && o.blockers.length > 0 && <div className="text-[12px] text-[#b91c1c]">{o.blockers.join(' · ')}</div>}
+                                </div>
+                                <a href={o.onsite_url} className="inline-flex shrink-0 items-center gap-1 rounded-full border border-[#e5e7eb] px-2.5 py-1 text-[12px] text-[#111] hover:border-[#111]">
+                                    {t('شاشة الموقع')}
+                                    <ArrowLeft className="size-3" />
+                                </a>
+                            </li>
+                        ))}
+                    </ul>
+                )}
+            </Card>
+
+            {data.conflicts.rows.length > 0 && <ActionSection id="operations-conflicts" title="تعارضات الموارد" hint="قطعٌ محجوزة مرّتين أو خارج الخدمة أو لم تُردّ، وموظّفون في وقتين معًا" icon={ShieldAlert} section={data.conflicts} m={m} />}
+            {data.outstanding.rows.length > 0 && <ActionSection id="operations-outstanding" title="معدّات لم تُردّ" hint="خرجت إلى الميدان ولم يُسجَّل ردُّها — لا تصير متاحةً بمرور الوقت" icon={PackageCheck} section={data.outstanding} m={m} />}
+            {data.incidents.rows.length > 0 && <ActionSection id="operations-incidents" title="حوادث حرجة مفتوحة" hint="عاليةٌ أو حرجة ولم تُحلّ — تمنع إتمام فعاليّتها" icon={AlertTriangle} section={data.incidents} m={m} />}
         </div>
     );
 }

@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\ChangeOrder;
 use App\Models\Customer;
 use App\Models\DeliveryPackage;
+use App\Models\EventOperation;
 use App\Models\Project;
 use App\Models\ProjectMember;
 use App\Models\ProjectRequirement;
@@ -15,6 +16,11 @@ use App\Support\ChangeOrders;
 use App\Support\DeliveryPackages;
 use App\Support\DeliveryReadiness;
 use App\Support\Demo;
+use App\Support\Operations\Checklists;
+use App\Support\Operations\Crew;
+use App\Support\Operations\EventOperations;
+use App\Support\Operations\OperationReadiness;
+use App\Support\Operations\ResourceConflicts;
 use App\Support\Pagination;
 use App\Support\Permissions;
 use App\Support\ProjectFinancials;
@@ -70,6 +76,9 @@ class ProjectController extends Controller
              * ليُخفى في الشاشة.
              */
             'commercial' => (bool) ($user?->may(Permissions::PROJECT_BUDGET_VIEW) || $user?->may(Permissions::CHANGE_ORDER_CREATE)),
+            /* والتشغيلُ — المرحلة 10: من يفتح «العمليات» يرى تبويبَها، ومن يديرها يُنشئ فعاليّة */
+            'operations' => (bool) $user?->allows('operations'),
+            'operations_manage' => (bool) $user?->may(Permissions::OPERATIONS_MANAGE),
         ];
     }
 
@@ -254,9 +263,61 @@ class ProjectController extends Controller
             /* وحكمُ سياسة الإلغاء لو أُلغي الآن — يُقرأ قبل أن يُضغط الزرّ */
             'cancellation' => $may['manage'] && ($project->isOpen() || $project->status === Project::DRAFT)
                 ? Projects::cancellationVerdict($project)->toArray() : null,
+            /* التشغيل — المرحلة 10: الفعاليّاتُ بجاهزيّتها وتعارضاتها؛ ولمن يفتح القسم */
+            'operations' => $may['operations'] ? $this->operations($project) : null,
             'users' => User::where('business_id', $this->bid())->orderBy('name')->get(['id', 'name'])->all(),
             'may' => $may,
         ]);
+    }
+
+    /**
+     * فعاليّاتُ المشروع — ملخّصٌ لتبويب «العمليات»، لا الشاشةَ كلَّها.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function operations(Project $project): array
+    {
+        $operations = EventOperation::where('project_id', $project->id)
+            ->with('lead:id,name', 'requirements', 'reservations.asset', 'reservations.requirement', 'crew.user', 'checklists.items', 'scheduleItems', 'incidents')
+            ->orderBy('event_starts_at')->orderBy('id')->get();
+
+        return $operations->map(function (EventOperation $o) {
+            $verdict = $o->status === EventOperation::LIVE || $o->status === EventOperation::SETUP ? OperationReadiness::live($o) : OperationReadiness::for($o);
+            $conflicts = ResourceConflicts::all($o);
+            $progress = Checklists::progress($o);
+
+            return [
+                'id' => $o->id,
+                'code' => $o->code,
+                'name' => $o->name,
+                'status' => $o->status,
+                'status_label' => __(EventOperations::statusLabel($o->status)),
+                'venue_name' => $o->venue_name,
+                'event_starts_at' => $o->event_starts_at?->format('Y-m-d H:i'),
+                'event_ends_at' => $o->event_ends_at?->format('Y-m-d H:i'),
+                'lead' => $o->lead?->name,
+                'ready' => $verdict->ready,
+                'blockers' => $verdict->blockerMessages(),
+                'warnings' => count($verdict->warnings),
+                'conflicts' => count($conflicts),
+                'critical_conflicts' => count(array_filter($conflicts, fn ($c) => $c['severity'] === ResourceConflicts::CRITICAL)),
+                'crew' => Crew::attendance($o),
+                'equipment' => [
+                    'required' => (int) $o->requirements->sum('required_quantity'),
+                    'assigned' => (int) $o->requirements->sum('assigned_quantity'),
+                    'reserved' => $o->reservations->whereIn('status', ['reserved', 'checked_out'])->count(),
+                    'outstanding' => $o->reservations->where('status', 'checked_out')->count(),
+                ],
+                'checklist' => [
+                    'total' => array_sum(array_column($progress, 'total')),
+                    'done' => array_sum(array_column($progress, 'done')) + array_sum(array_column($progress, 'waived')),
+                    'required_pending' => array_sum(array_column($progress, 'required_pending')),
+                ],
+                'incidents' => ['open' => $o->incidents->filter(fn ($i) => $i->isUnresolved())->count(), 'total' => $o->incidents->count()],
+                'url' => route('admin.operations.show', $o->id),
+                'onsite_url' => route('admin.operations.onsite', $o->id),
+            ];
+        })->values()->all();
     }
 
     /* ─────────────────────────── الكتابة ─────────────────────────── */
