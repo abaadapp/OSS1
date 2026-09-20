@@ -124,8 +124,13 @@ class EveryRoleIsProbedOnEveryRouteTest extends TestCase
              * يُطلب، والمنسّقُ الميدانيّ يقرأ ما ينفّذه. والقسمُ يفتح الشاشة؛ وما
              * يمسّ النطاقَ أو المالَ أفعالٌ تُمنح بالاسم.
              */
+            /*
+             * و«الإدارة» مُنحت للمحاسب عمدًا في المرحلة 11: يقرأ الأداءَ الماليّ
+             * وربحيّةَ المشاريع والعملاءَ والموازناتِ والتوقّعاتِ قراءةً — والإعدادُ
+             * والاعتمادُ أفعالٌ تُمنح بالاسم (`budgets.manage` و`budgets.approve`…).
+             */
             'accountant' => ['dashboard', 'orders', 'customers', 'finance', 'expenses',
-                'employees', 'reports', 'suppliers', 'purchases', 'projects'],
+                'employees', 'reports', 'suppliers', 'purchases', 'projects', 'management'],
             /*
              * و«المعدّات» مُنحت لأمين المخزن عمدًا في المرحلة 10: القطعُ ذاتُ
              * الهويّة في عهدته كما البضاعة. والقسمُ يفتح السجلّ؛ والحجزُ

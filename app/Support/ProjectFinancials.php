@@ -79,14 +79,15 @@ final class ProjectFinancials
             ->paid()->sum('amount'), 3);
 
         /*
-         * والاستهلاكُ سالبُ الكميّة: ما خرج من الرفّ إلى الفعاليّة.
+         * والاستهلاكُ صافي ما خرج من الرفّ إلى الفعاليّة: الصرفُ سالبٌ والإرجاعُ
+         * موجب — فما صُرف ٢٢٠٠ وعاد منه ٣٠٠ استُهلك ١٩٠٠ (المرحلة 11،
+         * `Operations\Consumables`). وبتكلفة لحظة الصرف لا تكلفة اليوم.
          *
-         * مؤجَّل — لا كاتبَ لـ`stock_adjustments.project_id` بعد. وقبل أن يُفتح
-         * بابُه يُقرَّر الأساس: بضاعةٌ اشتُريت بأمر شراءٍ على المشروع تُقرأ هنا
-         * بسند مورّدها؛ فإن استُهلكت من الرفّ باسمه أيضًا عُدّت مرّتين.
+         * والأساسُ لا يُعدّ مرّتين: البضاعةُ تدخل الرفَّ بسند مورّدٍ **بلا
+         * مشروع** (مخزونٌ عامّ)، وتُقرأ على المشروع يومَ تُصرف له. وسندُ مورّدٍ
+         * على المشروع نفسِه يُقرأ بسنده لا من الرفّ.
          */
-        $stock = round(abs((float) StockAdjustment::where('business_id', $bid)->where('project_id', $pid)
-            ->where('quantity_delta', '<', 0)
+        $stock = round(max(0.0, -(float) StockAdjustment::where('business_id', $bid)->where('project_id', $pid)
             ->selectRaw('COALESCE(SUM(quantity_delta * cost_at_time), 0) AS v')->value('v')), 3);
 
         $actual = round($supplierActual + $expensesPaid + $stock, 3);
@@ -119,6 +120,8 @@ final class ProjectFinancials
             'invoiced' => $invoiced,
             'credited' => $credited,
             'net_invoiced' => $netInvoiced,
+            /* الإيرادُ الصافي — ما يُقاس عليه الهامش: بلا ضريبةٍ وبعد الإشعارات (المرحلة 11 تقرؤه) */
+            'revenue' => $revenue,
             'collected' => $collected,
             'customer_outstanding' => round(max(0.0, $invoiced - $collected - $credited), 3),
             'supplier_actual' => $supplierActual,

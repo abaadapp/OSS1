@@ -22,6 +22,7 @@ use App\Support\Automation\Engine;
 use App\Support\Automation\Settings as AutomationSettings;
 use App\Support\Communication\Subjects;
 use App\Support\Communication\Templates;
+use App\Support\Intelligence\ManagementAlerts;
 use App\Support\Operations\Crew;
 use App\Support\Operations\Incidents;
 use App\Support\Operations\OperationReadiness;
@@ -81,6 +82,7 @@ final class CommandCenter
         $automation = self::automation($businessId);
         $migration = self::migration($businessId);
         $operations = self::operations($businessId);
+        $management = self::management($businessId, $money);
 
         return [
             'generated_at' => now()->format('Y-m-d H:i'),
@@ -95,6 +97,7 @@ final class CommandCenter
                 'automation' => $automation['total'],
                 'migration' => $migration['total'],
                 'operations' => $operations['total'],
+                'management' => $management['total'],
             ],
             'decisions' => $decisions,
             'late' => $late,
@@ -106,8 +109,33 @@ final class CommandCenter
             'automation' => $automation,
             'migration' => $migration,
             'operations' => $operations,
+            'management' => $management,
             'money' => $money ? self::money($businessId) : null,
         ];
+    }
+
+    /* ─────────────────────────── الإدارة ─────────────────────────── */
+
+    /**
+     * تنبيهاتٌ إداريّة تحتاج يدًا — المرحلة 11: الحرجُ وحده، ولمن يرى المال.
+     *
+     * لا لوحةَ تحليلٍ هنا: متأخّراتٌ فوق العتبة، ونقدٌ دون الحدّ، ومصروفٌ
+     * فوق موازنته — وكلٌّ يقود إلى شاشته في «الإدارة».
+     *
+     * @return array{rows: list<array<string, mixed>>, total: int}
+     */
+    public static function management(int $bid, bool $money): array
+    {
+        if (! $money) {
+            return ['rows' => [], 'total' => 0];
+        }
+
+        $rows = collect();
+        foreach (ManagementAlerts::actionable($bid, self::LIMIT) as $a) {
+            $rows->push(self::row('management_'.$a['kind'], 'danger', $a['title'], $a['detail'], __('افتح الإدارة'), $a['url'], now()));
+        }
+
+        return self::section($rows);
     }
 
     /* ─────────────────────────── التشغيل ─────────────────────────── */

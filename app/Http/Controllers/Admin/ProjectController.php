@@ -16,6 +16,7 @@ use App\Support\ChangeOrders;
 use App\Support\DeliveryPackages;
 use App\Support\DeliveryReadiness;
 use App\Support\Demo;
+use App\Support\Intelligence\ProjectProfitability;
 use App\Support\Operations\Checklists;
 use App\Support\Operations\Crew;
 use App\Support\Operations\EventOperations;
@@ -79,6 +80,8 @@ class ProjectController extends Controller
             /* والتشغيلُ — المرحلة 10: من يفتح «العمليات» يرى تبويبَها، ومن يديرها يُنشئ فعاليّة */
             'operations' => (bool) $user?->allows('operations'),
             'operations_manage' => (bool) $user?->may(Permissions::OPERATIONS_MANAGE),
+            /* والأداءُ الماليّ — المرحلة 11: لمن يقرأ ربحيّة المشاريع */
+            'performance' => (bool) $user?->may(Permissions::ANALYTICS_PROJECTS),
         ];
     }
 
@@ -265,6 +268,8 @@ class ProjectController extends Controller
                 ? Projects::cancellationVerdict($project)->toArray() : null,
             /* التشغيل — المرحلة 10: الفعاليّاتُ بجاهزيّتها وتعارضاتها؛ ولمن يفتح القسم */
             'operations' => $may['operations'] ? $this->operations($project) : null,
+            /* الأداءُ الماليّ — المرحلة 11: الصيغةُ في `ProjectFinancials` والاكتمالُ في `ProjectProfitability` */
+            'performance' => $may['performance'] ? ProjectProfitability::forProject($project) + ['timeline' => ProjectProfitability::timeline($project)] : null,
             'users' => User::where('business_id', $this->bid())->orderBy('name')->get(['id', 'name'])->all(),
             'may' => $may,
         ]);

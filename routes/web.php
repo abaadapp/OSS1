@@ -3,6 +3,7 @@
 use App\Http\Controllers\ActivityController;
 use App\Http\Controllers\Admin\AssetController;
 use App\Http\Controllers\Admin\AutomationController;
+use App\Http\Controllers\Admin\BudgetController;
 use App\Http\Controllers\Admin\BankStatementController;
 use App\Http\Controllers\Admin\BranchController;
 use App\Http\Controllers\Admin\CatalogQuickAddController;
@@ -30,12 +31,15 @@ use App\Http\Controllers\Admin\Finance\JournalController;
 use App\Http\Controllers\Admin\Finance\OverviewController;
 use App\Http\Controllers\Admin\FinanceController;
 use App\Http\Controllers\Admin\FinancialAttachmentController;
+use App\Http\Controllers\Admin\ForecastController;
 use App\Http\Controllers\Admin\GoalController;
 use App\Http\Controllers\Admin\Inventory\GoodsReceiptNoteController;
 use App\Http\Controllers\Admin\Inventory\StockAdjustmentController;
 use App\Http\Controllers\Admin\InventoryController;
 use App\Http\Controllers\Admin\JobTitleController;
 use App\Http\Controllers\Admin\LanguageController;
+use App\Http\Controllers\Admin\ManagementController;
+use App\Http\Controllers\Admin\ManagementReviewController;
 use App\Http\Controllers\Admin\OrderController;
 use App\Http\Controllers\Admin\OrderDetailController;
 use App\Http\Controllers\Admin\OrderEditController;
@@ -1059,6 +1063,46 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'tenant', 'business'
     Route::put('/assets/{id}', [AssetController::class, 'update'])->whereNumber('id')->name('assets.update');
     Route::post('/assets/{id}/status', [AssetController::class, 'status'])->whereNumber('id')->name('assets.status');
     Route::post('/assets/{id}/reservations/{rid}/return', [AssetController::class, 'giveBack'])->whereNumber('id')->whereNumber('rid')->name('assets.reservations.return');
+
+    /* المستهلَكاتُ من الرفّ إلى الفعاليّة وعودتُها — المرحلة 11؛ من باب المخزون نفسِه */
+    Route::post('/operations/{id}/consumables', [EventOperationController::class, 'issueConsumable'])->whereNumber('id')->name('operations.consumables.store');
+    Route::post('/operations/{id}/consumables/{cid}/return', [EventOperationController::class, 'returnConsumable'])->whereNumber('id')->whereNumber('cid')->name('operations.consumables.return');
+
+    /*
+     * الإدارة — المرحلة 11. القسمُ `management` يفتح الشاشات؛ والأرقامُ
+     * الماليّة بأفعالها (`analytics.*`)، والموازنةُ والتوقّعُ والسيناريو
+     * والمراجعةُ بأفعالها. وكلُّ رقمٍ من `Intelligence\*` لا من المتحكّم.
+     */
+    Route::get('/management', [ManagementController::class, 'index'])->name('management.index');
+    Route::get('/management/financial', [ManagementController::class, 'financial'])->name('management.financial');
+    Route::get('/management/projects', [ManagementController::class, 'projects'])->name('management.projects');
+    Route::get('/management/customers', [ManagementController::class, 'customers'])->name('management.customers');
+    Route::get('/management/services', [ManagementController::class, 'services'])->name('management.services');
+    Route::get('/management/cash', [ManagementController::class, 'cash'])->name('management.cash');
+    Route::get('/management/operations', [ManagementController::class, 'operations'])->name('management.operations');
+    Route::get('/management/reports', [ManagementController::class, 'reports'])->name('management.reports');
+    Route::put('/management/thresholds', [ManagementController::class, 'thresholds'])->name('management.thresholds');
+    Route::get('/management/budgets', [BudgetController::class, 'index'])->name('management.budgets');
+    Route::post('/management/budgets', [BudgetController::class, 'store'])->name('management.budgets.store');
+    Route::put('/management/budgets/{id}', [BudgetController::class, 'update'])->whereNumber('id')->name('management.budgets.update');
+    Route::post('/management/budgets/{id}/approve', [BudgetController::class, 'approve'])->whereNumber('id')->name('management.budgets.approve');
+    Route::post('/management/budgets/{id}/revise', [BudgetController::class, 'revise'])->whereNumber('id')->name('management.budgets.revise');
+    Route::post('/management/budgets/{id}/archive', [BudgetController::class, 'archive'])->whereNumber('id')->name('management.budgets.archive');
+    Route::post('/management/forecasts', [ForecastController::class, 'store'])->name('management.forecasts.store');
+    Route::post('/management/forecasts/{id}/approve', [ForecastController::class, 'approve'])->whereNumber('id')->name('management.forecasts.approve');
+    Route::delete('/management/forecasts/{id}', [ForecastController::class, 'destroy'])->whereNumber('id')->name('management.forecasts.destroy');
+    Route::post('/management/scenarios', [ForecastController::class, 'storeScenario'])->name('management.scenarios.store');
+    Route::put('/management/scenarios/{id}', [ForecastController::class, 'updateScenario'])->whereNumber('id')->name('management.scenarios.update');
+    Route::delete('/management/scenarios/{id}', [ForecastController::class, 'destroyScenario'])->whereNumber('id')->name('management.scenarios.destroy');
+    Route::get('/management/reviews', [ManagementReviewController::class, 'index'])->name('management.reviews');
+    Route::post('/management/reviews', [ManagementReviewController::class, 'store'])->name('management.reviews.store');
+    Route::get('/management/reviews/{id}', [ManagementReviewController::class, 'show'])->whereNumber('id')->name('management.reviews.show');
+    Route::put('/management/reviews/{id}', [ManagementReviewController::class, 'update'])->whereNumber('id')->name('management.reviews.update');
+    Route::post('/management/reviews/{id}/refresh', [ManagementReviewController::class, 'refresh'])->whereNumber('id')->name('management.reviews.refresh');
+    Route::post('/management/reviews/{id}/review', [ManagementReviewController::class, 'review'])->whereNumber('id')->name('management.reviews.review');
+    Route::post('/management/reviews/{id}/close', [ManagementReviewController::class, 'close'])->whereNumber('id')->name('management.reviews.close');
+    Route::post('/management/reviews/{id}/decisions', [ManagementReviewController::class, 'storeDecision'])->whereNumber('id')->name('management.reviews.decisions.store');
+    Route::post('/management/reviews/{id}/decisions/{did}/status', [ManagementReviewController::class, 'decisionStatus'])->whereNumber('id')->whereNumber('did')->name('management.reviews.decisions.status');
 
     /*
      * المراسلات — المرحلة 6.

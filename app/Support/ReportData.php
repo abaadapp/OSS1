@@ -857,6 +857,18 @@ class ReportData
      * التاجر بأنّ بضاعةً عُدمت. وطمسُها في واحدٍ يُفقد التقرير التمييز
      * بين خطأ دفترٍ وخسارةٍ حقيقية.
      */
+    /* ============================ الإدارة — المرحلة 11 ============================ */
+
+    /** تقاريرُ الإدارة تُبنى في `Intelligence\ManagementReports` — وهنا بابُها الموحَّد للتنزيل */
+    public static function __callStatic(string $name, array $arguments): array
+    {
+        if (in_array($name, \App\Support\Intelligence\ManagementReports::KEYS, true)) {
+            return \App\Support\Intelligence\ManagementReports::build($name, (int) $arguments[0], (array) ($arguments[1] ?? []));
+        }
+
+        throw new \BadMethodCallException("ReportData::{$name} غير موجود");
+    }
+
     public static function stocktake(int $bid, array $filters): array
     {
         $start = self::start($filters['range'] ?? 'month');

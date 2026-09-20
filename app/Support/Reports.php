@@ -35,6 +35,8 @@ class Reports
         'financial' => 'التقارير المالية',
         'operational' => 'التقارير التشغيلية',
         'analytical' => 'تقارير التحليلات',
+        // تقاريرُ الإدارة — المرحلة 11: تُفتح من شاشة «الإدارة › التقارير» وتخرج من الباب العامّ للتنزيل
+        'management' => 'تقارير الإدارة',
     ];
 
     /**
@@ -201,6 +203,31 @@ class Reports
             'icon' => 'trash-2',
             'route' => 'admin.reports.waste',
         ],
+        /* ------------------------------ الإدارة — المرحلة 11 ------------------------------ */
+        ['key' => 'management_monthly', 'category' => 'management', 'section' => 'management', 'params' => ['report' => 'management_monthly'], 'title' => 'التقرير الإداري الشهري',
+            'desc' => 'ملخّصٌ تنفيذيّ: الإيراد والتحصيل والمصروفات والنقد والذمم والمشاريع والقمع والتشغيل والموازنة والتوقّع والتنبيهات.',
+            'icon' => 'briefcase', 'route' => 'admin.management.reports'],
+        ['key' => 'project_profitability', 'category' => 'management', 'section' => 'management', 'params' => ['report' => 'project_profitability'], 'title' => 'ربحيّة المشاريع',
+            'desc' => 'المتعاقَد والمفوتَر والمحصَّل والتكلفة المباشرة والمساهمة والهامش — واكتمالُ التكلفة لكلّ مشروع.',
+            'icon' => 'briefcase', 'route' => 'admin.management.reports'],
+        ['key' => 'receivables_aging', 'category' => 'management', 'section' => 'management', 'params' => ['report' => 'receivables_aging'], 'title' => 'أعمار الذمم المدينة',
+            'desc' => 'ما لم يستحقّ، ومتأخّرٌ ١–٣٠ و٣١–٦٠ و٦١–٩٠ وأكثر — وبالعميل.',
+            'icon' => 'wallet', 'route' => 'admin.management.reports'],
+        ['key' => 'budget_vs_actual', 'category' => 'management', 'section' => 'management', 'params' => ['report' => 'budget_vs_actual'], 'title' => 'الموازنة مقابل الفعليّ',
+            'desc' => 'الموازنةُ المعتمَدة مقابل الدفتر — بالحساب والشهر أو الربع أو السنة.',
+            'icon' => 'wallet', 'route' => 'admin.management.reports'],
+        ['key' => 'cash_forecast', 'category' => 'management', 'section' => 'management', 'params' => ['report' => 'cash_forecast'], 'title' => 'التوقّع النقدي',
+            'desc' => 'الافتتاحيّ والداخل والخارج والإقفال المتوقَّع شهرًا بشهر — وكلُّ بندٍ بمصدره.',
+            'icon' => 'trending-up', 'route' => 'admin.management.reports'],
+        ['key' => 'customer_revenue', 'category' => 'management', 'section' => 'management', 'params' => ['report' => 'customer_revenue'], 'title' => 'إيراد العملاء',
+            'desc' => 'المفوتَر والمحصَّل والذمم لكلّ عميل — وتركيزُ الإيراد.',
+            'icon' => 'users', 'route' => 'admin.management.reports'],
+        ['key' => 'service_performance', 'category' => 'management', 'section' => 'management', 'params' => ['report' => 'service_performance'], 'title' => 'أداء الخدمات',
+            'desc' => 'ما عُرض وقُبل وفُوتر من كلّ صنفٍ في الكتالوج — ومتوسّطُ السعر والخصم.',
+            'icon' => 'package', 'route' => 'admin.management.reports'],
+        ['key' => 'asset_utilization', 'category' => 'management', 'section' => 'management', 'params' => ['report' => 'asset_utilization'], 'title' => 'استخدام المعدّات',
+            'desc' => 'أيّامُ الحجز والميدان لكلّ قطعة وصنف — والنقصُ والتأجير.',
+            'icon' => 'package', 'route' => 'admin.management.reports'],
     ];
 
     /**
@@ -218,7 +245,8 @@ class Reports
                 'title' => __($r['title']),
                 'desc' => __($r['desc']),
                 'icon' => $r['icon'],
-                'href' => route($r['route']),
+                /* وتقاريرُ الإدارة تفتح شاشةً واحدةً بمعامل — المرحلة 11 */
+                'href' => route($r['route'], $r['params'] ?? []),
             ])
             ->values()
             ->all();
@@ -251,6 +279,18 @@ class Reports
      * فيُسأل هذا الفهرس عن قسم التقرير نفسه قبل أن تُبنى الصفحة.
      * والمسار المجهول يُردّ بـnull: يُغلق لا يُفتح.
      */
+    /** القسمُ الذي يُقاس به تقريرٌ بمفتاحه — لتقاريرَ تُفتح من شاشةٍ لا تحمل اسمَها (المرحلة 11) */
+    public static function sectionForKey(string $key): ?string
+    {
+        foreach (self::ALL as $report) {
+            if ($report['key'] === $key) {
+                return $report['section'];
+            }
+        }
+
+        return null;
+    }
+
     public static function sectionForRoute(string $route): ?string
     {
         foreach (self::ALL as $report) {

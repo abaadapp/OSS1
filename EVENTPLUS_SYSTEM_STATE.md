@@ -1,23 +1,34 @@
 # حالة نظام Event Plus
 
 > **المرجع الفعليّ لحالة النظام.** كلُّ رقمٍ واسمٍ فيه مقروءٌ من الكود أو من
-> تشغيل أدوات المشروع — لا من توثيقٍ سابق.
+> تشغيل أدوات المشروع — لا من توثيقٍ سابق ولا من خطّة.
 >
-> **آخر تحديث:** 2026-09-17 · بعد المرحلة 3 «الإرسالُ والقبولُ والشروط»
-> **يحلّ محلّ:** [EVENTPLUS_SYSTEM_AUDIT.md](EVENTPLUS_SYSTEM_AUDIT.md) — ذاك
-> فحصُ ما كان، وهذا وصفُ ما هو.
+> **آخر تحديث:** 2026-09-20 · بعد المرحلة 11 «الذكاء الإداريّ والتحليلات
+> والتخطيط الماليّ» — ويغطّي المراحل 1–11 كلَّها.
+> **يحلّ محلّ:** نسخةَ ما بعد المرحلة 3 من هذا الملفّ، و[EVENTPLUS_SYSTEM_AUDIT.md](EVENTPLUS_SYSTEM_AUDIT.md).
 
 ---
 
 ## ما هو النظام اليوم
 
-**نظامٌ إداريّ داخليّ لشركة Event Plus.** يدير العملاء والمورّدين والمشتريات
-والمخزون والمالية والموظفين، بدفترِ أستاذٍ مزدوج القيد تحته.
+**نظامُ عمليّاتٍ داخليّ لشركة Event Plus** — شركةِ تنظيم فعاليّاتٍ وخدماتٍ
+تقنيّة. يغطّي الدورةَ كاملةً:
 
-**والمشروع قيد التحويل:** أساسُه نظامُ إدارةِ متاجرَ بالتجزئة، ويُحوَّل تدريجيًّا
-إلى نظام عمليّاتٍ لشركة خدمات. أُزيلت في هذه المرحلة كلُّ بقايا البيع بالتجزئة
-التي لم تعد تعمل، وبقيت أسماءٌ من الأصل مؤجَّلةٌ **عمدًا** — `Product` و`Order`
-و`FlowerOrder` و`Recipe` و`Addon` — تُبدَّل حين يُقرَّر ما يحلّ محلّها.
+```
+عميل → عرض سعر (سعرٌ يملكه الخادم، سياساتٌ تُختم، قبولٌ إلكترونيّ مبصوم)
+     → مشروع (نطاقٌ معتمَد لا يتغيّر إلّا بأمر تغيير)
+     → فعاليّة على الأرض (موعد ومكان وفريق ومعدّات وجاهزيّة وحوادث ومستهلَكات)
+     → حزمة تسليم → قبول العميل → فاتورة → تحصيل → دفتر أستاذ مزدوج القيد
+     → ربحيّةٌ ومؤشّراتٌ وموازنةٌ وتوقّعٌ نقديّ ومراجعةٌ إداريّة
+```
+
+وتحته: مراسلاتٌ على السجلّ، وأتمتةُ متابعةٍ تذكّر ولا تقرّر، ومركزُ عمليّاتٍ
+يقول ما التالي، وبابٌ واحد لاستيراد البيانات التاريخيّة.
+
+**أساسُ الكود** كان نظامَ إدارة متاجر بالتجزئة، وحُوِّل مرحلةً مرحلة. بقيت
+أسماءٌ من الأصل **عمدًا** — `Product` (صار كتالوجًا: صنف · خدمة · باقة)،
+و`Order` (متقاعدٌ للقراءة)، و`FlowerOrder`، و`Recipe`، و`Addon` — تُبدَّل حين
+يُقرَّر ما يحلّ محلّها.
 
 ---
 
@@ -25,64 +36,69 @@
 
 | البند | العدد |
 |---|---|
-| المسارات | **319** (291 تحت `admin.` + 28 عامّة ومصادقة) |
-| النماذج | 59 |
-| المتحكّمات | 69 |
-| أصناف الدعم (`app/Support` بمجلّداتها) | 99 |
-| الهجرات | 117 |
-| جداول قاعدة البيانات | 70 |
-| صفحات الواجهة | 99 |
-| مكوّنات الواجهة | 51 |
-| قوالب Blade | 60 |
-| أوامر الطرفيّة | 16 |
-| المهامّ المجدولة | 7 — كلُّها موجودة |
-| ملفات اختبار PHP | 223 (**2190** اختبارًا) |
+| المسارات | **497** (466 مسمّاةً تحت `admin.` + العامّة والمصادقة) |
+| النماذج | 98 |
+| المتحكّمات | 86 |
+| أصناف الدعم (`app/Support` بمجلّداتها) | 205 |
+| الهجرات | 128 |
+| جداول قاعدة البيانات | 101 (بلا جداول الإطار) — منها **116** مدخلًا في `TenantTables` (جداولُ المستأجر وما يمرّ عبرها) |
+| صفحات الواجهة (`Pages/*.tsx`) | 133 |
+| مكوّنات الواجهة | 57 |
+| قوالب Blade | 62 |
+| أوامر الطرفيّة | 18 |
+| المهامّ المجدولة | 8 — كلُّها موجودة |
+| ملفات اختبار PHP | 257 (**2508** اختبارًا) |
 | ملفات اختبار الواجهة | 11 (114 اختبارًا) |
-| مفاتيح `lang/en.json` | 3432 |
+| مفاتيح `lang/en.json` | 5760 |
 | ملفات `config/` | 12 |
 
 ### حالة الصحّة
 
 | الفحص | النتيجة |
 |---|---|
-| اختبارات PHP | **2190 / 2190** — 0 إخفاق · 0 خطأ (على SQLite وPostgreSQL) |
-| اختبارات الواجهة | **114 / 114** |
+| اختبارات PHP | **2508 / 2508** — 0 إخفاق · 0 خطأ |
+| اختبارات الواجهة (vitest) | **114 / 114** |
 | `npx tsc --noEmit` | صفر أخطاء |
-| مسارات معلّقة | صفر |
-| دوالُّ متحكّماتٍ بلا مسار | صفر |
-| مهامّ مجدولة مفقودة | صفر |
-| مسحٌ حيٌّ لـ87 شاشة إدارة | 87/87 تُجيب |
-
-> **تنبيه على القياس:** `phpunit` يُرجع رمز الخروج 2 في هذه البيئة حتى على
-> اختبارٍ واحدٍ ناجح — أثرٌ من غلاف إخراجٍ محلّي لا من الاختبارات. القراءة
-> الصحيحة من `--log-junit` مباشرةً.
+| `npm run build` | يبني |
+| `composer audit` | لا ثغرات معلنة |
+| كلُّ شاشةِ GET بلا معاملات تُفتح على قاعدةٍ فارغة | `EveryPageAnswersTest` · `EveryScreenOpensTest` |
 
 ---
 
-## الأقسام العاملة — 12 في القائمة الجانبية
+## الأقسام في القائمة الجانبية — 21
 
-| القسم | المسار | ماذا يفعل |
-|---|---|---|
-| **لوحة التحكم** | `admin.dashboard` | مؤشّرات قابلة للاختيار · رسمان بيانيّان · **أحدث الفواتير** وأعلى المنتجات والموظفين · هدف شهريّ · تغذية حيّة. وكلُّها من `Revenue` — فواتيرِ العملاء الصادرة |
-| **العملاء** | `admin.customers.index` | إضافة وتعديل وحذفٌ ناعم واستعادة · عناوين متعدّدة · كشف حساب PDF · استيراد/تصدير بمعاينةٍ قبل التأكيد. وتبويبُ **المورّدين** معه |
-| **المنتجات** | `admin.products.index` | إنشاء وتعديل وتعطيل ونسخ · تعديلٌ سريع · إجراء جماعي · معرض صور · مقاسات ووصفة وإضافات · استيراد/تصدير |
-| **عروض الأسعار** | `admin.quotations.index` | مسودّة → إرسال → قبول أو رفض · **السعرُ من الكتالوج في الخادم** وكلُّ انحرافٍ عنه يحتاج إذنًا وسببًا، وما تجاوز الحدَّ ينتظر اعتمادًا · تنقيحاتٌ تحفظ ما خرج · ورقةٌ تُطبع ورابطٌ للعميل يقول **هل فُتح** · **ويُقبل منه إلكترونيًّا** بدليلٍ مبصوم · سياساتُ الشركة تُختم فيه، ومخالفتُها استثناءٌ بسببٍ واعتماد · يُرسَل بالبريد ويُذكَّر به |
-| **المبيعات** *(متقاعِد)* | `admin.orders.index` | قراءةُ الطلبات وترشيحُها · نقلُ الحالة · تعديلُ بيانات التنفيذ · **تصحيح فاتورةٍ صدرت** · طباعةُ فاتورةٍ وإيصالٍ وسند تسليم وفاتورة ضريبيّة |
-| **فواتير العملاء** | `admin.customerInvoices.index` | مسودّة → إصدار → تحصيل → إلغاء أو إشعار دائن · فوترةٌ شهريّة مجمّعة · مرفقات · رمز QR للفوترة الإلكترونية · رابطٌ عامّ للورقة |
-| **المشتريات** | `admin.purchases.index` | أوامرُ شراء · استلامٌ كلّيّ أو جزئيّ باعتمادٍ على الإشعار · سنداتُ موردين بمطابقةٍ واعتمادٍ وتجاوزٍ وسداد |
-| **المالية** | `admin.finance.index` | عشرةُ تبويبات: الملخّص · الحركة · الذمم · الشيكات · المستحقّات · الحسابات البنكيّة · القيود · شجرة الحسابات · الأصول الثابتة · المصروفات |
-| **الرواتب والموظفين** | `admin.employees.index` | حساباتُ الموظفين وأدوارُهم وصلاحياتُهم المخصّصة · مسيرةُ رواتبَ تُعتمد ثمّ تُصرف |
-| **المخزون** | `admin.inventory.index` | رصيدٌ لكلّ فرع · جردٌ يُقيَّد فرقُه · تعديلاتٌ تُقيّد خسارتَها · إشعاراتُ استلام · تحليلاتُ هالك |
-| **التقارير** | `admin.reports.index` | فهرسٌ يقود إلى **16 تقريرًا**، لكلٍّ صفحتُه وفترتُه ومؤشّراتُه · تنزيلٌ بثلاث صيغ من بابٍ واحد |
-| **الإعدادات** | `admin.settings.index` | 11 بطاقة: بيانات الشركة · الضرائب والعملة والدفع · شجرة الحسابات · قوالب الأوراق · الصلاحيات · الإشعارات · التنبيهات المخصّصة · الفروع · الموظفون · سجلّ النشاط · المحذوفات · النسخ الاحتياطي |
+| القسم | المسار | ماذا يفعل | المرحلة |
+|---|---|---|---|
+| **لوحة التحكم** | `admin.dashboard` | مؤشّراتٌ ورسومٌ وهدفٌ شهريّ وتغذيةٌ حيّة — من `Revenue` (فواتيرُ العملاء الصادرة) | 1 |
+| **مركز العمليات** | `admin.command.index` | الصباحُ يقول ما التالي: ما يحتاج قرارًا · متأخّر · التسليم · المال · رسائلُ لم تصل · القادم · مشاريعُ معطَّلة · الفريق · الأتمتة · نقلُ البيانات · الفعاليّات · **تنبيهاتٌ إداريّة حرجة** (لمن يرى المال) | 8–11 |
+| **الإدارة** | `admin.management.index` | نظرةٌ عامّة + تبويبات: الأداء الماليّ · ربحيّة المشاريع · العملاء · الخدمات والقمع · النقد والتوقّع · الموازنات · العمليّات والموارد · المراجعات · التقارير الإداريّة | 11 |
+| **العملاء** | `admin.customers.index` | إضافة وتعديل وحذفٌ ناعم واستعادة · عناوين · كشف حساب PDF · استيراد/تصدير. وتبويبُ **المورّدين** معه | — |
+| **المنتجات** | `admin.products.index` | كتالوجٌ موحَّد: `kind` = صنف · خدمة · باقة (`package_items`) · صورٌ ومقاسات ووصفة · استيراد/تصدير | 2 |
+| **عروض الأسعار** | `admin.quotations.index` | مسودّة → إرسال → قبول/رفض · السعرُ من الكتالوج في الخادم وكلُّ انحرافٍ بإذنٍ وسبب · تنقيحاتٌ تحفظ ما خرج · ورقةٌ ورابطٌ للعميل يقبل منه إلكترونيًّا بدليلٍ مبصوم · سياساتُ الشركة تُختم فيه | 2–3 |
+| **المشاريع** | `admin.projects.index` | العرضُ المقبول يصير مشروعًا بنطاقٍ معتمَد · متطلّبات · فريق · مهامّ · **أوامر تغيير** (`admin.changeOrders.*`) · التسليم · المراسلات · العمليات · المال · **الأداء** (المرحلة 11) | 4–5 |
+| **العمليات** | `admin.operations.index` | الفعاليّةُ على الأرض: جدولٌ زمنيّ · متطلّباتُ معدّات · حجوزُ قطعٍ ذاتِ هويّة · فريقٌ وحضور · قوائمُ تحقّق · حوادث · جاهزيّةٌ تُسأل قبل البثّ · شاشةُ الموقع للهاتف · **مستهلَكاتٌ من الرفّ** (المرحلة 11) | 10–11 |
+| **حزم التسليم** | `admin.deliveries.index` | ما سُلِّم فعلًا: حزمٌ تُرسَل وتُقبل من العميل أو تُنقَّح — وتُقفل المشروعَ الذي جاءت منه | 6 |
+| **المبيعات** *(متقاعِد)* | `admin.orders.index` | قراءةُ الطلبات القديمة · تصحيحُ فاتورةٍ صدرت (`OrderCorrection`) · طباعة | — |
+| **فواتير العملاء** | `admin.customerInvoices.index` | مسودّة → إصدار → تحصيل → إلغاء أو إشعار دائن · فوترةٌ مجمّعة · مرفقات · QR للفوترة الإلكترونيّة · رابطٌ عامّ | 1 |
+| **المشتريات** | `admin.purchases.index` | أوامرُ شراء · استلامٌ كلّيّ أو جزئيّ · سنداتُ موردين بمطابقةٍ واعتمادٍ وتجاوزٍ وسداد · أمرٌ استُلم وفُوتر بأقلّ يُقفَل لا يُطالَب | 4 |
+| **المالية** | `admin.finance.index` | الملخّص · الحركة · الذمم · الشيكات · المستحقّات · الحسابات البنكيّة · القيود · شجرة الحسابات · الأصول الثابتة · المصروفات | — |
+| **الرواتب والموظفين** | `admin.employees.index` | حساباتُ الموظفين وأدوارُهم وصلاحيّاتُهم بالاسم · مسيرةُ رواتبَ تُعتمد ثمّ تُصرف | — |
+| **المخزون** | `admin.inventory.index` | رصيدٌ لكلّ فرع · جردٌ يُقيَّد فرقُه · تعديلاتٌ تُقيَّد · إشعاراتُ استلام · هالك | — |
+| **المعدّات** | `admin.assets.index` | القطعُ ذاتُ الهويّة (حواسيبُ وطابعاتٌ وماسحات): سجلٌّ وحالةٌ وحجوزٌ وتقويمٌ وتاريخُ عهدة | 10 |
+| **التقارير** | `admin.reports.index` | فهرسٌ يقود إلى **24 تقريرًا** في أربع فئات (ماليّة 6 · تشغيليّة 8 · تحليليّة 2 · **إداريّة 8**) · تنزيلٌ بثلاث صيغ من بابٍ واحد | — / 11 |
+| **المراسلات** | `admin.communications.index` | كلُّ رسالةٍ إلى العميل على السجلّ بمن أرسلها ولماذا وما جرى لها — بريدٌ اليوم، وواتساب بابٌ مغلقٌ حتى يُفتح | 7 |
+| **الأتمتة** | `admin.automation.index` | قواعدُ متابعةٍ من قائمةٍ مغلقة، بثلاثة أوضاع: مطفأة · مراقِبة (تسجّل ما كان سيحدث) · حيّة · ومفتاحُ إيقافٍ عامّ | 8 |
+| **استيراد البيانات** | `admin.imports.index` | البياناتُ التاريخيّة من بابٍ واحد: ملفٌّ يُفحص ويُربط ويُجرَّب ويُعتمد ثمّ يُستورَد بأثرٍ يُتتبَّع ويُرجَع | 9 |
+| **الإعدادات** | `admin.settings.index` | الشركة · الضرائب والعملة والدفع · شجرة الحسابات · قوالب الأوراق · الصلاحيات · الإشعارات · التنبيهات المخصّصة · الفروع · الموظفون · سجلّ النشاط · المحذوفات · النسخ الاحتياطي · **عتباتُ التنبيهات الإداريّة** (من شاشة الإدارة) | — |
 
-### توزيع المسارات
+### توزيع المسارات المسمّاة تحت `admin.`
 
 ```
-المنتجات 42 · المالية 34 · المشتريات 26 · التقارير 23 · العملاء 18
-فواتير العملاء 17 · عروض الأسعار 14 · الإعدادات 15 · المخزون 12 · المبيعات 12
-الموردون 10 · المصروفات 9 · الموظفون 8 · التصدير 8
-الرواتب 8 · وما دونها
+العمليات 44 · المنتجات 42 · المالية 34 · الإدارة 30 · المشتريات 27
+التقارير 23 · العملاء 21 · فواتير العملاء 20 · المشاريع 19 · حزم التسليم 18
+الاستيراد 18 · عروض الأسعار 17 · الإعدادات 15 · أوامر التغيير 13
+المخزون 12 · المبيعات 12 · الموردون 10 · المصروفات 9 · الأتمتة 8
+الموظفون 8 · التصدير 8 · الرواتب 8 · المعدّات 7 · المراسلات 6 · وما دونها
 ```
 
 ---
@@ -94,30 +110,39 @@
    │
    ├─ Inertia 3 + React 19 + TypeScript + Tailwind 4   (resources/js)
    │     AdminLayout ─ Sidebar (lib/nav.ts) ─ Topbar ─ SectionTabs
+   │     Components/management/* (Kpi · PeriodPicker · CompletenessBadge · AlertList)
    │
 Laravel 13 / PHP 8.4
    │
    ├─ routes/web.php ─── مجموعةٌ واحدة:
    │      auth → tenant → business → panel → ability
    │
-   ├─ Controllers (67) ─── رقيقة: تتحقّق، تستدعي طبقة الدعم، تُعيد Inertia
+   ├─ Controllers (86) ─── رقيقة: تتحقّق، تستدعي طبقة الدعم، تُعيد Inertia
    │
-   ├─ app/Support (77) ─── حيث يعيش المنطق
-   │      Demo ............ واجهة قراءة البيانات (‏2700 سطر تقريبًا)
-   │      Ledger / Books .. بابُ القيد الوحيد، والجسرُ إليه
-   │      CustomerInvoices  دورة حياة فاتورة العميل
-   │      Permissions ..... الأقسام والأفعال والأدوار
-   │      Tenancy ......... حالة المستأجر
-   │      TenantTables .... ما يملكه المستأجر من جداول
+   ├─ app/Support (205) ─── حيث يعيش المنطق
+   │      Ledger / Books ........ بابُ القيد الوحيد، والجسرُ إليه
+   │      StockLedger ........... بابُ حركة المخزون الوحيد
+   │      Revenue / Receivables . قراءةُ الإيراد والذمم — تعريفٌ واحد
+   │      Quotations / Projects / ChangeOrders / ProjectFinancials / DeliveryPackages
+   │      Operations/* .......... الفعاليّةُ على الأرض (المرحلة 10) + Consumables (11)
+   │      Communication/ + Messaging/  الرسائلُ على السجلّ وحدُّ الإيصال
+   │      Automation/ ........... المحرّكُ والقواعدُ والمشغّلات (20 مشغّلًا)
+   │      Import/ ............... بابُ الاستيراد (قرّاء · وصفات · مطابقة · إرجاع)
+   │      Intelligence/ ......... الذكاءُ الإداريّ (18 صنفًا — المرحلة 11)
+   │      CommandCenter ......... الصباحُ يقول ما التالي
+   │      Permissions ........... الأقسام (21) والأفعال (65) والأدوار (6)
+   │      TenantTables .......... ما يملكه المستأجر من جداول
+   │      Demo .................. واجهةُ قراءة البيانات القديمة (~2900 سطر) — اسمُها مضلّل
    │
-   └─ Models (53) ─── Eloquent، كلُّها تحت business_id
+   └─ Models (98) ─── Eloquent، كلُّها تحت business_id
 ```
 
 ### مبدآن حاكمان
 
 **١) `business_id` في كلّ جدولٍ للمستأجر.** الحارسُ عند الباب
-(`RequiresBusiness`) لا في كلّ شاشة. **أُبقي عمدًا** — يصلح لاحقًا لفصل أكثر من
-شركةٍ داخل النظام نفسه.
+(`RequiresBusiness`) لا في كلّ شاشة، وكلُّ قراءةٍ في طبقة الدعم مقيّدةٌ به.
+`TenantTables` تُصنّف كلَّ جدول (ORDER · DEFERRED · THROUGH) ويحرسها
+`ARestoreReturnsTheShopTest`.
 
 **٢) بابٌ واحد لكلّ كتابةٍ خطرة.**
 
@@ -126,25 +151,39 @@ Laravel 13 / PHP 8.4
 | قيدٌ في الدفتر | `Ledger::post` |
 | عكسُ قيد | `Ledger::reverse` |
 | تصحيحُ بندِ فاتورةٍ صدرت | `OrderCorrection` |
-| حركةُ مخزون | `StockLedger` |
+| حركةُ مخزون | `StockLedger::move` |
+| صرفُ مستهلَكٍ لفعاليّة وردُّه | `Operations\Consumables` (فوق `StockLedger` + `Ledger`) |
+| رسالةٌ إلى العميل | `Communication\Communications` عبر `Messaging\Notifier` |
+| استيرادُ بياناتٍ تاريخيّة | `Import\Runner` (بعد اعتماد) |
 | تطبيعُ رقم هاتف | `PhoneNumber::normalize` |
 | ترحيلُ بيعٍ أو مصروف | `Books` |
 
 ---
 
-## النماذج — 56
+## النماذج — 98
 
 ```
-Account · ActivityLog · Addon · BankAccount · BankStatementLine · Branch
-BranchStock · Business · Category · Currency · CustomAlert · Customer
-CompanyPolicy · CustomerAddress · CustomerCreditNote · CustomerInvoice
-CustomerInvoiceAttachment · CustomerInvoiceItem · CustomerPayment
-CustomerPaymentAllocation · DeliveryNote · DeliveryNoteItem
-DismissedNotification · DocumentApproval · DocumentLink · Expense · ExpenseType · FixedAsset
-GoodsReceiptNote · GoodsReceiptNoteItem · ImportBatch · InventoryMovement
-JobTitle · JournalEntry · JournalLine · Order · OrderEdit · OrderItem
-OrderItemAddon · PackageItem · PasswordRecoveryChallenge · PasswordRecoveryOtp
-PayrollLine · PayrollRun · PolicyException · Product · ProductImage · ProductVariant
+Account · ActivityLog · Addon · Asset · AssetReservation · AutomationRule
+AutomationRun · BankAccount · BankStatementLine · Branch · BranchStock
+Budget · BudgetLine · Business · Category · ChangeOrder · ChangeOrderItem
+Communication · CommunicationEvent · CommunicationTemplate · CompanyPolicy
+Currency · CustomAlert · Customer · CustomerAddress · CustomerCreditNote
+CustomerInvoice · CustomerInvoiceAttachment · CustomerInvoiceItem
+CustomerPayment · CustomerPaymentAllocation · DeliveryNote · DeliveryNoteItem
+DeliveryPackage · DeliveryPackageItem · DismissedNotification
+DocumentApproval · DocumentLink · EventOperation · Expense · ExpenseType
+FinancialForecast · FinancialScenario · FinancialScenarioAssumption
+FixedAsset · GoodsReceiptNote · GoodsReceiptNoteItem · ImportBatch
+ImportDataset · ImportLink · ImportMappingTemplate · ImportRow · ImportRun
+InternalNotification · InventoryMovement · JobTitle · JournalEntry
+JournalLine · ManagementDecision · ManagementReview · OperationChecklist
+OperationChecklistItem · OperationChecklistTemplate
+OperationChecklistTemplateItem · OperationConsumableIssue
+OperationCrewAssignment · OperationEquipmentRequirement · OperationIncident
+OperationScheduleItem · Order · OrderEdit · OrderItem · OrderItemAddon
+PackageItem · PasswordRecoveryChallenge · PasswordRecoveryOtp · PayrollLine
+PayrollRun · PolicyException · Product · ProductImage · ProductVariant
+Project · ProjectItem · ProjectMember · ProjectRequirement · ProjectTask
 PurchaseOrder · PurchaseOrderItem · Quotation · QuotationItem · RecipeItem
 Setting · StockAdjustment · Supplier · SupplierInvoice · Transaction · User
 ```
@@ -152,90 +191,86 @@ Setting · StockAdjustment · Supplier · SupplierInvoice · Transaction · User
 ### العلاقات الأساسية
 
 ```
-Business ─┬─ User ─── Branch (many-to-many)
-          ├─ Branch ─── BranchStock ─── Product
-          ├─ Category ─── Product ─┬─ ProductVariant
-          │                        ├─ RecipeItem
-          │                        ├─ ProductImage
-          │                        └─ Addon (product_addons)
-          ├─ Customer ─┬─ CustomerAddress
-          │            ├─ Order ─┬─ OrderItem ─── OrderItemAddon
-          │            │         ├─ OrderEdit
-          │            │         └─ Transaction
-          │            └─ CustomerInvoice ─┬─ CustomerInvoiceItem
-          │                                ├─ CustomerInvoiceAttachment
-          │                                ├─ CustomerCreditNote
-          │                                └─ Order (customer_invoice_orders)
-          ├─ Supplier ─┬─ PurchaseOrder ─── PurchaseOrderItem
+Business ─┬─ User ─── Branch
+          ├─ Customer ─┬─ Quotation ─── QuotationItem ─── (DocumentLink · DocumentApproval · PolicyException)
+          │            ├─ Project ─┬─ ProjectItem (النطاقُ الحاليّ) · ProjectRequirement · ProjectMember · ProjectTask
+          │            │           ├─ ChangeOrder ─── ChangeOrderItem
+          │            │           ├─ EventOperation ─┬─ OperationScheduleItem · OperationCrewAssignment
+          │            │           │                  ├─ OperationEquipmentRequirement ─── AssetReservation ─── Asset
+          │            │           │                  ├─ OperationChecklist ─── OperationChecklistItem
+          │            │           │                  ├─ OperationIncident
+          │            │           │                  └─ OperationConsumableIssue ─── StockAdjustment (project_id)
+          │            │           ├─ DeliveryPackage ─── DeliveryPackageItem
+          │            │           └─ CustomerInvoice / SupplierInvoice / Expense / PurchaseOrder (project_id — بُعدٌ لا قيد)
+          │            ├─ CustomerInvoice ─┬─ CustomerInvoiceItem · CustomerCreditNote · CustomerInvoiceAttachment
+          │            │                   └─ CustomerPayment ─── CustomerPaymentAllocation
+          │            └─ Communication ─── CommunicationEvent
+          ├─ Supplier ─┬─ PurchaseOrder ─── PurchaseOrderItem ─── GoodsReceiptNote
           │            └─ SupplierInvoice
-          ├─ GoodsReceiptNote ─── GoodsReceiptNoteItem
+          ├─ Product ─── BranchStock · ProductVariant · ProductImage · RecipeItem · PackageItem
           ├─ Account ─── JournalEntry ─── JournalLine
-          ├─ BankAccount ─── BankStatementLine
-          ├─ PayrollRun ─── PayrollLine
-          ├─ FixedAsset · Expense · ExpenseType · Transaction
-          ├─ InventoryMovement · StockAdjustment · DeliveryNote
-          └─ Setting · ActivityLog · CustomAlert · Currency · JobTitle
+          ├─ Budget ─── BudgetLine ─── Account
+          ├─ FinancialScenario ─── FinancialScenarioAssumption · FinancialForecast (لقطةٌ مجمَّدة)
+          ├─ ManagementReview ─── ManagementDecision
+          ├─ AutomationRule ─── AutomationRun · InternalNotification
+          ├─ ImportBatch ─── ImportDataset ─── ImportRow · ImportRun · ImportLink
+          └─ Setting · ActivityLog · CustomAlert · Currency · JobTitle · CompanyPolicy · CommunicationTemplate
 ```
 
 ---
 
 ## المستخدمون والأدوار والصلاحيات
 
-نظامٌ **من ثلاث طبقات**.
+نظامٌ **من ثلاث طبقات**: الدورُ يمنح أقسامًا، والقسمُ يفتح شاشات، والفعلُ
+يحدّ الضرر. وتُكتب الصلاحيّاتُ بالاسم في `users.permissions` (JSON) فتعلو الدور.
 
-### ١) الدور — 6 أدوار
+### ١) الدور — 6 أدوار (`Permissions::MAP`، مثبَّتٌ بنصّه في `EveryRoleIsProbedOnEveryRouteTest`)
 
-| المفتاح | التسمية | يفتح |
-|---|---|---|
-| `admin` | مدير نشاط | كلّ الأقسام (`*`) |
-| `manager` | مدير فرع | كلّ الأقسام (`*`) |
-| `accountant` | محاسب | لوحة · مبيعات · عملاء · مالية · مصروفات · موظفون · تقارير · موردون · مشتريات |
-| `inventory` | مسؤول مخزون | لوحة · منتجات · مخزون · موردون · مشتريات |
-| `sales` | موظف مبيعات | لوحة · **عروض أسعار** · مبيعات · عملاء · منتجات |
-| `delivery` | مندوب توصيل | لوحة · مبيعات |
+| المفتاح | يفتح |
+|---|---|
+| `admin` | كلّ الأقسام (`*`) |
+| `manager` | كلّ الأقسام (`*`) |
+| `accountant` | لوحة · مبيعات · عملاء · مالية · مصروفات · موظفون · تقارير · موردون · مشتريات · مشاريع · **الإدارة** (قراءةً — المرحلة 11) |
+| `inventory` | لوحة · منتجات · مخزون · موردون · مشتريات · مشاريع · **المعدّات** |
+| `sales` | لوحة · عروض أسعار · مشاريع · مبيعات · عملاء · منتجات |
+| `delivery` | لوحة · مبيعات · مشاريع — و«العمليات» وأفعالُ الموقع تُمنح له بالاسم |
 
-> وكلُّها في `PANEL_ROLES` — لا دورَ يُنشأ ولا يفتح شيئًا.
+> قاعدةٌ يحرسها `StaffCannotOutrankThemselvesTest`: من يوظّف دورًا يجب أن يملك
+> كلَّ ما يملكه ذاك الدور — فما يُضاف إلى `delivery` يصير فوق ما يملكه المحاسب.
 
-### ٢) القسم — 13 مفتاحًا
-
-```
-dashboard · customers · products · quotations · orders · inventory · finance
-expenses · settings · suppliers · purchases · employees · reports
-```
-
-القسمُ يجيب: **أيّ شاشةٍ تُفتح**.
-
-### ٣) الفعل — 29 فعلًا
-
-الفعلُ يجيب: **كم من الضرر تستطيع**. ويعيشان في العمود نفسه
-(`users.permissions`) ولا يختلطان: اسمُ الفعل فيه نقطة واسمُ القسم لا نقطة فيه.
+### ٢) القسم — 21 مفتاحًا
 
 ```
-order.edit · credit.override
-receipt.view / create / approve / reject
-invoice.view / create / approve / reject / override / pay
-payroll.view / approve / pay
-customerInvoice.issue / cancel · customerCreditNote.create
-customerPayment.create · attachment.view
-quotation.create / send / discount / overridePrice / approve / cancel / recordDecision
-policy.override · messaging.send
+dashboard · customers · products · quotations · projects · orders · inventory
+finance · expenses · settings · suppliers · purchases · employees · reports
+communications · command · automation · imports · operations · assets · management
 ```
 
-> وأفعالُ عرض السعر السبعة لأنّها سبعةُ قراراتٍ مختلفة — وأخطرُها ليس
-> الكتابة: `overridePrice` تبيع فوق السعر المعلن (للمالك وحده)، و`approve`
-> تُبطل الحدَّ الذي وضعه صاحبُ العمل، و`send` تُخرج الورقةَ إلى جهةٍ
-> تحتجّ بها.
->
-> و`policy.override` غيرُ `quotation.approve`: من يأذن بخصمٍ لا يأذن
-> بالضرورة بتنفيذٍ في ثلاثة أيّام. و`messaging.send` للبائع: هو من يكتب
-> العرضَ ويتابعه.
+### ٣) الفعل — 65 فعلًا (`ACTION_ROLES` يقول من يرثه بدوره)
+
+```
+المستندات    receipt.* (4) · invoice.* (6) · payroll.* (3)
+             customerInvoice.issue/cancel · customerCreditNote.create · customerPayment.create · attachment.view
+العروض       quotation.create/send/discount/overridePrice/approve/cancel/recordDecision · policy.override
+المشاريع     project.manage/close/reopen · changeOrder.create/send/recordDecision/cancel
+المراسلات    messaging.send · communication.view/retry
+الأتمتة      automation.manage/pause
+الاستيراد    import.manage/execute/financial/rollback
+العمليات     operations.manage/status/override/incidents · assets.manage/reserve/checkout/return · crew.manage · checklist.manage
+الإدارة (11)  analytics.financial/projects/customers/operations
+             budgets.view/manage/approve · forecasts.view/manage/approve
+             scenarios.manage · management_reviews.manage · management.thresholds
+```
+
+> في المرحلة 11: القراءةُ (`analytics.*` · `budgets.view` · `forecasts.view`)
+> للمالك والمدير والمحاسب؛ والإعدادُ للمالك والمدير؛ و**الاعتمادُ** (موازنةٌ أو
+> توقّع) و**العتباتُ** للمالك وحده. ومن مُنح «الإدارة» بالاسم بلا `analytics.financial`
+> يرى الحركةَ (مشاريعُ وعروضٌ وفعاليّات) ولا يرى مالًا.
 
 ### آليّات مساندة
-- `ALIASES` — مسارٌ اسمه لا يشتقّ قسمه يُنسب صراحةً (12 مدخلًا)
-- `EXPORT_ALIASES` — التصدير يتبع قسمَ ما يُصدَّر
-- `SHELL` — مسارات الهيكل لا الأقسام (البحث، العملة، اللغة، الإشعارات)
+- `ALIASES` · `EXPORT_ALIASES` · `SHELL` — مساراتٌ لا يُشتقّ قسمُها من اسمها
 - `ACTION_ROLES` — من يرث الفعل بدوره، ومن سواه يُمنحه بالاسم
-- صلاحياتٌ مخصّصة لكلّ موظف (`users.permissions` JSON) تعلو دورَه
+- `Ability` middleware — يشتقّ القسمَ من اسم المسار (`admin.<section>.*`)
 
 ---
 
@@ -260,115 +295,161 @@ policy.override · messaging.send
 
 ### ما يُقيَّد تلقائيًّا
 
-بيعٌ يقع · مصروفٌ يُسجَّل · فاتورةُ عميلٍ تُصدَر · إشعارٌ دائن · تحصيل · سندُ
-مورّدٍ يُعتمد · سدادٌ يخرج · استلامُ بضاعة · نقصُ/زيادةُ مخزون · إهلاكُ أصل ·
-مسيرةُ رواتبَ تُعتمد وتُصرف · شيكٌ يُصرف أو يرتدّ
+فاتورةُ عميلٍ تُصدَر · إشعارٌ دائن · تحصيل · شيكٌ يُصرف أو يرتدّ · سندُ مورّدٍ
+يُعتمد · سدادٌ يخرج · استلامُ بضاعة · نقصُ/زيادةُ مخزون · **صرفُ مستهلَكٍ
+لفعاليّة وردُّه** (Dr تكلفة / Cr مخزون — والردُّ بتكلفة الصرف) · مصروفٌ يُدفع ·
+إهلاكُ أصل · مسيرةُ رواتبَ تُعتمد وتُصرف
 
 ### الأمان المحاسبي
-- **لا محو، بل عكس:** مستندٌ صدر يبقى مقروءًا، والإلغاءُ يكتب قيدًا عكسيًّا
-- **قفلُ الإقرار المقدَّم:** فاتورةٌ داخلةٌ في ربعٍ سُلِّمت ورقتُه لا تُلغى —
-  لا من `OrderCorrection` ولا من `CustomerInvoices`. وتصحيحُها بإشعار دائنٍ
-  في فترةٍ مفتوحة
-- **أمرُ استدراكٍ ليليّ** (`finance:post-missing-sales`) — إن أخفق الترحيل
-  لحظتَه يُستدرك دون تكرار
-- **ميزانُ مراجعةٍ** يُفحص توازنُه
-- `journal_entries.reverses_id` و`reversed_at` — أثرٌ لا يُمحى
+- **لا محو، بل عكس:** مستندٌ صدر يبقى مقروءًا، والإلغاءُ قيدٌ عكسيّ
+- **قفلُ الإقرار المقدَّم:** فاتورةٌ في ربعٍ سُلِّمت ورقتُه لا تُلغى؛ تصحيحُها إشعارُ دائنٍ في فترةٍ مفتوحة
+- **أمرُ استدراكٍ ليليّ** (`finance:post-missing-sales`)
+- **ميزانُ مراجعةٍ** يُفحص توازنُه · `journal_entries.reverses_id` أثرٌ لا يُمحى
+- **الموازنةُ والتوقّعُ والسيناريو لا يكتبون قيدًا** — تخطيطٌ فوق الدفتر لا فيه
+
+### حقيقةٌ ماليّة واحدة — أساسُ كلّ رقمٍ إداريّ (المرحلة 11)
+
+كلُّ رقمٍ في شاشات الإدارة يحمل `basis` يُقرأ بالمرور. والتعريفاتُ:
+
+| الرقم | تعريفُه | من أين |
+|---|---|---|
+| **الإيراد** | فواتيرُ عملاءَ صادرة **بتاريخ إصدارها** — صافيةٌ من الضريبة وبعد إشعارات الدائن (أساسُ الفاتورة) | `Revenue::summary` |
+| **التحصيل** | دفعاتُ عملاءَ حيّة **بتاريخ قبضها** — لا تشمل الشيكات المرتجعة (أساسُ النقد) | `FinancialPerformance::collections` |
+| **الذمم** | فواتيرُ صادرة قائمة ناقص ما خُصّص لها — وأعمارُها: لم يستحقّ · 1–30 · 31–60 · 61–90 · 90+ | `Receivables::totals/aging` |
+| **التكلفة المباشرة** | سنداتُ مورّدين **معتمَدة** بتاريخ إصدارها (صافيةً من ضريبةٍ تُستردّ لمن يستردّها) + ما استُهلك من الرفّ لمشروع (صافي الصرف − الردّ × تكلفةِ وقتِ الصرف) | `FinancialPerformance::directCosts` |
+| **المصروفات** | مصروفاتٌ **مدفوعة** بتاريخ صرفها | `FinancialPerformance::expenses` |
+| **الرواتب** | صافي ما قُيّد على حساب الرواتب في الدفتر | حساب `salaries` |
+| **النقد** | رصيدُ الصندوق + أوراقُ البنوك من الدفتر — والشيكاتُ تحت التحصيل تُقال منفصلةً وليست نقدًا | `Ledger::balance` + `Bank` |
+| **النتيجة التشغيليّة** | الإيراد − التكلفة المباشرة − المصروفات − الرواتب — **على أساس المستندات لا ميزان المراجعة** | `FinancialPerformance::snapshot` |
+| **سلّمُ الإيراد** | معروضٌ · متعاقَد · مفوتَر · محصَّل · قائم — **خمسُ درجاتٍ لا تُجمع**، وكلُّها صافيةٌ من الضريبة عدا المحصَّل والقائم (نقدٌ وذمّةٌ بإجماليّهما) | `RevenueIntelligence::ladder` |
+| **ربحيّةُ المشروع** | الصيغةُ نفسُها في `ProjectFinancials`: إيرادٌ صافٍ − تكلفةٌ مباشرة = مساهمة؛ والهامشُ على الإيراد الصافي | `ProjectProfitability` |
+
+> **لماذا المستنداتُ لا الدفتر للنتيجة؟** سندُ المورّد يقيّد `Dr مخزون` (دلالةُ
+> التجزئة الموروثة) فلا يظهر في مصروفات الدفتر إلّا حين يُستهلك؛ فقراءةُ ميزان
+> المراجعة وحده كانت تُخفي مشترياتِ الفعاليّات. أمّا **الموازنةُ مقابل الفعليّ**
+> فتقرأ الدفترَ حسابًا حسابًا (سطورُ اليوميّة على الحساب والشهر).
+
+### المددُ — `Intelligence\Period`
+
+هذا الشهر · الشهر الماضي · هذا الربع · الربع الماضي · منذ بداية السنة · آخر 12
+شهرًا · مدّةٌ مخصَّصة (≤ 800 يومًا). نصفُ مفتوحة `[start, end)` بتوقيت
+الشركة (`Automation\Settings::timezone`، الافتراضيُّ `Asia/Muscat`). والمدّةُ
+السابقة بالطول نفسِه، والمقارنةُ بلا أساسٍ تقول `insufficient_data` — لا «+100٪».
+
+### الاكتمال — `Intelligence\Completeness`
+
+كلُّ رقمٍ إداريٍّ يحمل حالةً: **مكتمل** · **جزئيّ** (بأسبابٍ: تكاليفُ بلا مشروعٍ
+في نافذته، التزاماتٌ لم تصر قيدًا، مشروعٌ لم يُفوتَر كاملًا) · **غير كافٍ**
+(لا فواتيرَ ولا تكاليف). لا يُخفى ناقصٌ ولا يُكمَّل بتقدير.
 
 ---
 
-## المهامّ المجدولة — 7، وكلُّها موجودة
+## الذكاء الإداريّ — المرحلة 11 (`app/Support/Intelligence`)
+
+| الصنف | ما يجيب |
+|---|---|
+| `ExecutiveMetrics` | النظرةُ العامّة بحسب ما يحقّ للقارئ: نشاطٌ للجميع، ومالٌ ونقدٌ واتّجاهٌ وقمعٌ وسلّمٌ وتوقّعٌ وموازنةٌ ومدرجٌ وتنبيهاتٌ لمن يملك `analytics.financial` |
+| `FinancialPerformance` | اللقطةُ الماليّة للمدّة ومقارنتُها بالسابقة · شهرًا بشهر · موقفُ النقد · الذمم · المستحقّات |
+| `RevenueIntelligence` | سلّمُ الإيراد · القمعُ التجاريّ (المسودّةُ ليست إيرادًا محتمَلًا) · بالعميل |
+| `ProjectProfitability` | لكلّ مشروع: متعاقَدٌ ومفوتَرٌ ومحصَّلٌ وذمّةٌ وتكلفةٌ ومساهمةٌ وهامشٌ واكتمالٌ وخطُّ زمنٍ بروابطه · قائمةٌ الأضعفُ أوّلًا |
+| `CustomerIntelligence` | العملاءُ بالأرقام لا بالدرجات · التركيزُ (أكبر 1/5/10) على عتبةٍ تضبطها الشركة · متوسّطُ تأخّر السداد (≥ 3 ملاحظات) |
+| `ServiceIntelligence` | لكلّ صنفٍ في الكتالوج: ما عُرض وقُبل وفُوتر ومتوسّطُ السعر والخصم ومساهمةٌ تقديريّة — والبندُ الحرّ لا يُنسب |
+| `CashIntelligence` | الآنَ من الدفتر · إسقاطٌ لأفق 30/60/90/180/365 يومًا: **ملتزَمٌ** (مستنداتٌ قائمة بمصادرها) · **متوقَّعٌ** (افتراضاتٌ مكتوبة تُغيَّر بيد) · **سيناريو** و**خطُّ أنابيب** يُقالان جنبَ الرقم ولا يدخلان الإقفال · المدرجُ بتعريفٍ صريح (`insufficient_data` · `cash_positive` · `ok`) |
+| `Forecasting` | التوقّعُ لقطةٌ: مسودّةٌ → معتمَدٌ **مجمَّد** (لا يتغيّر حين تتغيّر الدفاتر ولا يُحذف) → يحلّ محلَّه أحدثُ بالأفق نفسِه · مقارنةٌ بالواقع شهرًا منقضيًا فشهرًا |
+| `ScenarioPlanning` | الأساسُ والمتحفّظُ والنموّ يُبذرون، والمخصَّصُ يُكتب بافتراضاتٍ من قائمةٍ مغلقة — محاكاةٌ لا تمسّ قيدًا |
+| `Budgeting` | موازنةٌ سنويّة بنسخ: مسودّةٌ → معتمَدةٌ (واحدةٌ للسنة) → تُنقَّح نسخةً جديدةً بسببٍ ومَن ومتى → حلّت محلّها/مؤرشفة — ولا تُمحى · الفعليُّ من الدفتر · القراءةُ بالوقائع («إنفاقٌ فوق الخطّة» لا «سيّئ») |
+| `OperationalIntelligence` | فعاليّاتٌ وحوادثُ لكلّ فعاليّة وجاهزيّةٌ بلا تجاوز وردودٌ متأخّرة وتأخّرُ البثّ · استخدامُ كلّ قطعةٍ وصنف · إشاراتٌ واقعيّة (نقصٌ متكرّر · استُؤجر وعندنا قطعٌ لم تُستخدم) — **لا ترتيبَ للأشخاص ولا «اشترِ»** |
+| `ManagementAlerts` · `Anomalies` · `Thresholds` | تنبيهاتٌ حتميّة تقيس رقمًا على عتبةٍ من `mgmt_threshold_*` وتقولها في نصّها · الشذوذُ يحتاج ≥ 3 أشهرٍ مرصودة · لا تنبيهَ نقدٍ لدفترٍ بلا تاريخ |
+| `ManagementReviews` | مراجعةٌ دوريّة: لقطةٌ تُلتقط وتُجمَّد عند المراجعة · أقسامٌ تكتبها الإدارة · قراراتٌ بمالكٍ وموعدٍ وحال — **النظامُ يسجّل ولا يقترح** |
+| `ManagementReports` | ثمانيةُ تقاريرَ من الحساب نفسِه: الشهريّ · ربحيّة المشاريع · أعمار الذمم · الموازنة مقابل الفعليّ · التوقّع النقديّ · إيراد العملاء · أداء الخدمات · استخدام المعدّات — تُقرأ في الشاشة وتُنزَّل من باب التقارير العامّ |
+
+**الشاشات:** `Pages/Admin/Management/{Overview, Financial, Projects, Customers,
+Services, Cash, Budgets, Operations, Reviews, ReviewShow, Reports}.tsx` — وكلُّ
+رسمٍ بيانيّ له جدولُه. وتبويبُ **الأداء** في شاشة المشروع، وبطاقةُ
+**المستهلَكات** في تبويب معدّات الفعاليّة، وقسمُ **التنبيهات الإداريّة** في مركز
+العمليّات (حرجٌ فقط، ولمن يرى المال).
+
+**ما لا يفعله النظام عمدًا:** لا يُغيّر راتبًا ولا سعرًا ولا موازنة، لا يعتمد
+إنفاقًا، لا يصنّف عميلًا جيّدًا أو سيّئًا، لا يرتّب موظّفين، لا يوصي «اشترِ
+كذا»، لا يخفي ناقصًا، ولا يُخفي افتراضًا.
+
+---
+
+## العمليّاتُ على الأرض — المرحلة 10 (`app/Support/Operations`)
+
+`EventOperations` (الحالاتُ: تخطيط · تجهيز · جاهزة · إعداد · على الهواء · فكّ ·
+مكتملة · ملغاة) · `Schedule` · `Requirements` (قطعٌ ذاتُ هويّة · من الكتالوج ·
+خارجيّ) · `Reservations` و`Assets` (قطعةٌ واحدة لا تكون في مكانين) ·
+`ResourceConflicts` · `Crew` (تعيينٌ وحضورٌ وانصراف) · `Checklists` (قوالبُ
+ونُسخ) · `Incidents` · `OperationReadiness` (تُسأل قبل البثّ، وتجاوزُها بسببٍ
+ومَن) · **`Consumables`** (المرحلة 11: صرفٌ من الرفّ بمفتاح تكرار، ردٌّ بتكلفة
+الصرف، والكميّةُ تخرج من `StockLedger` والتكلفةُ تدخل الدفترَ والمشروع).
+
+---
+
+## المراسلاتُ والأتمتة — المرحلتان 7 و8
+
+- **كلُّ رسالةٍ إلى العميل على السجلّ** (`Communication` + `CommunicationEvent`):
+  من أرسلها ولماذا وبأيّ قناة وما جرى لها. البريدُ حيٌّ عبر `EmailNotifier`
+  (يرفض `log` و`array`)؛ وواتساب `WhatsAppNotifier` **بابٌ مغلق** حتى يُضبط.
+- **الأتمتة تذكّر ولا تقرّر** (`Automation\Engine` كلَّ 15 دقيقة): 21 قاعدةً
+  من قائمةٍ مغلقة (`Rules::PRESETS`) على 20 مشغّلًا (`Triggers::ALL`)، بثلاثة
+  أوضاع للشركة وللقاعدة: مطفأة · **مراقِبة** (تسجّل «كان سيُرسل») · حيّة؛
+  ومفتاحُ إيقافٍ عامّ؛ ومفتاحُ تكرارٍ لكلّ خطوة؛ وتهدئةٌ بالساعات؛ وساعاتُ عمل.
+  والقواعدُ الخارجيّة تبدأ موقوفةً. وفي المرحلة 11 ثلاثةُ مشغّلاتٍ داخليّة
+  تبدأ **مراقِبة**: `management.report_ready` · `management.review_due` ·
+  `forecast.stale` — إلى الإدارة، ولا رسالةَ خارجيّة منها.
+
+---
+
+## الاستيرادُ التاريخيّ — المرحلة 9 (`app/Support/Import`)
+
+ملفٌّ (CSV/XLSX) → فحصٌ (`Profiler`) → ربطُ أعمدةٍ بقوالبَ تُحفظ (`Mapper`) →
+تجربةٌ جافّة → اعتمادٌ (`Approval`) → تنفيذٌ (`Runner` بوصفاتٍ لكلّ نوع:
+عملاء · موردون · منتجات · فواتير · دفعات · مصروفات · أرصدةٌ افتتاحيّة …) →
+مطابقةٌ (`Reconciliation`) → أثرٌ (`Provenance`، `ImportLink` يحفظ المعرّفَ
+القديم) → إرجاعٌ (`Rollback`). والماليُّ منه يحتاج `import.financial`.
+**لم تُستورَد بياناتُ Event Plus الحقيقيّة في أيّ مرحلة** — الاختباراتُ وحدَها.
+
+---
+
+## المهامّ المجدولة — 8، وكلُّها موجودة
 
 | الأمر | الموعد | ماذا يفعل |
 |---|---|---|
-| `finance:post-missing-sales` | 01:30 | يستدرك ما لم يصل الدفترَ من المبيعات |
-| `backup:run` | 02:00 | نسخةٌ احتياطيّة لكلّ شركة، وتحذفُ ما مضى عليه `--keep` يومًا |
-| `trash:purge` | 02:30 | محوُ ما انقضت مهلتُه في سلّة المحذوفات |
+| `automation:run` | كلّ 15 دقيقة | يقيّم قواعدَ المتابعة (مطفأٌ ما لم تختر الشركة وضعًا) |
+| `finance:post-missing-sales` | 01:30 | يستدرك ما لم يصل الدفترَ |
+| `backup:run` | 02:00 | نسخةٌ احتياطيّة لكلّ شركة |
+| `trash:purge` | 02:30 | محوُ ما انقضت مهلتُه في المحذوفات |
 | `alerts:low-stock` | 08:00 | تنبيهُ انخفاض المخزون بالبريد |
 | `alerts:smart` | 08:30 | تنبيهاتٌ ذكيّة بالبريد |
 | `report:daily-summary` | 23:55 | ملخّصُ الأداء اليوميّ |
 | `reports:email` | أوّل الشهر 07:00 | تقريرُ الأداء الشهريّ |
 
-> كانت ثلاثةُ نداءاتٍ إضافيّة لأوامرَ **غير موجودة** — `subscriptions:expire`
-> و`subscriptions:notify` و`whatsapp:sync-templates` — تفشل كلّ ليلةٍ بصمت.
-> أُزيلت.
-
-### أوامرُ يدويّة (9)
-
-`eventplus:preflight` · `finance:backfill-sales` · `finance:repair-order-income`
-`finance:post-missing-stock-losses` · `inventory:repair-balance`
-`catalog:translate-names` · `translations:check` · `clock:shift`
-`demo:seed-sales`
+**أوامرُ يدويّة (10):** `eventplus:preflight` · `finance:backfill-sales` ·
+`finance:repair-order-income` · `finance:post-missing-stock-losses` ·
+`inventory:repair-balance` · `catalog:translate-names` · `translations:check` ·
+`clock:shift` · `demo:seed-sales` · `data:import` (الاستيرادُ من الطرفيّة — بابُ
+المرحلة 9 نفسُه).
 
 ---
 
-## ما أُزيل في مرحلة التنظيف
+## المراحل — ما بُني في كلٍّ
 
-### أعطالٌ حقيقيّة أُصلحت
-
-| # | العطب | كان أثرُه |
+| المرحلة | العنوان | الجوهر |
 |---|---|---|
-| 1 | ثلاثةُ أوامرَ مجدولةٍ غيرِ موجودة | فشلٌ يوميٌّ صامتٌ في الإنتاج |
-| 2 | `ActivityController::superIndex` يرسم `Platform/Activity` — صفحةٌ غير موجودة | 500 لو رُبط بمسار |
-| 3 | زرّ «ذكّره بواتسابك» يرسل إلى `/admin/customer-invoices/{id}/remind` | مسارٌ لا وجود له — رابطٌ ميّتٌ في شاشةٍ حيّة |
-| 4 | `JobTitleController` يُسقط الوظيفةَ بلا دورٍ على `cashier` | وظيفةٌ تُكتب بدورٍ لا يعرفه النظام |
-| 5 | `Business::scopeSubscribed` و`scopeTrialing` تستعلمان من جدول `invoices` | جدولٌ محذوف — استعلامٌ يرمي لو استُدعي |
-| 6 | الوثائق الأربع تصف نظامًا لم يعد موجودًا | أوّلُ ما يقرؤه المنضمّ خطأ |
-
-### نظامُ الساس (SaaS)
-
-دورةُ الاشتراك كاملةً (`ends_at` · `locked` · `graceLeft` · الشريطُ الأحمر ·
-صفحةُ الانتهاء · رسالةُ الإنذار) · دورُ `super_admin` بكلّ حرّاسه · قاعدةُ نطاق
-بريد المنصّة · الانتحال («الدخول كتاجر») بعموديه في السجلّ · قدراتُ الباقات
-(`planFeatures`) · تقاريرُ المنصّة وتصديراتُها وقوالبُها · `SeedData` كاملةً
-(460 سطرًا) · بذرةُ حساب مدير المنصّة
-
-### نقطةُ البيع (POS)
-
-دورُ `cashier` · جدولا `shifts` و`shift_movements` · `orders.shift_id` ·
-`orders.is_held` (السلّةُ المعلَّقة، كانت تُقرأ في 19 موضعًا بشرطٍ لا يُسقط صفًّا) ·
-`Demo::heldOrders/posCategories/receipts` · أنواعُ الجهاز والملحقات والكاشير في
-الواجهة · «الملفُّ المحدود» للكاشير
-
-### المتجر الإلكتروني والموقع
-
-`businesses.site_slug` · `products.published` ومفتاحُه في شاشة المنتج ·
-`website.configure` · قوالبُ `site/` و`store/` · `DomainChooser` · مُرادفا
-`store` و`devices` · مسارات `admin.help.*` في هيكل الصلاحيات · شرائحُ شاشة
-الدخول التي كانت تُعلن عن نقطة بيعٍ ومتجرٍ إلكترونيّ
-
-### الولاء والكوبونات
-
-`customers.points` وعمودُه وتلميحُه واستيرادُه وتصديرُه وطباعتُه ·
-`orders.coupon_code` و`coupon_discount` (كانت تُطرح في كلّ تصحيح) و
-`points_earned` و`redeemed_points` · `loyalty_earn_rate`
-
-### واتساب وتقييم Google
-
-`config/whatsapp.php` (بقي منه مفتاحُ الدولة في `config/app.php`) ·
-استثناءُ CSRF لـ`webhooks/whatsapp` · `orders.review_request_sent_at` و
-`status_notice_at` و`status_notice_event` · `BrandMarks`
-
-### كودٌ ميّت
-
-نموذجا `Shift` و`StockTransfer` · حدثُ `OrderStatusChanged` ومراقبُه (بلا
-مستمع) · `NewOrderMail` وقالبُها ومفتاحُها · `SubscriptionNoticeMail` ·
-`config/ai.php` · `Gate` و`EmojiPicker` و`lib/plan` و`lib/tenancy` ·
-**2592 مفتاحَ ترجمةٍ** لا نصَّ له في المستودع
-
-### الهجرات المضافة — 7
-
-```
-2026_09_15_100000_no_one_acts_on_behalf_of_another_anymore
-2026_09_15_100100_a_company_has_no_subscription_to_expire
-2026_09_15_100200_the_register_and_its_shifts_are_gone
-2026_09_15_100300_the_transfer_note_left_with_its_screen
-2026_09_15_100400_the_shop_has_no_storefront_to_publish_to
-2026_09_15_100500_no_loyalty_points_and_no_coupons
-2026_09_15_100600_the_order_no_longer_waits_for_a_message
-```
-
-كلُّها جديدةٌ ولا تمسّ هجرةً تاريخيّة. وتُسقط 3 جداول و15 عمودًا — كلُّها فارغةٌ
-أو صفريّةٌ وقتَ الإسقاط.
+| التنظيف | من متجرٍ إلى شركة | نُزع الساس ونقطةُ البيع والمتجرُ والولاءُ وواتساب القديم؛ وثُبّتت الأدوارُ والأقسام |
+| 1 | مصدرُ الإيراد | فاتورةُ العميل هي الإيراد (`Revenue`)، لا الطلب |
+| 2 | عروضُ الأسعار | كتالوجٌ موحَّد · سعرٌ يملكه الخادم · تنقيحاتٌ وقرارات · `LineTotals` و`Numbering` |
+| 3 | القبولُ والشروط | رابطٌ للعميل يقبل منه بدليلٍ مبصوم (`Fingerprint`) · سياساتُ الشركة تُختم |
+| 4 | المشاريع | العرضُ المقبول مشروعٌ بنطاقٍ معتمَد · متطلّباتٌ وفريقٌ ومهامّ · `ProjectFinancials` بثلاثة أوعية |
+| 5 | أوامرُ التغيير | النطاقُ المعتمَد لا يتغيّر إلّا بأمرٍ يُرسَل ويُقبل |
+| 6 | حزمُ التسليم | ما سُلِّم يُقبل من العميل ويُقفل المشروع · `Order` يتقاعد |
+| 7 | المراسلات | كلُّ رسالةٍ على السجلّ · حدُّ الإيصال `Notifier` |
+| 8 | الأتمتة ومركزُ العمليات | المتابعةُ تذكّر ولا تقرّر · الصباحُ يقول ما التالي |
+| 9 | الاستيراد | البياناتُ التاريخيّة من بابٍ واحد بأثرٍ وإرجاع |
+| 10 | العمليّات على الأرض | الفعاليّةُ بموعدها ومكانها وفريقها ومعدّاتها وجاهزيّتها |
+| 11 | الذكاءُ الإداريّ | حقيقةٌ ماليّة واحدة · ربحيّةٌ وعملاءُ وخدمات · نقدٌ وتوقّعٌ وسيناريو · موازناتٌ بنسخ · مراجعاتٌ وقرارات · تنبيهاتٌ بعتبات · مستهلَكاتٌ من الرفّ · 8 تقارير |
 
 ---
 
@@ -376,39 +457,15 @@ policy.override · messaging.send
 
 | البند | لماذا بقي |
 |---|---|
-| **`App\Support\Revenue`** | بابُ قراءةِ الإيراد الوحيد — أُضيف في المرحلة 1. التعريفُ فيه مرّةً واحدة، ويحرسه `TheSystemSeesItsOwnRevenueTest` بمقابلة التقرير برصيد الحساب |
-| **`App\Support\LineTotals`** | محرّكُ حساب البنود الواحد — استُخرج في المرحلة 2 من `CustomerInvoices::compute()` التي صارت تُفوِّض إليه. فما يُعرض على العميل وما يُفوتَر له يُحسبان بالقواعد نفسِها |
-| **`App\Support\Numbering`** | التسلسلُ تحت قفلٍ على صفّ الشركة — استُخرج في المرحلة 2. ونسخُه كان يعني نسخَ القفل وقاعدةِ «الأكبرُ عددًا لا الأحدثُ صفًّا» |
-| **`App\Support\Fingerprint`** | بصمةُ حمولةٍ بصيغةٍ واحدة — أُضيف في المرحلة 3. تقرؤها البصمةُ عند الإرسال وإعادةُ الفحص بعد سنة، فلا تفترق رايةٌ في `json_encode` بين الموضعين |
-| **`App\Support\CompanyPolicies` + `Policy\Registry`** | سياساتُ الشركة — قائمةٌ مغلقةٌ في الكود على نمط `CustomAlert::METRICS`، والمديرُ يضبط النصَّ والمعاملات لا المنطق. والنصُّ يُختم في العرض لحظةَ إرساله ويدخل في بصمته |
-| **`App\Support\Messaging\Notifier`** | حدُّ الإيصال — بريدٌ اليوم (`EmailNotifier` يرث `Mailer::configured()` فيرفض `log` و`array`)، وواتساب غدًا من الباب نفسِه |
-| **`package_items` منفصلًا عن `recipe_items`** | الوصفةُ **قائمةُ موادّ تُخصم من الرفّ**، والباقةُ **حزمةٌ تجاريّة تُسعَّر**. وحارسُ الوصفة الحيّ يرفض باقةً داخل باقة، و`Recipe::units()` ترفع الكسرَ إلى عددٍ صحيح — انظر الهجرة `a_package_lists_what_it_contains` |
+| **`Product`** كتالوجًا | `kind` = صنف · خدمة · باقة — عمودٌ لا نموذجٌ ثانٍ |
+| **`Order`** | متقاعدٌ للقراءة وتصحيحِ ما صدر؛ لا يُنشأ منه بيع |
+| **`FlowerOrder` · `Recipe` · `Addon`** | بنيةُ حدثٍ ووصفةُ موادّ ونظامُ إضافاتٍ مؤجَّل — تُبدَّل لا تُحذف |
+| **`Demo`** | واجهةُ قراءة البيانات القديمة؛ اسمُها مضلّل وإعادةُ تسميتها refactor مؤجَّل. الشاشاتُ الجديدة لا تعتمد عليها |
 | **`business_id` وطبقةُ المستأجر** | قرارُ المالك: تصلح لاحقًا لفصل أكثر من شركة |
-| **`Product`** | صار كتالوجًا موحَّدًا في المرحلة 2 — `kind` = صنف · خدمة · باقة. ولا نموذجَ ثانٍ للخدمة: ثلاثةَ عشرَ عمودًا كانت ستُكرَّر لتُكسَب ثلاثة |
-| **`Order`** | مؤجَّل: يُتقاعد في المرحلة 6 |
-| **`FlowerOrder`** (422 سطرًا) | بنيتُها بنيةُ حدث: مستلِمٌ غير المشتري، وموعدٌ مجدول، ومناسبة، وعنوان تسليم. تُعاد تسميتُها لا تُحذف |
-| **`Recipe` و`Addon` و`ProductAddons`** | ~~«باقةُ خدمةٍ تحتوي بنودًا» هي الوصفةُ نفسُها بمفهومٍ آخر~~ — **سقط هذا السببُ في المرحلة 2**: الباقةُ صارت `package_items`. وتبقى الوصفةُ لما هي له: خصمُ الموادّ من الرفّ |
-| **`OrderEditController::addon`** | دالّةٌ بلا مسارٍ، لكنّها من نظام الإضافات المؤجَّل — لا من بقايا الصندوق |
-| **الإيصالُ الحراريّ** (`ReceiptTemplate` · `orders.receipt`) | وجهُ ورقةِ البيع في نظام المستندات: تقرؤه `DocumentRenderer` وستّةُ اختبارات |
-| **`Demo`** | اسمُها مضلّل، وهي واجهةُ قراءة البيانات كلِّها. إعادةُ تسميتها refactor مؤجَّل |
-| **`DemoStore` و`DemoGuard` و`is_demo`** | بناءُ بيانات الاختبار وحارسُ عزلها — لا علاقةَ لها بالساس |
-| **`Tenancy::platform()` و`maintenance()`** | وضعُ الصيانة مقبضُ أمانٍ يُرفع قبل ترقية، ويُضبط من القاعدة |
-| **`Waste` و`WasteInsights`** | تحليلاتُ الهالك — قرارٌ مؤجَّل مع المخزون |
-| **`BusinessTypes`** | أنواعُ النشاط («محل ورود»، «مطعم») تُبدَّل مع تحويل المنتجات |
-| **دور `delivery`** | باقٍ بطلبٍ صريح |
-| **هجرةُ `seed_default_job_titles`** | تاريخيّةٌ بالتصميم: تكتب «أدوار ذلك اليوم» ومنها `cashier`. لا تُعدَّل، ولا أثرَ لها على تثبيتٍ جديد (تمرّ على شركاتٍ قائمةٍ وقتها ولا شركةَ بعد) |
-
-### مفرداتٌ قديمة بقيت في نصوص الواجهة — 9
-
-كلُّها في ما أُجِّل قرارُه:
-
-```
-باقة · باقة ورد · مثال: باقة ورد أحمر · باقة أنيقة من الورود…
-باقات ومناسبات وهدايا… · متجر ملابس · لأصناف الوصفات — …الباقات
-هذا الصنف له وصفته الخاصة — …لا باقات · مثال: اشتراكات وبرمجيات
-```
-
-> و«مثال: اشتراكات وبرمجيات» ليست بقيّةً: هي مثالٌ صحيحٌ لمصروفِ شركةِ تقنية.
+| **`Waste` و`WasteInsights`** | تحليلاتُ الهالك — وفي المرحلة 11 صار الهالكُ يعدّ أسبابَه وحدَها، فالاستهلاكُ لفعاليّةٍ ليس هالكًا |
+| **`WhatsAppNotifier`** | بابٌ مغلقٌ بتصميمه — لا يُفتح إلّا بقرارٍ وإعداد |
+| **سندُ المورّد يقيّد `Dr مخزون`** | دلالةٌ موروثة من التجزئة؛ لذلك تقرأ النتيجةُ التشغيليّة المستنداتِ لا الميزان. تغييرُها قرارٌ محاسبيّ |
+| **دور `delivery`** | باقٍ بطلبٍ صريح؛ وما يحتاجه على الأرض يُمنح بالاسم |
 
 ---
 
@@ -416,13 +473,12 @@ policy.override · messaging.send
 
 | # | البند | السؤال |
 |---|---|---|
-| 1 | ~~**لا مسارَ يُنشئ عملية بيع**~~ | ✅ **حُسم:** فاتورةُ العميل هي الطريق، وطبقةُ التحليل كلُّها تقرؤها الآن عبر `App\Support\Revenue`. و`Order` يُتقاعد في المرحلة 6 |
-| 2 | **تسمية دور `admin`** | «مدير نشاط» — تسميةٌ من الأصل. «مالك الشركة»؟ |
-| 3 | ~~**`Product` → خدمة**~~ · `Order` → مشروع | ✅ **نصفُه حُسم:** `products.kind` = صنف · خدمة · باقة — عمودٌ لا نموذجٌ ثانٍ. و`Order` → مشروعٌ في المرحلة 4 |
-| 4 | ~~**الوصفةُ والإضافات**~~ | ✅ **حُسم:** الوصفةُ تبقى لما هي له — خصمُ الموادّ من الرفّ. وبنودُ الباقة جدولٌ مستقلّ (`package_items`): اسمُهما واحدٌ ومعناهما اثنان |
-| 5 | **الهالكُ والمخزون** | ما الذي تحتاجه شركةُ تقنيةٍ منهما فعلًا؟ |
-| 6 | **`BusinessTypes`** | أنواعُ مشاريع Event Plus بدل أنواع المتاجر |
-| 7 | **`Demo` → اسمٌ يصفها** | `DataAccess`؟ 103 استدعاءٍ لـ`bid()` وحدها |
+| 1 | **تسمية دور `admin`** | «مدير نشاط» — تسميةٌ من الأصل. «مالك الشركة»؟ |
+| 2 | **دلالةُ سند المورّد في الدفتر** | `Dr مخزون` (تجزئة) أم `Dr مشتريات مباشرة` (خدمات)؟ يغيّر قراءةَ ميزان المراجعة لا قراءةَ الإدارة |
+| 3 | **`Demo` → اسمٌ يصفها** | `DataAccess`؟ |
+| 4 | **`BusinessTypes`** | أنواعُ مشاريع Event Plus بدل أنواع المتاجر |
+| 5 | **واتساب** | متى يُفتح البابُ ومن يملك القالب؟ |
+| 6 | **عتباتُ التنبيهات الافتراضيّة** | 1000 للمتأخّر · 30 يومًا · 15٪ هامش · 10٪ انحراف · 5000 أرضيّةُ نقد · 40٪ تركيز · 40٪ شذوذ · 3 فعاليّات نقص · 1 حادث/فعاليّة — أرقامُ بدايةٍ تضبطها الشركة من شاشة الإدارة |
 
 ---
 
@@ -433,29 +489,24 @@ policy.override · messaging.send
 | كلُّ نصٍّ عربيٍّ يراه المستخدم له مقابلٌ إنجليزيّ | `TranslationCoverageTest` |
 | لا رابطَ في الواجهة يقود إلى مسارٍ غير موجود | `NoDeadLinksTest` |
 | كلُّ جدولٍ للمستأجر مصنَّفٌ في `TenantTables` | `ARestoreReturnsTheShopTest` |
-| لا دورَ يصل إلى قسمٍ لم يُمنح له | `EveryRoleIsProbedOnEveryRouteTest` |
-| كلُّ شاشةٍ تحت `admin.` تُفتح | `EveryScreenOpensTest` |
-| لا شركةَ تقرأ بيانات أخرى | `TenantIsolationTest` |
-| أبوابٌ حُذفت تبقى مغلقة | `TheRemovedDoorsStayClosedTest` |
-| ما يُمنح لكلّ دورٍ مثبَّتٌ بنصّه | `EveryRoleIsProbedOnEveryRouteTest` |
+| لا دورَ يصل إلى قسمٍ لم يُمنح له، وما يُمنح مثبَّتٌ بنصّه | `EveryRoleIsProbedOnEveryRouteTest` |
+| من يوظّف دورًا يملك كلَّ ما يملكه | `StaffCannotOutrankThemselvesTest` |
+| كلُّ شاشةٍ تحت `admin.` تُفتح على قاعدةٍ فارغة | `EveryScreenOpensTest` · `EveryPageAnswersTest` |
+| كلُّ تقريرٍ في `Reports::ALL` له مسارٌ يُفتح وفئةٌ معروفة | `ReportsCatalogTest` |
+| لا شركةَ تقرأ بيانات أخرى | `TenantIsolationTest` + اختباراتُ العزل في كلّ مرحلة |
+| كلُّ حقلِ كتابةٍ يمرّ بحارس الأرقام العربيّة | `ArabicNumeralsTest` |
+| لا `confirm()` من المتصفّح | `NoBrowserConfirmTest` |
+| الدفترُ يُقيَّد من `Ledger::post` وحده، والمخزونُ من `StockLedger` وحده | `EveryMovementCarriesItsEntryTest` · `StockBooksStayHonestTest` |
+| الأتمتة تسجّل ولا تُرسل في وضع المراقبة | `TheSystemFollowsUpButNeverDecidesTest` |
+| المرحلة 11: الأرقامُ من حقيقةٍ واحدة، والموازنةُ بنسخ، والتوقّعُ مجمَّد، والمستهلَكُ لا يُعدّ مرّتين، والشاشاتُ لمن يحقّ له | `tests/Feature/Management/*` · `ConsumablesLeaveTheShelfForTheEventTest` |
 
 ---
 
-## الاتجاه المستقبليّ — للسياق لا للتنفيذ
+## ما لم يحدث في أيّ مرحلة — بقرار
 
-```
-عميل → عرض سعر → موافقة → سياسات وشروط → توقيع إلكتروني
-     → مشروع/فعالية → مهامّ وفريق ومشتريات ومخزون وتنفيذ ميداني
-     → حزمة تسليم → قبول العميل → فاتورة → تحصيل → محاسبة → إقفال
-```
-
-**ومبنيٌّ اليوم:** إدارةُ عروض الأسعار — مسودّةً وإرسالًا وتنقيحًا وقرارًا،
-بسعرٍ يملكه الخادم وورقةٍ ورابطٍ للعميل **يقبل منه إلكترونيًّا** بدليلٍ
-مبصوم، وسياساتٌ تُختم في العرض وتُفحص (مهلةُ الطلب)، وبريدٌ يُوصِل الرابطَ
-ويذكّر به.
-
-**وباقٍ:** المشاريعُ والفعاليات · حزمُ التسليم · واتساب موحَّد للشركة ·
-متابعاتٌ آليّة · ربحيّةُ المشروع · مساعدٌ ذكيّ · توقيعٌ معتمَدٌ قانونًا يومَ
-يشترطه عميل.
-
-> ذُكر هنا كي لا تُحذف بنيةٌ أو نموذجٌ قد يُستفاد منه.
+- **لم يُنشر شيءٌ من المراحل 10 و11 على الإنتاج** من هذا المستودع؛ آخرُ ما دُفع
+  إلى `origin/main` هو المرحلة 9.
+- **لم تُستورَد بياناتُ Event Plus الحقيقيّة** — كلُّ بياناتٍ في الاختبارات مُصطنعة.
+- **لم تُفعَّل قناةٌ خارجيّة** (واتساب أو Postmark) ولا أتمتةٌ حيّة؛ وكلُّ ما
+  أُضيف من تذكيراتٍ يبدأ في وضع المراقبة.
+- **لا أسرارَ في المستودع**: لا مفاتيح ولا رموز ولا بياناتِ عملاء.

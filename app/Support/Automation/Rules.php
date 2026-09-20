@@ -118,6 +118,22 @@ final class Rules
             'steps' => [['offset' => 1, 'audience' => 'lead'], ['offset' => 3, 'audience' => 'management']],
             'enabled' => true, 'mode' => 'observe', 'cooldown_hours' => 48, 'business_hours' => false,
         ],
+        /* والإدارةُ — المرحلة 11: تذكيرٌ بالتقرير الشهريّ والمراجعة الربعيّة وتقادم التوقّع — على «مراقبة» */
+        'management.report_ready' => [
+            'name' => 'التقرير الإداري الشهري جاهز', 'trigger' => 'management_report_ready', 'kind' => 'internal', 'channel' => 'internal',
+            'steps' => [['offset' => 1, 'audience' => 'management']],
+            'enabled' => true, 'mode' => 'observe', 'cooldown_hours' => 48, 'business_hours' => false,
+        ],
+        'management.review_due' => [
+            'name' => 'موعد المراجعة الإدارية الربعية', 'trigger' => 'management_review_due', 'kind' => 'internal', 'channel' => 'internal',
+            'steps' => [['offset' => 1, 'audience' => 'management'], ['offset' => 14, 'audience' => 'management']],
+            'enabled' => true, 'mode' => 'observe', 'cooldown_hours' => 72, 'business_hours' => false,
+        ],
+        'forecast.stale' => [
+            'name' => 'التوقّع النقدي يحتاج تحديثًا', 'trigger' => 'forecast_stale', 'kind' => 'internal', 'channel' => 'internal',
+            'steps' => [['offset' => 30, 'audience' => 'management']],
+            'enabled' => true, 'mode' => 'observe', 'cooldown_hours' => 72, 'business_hours' => false,
+        ],
         'delivery.followup' => [
             'name' => 'متابعة حزمة التسليم مع العميل', 'trigger' => 'delivery_awaiting', 'kind' => 'external', 'channel' => 'email', 'template_key' => 'delivery.reminder',
             'steps' => [['offset' => 2, 'audience' => 'customer'], ['offset' => 5, 'audience' => 'customer']],

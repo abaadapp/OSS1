@@ -8,7 +8,10 @@ use App\Support\Automation\Triggers\DeliveryAwaiting;
 use App\Support\Automation\Triggers\EquipmentCheckout;
 use App\Support\Automation\Triggers\EquipmentUnreturned;
 use App\Support\Automation\Triggers\ExpenseUnpaid;
+use App\Support\Automation\Triggers\ForecastStale;
 use App\Support\Automation\Triggers\InvoiceDue;
+use App\Support\Automation\Triggers\ManagementReportReady;
+use App\Support\Automation\Triggers\ManagementReviewDue;
 use App\Support\Automation\Triggers\MorningBrief;
 use App\Support\Automation\Triggers\OperationCloseout;
 use App\Support\Automation\Triggers\OperationStart;
@@ -44,6 +47,10 @@ final class Triggers
         'equipment_checkout' => EquipmentCheckout::class,
         'equipment_unreturned' => EquipmentUnreturned::class,
         'operation_closeout' => OperationCloseout::class,
+        /* الإدارةُ — المرحلة 11: تذكيرٌ بالتقرير والمراجعة والتوقّع — ولا قرارَ يُتّخذ */
+        'management_report_ready' => ManagementReportReady::class,
+        'management_review_due' => ManagementReviewDue::class,
+        'forecast_stale' => ForecastStale::class,
     ];
 
     public static function for(string $key): Trigger

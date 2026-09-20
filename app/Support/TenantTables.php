@@ -129,6 +129,14 @@ class TenantTables
         'event_operations', 'operation_schedule_items', 'operation_equipment_requirements',
         'asset_reservations', 'operation_crew_assignments',
         'operation_checklists', 'operation_checklist_items', 'operation_incidents',
+        /*
+         * والتخطيطُ الإداريّ — المرحلة 11: الموازنةُ تشير إلى الحسابات وإلى
+         * نسخةٍ سابقة منها (ذاتيّةٌ فتُكتب بترتيب معرّفاتها)، والتوقّعُ إلى
+         * سيناريو، والقرارُ إلى مراجعته، وصرفُ المستهلَك إلى الفعاليّة والمنتج
+         * والتعديل. وبنودُ الموازنة والافتراضاتُ بلا `business_id` تُقرأ من أبيها.
+         */
+        'budgets', 'budget_lines', 'financial_scenarios', 'financial_scenario_assumptions', 'financial_forecasts',
+        'management_reviews', 'management_decisions', 'operation_consumable_issues',
     ];
 
     /**
@@ -174,6 +182,8 @@ class TenantTables
         'payroll_lines' => ['payroll_runs', 'payroll_run_id'],
         'purchase_order_items' => ['purchase_orders', 'purchase_order_id'],
         'operation_checklist_template_items' => ['operation_checklist_templates', 'template_id'],
+        'budget_lines' => ['budgets', 'budget_id'],
+        'financial_scenario_assumptions' => ['financial_scenarios', 'scenario_id'],
     ];
 
     /**

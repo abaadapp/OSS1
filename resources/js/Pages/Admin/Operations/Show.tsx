@@ -12,7 +12,9 @@ import { Button } from '@/Components/ui/button';
 import { Card } from '@/Components/ui/card';
 import { Input, Textarea } from '@/Components/ui/input';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/Components/ui/dialog';
+import { money } from '@/lib/format';
 import { useTranslate } from '@/lib/i18n';
+import type { PageProps } from '@/types';
 import {
     CHECKLIST_STATUS_LABEL,
     RESERVATION_LABEL,
@@ -99,6 +101,25 @@ interface Requirement {
     source: string;
     critical: boolean;
     backup: boolean;
+    notes: string | null;
+    issued_quantity: number;
+    returned_quantity: number;
+}
+
+/* المستهلَكات — المرحلة 11: صرفٌ من الرفّ على الفعاليّة وردٌّ لما لم يُستهلك */
+interface ConsumableIssue {
+    id: number;
+    product_id: number;
+    product: string | null;
+    requirement: string | null;
+    issued: number;
+    returned: number;
+    consumed: number;
+    unit_cost: number;
+    consumed_cost: number;
+    status: string;
+    issued_at: string | null;
+    returned_at: string | null;
     notes: string | null;
 }
 
@@ -201,7 +222,8 @@ interface Props {
     users: { id: number; name: string }[];
     project_members: { user_id: number; name: string | null; role: string | null }[];
     templates: { id: number; name: string; phase: string }[];
-    products: { id: number; name: string; kind: string }[];
+    products: { id: number; name: string; kind: string; quantity: number }[];
+    consumables: { rows: ConsumableIssue[]; issued_cost: number; consumed_cost: number; returned_cost: number; open: number };
     categories: { value: string; label: string }[];
     assets: AssetOption[];
     labels: Labels;
@@ -306,7 +328,7 @@ export default function OperationShow(p: Props) {
                 }
             />
 
-            {(['operation', 'schedule', 'requirement', 'reservation', 'crew', 'checklist', 'incident'] as const).map((k) => errors?.[k] && <Alert key={k} tone="danger">{errors[k]}</Alert>)}
+            {(['operation', 'schedule', 'requirement', 'reservation', 'consumable', 'crew', 'checklist', 'incident'] as const).map((k) => errors?.[k] && <Alert key={k} tone="danger">{errors[k]}</Alert>)}
             {o.readiness_override && o.readiness_override.length > 0 && (
                 <Alert tone="warning">
                     <ShieldAlert className="me-1 inline size-4" />
@@ -613,6 +635,17 @@ function EquipmentTab({ p }: { p: Props }) {
     const [checkoutForm, setCheckoutForm] = useState({ custodian_id: '', condition: 'good', notes: '' });
     const [returning, setReturning] = useState<Reservation | null>(null);
     const [returnForm, setReturnForm] = useState({ condition: 'good', missing_accessories: '', damage_notes: '' });
+    /* صرفُ مستهلَك: مفتاحُ تكرارٍ يُولَّد عند فتح النافذة فلا يُصرف مرّتين بنقرتين */
+    const [issuing, setIssuing] = useState<{ requirement_id: number | null; product_id: string } | null>(null);
+    const [issueForm, setIssueForm] = useState({ quantity: '1', notes: '', key: '' });
+    const [givingBack, setGivingBack] = useState<ConsumableIssue | null>(null);
+    const [giveBackForm, setGiveBackForm] = useState({ quantity: '0', notes: '' });
+    const { context } = usePage<PageProps>().props;
+    const m = (v: number) => money(v, context!.currency);
+    const openIssue = (requirementId: number | null, productId: number | null) => {
+        setIssuing({ requirement_id: requirementId, product_id: productId ? String(productId) : '' });
+        setIssueForm({ quantity: '1', notes: '', key: `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}` });
+    };
 
     const submitReq = () => {
         if (!req) return;
@@ -644,11 +677,15 @@ function EquipmentTab({ p }: { p: Props }) {
                                     {r.kind === 'asset_category' ? t('قطع ذات هويّة') : r.kind === 'product' ? t('من الكتالوج') : t('خارجيّ')} · {label(L, 'source', r.source)}
                                     {r.critical && <span className="ms-1 rounded-full bg-[#fef2f2] px-1.5 text-[#b91c1c]">{t('حرج')}</span>}
                                     {r.backup && <span className="ms-1 rounded-full bg-[#eff6ff] px-1.5 text-[#1d4ed8]">{t('احتياطيّ')}</span>}
+                                    {r.kind === 'product' && r.issued_quantity > 0 && <span className="ms-1 rounded-full bg-[#fffbeb] px-1.5 text-[#b45309]">{t('صُرف')} {r.issued_quantity}{r.returned_quantity > 0 ? ` · ${t('رُدّ')} ${r.returned_quantity}` : ''}</span>}
                                 </span>
                             </span>
                             <span className="flex gap-1">
                                 {r.kind === 'asset_category' && p.may.reserve && o.active && r.shortfall > 0 && (
                                     <Button variant="outline" size="sm" onClick={() => { setReserving({ requirement_id: r.id, category: r.asset_category }); setReserveForm({ asset_id: '', from: '', until: '', notes: '' }); }}>{t('احجز قطعة')}</Button>
+                                )}
+                                {r.kind === 'product' && r.product_id !== null && p.may.checkout && o.active && (
+                                    <Button variant="outline" size="sm" onClick={() => openIssue(r.id, r.product_id)}>{t('اصرف من الرفّ')}</Button>
                                 )}
                                 {p.may.manage && o.active && (
                                     <>
@@ -692,6 +729,69 @@ function EquipmentTab({ p }: { p: Props }) {
                     ))}
                 </ul>
             </Card>
+
+            <Card className="p-4">
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                    <h3 className="text-[14px] font-semibold">{t('المستهلَكات')} <span className="text-[11px] font-normal text-[#9ca3af]">— {t('ما صُرف من الرفّ وما عاد')}</span></h3>
+                    <div className="flex items-center gap-2">
+                        {p.consumables.rows.length > 0 && <span className="text-[11px] text-[#6b7280]">{t('استُهلك')}: <span dir="ltr">{m(p.consumables.consumed_cost)}</span> · {t('رُدّ')}: <span dir="ltr">{m(p.consumables.returned_cost)}</span></span>}
+                        {p.may.checkout && o.active && <Button size="sm" variant="outline" onClick={() => openIssue(null, null)}><Plus />{t('صرف')}</Button>}
+                    </div>
+                </div>
+                {p.consumables.rows.length === 0 && <p className="py-4 text-center text-[13px] text-[#9ca3af]">{t('لم يُصرف شيءٌ من الرفّ بعد — الصرفُ يحرّك المخزون ويُحمَّل على المشروع')}</p>}
+                <ul className="divide-y divide-[#f4f4f5]">
+                    {p.consumables.rows.map((c) => (
+                        <li key={c.id} className="flex flex-wrap items-center gap-3 py-2 text-[13px]">
+                            <span className={'rounded-full px-2 py-0.5 text-[11px] ' + (c.status === 'closed' ? 'bg-[#f4f4f5] text-[#71717a]' : 'bg-[#fffbeb] text-[#b45309]')}>{c.status === 'closed' ? t('مقفل') : t('مصروف')}</span>
+                            <span className="min-w-0 flex-1">
+                                <span className="font-medium">{c.product ?? '—'}</span>
+                                {c.requirement && <span className="ms-2 text-[11px] text-[#9ca3af]">{c.requirement}</span>}
+                                <span className="block text-[11px] text-[#9ca3af]"><span dir="ltr">{c.issued_at}</span> · {t('صُرف')} {c.issued} · {t('رُدّ')} {c.returned} · {t('استُهلك')} {c.consumed} × <span dir="ltr">{m(c.unit_cost)}</span> = <span dir="ltr">{m(c.consumed_cost)}</span></span>
+                                {c.notes && <span className="block text-[11px] text-[#6b7280]">{c.notes}</span>}
+                            </span>
+                            {c.status === 'issued' && p.may.return && <Button size="sm" onClick={() => { setGivingBack(c); setGiveBackForm({ quantity: '0', notes: '' }); }}>{t('ردّ وإقفال')}</Button>}
+                        </li>
+                    ))}
+                </ul>
+            </Card>
+
+            {/* صرفُ مستهلَك */}
+            <Dialog open={issuing !== null} onOpenChange={(v) => !v && setIssuing(null)}>
+                <DialogContent>
+                    <DialogHeader><DialogTitle>{t('صرفٌ من الرفّ')}</DialogTitle><DialogDescription>{t('تُخصم الكميّةُ من المخزون الآن بتكلفتها وتُحمَّل على المشروع — وما يعود يُردّ لاحقًا')}</DialogDescription></DialogHeader>
+                    {issuing && (
+                        <div className="space-y-3 px-5 pb-5">
+                            <Field label="الصنف" required>
+                                <Select value={issuing.product_id} placeholder="اختر صنفًا" onChange={(e) => setIssuing({ ...issuing, product_id: e.target.value })} options={p.products.filter((x) => x.kind !== 'service').map((x) => ({ value: x.id, label: `${x.name} (${t('بالرفّ')}: ${x.quantity})` }))} />
+                            </Field>
+                            <Field label="الكميّة" required><Input type="number" min={1} value={issueForm.quantity} onChange={(e) => setIssueForm({ ...issueForm, quantity: e.target.value })} dir="ltr" /></Field>
+                            <Field label="ملاحظة"><Input value={issueForm.notes} onChange={(e) => setIssueForm({ ...issueForm, notes: e.target.value })} /></Field>
+                        </div>
+                    )}
+                    <DialogFooter>
+                        <Button disabled={!issuing?.product_id || Number(issueForm.quantity) < 1} onClick={() => router.post(route('admin.operations.consumables.store', o.id), { product_id: Number(issuing!.product_id), quantity: Number(issueForm.quantity), requirement_id: issuing!.requirement_id, notes: issueForm.notes, key: issueForm.key }, { preserveScroll: true, onSuccess: () => setIssuing(null) })}>{t('صرف')}</Button>
+                        <Button variant="outline" onClick={() => setIssuing(null)}>{t('إلغاء')}</Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* ردُّ مستهلَك */}
+            <Dialog open={givingBack !== null} onOpenChange={(v) => !v && setGivingBack(null)}>
+                <DialogContent>
+                    <DialogHeader><DialogTitle>{t('ردٌّ إلى الرفّ وإقفال')}</DialogTitle><DialogDescription>{t('ما يُردّ يعود إلى المخزون بتكلفة الصرف نفسِها — والباقي مستهلَكٌ على المشروع')}</DialogDescription></DialogHeader>
+                    {givingBack && (
+                        <div className="space-y-3 px-5 pb-5">
+                            <p className="text-[13px]">{givingBack.product} — {t('صُرف')} {givingBack.issued}</p>
+                            <Field label="الكميّة المردودة" required hint="صفرٌ يعني استُهلك كلُّه"><Input type="number" min={0} max={givingBack.issued} value={giveBackForm.quantity} onChange={(e) => setGiveBackForm({ ...giveBackForm, quantity: e.target.value })} dir="ltr" /></Field>
+                            <Field label="ملاحظة"><Input value={giveBackForm.notes} onChange={(e) => setGiveBackForm({ ...giveBackForm, notes: e.target.value })} /></Field>
+                        </div>
+                    )}
+                    <DialogFooter>
+                        <Button disabled={!givingBack || Number(giveBackForm.quantity) < 0 || Number(giveBackForm.quantity) > (givingBack?.issued ?? 0)} onClick={() => router.post(route('admin.operations.consumables.return', [o.id, givingBack!.id]), { quantity: Number(giveBackForm.quantity), notes: giveBackForm.notes }, { preserveScroll: true, onSuccess: () => setGivingBack(null) })}>{t('ردّ وإقفال')}</Button>
+                        <Button variant="outline" onClick={() => setGivingBack(null)}>{t('إلغاء')}</Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
 
             {/* متطلَّب */}
             <Dialog open={req !== null} onOpenChange={(v) => !v && setReq(null)}>

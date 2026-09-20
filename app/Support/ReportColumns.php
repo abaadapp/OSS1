@@ -115,6 +115,46 @@ class ReportColumns
                 ['waste', 'الهالك', 'number'], ['rate', 'النسبة %', 'number'], ['value', 'القيمة', 'money'],
             ],
         ],
+        /* ─────────── تقاريرُ الإدارة — المرحلة 11 ─────────── */
+        'management_monthly' => [
+            'الملخّص التنفيذي' => [['metric', 'المؤشّر', 'text'], ['value', 'القيمة', 'money'], ['basis', 'الأساس', 'text']],
+            'شهرًا بشهر' => [['month', 'الشهر', 'text'], ['revenue', 'الإيراد', 'money'], ['collections', 'التحصيل', 'money'], ['expenses', 'المصروفات', 'money'], ['direct_costs', 'التكلفة المباشرة', 'money'], ['projects', 'مشاريع', 'number']],
+            'المصروفات بالنوع' => [['type', 'النوع', 'text'], ['total', 'المبلغ', 'money'], ['count', 'العدد', 'number']],
+            'أعمار الذمم' => [['bucket', 'الفئة', 'text'], ['amount', 'المبلغ', 'money']],
+            'أداء المشاريع' => [['code', 'الرمز', 'text'], ['name', 'المشروع', 'text'], ['customer', 'العميل', 'text'], ['contracted', 'المتعاقَد', 'money'], ['revenue', 'الإيراد', 'money'], ['collected', 'المحصَّل', 'money'], ['receivable', 'الذمّة', 'money'], ['direct_costs', 'التكلفة', 'money'], ['contribution', 'المساهمة', 'money'], ['margin', 'الهامش %', 'number'], ['completeness', 'الاكتمال', 'text']],
+            'القمع التجاري' => [['stage', 'المرحلة', 'text'], ['count', 'العدد', 'number'], ['value', 'القيمة', 'money'], ['committed', 'ملتزَم', 'text']],
+            'تركيز العملاء' => [['customer', 'العميل', 'text'], ['net', 'الإيراد', 'money'], ['percent', 'النسبة %', 'number']],
+            'التشغيل' => [['metric', 'المؤشّر', 'text'], ['value', 'القيمة', 'number']],
+            'المعدّات بالصنف' => [['category', 'الصنف', 'text'], ['assets', 'القطع', 'number'], ['deployed_days', 'أيّام الميدان', 'number'], ['utilization', 'الاستخدام %', 'number'], ['short_events', 'فعاليّات بنقص', 'number'], ['rented_events', 'فعاليّات بتأجير', 'number']],
+            'الموازنة مقابل الفعلي' => [['account', 'الحساب', 'text'], ['kind', 'النوع', 'text'], ['planned', 'الموازنة', 'money'], ['actual', 'الفعلي', 'money'], ['variance', 'الانحراف', 'money'], ['reading', 'القراءة', 'text']],
+            'التوقّع النقدي المعتمَد' => [['month', 'الشهر', 'text'], ['opening', 'الافتتاحي', 'money'], ['inflows', 'الداخل', 'money'], ['outflows', 'الخارج', 'money'], ['net', 'الصافي', 'money'], ['closing', 'الإقفال', 'money']],
+            'التنبيهات' => [['severity', 'الشدّة', 'text'], ['title', 'التنبيه', 'text'], ['detail', 'التفصيل', 'text']],
+        ],
+        'project_profitability' => [
+            'المشاريع' => [['code', 'الرمز', 'text'], ['name', 'المشروع', 'text'], ['customer', 'العميل', 'text'], ['contracted', 'المتعاقَد', 'money'], ['revenue', 'الإيراد', 'money'], ['collected', 'المحصَّل', 'money'], ['receivable', 'الذمّة', 'money'], ['direct_costs', 'التكلفة', 'money'], ['contribution', 'المساهمة', 'money'], ['margin', 'الهامش %', 'number'], ['completeness', 'الاكتمال', 'text']],
+        ],
+        'receivables_aging' => [
+            'الأعمار' => [['bucket', 'الفئة', 'text'], ['amount', 'المبلغ', 'money']],
+            'بالعميل' => [['customer', 'العميل', 'text'], ['outstanding', 'القائم', 'money'], ['overdue', 'المتأخّر', 'money'], ['oldest', 'أقدم فاتورة', 'text'], ['days', 'أيّام التأخّر', 'number']],
+        ],
+        'budget_vs_actual' => [
+            'بالحساب' => [['account', 'الحساب', 'text'], ['kind', 'النوع', 'text'], ['bucket', 'المدّة', 'text'], ['planned', 'الموازنة', 'money'], ['actual', 'الفعلي', 'money'], ['variance', 'الانحراف', 'money'], ['variance_percent', 'الانحراف %', 'number'], ['reading', 'القراءة', 'text']],
+        ],
+        'cash_forecast' => [
+            'الأشهر' => [['month', 'الشهر', 'text'], ['opening', 'الافتتاحي', 'money'], ['committed_in', 'داخل ملتزَم', 'money'], ['expected_in', 'داخل متوقَّع', 'money'], ['committed_out', 'خارج ملتزَم', 'money'], ['expected_out', 'خارج متوقَّع', 'money'], ['net', 'الصافي', 'money'], ['closing', 'الإقفال', 'money']],
+            'البنود' => [['at', 'التاريخ', 'text'], ['label', 'البند', 'text'], ['category', 'الطبقة', 'text'], ['direction', 'الاتّجاه', 'text'], ['amount', 'المبلغ', 'money'], ['source', 'المصدر', 'text']],
+        ],
+        'customer_revenue' => [
+            'العملاء' => [['customer', 'العميل', 'text'], ['quotations', 'عروض', 'number'], ['accepted', 'مقبولة', 'number'], ['invoiced', 'المفوتَر', 'money'], ['collected', 'المحصَّل', 'money'], ['outstanding', 'القائم', 'money'], ['overdue', 'المتأخّر', 'money'], ['projects', 'مشاريع', 'number']],
+            'التركيز' => [['customer', 'العميل', 'text'], ['net', 'الإيراد', 'money'], ['percent', 'النسبة %', 'number']],
+        ],
+        'service_performance' => [
+            'الأصناف' => [['name', 'الصنف', 'text'], ['quotations', 'عروض', 'number'], ['quoted_value', 'المعروض', 'money'], ['accepted_value', 'المقبول', 'money'], ['invoiced_value', 'المفوتَر', 'money'], ['projects', 'مشاريع', 'number'], ['average_price', 'متوسّط السعر', 'money'], ['discount', 'الخصم %', 'number'], ['contribution', 'المساهمة', 'money']],
+        ],
+        'asset_utilization' => [
+            'القطع' => [['code', 'الرمز', 'text'], ['name', 'القطعة', 'text'], ['category', 'الصنف', 'text'], ['reserved_days', 'أيّام الحجز', 'number'], ['deployed_days', 'أيّام الميدان', 'number'], ['events', 'فعاليّات', 'number'], ['utilization', 'الاستخدام %', 'number'], ['status', 'الحالة', 'text']],
+            'الأصناف' => [['category', 'الصنف', 'text'], ['assets', 'القطع', 'number'], ['deployed_days', 'أيّام الميدان', 'number'], ['utilization', 'الاستخدام %', 'number'], ['short_events', 'فعاليّات بنقص', 'number'], ['rented_events', 'فعاليّات بتأجير', 'number'], ['idle', 'قطع بلا استخدام', 'number']],
+        ],
     ];
 
     /** هل هذا التقرير أقسامٌ لا جدولًا واحدًا؟ */

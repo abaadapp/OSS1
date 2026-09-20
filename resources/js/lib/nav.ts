@@ -4,6 +4,7 @@ import {
     EMPLOYEE_TABS,
     FINANCE_TABS,
     INVENTORY_TABS,
+    MANAGEMENT_TABS,
     PURCHASE_TABS,
     type SectionTab,
 } from '@/Components/SectionTabs';
@@ -11,6 +12,7 @@ import {
     BarChart3,
     Boxes,
     CalendarCheck,
+    Gauge,
     Database,
     Briefcase,
     FileSignature,
@@ -81,6 +83,14 @@ export const NAV: NavGroup[] = [
             { label: 'لوحة التحكم', icon: LayoutDashboard, route: 'admin.dashboard', section: 'dashboard' },
             /* ومركزُ العمليات بعدها مباشرةً: ما يحتاج يدًا اليوم — المرحلة 7 */
             { label: 'مركز العمليات', icon: Radar, route: 'admin.command.index', section: 'command' },
+            /* والإدارةُ: كيف تؤدّي الشركة — لا ما يحتاج يدًا — المرحلة 11 */
+            {
+                label: 'الإدارة',
+                icon: Gauge,
+                route: 'admin.management.index',
+                section: 'management',
+                covers: [...covers(MANAGEMENT_TABS), 'admin.management.reviews.show'],
+            },
             {
                 label: 'العملاء',
                 icon: Users,

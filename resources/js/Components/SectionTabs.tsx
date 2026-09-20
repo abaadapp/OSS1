@@ -195,6 +195,24 @@ export const PURCHASE_TABS: SectionTab[] = [
  * بابان في قسمين. والتحويل بين الفروع وحركات المخزون قراءاتٌ من قراءات
  * «المنتجات»، فلا تُفرد لهما تبويبات.
  */
+/*
+ * قسمُ الإدارة — المرحلة 11: «كيف تؤدّي الشركة؟» في تبويباتٍ لا في ثلاثَ
+ * عشرةَ شاشة. والمالُ يحرسه فعلُه: من فتح القسم بلا `analytics.financial`
+ * لا يرى تبويبَ المال ولا النقد ولا الموازنة.
+ */
+export const MANAGEMENT_TABS: SectionTab[] = [
+    { label: 'نظرة عامة', routeName: 'admin.management.index', section: 'management' },
+    { label: 'الأداء المالي', routeName: 'admin.management.financial', section: 'management', action: 'analytics.financial' },
+    { label: 'المشاريع', routeName: 'admin.management.projects', section: 'management', action: 'analytics.projects' },
+    { label: 'العملاء', routeName: 'admin.management.customers', section: 'management', action: 'analytics.customers' },
+    { label: 'الخدمات والقمع', routeName: 'admin.management.services', section: 'management', action: 'analytics.customers' },
+    { label: 'النقد والتوقّع', routeName: 'admin.management.cash', section: 'management', action: 'analytics.financial' },
+    { label: 'الموازنة', routeName: 'admin.management.budgets', section: 'management', action: 'budgets.view' },
+    { label: 'التشغيل والمعدّات', routeName: 'admin.management.operations', section: 'management', action: 'analytics.operations' },
+    { label: 'المراجعات', routeName: 'admin.management.reviews', section: 'management' },
+    { label: 'التقارير', routeName: 'admin.management.reports', section: 'management' },
+];
+
 export const INVENTORY_TABS: SectionTab[] = [
     { label: 'المنتجات', routeName: 'admin.inventory.index', section: 'inventory' },
     { label: 'عمليات جرد المخزون', routeName: 'admin.inventory.stocktake', section: 'inventory' },

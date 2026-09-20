@@ -18,7 +18,9 @@ use App\Models\Project;
 use App\Models\User;
 use App\Support\Demo;
 use App\Support\Operations\Assets;
+use App\Models\OperationConsumableIssue;
 use App\Support\Operations\Checklists;
+use App\Support\Operations\Consumables;
 use App\Support\Operations\Crew;
 use App\Support\Operations\EventOperations;
 use App\Support\Operations\Incidents;
@@ -211,7 +213,9 @@ class EventOperationController extends Controller
             'users' => User::where('business_id', $bid)->where('status', 'نشط')->orderBy('name')->get(['id', 'name'])->all(),
             'project_members' => $operation->project?->members()->with('user:id,name')->get()->map(fn ($m) => ['user_id' => $m->user_id, 'name' => $m->user?->name, 'role' => $m->role_in_project])->all() ?? [],
             'templates' => OperationChecklistTemplate::where('business_id', $bid)->where('active', true)->orderBy('sort_order')->get(['id', 'name', 'phase'])->all(),
-            'products' => Product::where('business_id', $bid)->orderBy('name')->limit(500)->get(['id', 'name', 'kind'])->all(),
+            'products' => Product::where('business_id', $bid)->orderBy('name')->limit(500)->get(['id', 'name', 'kind', 'quantity'])->all(),
+            /* المستهلَكاتُ — المرحلة 11: ما صُرف وما عاد وما استُهلك بتكلفته */
+            'consumables' => Consumables::summary($operation),
             'categories' => $this->categories($bid),
             'assets' => Asset::where('business_id', $bid)->whereNotIn('status', Asset::OUT_OF_SERVICE)->orderBy('asset_code')->limit(500)->get()
                 ->map(fn (Asset $a) => ['id' => $a->id, 'code' => $a->asset_code, 'name' => $a->name, 'category' => $a->category, 'status' => $a->status, 'free' => ! isset($busy[$a->id])])->all(),
@@ -491,6 +495,32 @@ class EventOperationController extends Controller
         $operation = $this->find($id);
 
         return AssetReservation::where('event_operation_id', $operation->id)->whereKey($rid)->with('asset', 'operation', 'requirement')->firstOrFail();
+    }
+
+    /* ─────────────────────────── المستهلَكات — المرحلة 11 ─────────────────────────── */
+
+    /** الصرفُ من الرفّ — بإذن التسليم؛ ومن باب المخزون نفسِه */
+    public function issueConsumable(Request $request, int|string $id)
+    {
+        $this->gate(Permissions::ASSETS_CHECKOUT);
+        $operation = $this->find($id);
+        $data = $request->validate([
+            'product_id' => ['required', 'integer'], 'quantity' => ['required', 'integer', 'min:1', 'max:1000000'],
+            'requirement_id' => ['nullable', 'integer'], 'branch_id' => ['nullable', 'integer'], 'notes' => ['nullable', 'string', 'max:2000'], 'key' => ['nullable', 'string', 'max:40'],
+        ]);
+        $product = Product::where('business_id', $this->bid())->whereKey($data['product_id'])->firstOrFail();
+
+        return $this->attempt(fn () => Consumables::issue($operation, $product, $data, auth()->user()), __('صُرف :n × :p', ['n' => $data['quantity'], 'p' => $product->name]), 'consumable');
+    }
+
+    public function returnConsumable(Request $request, int|string $id, int|string $cid)
+    {
+        $this->gate(Permissions::ASSETS_RETURN);
+        $operation = $this->find($id);
+        $issue = OperationConsumableIssue::where('event_operation_id', $operation->id)->whereKey($cid)->with('operation', 'requirement')->firstOrFail();
+        $data = $request->validate(['quantity' => ['required', 'integer', 'min:0', 'max:1000000'], 'notes' => ['nullable', 'string', 'max:2000']]);
+
+        return $this->attempt(fn () => Consumables::giveBack($issue, $data, auth()->user()), __('أُقفل الصرف'), 'consumable');
     }
 
     /* ─────────────────────────── الفريق ─────────────────────────── */
@@ -823,6 +853,7 @@ class EventOperationController extends Controller
         return [
             'id' => $r->id, 'kind' => $r->kind, 'asset_category' => $r->asset_category, 'product_id' => $r->product_id, 'product' => $r->product?->name,
             'description' => $r->description, 'required_quantity' => (int) $r->required_quantity, 'assigned_quantity' => (int) $r->assigned_quantity,
+            'issued_quantity' => (int) $r->issued_quantity, 'returned_quantity' => (int) $r->returned_quantity,
             'shortfall' => $r->shortfall(), 'source' => $r->source, 'critical' => (bool) $r->critical, 'backup' => (bool) $r->backup, 'notes' => $r->notes,
         ];
     }

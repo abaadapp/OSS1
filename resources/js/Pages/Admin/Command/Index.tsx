@@ -7,6 +7,7 @@ import {
     CheckCircle2,
     Clock,
     Database,
+    Gauge,
     Gavel,
     MessageSquareWarning,
     PackageCheck,
@@ -148,7 +149,7 @@ interface Operations {
 interface Center {
     generated_at: string;
     sees_money: boolean;
-    summary: { decisions: number; late: number; delivery: number; communications: number; upcoming: number; blockers: number; automation: number; migration: number; operations: number };
+    summary: { decisions: number; late: number; delivery: number; communications: number; upcoming: number; blockers: number; automation: number; migration: number; operations: number; management: number };
     decisions: Section;
     late: Section;
     delivery: Section;
@@ -162,6 +163,8 @@ interface Center {
     migration: Section;
     /* التشغيل — المرحلة 10 */
     operations: Operations;
+    /* الإدارة — المرحلة 11: تنبيهاتٌ حرجة فقط (ذممٌ متأخّرة، أرضيّةُ النقد، انحرافُ موازنة) — لمن يرى المال */
+    management: Section;
     money: Money | null;
 }
 
@@ -203,6 +206,7 @@ export default function CommandIndex({ center: c }: { center: Center }) {
         { key: 'automation', label: 'أتمتة تحتاج يدًا', count: c.summary.automation + (c.automation.paused ? 1 : 0), icon: Zap, tone: 'warning' },
         ...(c.summary.migration > 0 ? [{ key: 'migration', label: 'نقل بيانات يحتاج يدًا', count: c.summary.migration, icon: Database, tone: 'warning' }] : []),
         { key: 'operations', label: 'فعاليّات تحتاج يدًا', count: c.summary.operations, icon: Radio, tone: c.operations.live > 0 ? 'ok' : 'warning' },
+        ...(c.sees_money ? [{ key: 'management', label: 'تنبيهات إداريّة', count: c.summary.management, icon: Gauge, tone: 'danger' }] : []),
     ];
 
     const jump = (key: string) => document.getElementById(`cc-${key}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -243,6 +247,7 @@ export default function CommandIndex({ center: c }: { center: Center }) {
                 <ActionSection id="delivery" title="التسليم" hint="حزمٌ تنتظر الإرسال أو العميل أو التنقيح — ومشاريعُ تنتظر حزمتَها أو إقفالَها" icon={PackageCheck} section={c.delivery} m={m} />
 
                 {c.money && <MoneySection money={c.money} m={m} />}
+                {c.sees_money && c.management.total > 0 && <ActionSection id="management" title="تنبيهات إداريّة" hint="ذممٌ متأخّرة فوق العتبة، ونقدٌ متوقَّع دون الأرضيّة، وانحرافُ موازنةٍ فوق الحدّ — من شاشة الإدارة" icon={Gauge} section={c.management} m={m} />}
 
                 <ActionSection
                     id="communications"

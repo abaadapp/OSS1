@@ -23,6 +23,8 @@ import { useTranslate } from '@/lib/i18n';
 import { CO_STATE_LABEL, coTone, PARTY_LABEL, PROJECT_STATUS_LABEL, projectTone } from '@/lib/projects';
 import { DELIVERY_STATE_LABEL, deliveryTone } from '@/lib/deliveries';
 import { operationTone } from '@/lib/operations';
+import CompletenessBadge from '@/Components/management/CompletenessBadge';
+import { marginTone, pct, type CompletenessInfo } from '@/lib/management';
 import CommunicationsTab from './partials/CommunicationsTab';
 import type { PageProps } from '@/types';
 
@@ -171,8 +173,33 @@ interface Props {
     delivery: Delivery;
     cancellation: Cancellation | null;
     operations: OperationRow[] | null;
+    /* الأداء — المرحلة 11: الربحيّةُ بصيغتها الواحدة واكتمالُها وخطُّ زمنِها؛ لمن يقرأ تحليلات المشاريع */
+    performance: Performance | null;
     users: { id: number; name: string }[];
-    may: { manage: boolean; budget: boolean; close: boolean; reopen: boolean; change_order: boolean; override_policy: boolean; delivery: boolean; operations: boolean; operations_manage: boolean };
+    may: { manage: boolean; budget: boolean; close: boolean; reopen: boolean; change_order: boolean; override_policy: boolean; delivery: boolean; operations: boolean; operations_manage: boolean; performance: boolean };
+}
+
+interface Performance {
+    baseline: number;
+    change_orders_delta: number;
+    contracted: number;
+    invoiced: number;
+    credited: number;
+    net_invoiced: number;
+    revenue: number;
+    collected: number;
+    receivable: number;
+    direct_costs: { supplier_invoices: number; expenses: number; stock_consumed: number; total: number };
+    committed: number;
+    expected_cost: number;
+    contribution: number;
+    margin_percent: number | null;
+    forecast_margin: number;
+    forecast_margin_percent: number | null;
+    invoiced_above_approved: boolean;
+    completeness: CompletenessInfo;
+    basis: string;
+    timeline: { at: string; kind: string; label: string; amount: number; direction: 'in' | 'out' | 'cash'; url: string | null }[];
 }
 
 /**
@@ -184,7 +211,7 @@ interface Props {
  * المقبولة)، وما يجب على الفريق تنفيذَه الآن (الحاليّ). والقيمةُ الحاليّة
  * تُشتقّ في الخادم — انظر `ProjectScope`.
  */
-export default function ProjectShow({ project: p, scope, requirements, members, tasks, change_orders, financials, delivery, cancellation, operations, users, may }: Props) {
+export default function ProjectShow({ project: p, scope, requirements, members, tasks, change_orders, financials, delivery, cancellation, operations, performance, users, may }: Props) {
     const t = useTranslate();
     const { context } = usePage<PageProps>().props;
     const { errors } = usePage().props as { errors?: Record<string, string> };
@@ -215,6 +242,8 @@ export default function ProjectShow({ project: p, scope, requirements, members, 
         /* العمليات — المرحلة 10: التنفيذُ على الأرض؛ لمن يفتح القسم */
         ...(operations !== null ? [{ key: 'operations', label: 'العمليات', count: operations.filter((o) => !['completed', 'cancelled'].includes(o.status)).length, alert: operations.some((o) => !o.ready && !['completed', 'cancelled', 'ready', 'live', 'teardown'].includes(o.status)) }] : []),
         ...(may.budget ? [{ key: 'financials', label: 'المال' }] : []),
+        /* الأداء — المرحلة 11 */
+        ...(performance !== null ? [{ key: 'performance', label: 'الأداء', alert: performance.contribution < 0 }] : []),
     ];
 
     return (
@@ -319,6 +348,7 @@ export default function ProjectShow({ project: p, scope, requirements, members, 
             {tab === 'communications' && <CommunicationsTab projectId={p.id} open={open} />}
             {tab === 'operations' && operations !== null && <OperationsTab p={p} rows={operations} may={may} open={open} />}
             {tab === 'financials' && financials && <FinancialsTab f={financials} m={m} frozen={p.financials_frozen} />}
+            {tab === 'performance' && performance !== null && <PerformanceTab perf={performance} m={m} />}
 
             <Dialog open={baselining} onOpenChange={setBaselining}>
                 <DialogContent className="max-w-md">
@@ -1028,6 +1058,82 @@ function DeliveryTab({ p, delivery, may, open }: { p: Project; delivery: Deliver
                         ))}
                     </ul>
                 )}
+            </Card>
+        </div>
+    );
+}
+
+/**
+ * تبويبُ الأداء — المرحلة 11.
+ *
+ * الصيغةُ واحدة (`ProjectProfitability` فوق `ProjectFinancials`): إيرادٌ صافٍ
+ * وتكلفةٌ مباشرة ومساهمةٌ وهامش — والاكتمالُ مكتوبٌ فوقها لا مخفيٌّ تحتها.
+ */
+function PerformanceTab({ perf, m }: { perf: Performance; m: (v: number | null | undefined) => string }) {
+    const t = useTranslate();
+    const Line = ({ label, v, strong, tone, hint }: { label: string; v: number | null; strong?: boolean; tone?: string; hint?: string }) => (
+        <div className={'flex justify-between gap-3 py-1 ' + (strong ? 'font-semibold' : '')} title={hint}>
+            <span className={strong ? '' : 'text-[#6b7280]'}>{t(label)}</span>
+            <span className={'tabular-nums ' + (tone ?? '')} dir="ltr">{m(v)}</span>
+        </div>
+    );
+    const KIND_LABEL: Record<string, string> = { quotation: 'عرض', change_order: 'أمر تغيير', invoice: 'فاتورة', collection: 'تحصيل', supplier_invoice: 'سند مورّد', expense: 'مصروف', stock: 'مخزون' };
+    const KIND_TONE: Record<string, string> = { quotation: 'bg-[#eff6ff] text-[#1d4ed8]', change_order: 'bg-[#eff6ff] text-[#1d4ed8]', invoice: 'bg-[#f4f4f5] text-[#52525b]', collection: 'bg-[#ecfdf5] text-[#047857]', supplier_invoice: 'bg-[#fef2f2] text-[#b91c1c]', expense: 'bg-[#fef2f2] text-[#b91c1c]', stock: 'bg-[#fffbeb] text-[#b45309]' };
+
+    return (
+        <div className="space-y-4">
+            <div className="flex flex-wrap items-center gap-2">
+                <CompletenessBadge completeness={perf.completeness} />
+                <span className="text-[12px] text-[#9ca3af]">{perf.basis}</span>
+            </div>
+            <div className="grid gap-4 lg:grid-cols-3">
+                <Card className="p-4 text-[13px]">
+                    <h2 className="mb-2 text-[15px] font-semibold">{t('الإيراد')}</h2>
+                    <Line label="القيمة المعتمَدة الأصلية" v={perf.baseline} />
+                    <Line label="أوامر التغيير المقبولة" v={perf.change_orders_delta} />
+                    <Line label="المتعاقَد" v={perf.contracted} strong />
+                    <div className="my-2 border-t border-[#f4f4f5]" />
+                    <Line label="المفوتَر" v={perf.invoiced} tone={perf.invoiced_above_approved ? 'text-[#b91c1c]' : ''} hint={perf.invoiced_above_approved ? t('فوق المعتمَد') : undefined} />
+                    {perf.credited > 0 && <Line label="إشعارات دائن" v={perf.credited} />}
+                    <Line label="الإيراد الصافي" v={perf.revenue} strong hint={t('صافٍ من الضريبة بعد إشعارات الدائن')} />
+                    <Line label="المحصَّل" v={perf.collected} />
+                    <Line label="الذمّة" v={perf.receivable} tone={perf.receivable > 0 ? 'text-[#b45309]' : ''} />
+                </Card>
+                <Card className="p-4 text-[13px]">
+                    <h2 className="mb-2 text-[15px] font-semibold">{t('التكلفة المباشرة')}</h2>
+                    <Line label="سندات موردين معتمَدة" v={perf.direct_costs.supplier_invoices} />
+                    <Line label="مصروفات مدفوعة" v={perf.direct_costs.expenses} />
+                    <Line label="مستهلَكات من الرفّ" v={perf.direct_costs.stock_consumed} hint={t('صافي ما صُرف للفعاليّة ناقصَ ما رُدّ — بتكلفته وقتَ الصرف')} />
+                    <Line label="التكلفة الفعلية" v={perf.direct_costs.total} strong />
+                    <div className="my-2 border-t border-[#f4f4f5]" />
+                    <Line label="ملتزَمٌ لم يصر قيدًا" v={perf.committed} />
+                    <Line label="التكلفة المتوقَّعة" v={perf.expected_cost} />
+                </Card>
+                <Card className="p-4 text-[13px]">
+                    <h2 className="mb-2 text-[15px] font-semibold">{t('المساهمة')}</h2>
+                    <Line label="المساهمة المحقَّقة" v={perf.contribution} strong tone={perf.contribution < 0 ? 'text-[#b91c1c]' : 'text-[#047857]'} />
+                    <div className="flex justify-between gap-3 py-1"><span className="text-[#6b7280]">{t('الهامش')}</span><span className={'tabular-nums ' + marginTone(perf.margin_percent)} dir="ltr">{pct(perf.margin_percent)}</span></div>
+                    <div className="my-2 border-t border-[#f4f4f5]" />
+                    <Line label="المساهمة المتوقَّعة" v={perf.forecast_margin} hint={t('المتعاقَد − التكلفة المتوقَّعة')} />
+                    <div className="flex justify-between gap-3 py-1"><span className="text-[#6b7280]">{t('الهامش المتوقَّع')}</span><span className="tabular-nums" dir="ltr">{pct(perf.forecast_margin_percent)}</span></div>
+                    {perf.completeness.status !== 'complete' && <p className="mt-2 text-[11px] text-[#b45309]">{perf.completeness.reasons.join(' · ')}</p>}
+                </Card>
+            </div>
+            <Card className="overflow-hidden">
+                <h2 className="px-4 pt-3 text-[15px] font-semibold">{t('خطّ الزمن الماليّ')}</h2>
+                <table className="w-full text-[12px]">
+                    <thead className="text-[11px] text-[#6b7280]"><tr><th className="px-3 py-2 text-start">{t('التاريخ')}</th><th className="px-3 py-2 text-start">{t('الواقعة')}</th><th className="px-3 py-2 text-end">{t('المبلغ')}</th></tr></thead>
+                    <tbody>
+                        {perf.timeline.length === 0 && <tr><td colSpan={3} className="px-3 py-6 text-center text-[#9ca3af]">{t('لا وقائعَ ماليّة بعد')}</td></tr>}
+                        {perf.timeline.map((row, i) => (
+                            <tr key={i} className="border-t border-[#f4f4f5]">
+                                <td className="px-3 py-1.5" dir="ltr">{row.at || '—'}</td>
+                                <td className="px-3 py-1.5"><span className={'me-1 rounded-full px-1.5 text-[10px] ' + (KIND_TONE[row.kind] ?? 'bg-[#f4f4f5]')}>{t(KIND_LABEL[row.kind] ?? row.kind)}</span>{row.url ? <a href={row.url} className="hover:text-[#1d4ed8]">{row.label}</a> : row.label}</td>
+                                <td className={'px-3 py-1.5 text-end tabular-nums ' + (row.direction === 'out' ? 'text-[#b91c1c]' : row.direction === 'cash' ? 'text-[#047857]' : '')} dir="ltr">{row.direction === 'out' ? '−' : ''}{m(row.amount)}</td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
             </Card>
         </div>
     );

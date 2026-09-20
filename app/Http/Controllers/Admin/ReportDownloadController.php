@@ -40,7 +40,8 @@ class ReportDownloadController extends Controller
     {
         abort_unless(ReportColumns::has($report) || ReportColumns::sectioned($report), 404);
 
-        $section = Reports::sectionForRoute('admin.reports.'.$report);
+        /* وتقاريرُ الإدارة (المرحلة 11) لا تحمل مسارًا باسمها — تُقاس بمفتاحها */
+        $section = Reports::sectionForKey($report) ?? Reports::sectionForRoute('admin.reports.'.$report);
         abort_if($section === null, 404);
         abort_unless(
             auth()->user()?->allows($section),

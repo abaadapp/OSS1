@@ -36,8 +36,13 @@ class Permissions
          * والمنسّقُ الميدانيّ يقرأ ما سينفّذه. والقسمُ يفتح الشاشة؛ وما يمسّ
          * النطاقَ أو المالَ أفعالٌ تُمنح بالاسم.
          */
+        /*
+         * و«الإدارة» مُنحت للمحاسب عمدًا في المرحلة 11: يقرأ الأداءَ الماليّ
+         * وربحيّةَ المشاريع والعملاءَ والموازناتِ والتوقّعاتِ — قراءةً. والقسمُ
+         * يفتح الشاشة؛ والإعدادُ والاعتمادُ والسيناريوهاتُ أفعالٌ تُمنح بالاسم.
+         */
         'accountant' => ['dashboard', 'orders', 'customers', 'finance', 'expenses',
-            'employees', 'reports', 'suppliers', 'purchases', 'projects'],
+            'employees', 'reports', 'suppliers', 'purchases', 'projects', 'management'],
         /*
          * وأمينُ المخزن يفتح «المعدّات» — المرحلة 10: القطعُ ذاتُ الهويّة
          * (حواسيبُ وطابعاتٌ وماسحات) في عهدته كما البضاعةُ في عهدته. والقسمُ
@@ -290,6 +295,46 @@ class Permissions
     public const CHECKLIST_MANAGE = 'checklist.manage';
 
     /*
+     * ═══ الذكاءُ الإداريّ — المرحلة 11 ═══
+     *
+     * قسمُ «الإدارة» يفتح الشاشات؛ والأرقامُ الماليّة لا تُرى بمجرّد فتح
+     * القسم: كلُّ بابٍ منها فعلٌ بالاسم — المالُ، والمشاريعُ، والعملاءُ،
+     * والعمليات. والموازنةُ والتوقّعُ يُقرآن بفعلٍ ويُداران بفعلٍ ويُعتمدان
+     * بفعل: من يكتب لا يعتمد ما كتبه إلّا أن يُمنح الاثنين.
+     */
+
+    /** الأداءُ الماليّ: الإيرادُ والتحصيلُ والمصروفُ والنقدُ والذمم */
+    public const ANALYTICS_FINANCIAL = 'analytics.financial';
+
+    /** ربحيّةُ المشاريع */
+    public const ANALYTICS_PROJECTS = 'analytics.projects';
+
+    /** العملاءُ والخدماتُ والقمع التجاريّ */
+    public const ANALYTICS_CUSTOMERS = 'analytics.customers';
+
+    /** التشغيلُ والمعدّات */
+    public const ANALYTICS_OPERATIONS = 'analytics.operations';
+
+    public const BUDGETS_VIEW = 'budgets.view';
+
+    public const BUDGETS_MANAGE = 'budgets.manage';
+
+    public const BUDGETS_APPROVE = 'budgets.approve';
+
+    public const FORECASTS_VIEW = 'forecasts.view';
+
+    public const FORECASTS_MANAGE = 'forecasts.manage';
+
+    public const FORECASTS_APPROVE = 'forecasts.approve';
+
+    public const SCENARIOS_MANAGE = 'scenarios.manage';
+
+    public const MANAGEMENT_REVIEWS_MANAGE = 'management_reviews.manage';
+
+    /** ضبطُ عتبات التنبيهات الإداريّة */
+    public const MANAGEMENT_THRESHOLDS = 'management.thresholds';
+
+    /*
      * ═══ المشروع — المرحلة 4 ═══
      *
      * ولا `project.create`: المشروعُ يُنشأ من قبول العرض لا بيد، ومقبضٌ لا
@@ -425,6 +470,19 @@ class Permissions
         self::ASSETS_RETURN => 'ردّ المعدّات وتسجيل حالها',
         self::CREW_MANAGE => 'تعيين فريق الفعاليّة',
         self::CHECKLIST_MANAGE => 'قوالب قوائم التحقّق وإعفاء بندٍ إلزاميّ',
+        self::ANALYTICS_FINANCIAL => 'قراءة الأداء المالي والنقد والذمم',
+        self::ANALYTICS_PROJECTS => 'قراءة ربحيّة المشاريع',
+        self::ANALYTICS_CUSTOMERS => 'قراءة تحليلات العملاء والخدمات والقمع',
+        self::ANALYTICS_OPERATIONS => 'قراءة تحليلات التشغيل والمعدّات',
+        self::BUDGETS_VIEW => 'قراءة الموازنات',
+        self::BUDGETS_MANAGE => 'إعداد الموازنات وتنقيحها',
+        self::BUDGETS_APPROVE => 'اعتماد الموازنات',
+        self::FORECASTS_VIEW => 'قراءة التوقّعات النقدية',
+        self::FORECASTS_MANAGE => 'إعداد التوقّعات النقدية',
+        self::FORECASTS_APPROVE => 'اعتماد التوقّعات النقدية',
+        self::SCENARIOS_MANAGE => 'إعداد السيناريوهات المالية',
+        self::MANAGEMENT_REVIEWS_MANAGE => 'إعداد المراجعات الإدارية وقراراتها',
+        self::MANAGEMENT_THRESHOLDS => 'ضبط عتبات التنبيهات الإدارية',
         self::PROJECT_MANAGE => 'إدارة المشروع وفريقه ومهامّه وتثبيت متطلّباته',
         self::PROJECT_BUDGET_VIEW => 'رؤية تكلفة المشروع وربحيّته',
         self::PROJECT_CLOSE => 'إقفال مشروع',
@@ -545,6 +603,24 @@ class Permissions
         self::ASSETS_RETURN => ['admin', 'manager', 'inventory'],
         self::CREW_MANAGE => ['admin', 'manager'],
         self::CHECKLIST_MANAGE => ['admin', 'manager'],
+        /*
+         * والذكاءُ الإداريّ — المرحلة 11: القراءةُ للمالك والمدير، وللمحاسب
+         * ما هو عملُه (المالُ والمشاريعُ والعملاءُ والموازنةُ والتوقّعُ قراءةً).
+         * والاعتمادُ للمالك وحده — من يكتب الموازنةَ لا يعتمدها إلّا أن يُمنح.
+         */
+        self::ANALYTICS_FINANCIAL => ['admin', 'manager', 'accountant'],
+        self::ANALYTICS_PROJECTS => ['admin', 'manager', 'accountant'],
+        self::ANALYTICS_CUSTOMERS => ['admin', 'manager', 'accountant'],
+        self::ANALYTICS_OPERATIONS => ['admin', 'manager'],
+        self::BUDGETS_VIEW => ['admin', 'manager', 'accountant'],
+        self::BUDGETS_MANAGE => ['admin', 'manager'],
+        self::BUDGETS_APPROVE => ['admin'],
+        self::FORECASTS_VIEW => ['admin', 'manager', 'accountant'],
+        self::FORECASTS_MANAGE => ['admin', 'manager'],
+        self::FORECASTS_APPROVE => ['admin'],
+        self::SCENARIOS_MANAGE => ['admin', 'manager'],
+        self::MANAGEMENT_REVIEWS_MANAGE => ['admin', 'manager'],
+        self::MANAGEMENT_THRESHOLDS => ['admin'],
         /*
          * والمشروع: إدارتُه وإقفالُه للمالك ومدير الفرع، وإعادةُ الفتح
          * للمالك وحده — تُعيد أرقامًا جُمّدت. والمحاسبُ يرى المال لأنّه عملُه.
@@ -757,6 +833,8 @@ class Permissions
         'operations',
         // والمعدّاتُ ذاتُ الهويّة — المرحلة 10. ولأمين المخزن
         'assets',
+        // الذكاءُ الإداريّ — المرحلة 11: لوحةُ الأداء والموازنةُ والتوقّع. للمالك والمدير، ويُمنح بالاسم
+        'management',
     ];
 
     /**
@@ -862,6 +940,7 @@ class Permissions
         'imports' => 'admin.imports.index',
         'operations' => 'admin.operations.index',
         'assets' => 'admin.assets.index',
+        'management' => 'admin.management.index',
     ];
 
     /**
@@ -917,6 +996,7 @@ class Permissions
             'imports' => 'استيراد البيانات',
             'operations' => 'العمليات',
             'assets' => 'المعدّات',
+            'management' => 'الإدارة',
         ];
 
         return collect(self::SECTIONS)
