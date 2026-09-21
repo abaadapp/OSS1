@@ -153,7 +153,7 @@ final class CashIntelligence
         $delay = (int) $assumptions['collection_delay_days'];
         $overdueDays = (int) $assumptions['overdue_collection_days'];
         $collectDelay = $scenario !== null ? $delay + self::scenarioDays($scenario, 'collection_delay_days') : $delay;
-        foreach (CustomerInvoice::where('business_id', $bid)->where('status', CustomerInvoice::ISSUED)->whereRaw(CustomerInvoice::outstandingSql().' > 0.0005')
+        foreach (CustomerInvoice::where('business_id', $bid)->where('status', CustomerInvoice::ISSUED)->whereRaw(CustomerInvoice::outstandingSql().' > 0.0005')->withMoney()
             ->with('customer:id,name')->orderBy('due_at')->limit(2000)->get() as $inv) {
             $amount = $inv->outstanding();
             $due = $inv->due_at?->copy()->startOfDay();

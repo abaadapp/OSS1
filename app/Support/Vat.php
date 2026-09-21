@@ -19,11 +19,22 @@ use Illuminate\Support\Carbon;
 class Vat
 {
     /** مفعّلة ما لم تُطفأ صراحةً — فلا يتغيّر شيء لمن لم يلمس المفتاح */
+    /** ما قُرئ في هذه العمليّة — يُمسح مع `Demo::flushCurrency` وعند حفظ الإعدادات (المرحلة 12 §57) */
+    private static array $memo = [];
+
+    public static function flush(): void
+    {
+        self::$memo = [];
+    }
+
     public static function enabled(int $businessId): bool
     {
+        if (array_key_exists("e$businessId", self::$memo)) {
+            return self::$memo["e$businessId"];
+        }
         $value = Setting::where('business_id', $businessId)->where('key', 'vat_enabled')->value('value');
 
-        return $value === null || $value === '1';
+        return self::$memo["e$businessId"] = ($value === null || $value === '1');
     }
 
     /**

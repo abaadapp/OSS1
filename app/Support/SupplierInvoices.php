@@ -89,6 +89,8 @@ final class SupplierInvoices
                 'notes' => $data['notes'] ?? null,
                 'attachment' => $data['attachment'] ?? null,
                 'attachment_name' => $data['attachment_name'] ?? null,
+                /* طبيعةُ التكلفة بيد المحاسب — أو تُشتقّ من الأمر عند الاعتماد (المرحلة 12) */
+                'cost_kind' => in_array($data['cost_kind'] ?? null, self::COST_KINDS, true) ? $data['cost_kind'] : null,
                 'approval_status' => self::PENDING,
                 'submitted_by' => $by?->id,
             ]);
@@ -114,6 +116,70 @@ final class SupplierInvoices
      *
      * @return array{status: string, notes: list<string>}
      */
+    public const COST_INVENTORY = 'inventory';
+
+    public const COST_DIRECT = 'direct';
+
+    public const COST_MIXED = 'mixed';
+
+    public const COST_KINDS = [self::COST_INVENTORY, self::COST_DIRECT];
+
+    public const COST_LABELS = [
+        self::COST_INVENTORY => 'مخزون — أصنافٌ تدخل الرفّ',
+        self::COST_DIRECT => 'تكلفة مباشرة — خدماتٌ ومشترياتٌ لا تدخل الرفّ',
+        self::COST_MIXED => 'مختلط — مخزونٌ وتكلفةٌ معًا بحسب بنود الأمر',
+    ];
+
+    /**
+     * كيف يُقسَم صافي السند بين المخزون والمشتريات المباشرة.
+     *
+     * ═══ القاعدة ═══
+     *
+     * ما قاله المحاسبُ بيده (`cost_kind`) يُطاع كلُّه. وإلّا فمن أمر الشراء:
+     * حصّةُ المخزون = مجموعُ سطور الأصناف المخزونة ÷ مجموعِ السطور، والباقي
+     * تكلفةٌ مباشرة. وسندٌ بلا أمرٍ — أو أمرٌ بلا صنفٍ مخزون — تكلفةٌ مباشرة
+     * كلُّه: خدمةٌ اشتُريت لفعاليّةٍ لا بضاعةٌ للرفّ.
+     *
+     * والأصنافُ المخزونة تُقرأ من الكتالوج (`Product::isStocked`): الخدمةُ
+     * والباقةُ لا رفَّ لهما ولو حملتا `product_id`.
+     *
+     * @return array{inventory: float, direct: float, kind: string}
+     */
+    public static function costSplit(SupplierInvoice $invoice, float $cost): array
+    {
+        $cost = round($cost, 3);
+
+        if ($invoice->cost_kind === self::COST_INVENTORY) {
+            return ['inventory' => $cost, 'direct' => 0.0, 'kind' => self::COST_INVENTORY];
+        }
+        if ($invoice->cost_kind === self::COST_DIRECT) {
+            return ['inventory' => 0.0, 'direct' => $cost, 'kind' => self::COST_DIRECT];
+        }
+
+        $order = $invoice->purchase_order_id
+            ? PurchaseOrder::where('business_id', $invoice->business_id)->with('items.product')->find($invoice->purchase_order_id)
+            : null;
+
+        if ($order === null || $order->items->isEmpty()) {
+            return ['inventory' => 0.0, 'direct' => $cost, 'kind' => self::COST_DIRECT];
+        }
+
+        $lineValue = fn ($item) => (float) $item->line_total > 0.0005 ? (float) $item->line_total : (float) $item->cost * (float) $item->quantity;
+        $all = round((float) $order->items->sum($lineValue), 3);
+        $stocked = round((float) $order->items->filter(fn ($item) => $item->product !== null && $item->product->isStocked())->sum($lineValue), 3);
+
+        if ($all <= 0.0005 || $stocked <= 0.0005) {
+            return ['inventory' => 0.0, 'direct' => $cost, 'kind' => self::COST_DIRECT];
+        }
+        if (abs($all - $stocked) <= 0.0005) {
+            return ['inventory' => $cost, 'direct' => 0.0, 'kind' => self::COST_INVENTORY];
+        }
+
+        $inventory = round($cost * $stocked / $all, 3);
+
+        return ['inventory' => $inventory, 'direct' => round($cost - $inventory, 3), 'kind' => self::COST_MIXED];
+    }
+
     public static function match(SupplierInvoice $invoice): array
     {
         $notes = [];
@@ -328,10 +394,26 @@ final class SupplierInvoices
             $cost = $registered ? round($total - $tax, 3) : $total;
 
             /* والرصيدُ الافتتاحيُّ ذمّةٌ للمورّد لا بضاعةً دخلت — يُقابَل بالأرباح المحتجزة (المرحلة 9) */
+            $split = ['inventory' => 0.0, 'direct' => 0.0, 'kind' => null];
             if ($locked->is_opening_balance) {
                 $lines = [['account' => 'retained_earnings', 'debit' => $total, 'memo' => $locked->supplier?->name]];
             } else {
-                $lines = [['account' => 'inventory', 'debit' => $cost, 'memo' => $locked->supplier?->name]];
+                /*
+                 * ماذا اشترى السند؟ — المرحلة 12 §18.
+                 *
+                 * كان كلُّ سندٍ `Dr مخزون`. وشركةُ الفعاليّات تشتري خدماتٍ في
+                 * أكثر أيّامها، فبقيت تكلفتُها أصلًا لا يُستهلك. فيُقرأ أمرُ
+                 * الشراء: بنودُ الأصناف المخزونة مخزونٌ، وما سواها مشترياتٌ
+                 * مباشرة (5150) — انظر `costSplit`.
+                 */
+                $split = self::costSplit($locked, $cost);
+                $lines = [];
+                if ($split['inventory'] > 0.0005) {
+                    $lines[] = ['account' => 'inventory', 'debit' => $split['inventory'], 'memo' => $locked->supplier?->name];
+                }
+                if ($split['direct'] > 0.0005) {
+                    $lines[] = ['account' => 'direct_purchases', 'debit' => $split['direct'], 'memo' => $locked->supplier?->name];
+                }
 
                 if ($registered && $tax > 0) {
                     $lines[] = ['account' => 'tax_payable', 'debit' => $tax];
@@ -357,6 +439,10 @@ final class SupplierInvoices
                 'approved_by' => $by?->id,
                 'match_status' => $match['status'],
                 'match_notes' => implode("\n", $match['notes']),
+                /* ما رُحِّل فعلًا — يُكتب مرّةً ولا يُعاد اشتقاقه */
+                'cost_kind' => $split['kind'] ?? $locked->cost_kind,
+                'inventory_cost' => $locked->is_opening_balance ? null : $split['inventory'],
+                'direct_cost' => $locked->is_opening_balance ? null : $split['direct'],
             ]);
 
             $locked->syncStatus();

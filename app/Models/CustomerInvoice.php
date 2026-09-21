@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\Receivables;
 use App\Support\Cheques;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -16,6 +17,13 @@ use Illuminate\Support\Facades\DB;
  */
 class CustomerInvoice extends Model
 {
+    /** أيُّ كتابةٍ هنا تُسقط ما حفظته الذممُ في الذاكرة — انظر `Receivables::openInvoices` */
+    protected static function booted(): void
+    {
+        static::saved(fn () => Receivables::flush());
+        static::deleted(fn () => Receivables::flush());
+    }
+
     public const DRAFT = 'مسودة';
 
     public const ISSUED = 'صادرة';
@@ -214,8 +222,30 @@ class CustomerInvoice extends Model
      * ويُشتقّ ولا يُخزَّن: عمودٌ وجدولٌ يقولان الشيء نفسه يفترقان يومًا،
      * وأوّلُ دفعةٍ تُلغى ولا يُحدَّث فيها العمود تجعل الفاتورة تقول مدفوعةً.
      */
+    /**
+     * المبالغُ محسوبةً في SQL مع الصفوف — لا استعلامَين لكلّ فاتورة.
+     *
+     * ═══ لماذا (المرحلة 12 §57) ═══
+     *
+     * `outstanding()` كانت تسأل القاعدةَ عن المدفوع والمردود لكلّ فاتورةٍ على
+     * حدة، و`daysOverdue()` تسألها ثانيةً — فشاشةُ الذمم على خمسة آلاف فاتورة
+     * كانت ثلاثمئة ألف استعلامٍ ودقيقتين. فتُقرأ الأرقامُ مع الصفّ نفسِه
+     * (`withMoney`). ولا تُحفظ في الكائن بعد القراءة: كائنٌ يُقرأ ثمّ تُقيَّد
+     * عليه دفعةٌ ثمّ يُقرأ ثانيةً يجب أن يقول الجديد.
+     */
+    public function scopeWithMoney($query)
+    {
+        return $query->select('customer_invoices.*')
+            ->selectRaw(self::paidSql().' AS paid_amount_sql')
+            ->selectRaw(self::creditedSql().' AS credited_amount_sql');
+    }
+
     public function paidTotal(): float
     {
+        if (array_key_exists('paid_amount_sql', $this->attributes)) {
+            return round((float) $this->attributes['paid_amount_sql'], 3);
+        }
+
         /*
          * وبالقاعدة نفسها التي في `paidSql` حرفًا بحرف — انظرها هناك.
          *
@@ -223,17 +253,23 @@ class CustomerInvoice extends Model
          * واحد. وافتراقُهما يعني ورقةً تقول «مدفوعة» في الشاشة و«عليها باقٍ»
          * في القائمة — فيحرسه `test_both_readings_of_paid_agree`.
          */
-        return round((float) DB::table('customer_payment_allocations as a')
+        $paid = round((float) DB::table('customer_payment_allocations as a')
             ->join('customer_payments as p', 'p.id', '=', 'a.customer_payment_id')
             ->where('a.customer_invoice_id', $this->id)
             ->whereNull('p.cancelled_at')
             ->where(fn ($q) => $q->whereNull('p.cheque_status')->orWhere('p.cheque_status', '<>', Cheques::BOUNCED))
             ->sum('a.amount'), 3);
+
+        return $paid;
     }
 
     /** ما رُدَّ منها بإشعار دائن */
     public function creditedTotal(): float
     {
+        if (array_key_exists('credited_amount_sql', $this->attributes)) {
+            return round((float) $this->attributes['credited_amount_sql'], 3);
+        }
+
         return round((float) $this->creditNotes()->sum('amount'), 3);
     }
 
@@ -286,8 +322,22 @@ class CustomerInvoice extends Model
             return 0;
         }
 
-        return max(0, (int) $this->due_at->endOfDay()->diffInDays(now(), absolute: false));
+        /*
+         * أيّامٌ كاملة بعد نهاية يوم الاستحقاق — بالطوابع لا بنسخ Carbon.
+         *
+         * كانت `endOfDay()->diffInDays()` تُنشئ كائنين لكلّ نداء، وشاشةُ
+         * الأعمار تنادي هذه الدالّةَ عشراتِ آلاف المرّات على خمسة آلاف فاتورة
+         * (المرحلة 12 §57). والمنطقةُ الزمنيّة هي منطقةُ التطبيق في الحالتين.
+         */
+        $dueDay = $this->due_at->format('Y-m-d');
+        $this->dueEnd ??= [];
+        $end = $this->dueEnd[$dueDay] ??= (int) strtotime($dueDay.' 23:59:59');
+
+        return max(0, (int) floor((now()->getTimestamp() - $end) / 86400));
     }
+
+    /** @var array<string, int>|null نهايةُ يوم الاستحقاق طابعًا — لكلّ تاريخٍ مرّ على الكائن */
+    private ?array $dueEnd = null;
 
     /** المشروعُ الذي يُقرأ هذا المستندُ تحته — بُعدٌ لا قيد (§16) */
     public function project(): BelongsTo

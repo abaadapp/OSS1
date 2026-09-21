@@ -10,6 +10,7 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
@@ -233,6 +234,49 @@ class Preflight extends Command
                     : 'آخر تشغيل فشل في '.count($stamp['failed']).' متجرًا — شغّل: php artisan backup:run'),
         );
 
+        /*
+         * ─────────────────── جاهزيّةُ الإنتاج — المرحلة 12 §66 ───────────────────
+         *
+         * ما يُفحص هنا يُقرأ من الإعدادات الحيّة ولا يطبع سرًّا: يقول «مضبوط»
+         * أو «ناقص» ولا يقول القيمة. ويصلح للتشغيل على خادم الإنتاج بعد النشر.
+         */
+        $this->section('البنية التحتيّة');
+        $driver = (string) config('database.default');
+        $this->check('قاعدةُ البيانات PostgreSQL', $driver === 'pgsql',
+            'المحرّكُ الحاليّ '.$driver.' — الإنتاجُ على PostgreSQL؛ SQLite للتطوير وحده', warnOnly: ! app()->environment('production'));
+        $this->check('الاتّصالُ بالقاعدة يعمل', $this->safe(fn () => DB::connection()->getPdo() !== null), 'تعذّر الاتّصال — راجع DB_* في .env');
+        $this->check('لا هجراتٍ معلَّقة', $this->safe(fn () => $this->pendingMigrations() === 0), 'هجراتٌ لم تُشغَّل: php artisan migrate --force');
+        foreach ([['queue', 'jobs', 'QUEUE_CONNECTION=database يحتاج جدول jobs'], ['session', 'sessions', 'SESSION_DRIVER=database يحتاج جدول sessions'], ['cache', 'cache', 'CACHE_STORE=database يحتاج جدول cache']] as [$kind, $table, $fix]) {
+            $store = match ($kind) { 'queue' => config('queue.default'), 'session' => config('session.driver'), default => config('cache.default') };
+            if ($store === 'database') {
+                $this->check("جدولُ {$table} موجود (".$kind.' = database)', $this->safe(fn () => Schema::hasTable($table)), $fix.' — شغّل الهجرات');
+            } else {
+                $this->check(ucfirst($kind).' = '.$store, ! in_array($store, ['array', 'null'], true), $kind.' على '.$store.' لا يصلح للإنتاج');
+            }
+        }
+        $this->check('مجلّدُ التخزين قابلٌ للكتابة', is_writable(storage_path('app')) && is_writable(storage_path('logs')) && is_writable(storage_path('framework')), 'storage/ غيرُ قابلٍ للكتابة — chown/chmod لمستخدم الخادم');
+        $this->check('ملفُّ .env ليس مقروءًا للعامّة', ! file_exists(base_path('.env')) || (fileperms(base_path('.env')) & 0004) === 0, 'chmod 640 .env', warnOnly: true);
+        $this->check('المنطقةُ الزمنيّة مسقط', config('app.timezone') === 'Asia/Muscat', 'APP_TIMEZONE=Asia/Muscat — المواعيدُ والفواتيرُ تُختم بها', warnOnly: true);
+        $this->check('المسارات مُخزَّنة مؤقتًا', file_exists(base_path('bootstrap/cache/routes-v7.php')) || count(glob(base_path('bootstrap/cache/routes*.php')) ?: []) > 0, 'php artisan route:cache', warnOnly: true);
+
+        $this->section('القنوات الخارجيّة');
+        $mailer = (string) config('mail.default');
+        $this->check('مُرسِلُ البريد معروف: '.$mailer, in_array($mailer, ['smtp', 'postmark', 'ses', 'sendmail'], true), 'MAIL_MAILER على مُرسِلٍ حقيقيّ: postmark أو smtp أو ses أو sendmail — لا log ولا resend');
+        if ($mailer === 'postmark') {
+            $this->check('سرُّ webhook لـPostmark مضبوط', filled(config('services.postmark.webhook_secret')), 'POSTMARK_WEBHOOK_SECRET — بدونه بابُ الأخبار مقفل (404) ولا يُعرف ما وصل وما ارتدّ', warnOnly: true);
+        }
+        $wa = filled(config('services.whatsapp.token'));
+        $this->check('واتساب: '.($wa ? 'موصول' : 'غيرُ موصول (مقصود حتى قرار التفعيل)'), true, '');
+        if ($wa) {
+            $this->check('واتساب: سرُّ التطبيق ورمزُ التحقّق مضبوطان', filled(config('services.whatsapp.app_secret')) && filled(config('services.whatsapp.verify_token')), 'WHATSAPP_APP_SECRET وWHATSAPP_VERIFY_TOKEN — بدونهما لا تُقبل أخبارُ Meta');
+        }
+
+        $this->section('سلامةُ الأتمتة والمراسلات');
+        $live = $this->safe(fn () => \App\Models\Setting::where('key', 'automation_mode')->where('value', 'live')->count()) ?: 0;
+        $this->check('لا شركةَ في وضع الأتمتة الحيّ', $live === 0, $live.' شركة في الوضع الحيّ — الانطلاقُ يكون مطفأً أو مراقِبًا ثمّ يُفعَّل بقرار (docs/AUTOMATION_GO_LIVE.md)', warnOnly: true);
+        $liveRules = $this->safe(fn () => \App\Models\AutomationRule::where('kind', 'external')->where('enabled', true)->where('mode', 'live')->count()) ?: 0;
+        $this->check('لا قاعدةَ خارجيّة حيّة', $liveRules === 0, $liveRules.' قاعدة خارجيّة حيّة — تُراجَع قبل الانطلاق', warnOnly: true);
+
         /* ------------------------------- الخلاصة ------------------------------- */
         $this->newLine();
         if ($this->fail) {
@@ -338,6 +382,25 @@ class Preflight extends Command
         }
 
         return @shell_exec($cmd);
+    }
+
+    /** فحصٌ يرمي استثناءً فحصٌ فاشل — لا سقوطٌ للأمر كلِّه */
+    private function safe(callable $fn): mixed
+    {
+        try {
+            return $fn();
+        } catch (\Throwable) {
+            return false;
+        }
+    }
+
+    private function pendingMigrations(): int
+    {
+        $migrator = app('migrator');
+        $ran = $migrator->getRepository()->getRan();
+        $files = $migrator->getMigrationFiles($migrator->paths() ?: [database_path('migrations')]);
+
+        return count(array_diff(array_keys($files), $ran));
     }
 
     private function section(string $title): void

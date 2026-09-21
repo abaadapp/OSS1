@@ -72,7 +72,7 @@ final class Reconciliation
 
     private static function invoices(ImportDataset $dataset, array $ids, array $expected): array
     {
-        $rows = CustomerInvoice::whereIn('id', $ids)->get();
+        $rows = CustomerInvoice::whereIn('id', $ids)->withMoney()->get();
         $supplierRows = $dataset->category === 'opening_balances' ? SupplierInvoice::whereIn('id', $ids)->get() : collect();
 
         $issued = $rows->where('status', CustomerInvoice::ISSUED);

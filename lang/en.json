@@ -5758,5 +5758,18 @@
     "التقرير الإداري جاهز": "Management report ready",
     "توقّع نقدي قديم": "Stale cash forecast",
     "عروضٌ أُرسلت في المدّة — صافيةً من الضريبة": "Quotations sent in the period — net of VAT",
-    "عروضٌ قُبلت وفروقُ أوامرِ تغييرٍ قُبلت في المدّة — صافيةً من الضريبة": "Quotations accepted and change-order deltas accepted in the period — net of VAT"
+    "عروضٌ قُبلت وفروقُ أوامرِ تغييرٍ قُبلت في المدّة — صافيةً من الضريبة": "Quotations accepted and change-order deltas accepted in the period — net of VAT",
+    "سقف الرسائل الخارجية في الدورة الواحدة": "External messages per run (cap)",
+    "كلّ ربع ساعة تخرج هذا العددُ على الأكثر إلى العملاء — والباقي ينتظر الدورةَ التالية. حدُّ انفجارٍ لقاعدةٍ معطوبة": "At most this many customer messages go out every 15 minutes — the rest wait for the next run. A blast-radius limit for a broken rule",
+    "سقفُ الرسائل في الدورة بين 1 و1000.": "The per-run message cap must be between 1 and 1000.",
+    "القاعدة تفشل تكرارًا — أُوقفت صفوفُها حتى يُصلح السبب": "The rule keeps failing — its rows are held until the cause is fixed",
+    "طبيعة التكلفة": "Cost nature",
+    "تُترك فارغةً فتُقرأ من بنود أمر الشراء عند الاعتماد: أصنافٌ مخزونة تدخل الرفّ، وما سواها تكلفةٌ مباشرة في الدخل": "Leave blank to derive it from the purchase order lines on approval: stocked items go to inventory, everything else is a direct cost in the income statement",
+    "تُقرأ من أمر الشراء": "Derived from the purchase order",
+    "مخزون — أصنافٌ تدخل الرفّ": "Inventory — items that go on the shelf",
+    "تكلفة مباشرة — خدماتٌ ومشترياتٌ لا تدخل الرفّ": "Direct cost — services and purchases that never reach the shelf",
+    "مختلط — مخزونٌ وتكلفةٌ معًا بحسب بنود الأمر": "Mixed — inventory and direct cost by the order lines",
+    "تكلفة مباشرة": "Direct cost",
+    "مختلط": "Mixed",
+    "لا تكاليفَ مسجَّلة على المشروع بعد": "No costs recorded on the project yet"
 }

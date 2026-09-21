@@ -72,6 +72,21 @@ final class Engine
     /** مستورَدٌ تاريخيًّا — لم يمرّ بدورة النظام فلا يُذكَّر به (المرحلة 9) */
     public const HISTORICAL = 'historical';
 
+    public const FUSE_BLOWN = 'fuse_blown';
+
+    /*
+     * حدُّ الانفجار — المرحلة 12.
+     *
+     * قاعدةٌ معطوبة تطابق ألفَ صفٍّ لا تُخرج ألفَ رسالةٍ في ربع ساعة: كلُّ
+     * دورةٍ تُنفّذ من الرسائل الخارجيّة لكلّ شركةٍ هذا العددَ ثمّ تترك الباقي
+     * **معلَّقًا** للدورة التالية — فالدفعةُ المشروعة تخرج كلُّها لكن على مهل،
+     * والمعطوبةُ تُلحَق قبل أن تبلغ الجميع. ويُضبط من إعدادات الشركة.
+     */
+    public const DEFAULT_EXTERNAL_PER_TICK = 50;
+
+    /* والفتيل: قاعدةٌ أخفقت هذا العددَ في ساعةٍ تُوقَف صفوفُها حتى يُصلح سببُها */
+    public const FUSE_FAILURES = 10;
+
     public const REASONS = [
         self::PAUSED => 'الأتمتة موقوفة',
         self::NOT_ELIGIBLE => 'لم يعد المستند في الحال التي تستدعي المتابعة',
@@ -85,6 +100,7 @@ final class Engine
         self::HISTORICAL => 'مستند مستورَد من بيانات تاريخية — لا تُتابعه الأتمتة',
         self::MODE_OFF => 'الأتمتة مطفأة',
         self::TARGET_GONE => 'المستند لم يعد موجودًا',
+        self::FUSE_BLOWN => 'القاعدة تفشل تكرارًا — أُوقفت صفوفُها حتى يُصلح السبب',
     ];
 
     /* ─────────────────────────── الدورة ─────────────────────────── */
@@ -107,6 +123,7 @@ final class Engine
             }
 
             $totals['businesses']++;
+            self::resetBudget((int) $bid);
             foreach (self::evaluate((int) $bid, $settings) as $k => $v) {
                 $totals[$k] += $v;
             }
@@ -187,8 +204,16 @@ final class Engine
                         continue;
                     }
 
+                    $gate = self::gate($run, $rule, $settings);
+                    if ($gate !== null) {
+                        $stats[$gate]++;
+
+                        continue;
+                    }
+
                     $outcome = self::execute($run, $rule, $trigger, $target, $step, $settings);
                     $stats[$outcome] = ($stats[$outcome] ?? 0) + 1;
+                    self::spend($run, $rule, $settings, $outcome);
                 }
             }
 
@@ -225,6 +250,12 @@ final class Engine
 
                 continue;
             }
+            $gate = self::gate($run, $rule, $settings);
+            if ($gate !== null) {
+                $stats[$gate]++;
+
+                continue;
+            }
 
             $trigger = Triggers::for($run->trigger);
             $target = $run->target_type ? $trigger->find($businessId, $run->target_type, (int) $run->target_id) : null;
@@ -238,9 +269,74 @@ final class Engine
             $step = ['offset' => (int) $run->step, 'audience' => (string) $run->audience];
             $outcome = self::execute($run, $rule, $trigger, $target, $step, $settings);
             $stats[$outcome] = ($stats[$outcome] ?? 0) + 1;
+            self::spend($run, $rule, $settings, $outcome);
         }
 
         return $stats;
+    }
+
+    /* ─────────────────────────── حدُّ الانفجار ─────────────────────────── */
+
+    /** ميزانيّةُ الدورة لكلّ شركة: سقفُ الخارجيّ وما صُرف منه، والقواعدُ المنقطعُ فتيلُها */
+    private static array $budget = [];
+
+    public static function resetBudget(int $businessId): void
+    {
+        unset(self::$budget[$businessId]);
+    }
+
+    private static function budget(int $businessId, Settings $settings): array
+    {
+        return self::$budget[$businessId] ??= ['cap' => $settings->externalPerTick, 'sent' => 0, 'blown' => self::blownFuses($businessId)];
+    }
+
+    private static function isExternalLive(AutomationRun $run, AutomationRule $rule, Settings $settings): bool
+    {
+        return Audience::isExternal((string) $run->audience) && $settings->effectiveMode($rule) === Settings::LIVE;
+    }
+
+    /**
+     * البوّابةُ قبل التنفيذ — تُعيد اسمَ الإحصاء إن مُنع، أو `null` ليمضي.
+     *
+     * الفتيلُ المنقطع يُتخطّى صفُّه بسببٍ مكتوب؛ والخارجيُّ فوق سقف الدورة
+     * يبقى **معلَّقًا** لا مُلغًى — يخرج في الدورة التالية.
+     */
+    private static function gate(AutomationRun $run, AutomationRule $rule, Settings $settings): ?string
+    {
+        $budget = self::budget((int) $rule->business_id, $settings);
+
+        if (in_array((int) $rule->id, $budget['blown'], true)) {
+            self::skip($run, self::FUSE_BLOWN);
+
+            return 'skipped';
+        }
+        if (self::isExternalLive($run, $rule, $settings) && $budget['sent'] >= $budget['cap']) {
+            return 'pending';
+        }
+
+        return null;
+    }
+
+    private static function spend(AutomationRun $run, AutomationRule $rule, Settings $settings, string $outcome): void
+    {
+        if ($outcome === 'executed' && self::isExternalLive($run, $rule, $settings)) {
+            self::budget((int) $rule->business_id, $settings);
+            self::$budget[(int) $rule->business_id]['sent']++;
+        }
+    }
+
+    /**
+     * القواعدُ التي انقطع فتيلُها — `FUSE_FAILURES` إخفاقًا في الساعة الأخيرة.
+     *
+     * @return list<int>
+     */
+    public static function blownFuses(int $businessId): array
+    {
+        return AutomationRun::where('business_id', $businessId)->where('status', AutomationRun::FAILED)
+            ->where('executed_at', '>=', now()->subHour())
+            ->selectRaw('automation_rule_id, COUNT(*) AS n')->groupBy('automation_rule_id')
+            ->havingRaw('COUNT(*) >= ?', [self::FUSE_FAILURES])
+            ->pluck('automation_rule_id')->map(fn ($id) => (int) $id)->all();
     }
 
     /* ─────────────────────────── الفتح ─────────────────────────── */

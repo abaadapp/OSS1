@@ -82,6 +82,9 @@ class Demo
         self::$displayCur = null;
         self::$baseBid = null;
         self::$displayBid = null;
+        self::$currencyFor = [];
+        Vat::flush();
+        Receivables::flush();
     }
 
     /** رموز العملات الشائعة في المنطقة — لمن ضبط عملته من الإعدادات بلا جدول عملات */
@@ -123,7 +126,15 @@ class Demo
      * زبونٌ لا حساب له — يحتاج عملتَه هو. ونداءٌ واحدٌ يخدم الاثنين: خريطتان
      * للعملة تفترقان يوم يبدّل التاجر منازلَه العشرية في إحداهما.
      */
+    /** عملةُ كلّ شركةٍ مقروءةً مرّةً في العمليّة — تُمسح مع `flushCurrency` (المرحلة 12 §57) */
+    private static array $currencyFor = [];
+
     public static function currencyFor(int $businessId): array
+    {
+        return self::$currencyFor[$businessId] ??= self::readCurrencyFor($businessId);
+    }
+
+    private static function readCurrencyFor(int $businessId): array
     {
         $settings = Setting::where('business_id', $businessId)->pluck('value', 'key')->all();
         $row = Currency::where('business_id', $businessId)->where('is_base', true)->first();
@@ -827,7 +838,7 @@ class Demo
      */
     public static function recentInvoices(int $limit = 6): array
     {
-        return CustomerInvoice::where('business_id', self::bid())
+        return CustomerInvoice::where('business_id', self::bid())->withMoney()
             ->where('status', '!=', CustomerInvoice::DRAFT)
             ->when(self::currentBranchId(), fn ($q) => $q->where('branch_id', self::currentBranchId()))
             ->orderByDesc('issued_at')->orderByDesc('id')
@@ -1033,7 +1044,7 @@ class Demo
      */
     public static function customerOrders($id): array
     {
-        return CustomerInvoice::where('business_id', self::bid())->where('customer_id', $id)
+        return CustomerInvoice::where('business_id', self::bid())->where('customer_id', $id)->withMoney()
             ->where('status', '!=', CustomerInvoice::DRAFT)
             ->withCount('items')->orderByDesc('issued_at')->orderByDesc('id')->get()->map(fn ($i) => [
                 'id' => $i->number,

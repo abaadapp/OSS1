@@ -85,6 +85,12 @@ class AStockLossIsWrittenInBothBooksTest extends TestCase
         return Ledger::account($this->business->id, 'inventory')->balance();
     }
 
+    /** ثمنُ سندٍ بلا أمرِ أصنافٍ مخزونة — مشترياتٌ مباشرة منذ المرحلة 12 §18 */
+    private function purchased(): float
+    {
+        return Ledger::account($this->business->id, 'direct_purchases')->balance();
+    }
+
     private function expenses(): float
     {
         return (float) Expense::where('business_id', $this->business->id)->paid()->sum('amount');
@@ -220,7 +226,7 @@ class AStockLossIsWrittenInBothBooksTest extends TestCase
     {
         SupplierInvoices::approve($this->invoice(25, 5), $this->owner);
 
-        $this->assertSame(25.0, $this->inventory(), 'ضريبةٌ تُستردّ حُمّلت على تكلفة البضاعة');
+        $this->assertSame(25.0, $this->purchased(), 'ضريبةٌ تُستردّ حُمّلت على تكلفة الشراء');
         $this->assertSame(
             -5.0,
             Ledger::account($this->business->id, 'tax_payable')->balance(),
@@ -245,7 +251,7 @@ class AStockLossIsWrittenInBothBooksTest extends TestCase
 
         SupplierInvoices::approve($this->invoice(25, 5), $this->owner);
 
-        $this->assertSame(30.0, $this->inventory(), 'ضريبةٌ لا تُستردّ خرجت من تكلفة البضاعة');
+        $this->assertSame(30.0, $this->purchased(), 'ضريبةٌ لا تُستردّ خرجت من تكلفة الشراء');
         $this->assertSame(0.0, Ledger::account($this->business->id, 'tax_payable')->balance());
         $this->assertTrue(Ledger::trialBalance($this->business->id)['balanced']);
     }
@@ -258,7 +264,7 @@ class AStockLossIsWrittenInBothBooksTest extends TestCase
         $entry = JournalEntry::where('source', 'سند مورّد')->sole();
 
         $this->assertCount(2, $entry->lines);
-        $this->assertSame(25.0, $this->inventory());
+        $this->assertSame(25.0, $this->purchased());
     }
 
     /**

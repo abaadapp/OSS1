@@ -140,12 +140,18 @@ class SupplierInvoiceController extends Controller
                 'order_total' => $i->purchaseOrder ? (float) $i->purchaseOrder->total : null,
                 'overdue' => $i->isOverdue(),
                 'notes' => $i->notes,
+                /* طبيعةُ التكلفة كما قيلت أو كما رُحِّلت — المرحلة 12 §18 */
+                'cost_kind' => $i->cost_kind,
+                'cost_kind_label' => $i->cost_kind ? __(SupplierInvoices::COST_LABELS[$i->cost_kind] ?? $i->cost_kind) : null,
+                'inventory_cost' => $i->inventory_cost !== null ? (float) $i->inventory_cost : null,
+                'direct_cost' => $i->direct_cost !== null ? (float) $i->direct_cost : null,
                 // ما يقبله `destroy` بحروفه — لا قاعدةً ثانيةً في الشاشة تفترق عنه
                 'can_delete' => $i->approval_status !== SupplierInvoices::APPROVED
                     && (float) $i->paid <= 0
                     && ! $posted->has($i->id),
             ])->all(),
             'pagination' => Pagination::meta($invoices),
+            'cost_kinds' => collect(SupplierInvoices::COST_KINDS)->map(fn ($k) => ['value' => $k, 'label' => __(SupplierInvoices::COST_LABELS[$k])])->values()->all(),
             'filters' => $request->only('q', 'status', 'supplier', 'approval')
                 + Sort::params($request, self::SORTS),
             'sorts' => Sort::keys(self::SORTS),
@@ -353,6 +359,8 @@ class SupplierInvoiceController extends Controller
             'subtotal' => ['required', 'numeric', 'min:0'],
             'tax' => ['nullable', 'numeric', 'min:0'],
             'notes' => ['nullable', 'string', 'max:1000'],
+            /* طبيعةُ التكلفة — فارغةٌ تُشتقّ من أمر الشراء (المرحلة 12 §18) */
+            'cost_kind' => ['nullable', Rule::in(SupplierInvoices::COST_KINDS)],
             /* والمشروعُ من شركة الطالب وقائمٌ — وإن لم يُذكر وُرث من أمر الشراء */
             'project_id' => ['nullable', 'integer', Rule::exists('projects', 'id')
                 ->where('business_id', $bid)->whereIn('status', Project::OPEN)],

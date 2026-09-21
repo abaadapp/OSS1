@@ -46,6 +46,7 @@ final class Settings
         'days' => 'automation_work_days',
         'start' => 'automation_work_start',
         'end' => 'automation_work_end',
+        'external_cap' => 'automation_external_per_tick',
     ];
 
     /** @param  list<int>  $days */
@@ -57,6 +58,8 @@ final class Settings
         public readonly array $days,
         public readonly string $start,
         public readonly string $end,
+        /** سقفُ الرسائل الخارجيّة في الدورة الواحدة — حدُّ الانفجار (المرحلة 12) */
+        public readonly int $externalPerTick = Engine::DEFAULT_EXTERNAL_PER_TICK,
     ) {}
 
     public static function for(int $businessId): self
@@ -76,6 +79,7 @@ final class Settings
             $days === [] ? self::DEFAULT_DAYS : array_unique($days),
             self::validTime($get('start', '09:00')) ? $get('start', '09:00') : '09:00',
             self::validTime($get('end', '17:00')) ? $get('end', '17:00') : '17:00',
+            max(1, min(1000, (int) $get('external_cap', (string) Engine::DEFAULT_EXTERNAL_PER_TICK))),
         );
     }
 
@@ -154,6 +158,7 @@ final class Settings
             'end' => $this->end,
             'now' => $this->now()->format('Y-m-d H:i'),
             'open_now' => $this->isOpen(now()),
+            'external_per_tick' => $this->externalPerTick,
         ];
     }
 
@@ -194,6 +199,14 @@ final class Settings
             }
             sort($days);
             self::put($businessId, 'days', implode(',', $days));
+        }
+
+        if (isset($data['external_cap'])) {
+            $cap = (int) $data['external_cap'];
+            if ($cap < 1 || $cap > 1000) {
+                throw new RuntimeException(__('سقفُ الرسائل في الدورة بين 1 و1000.'));
+            }
+            self::put($businessId, 'external_cap', (string) $cap);
         }
 
         foreach (['start', 'end'] as $k) {

@@ -54,7 +54,8 @@ final class OperationalIntelligence
 
         foreach ($ops as $op) {
             $inc = $incidents[$op->id] ?? null;
-            $conf = ResourceConflicts::all($op);
+            /* التعارضاتُ تُقاس للفعاليّات القائمة وحدَها — المختومةُ لا تتعارض مع شيء، ولا تُسأل عنها القاعدة (المرحلة 12 §57) */
+            $conf = in_array($op->status, [EventOperation::COMPLETED, EventOperation::CANCELLED], true) ? [] : ResourceConflicts::all($op);
             $critical = count(array_filter($conf, fn ($c) => $c['severity'] === ResourceConflicts::CRITICAL));
             $conflictsCritical += $critical;
             $conflictsWarning += count($conf) - $critical;

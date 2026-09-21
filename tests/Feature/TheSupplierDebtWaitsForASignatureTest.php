@@ -116,7 +116,7 @@ class TheSupplierDebtWaitsForASignatureTest extends TestCase
         $this->assertSame(0.0, Ledger::balance($this->business->id, 'payable'));
     }
 
-    /** والاعتمادُ يُنشئها: مدين المخزون / دائن الموردين */
+    /** والاعتمادُ يُنشئها: مدين المشتريات المباشرة (أو المخزون لأصنافه) / دائن الموردين */
     public function test_approval_creates_the_debt(): void
     {
         $this->actingAs($this->clerk)->post(route('admin.purchases.invoices.store'), $this->payload());
@@ -129,7 +129,8 @@ class TheSupplierDebtWaitsForASignatureTest extends TestCase
         $this->assertSame(SupplierInvoices::APPROVED, $invoice->fresh()->approval_status);
         $this->assertSame($this->owner->id, (int) $invoice->fresh()->approved_by);
         $this->assertSame(900.0, Ledger::balance($this->business->id, 'payable'));
-        $this->assertSame(900.0, Ledger::balance($this->business->id, 'inventory'));
+        /* المرحلة 12 §18: بلا أمرِ أصنافٍ مخزونة — مشترياتٌ مباشرة */
+        $this->assertSame(900.0, Ledger::balance($this->business->id, 'direct_purchases'));
     }
 
     /** واعتمادان لا يُنشئان ذمّتين */

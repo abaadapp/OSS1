@@ -3,6 +3,7 @@
 namespace App\Support\Intelligence;
 
 use App\Models\ChangeOrder;
+use App\Models\CustomerCreditNote;
 use App\Models\CustomerInvoice;
 use App\Models\Quotation;
 use App\Support\Revenue;
@@ -118,11 +119,32 @@ final class RevenueIntelligence
      */
     public static function invoicedByCustomer(int $bid, Period $period): array
     {
-        return Revenue::query($bid, $period->start, $period->end)->toBase()->whereNotNull('customer_id')
+        $rows = Revenue::query($bid, $period->start, $period->end)->toBase()->whereNotNull('customer_id')
             ->selectRaw('customer_id, COALESCE(SUM(subtotal - discount_total), 0) AS n, COALESCE(SUM(total), 0) AS g, COUNT(*) AS c')
             ->groupBy('customer_id')->get()
             ->mapWithKeys(fn ($r) => [(int) $r->customer_id => ['customer_id' => (int) $r->customer_id, 'net' => round((float) $r->n, 3), 'gross' => round((float) $r->g, 3), 'invoices' => (int) $r->c]])
             ->all();
+
+        /*
+         * وإشعاراتُ الدائن تُنقص حصّةَ صاحبها — كما تُنقص إيرادَ الشركة في
+         * `Revenue::summary`. كانت تُغفَل هنا فيفترق العميلُ عن الشركة بمقدار
+         * ما رُدّ له (المرحلة 12 §21).
+         */
+        $credits = CustomerCreditNote::query()->toBase()
+            ->where('customer_credit_notes.business_id', $bid)
+            ->whereDate('customer_credit_notes.issued_at', '>=', $period->startDate())->whereDate('customer_credit_notes.issued_at', '<', $period->endDate())
+            ->join('customer_invoices', 'customer_invoices.id', '=', 'customer_credit_notes.customer_invoice_id')
+            ->whereNotNull('customer_invoices.customer_id')
+            ->selectRaw('customer_invoices.customer_id AS cid, COALESCE(SUM(customer_credit_notes.amount - customer_credit_notes.tax_amount), 0) AS n, COALESCE(SUM(customer_credit_notes.amount), 0) AS g')
+            ->groupBy('customer_invoices.customer_id')->get();
+        foreach ($credits as $c) {
+            $id = (int) $c->cid;
+            $rows[$id] ??= ['customer_id' => $id, 'net' => 0.0, 'gross' => 0.0, 'invoices' => 0];
+            $rows[$id]['net'] = round($rows[$id]['net'] - (float) $c->n, 3);
+            $rows[$id]['gross'] = round($rows[$id]['gross'] - (float) $c->g, 3);
+        }
+
+        return $rows;
     }
 
     /** المحصَّلُ في المدّة بالعميل */

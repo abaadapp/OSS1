@@ -36,10 +36,10 @@ final class ProjectProfitability
     public const WINDOW_DAYS = 30;
 
     /** @return array<string, mixed> */
-    public static function forProject(Project $project): array
+    public static function forProject(Project $project, ?array $f = null, ?array $pool = null): array
     {
-        $f = ProjectFinancials::summary($project);
-        $completeness = self::completeness($project, $f);
+        $f ??= ProjectFinancials::summary($project);
+        $completeness = self::completeness($project, $f, $pool);
         $revenue = (float) $f['revenue'];
 
         return [
@@ -77,7 +77,7 @@ final class ProjectProfitability
     /**
      * اكتمالُ التكلفة: أثمّة تكاليفُ بلا مشروعٍ في نافذة هذا المشروع؟
      */
-    public static function completeness(Project $project, array $f): Completeness
+    public static function completeness(Project $project, array $f, ?array $pool = null): Completeness
     {
         $bid = (int) $project->business_id;
         $reasons = [];
@@ -88,24 +88,18 @@ final class ProjectProfitability
 
         [$from, $to] = self::window($project);
         if ($from !== null) {
-            $registered = Vat::enabled($bid);
-            $basis = $registered ? '(total - tax)' : 'total';
+            $pool ??= self::unallocatedPool($bid);
+            $inWindow = fn (array $rows) => array_values(array_filter($rows, fn ($r) => $r[0] >= $from && $r[0] <= $to));
+            $si = $inWindow($pool['si']);
+            $ex = $inWindow($pool['ex']);
 
-            $si = SupplierInvoice::where('business_id', $bid)->where('approval_status', SupplierInvoices::APPROVED)
-                ->where('is_opening_balance', false)->whereNull('project_id')
-                ->whereDate('issued_at', '>=', $from)->whereDate('issued_at', '<=', $to);
-            $ex = Expense::where('business_id', $bid)->paid()->whereNull('project_id')
-                ->whereDate('spent_at', '>=', $from)->whereDate('spent_at', '<=', $to);
-
-            $siCount = (int) (clone $si)->count();
-            $exCount = (int) (clone $ex)->count();
-            if ($siCount > 0) {
-                $reasons[] = __(':n سند مورّد بلا مشروع في نافذة المشروع (:v)', ['n' => $siCount,
-                    'v' => Money::format(round((float) (clone $si)->selectRaw('COALESCE(SUM('.$basis.'), 0) AS v')->value('v'), 3), Money::of($bid))]);
+            if ($si !== []) {
+                $reasons[] = __(':n سند مورّد بلا مشروع في نافذة المشروع (:v)', ['n' => count($si),
+                    'v' => Money::format(round((float) array_sum(array_column($si, 1)), 3), Money::of($bid))]);
             }
-            if ($exCount > 0) {
-                $reasons[] = __(':n مصروف بلا مشروع في نافذة المشروع (:v)', ['n' => $exCount,
-                    'v' => Money::format(round((float) (clone $ex)->sum('amount'), 3), Money::of($bid))]);
+            if ($ex !== []) {
+                $reasons[] = __(':n مصروف بلا مشروع في نافذة المشروع (:v)', ['n' => count($ex),
+                    'v' => Money::format(round((float) array_sum(array_column($ex, 1)), 3), Money::of($bid))]);
             }
         }
 
@@ -115,8 +109,35 @@ final class ProjectProfitability
         if ($project->isOpen() && $f['invoiced'] < $f['current_value'] - 0.0005) {
             $reasons[] = __('لم يُفوتَر المشروع كاملًا بعد');
         }
+        /* مشروعٌ قائم له إيرادٌ ولا تكلفةَ عليه — أقربُ إلى «لم تُسجَّل تكاليفُه» منه إلى هامشِ مئة (المرحلة 12 §22) */
+        if ($project->isOpen() && $f['actual'] <= 0.0005 && $f['invoiced'] > 0.0005) {
+            $reasons[] = __('لا تكاليفَ مسجَّلة على المشروع بعد');
+        }
 
         return $reasons === [] ? Completeness::complete() : Completeness::partial($reasons);
+    }
+
+    /**
+     * التكاليفُ بلا مشروعٍ في الشركة كلِّها — مرّةً واحدة، ثمّ تُقصّ على نافذة كلّ مشروع.
+     *
+     * كان الاكتمالُ يسأل القاعدةَ أربعَ مرّاتٍ لكلّ مشروع (المرحلة 12 §57).
+     *
+     * @return array{si: list<array{0: string, 1: float}>, ex: list<array{0: string, 1: float}>}
+     */
+    public static function unallocatedPool(int $bid): array
+    {
+        $registered = Vat::enabled($bid);
+        $basis = $registered ? '(total - tax)' : 'total';
+
+        $si = SupplierInvoice::where('business_id', $bid)->where('approval_status', SupplierInvoices::APPROVED)
+            ->where('is_opening_balance', false)->whereNull('project_id')->toBase()
+            ->selectRaw('issued_at, '.$basis.' AS v')->get()
+            ->map(fn ($r) => [substr((string) $r->issued_at, 0, 10), round((float) $r->v, 3)])->all();
+        $ex = Expense::where('business_id', $bid)->paid()->whereNull('project_id')->toBase()
+            ->selectRaw('spent_at, amount AS v')->get()
+            ->map(fn ($r) => [substr((string) $r->spent_at, 0, 10), round((float) $r->v, 3)])->all();
+
+        return ['si' => $si, 'ex' => $ex];
     }
 
     /**
@@ -130,7 +151,10 @@ final class ProjectProfitability
             ->when($period, fn ($q) => $q->whereDate('starts_at', '>=', $period->startDate())->whereDate('starts_at', '<', $period->endDate()))
             ->with('customer:id,name')->orderByDesc('starts_at')->orderByDesc('id')->limit($limit)->get();
 
-        $rows = $projects->map(fn (Project $p) => self::forProject($p));
+        /* الصيغةُ الواحدة لكلّ المشاريع معًا — لا عشرةُ استعلاماتٍ لكلّ مشروع */
+        $summaries = ProjectFinancials::summaries($bid, $projects);
+        $pool = self::unallocatedPool($bid);
+        $rows = $projects->map(fn (Project $p) => self::forProject($p, $summaries[(int) $p->id] ?? null, $pool));
 
         $rows = match ($sort) {
             'revenue' => $rows->sortByDesc('revenue'),

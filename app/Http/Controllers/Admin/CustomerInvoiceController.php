@@ -119,7 +119,7 @@ class CustomerInvoiceController extends Controller
         $per = (int) $request->integer('per_page');
         $per = in_array($per, self::PER_PAGE, true) ? $per : self::PER_PAGE[0];
 
-        $page = CustomerInvoice::where('business_id', $bid)->with('customer')
+        $page = CustomerInvoice::where('business_id', $bid)->withMoney()->with('customer')
             // والمعاملُ من `Search::like` لا مكتوبًا بيده: `like` على Postgres
             // حسّاسٌ لحالة الأحرف و`ilike` ليس كذلك — ومن كتبه بيده أصاب في
             // شاشةٍ وأخطأ في أخرى

@@ -42,7 +42,7 @@ final class ManagementAlerts
                 __('المتأخّرُ :v على :n عميلًا — العتبة :t', ['v' => $money($receivables['overdue']), 'n' => $receivables['customers'], 't' => $money($t['overdue_receivable_amount'])]),
                 ['value' => $receivables['overdue'], 'threshold' => $t['overdue_receivable_amount'], 'period' => __('الآن')], route('admin.finance.receivables'));
         }
-        $veryLate = CustomerInvoice::where('business_id', $bid)->overdue()
+        $veryLate = CustomerInvoice::where('business_id', $bid)->overdue()->withMoney()
             ->whereDate('due_at', '<', now()->subDays((int) $t['overdue_invoice_days'])->toDateString())
             ->with('customer:id,name')->orderBy('due_at')->limit(20)->get();
         foreach ($veryLate as $inv) {
@@ -52,8 +52,12 @@ final class ManagementAlerts
         }
 
         /* ─ هامشُ المشاريع ─ */
-        foreach (Project::where('business_id', $bid)->open()->with('customer:id,name')->orderByDesc('id')->limit(100)->get() as $project) {
-            $p = ProjectProfitability::forProject($project);
+        $openProjects = Project::where('business_id', $bid)->open()->with('customer:id,name')->orderByDesc('id')->limit(100)->get();
+        /* الصيغةُ الواحدة لكلّها معًا — لا عشرةُ استعلاماتٍ لكلّ مشروع (المرحلة 12 §57) */
+        $summaries = \App\Support\ProjectFinancials::summaries($bid, $openProjects);
+        $pool = ProjectProfitability::unallocatedPool($bid);
+        foreach ($openProjects as $project) {
+            $p = ProjectProfitability::forProject($project, $summaries[(int) $project->id] ?? null, $pool);
             if ($p['margin_percent'] === null || $p['completeness']['status'] === Completeness::INSUFFICIENT) {
                 continue;
             }

@@ -82,7 +82,8 @@ class SupplierInvoiceTest extends TestCase
         $this->record()->assertSessionHasNoErrors();
 
         $this->assertSame(500.0, Ledger::account($this->bid(), 'payable')->balance(), 'لم تُقيَّد الذمّة');
-        $this->assertSame(500.0, Ledger::account($this->bid(), 'inventory')->balance());
+        /* المرحلة 12 §18: بلا أمرِ أصنافٍ مخزونة — مشترياتٌ مباشرة */
+        $this->assertSame(500.0, Ledger::account($this->bid(), 'direct_purchases')->balance());
         $this->assertTrue(Ledger::trialBalance($this->bid())['balanced']);
     }
 

@@ -183,6 +183,8 @@ class AutomationController extends Controller
             'days.*' => ['integer', 'min:0', 'max:6'],
             'start' => ['sometimes', 'string', 'max:5'],
             'end' => ['sometimes', 'string', 'max:5'],
+            /* حدُّ الانفجار — المرحلة 12 */
+            'external_cap' => ['sometimes', 'integer', 'min:1', 'max:1000'],
         ]);
 
         try {

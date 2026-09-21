@@ -227,10 +227,11 @@ class TheImportCenterGuardsItsDoorsTest extends ImportTestCase
     {
         $file = UploadedFile::fake()->createWithContent('عملاء.csv', file_get_contents($this->fixture('suppliers.csv')));
 
-        $this->post(route('admin.imports.store'), ['file' => $file, 'category' => 'suppliers', 'name' => 'مورّدون قدامى', 'source' => 'إكسل'])
-            ->assertRedirect(route('admin.imports.show', 1));
+        $response = $this->post(route('admin.imports.store'), ['file' => $file, 'category' => 'suppliers', 'name' => 'مورّدون قدامى', 'source' => 'إكسل']);
 
+        /* بالمعرّف الفعليّ لا بـ1: تسلسلاتُ PostgreSQL لا تعود مع كلّ اختبار */
         $d = ImportDataset::firstOrFail();
+        $response->assertRedirect(route('admin.imports.show', $d->id));
         $this->assertSame(ImportDataset::NEEDS_MAPPING, $d->status);
         $this->assertSame('عملاء.csv', $d->original_filename);
         $this->assertSame('upload', $d->metadata['registered_via']);

@@ -18,6 +18,12 @@ use Illuminate\Support\Facades\DB;
  * «الأكبرُ عددًا لا الأحدثُ صفًّا» — وأوّلُ نسخةٍ تُكتب بلا قفلٍ تُخرج
  * رقمين لورقتين في يومٍ مزدحم، ولا يظهر ذلك إلّا حين يتّصل عميلان يذكران
  * الرقمَ نفسَه.
+ *
+ * ═══ وفي المرحلة 12 صار البابَ الوحيد ═══
+ *
+ * قيودُ اليوميّة وإشعاراتُ الاستلام وسنداتُ التسليم ومسيراتُ الرواتب كانت
+ * تقرأ آخرَ رقمٍ بلا قفل، وفهرسُها فريد: دفعتان في اللحظة نفسها تسقط
+ * إحداهما بخطأ قاعدةٍ لا يفهمه أحد. فكلُّ تسلسلٍ له فهرسُ تفرّدٍ يمرّ من هنا.
  */
 final class Numbering
 {
@@ -37,18 +43,39 @@ final class Numbering
      *
      * @param  class-string  $model  النموذجُ الذي يحمل العمود `number`
      */
-    public static function next(int $businessId, string $model, string $prefix): string
+    public static function next(int $businessId, string $model, string $prefix, int $pad = 6, string $column = 'number'): string
     {
-        return DB::transaction(function () use ($businessId, $model, $prefix) {
+        return DB::transaction(function () use ($businessId, $model, $prefix, $pad, $column) {
             Business::whereKey($businessId)->lockForUpdate()->first();
 
-            $highest = (int) $model::where('business_id', $businessId)
-                ->where('number', 'like', $prefix.'%')
-                ->get(['number'])
-                ->map(fn ($r) => (int) substr((string) $r->number, strlen($prefix)))
-                ->max();
+            $width = strlen($prefix) + $pad;
+            $top = (string) $model::where('business_id', $businessId)
+                ->where($column, 'like', $prefix.'%')
+                ->orderByDesc($column)->value($column);
+            $digits = substr($top, strlen($prefix));
 
-            return $prefix.str_pad((string) ($highest + 1), 6, '0', STR_PAD_LEFT);
+            /*
+             * الطريقُ السريع: الأرقامُ بعرضٍ ثابتٍ مبطَّنةٍ بالأصفار، فأعلاها
+             * نصًّا هو أعلاها عددًا — ويُقرأ من الفهرس بلا مسحٍ للجدول. وقيدُ
+             * اليوميّة يُكتب مع كلّ دفعةٍ وكلّ صرف؛ فمسحُ مئة ألف رقمٍ في كلّ
+             * مرّةٍ ليس ثمنًا يُدفع.
+             *
+             * ويُترك الطريقُ حين لا يصلح: رقمٌ شاذٌّ في القمّة، أو رقمٌ تجاوز
+             * عرضَه (JV-1000000 يسبق JV-999999 نصًّا) — فيُمسح كما كان.
+             */
+            if ($top !== '' && ctype_digit($digits) && strlen($digits) === $pad
+                && ! $model::where('business_id', $businessId)->where($column, 'like', $prefix.'%')
+                    ->whereRaw('LENGTH('.$column.') > ?', [$width])->exists()) {
+                $highest = (int) $digits;
+            } else {
+                $highest = (int) $model::where('business_id', $businessId)
+                    ->where($column, 'like', $prefix.'%')
+                    ->get([$column])
+                    ->map(fn ($r) => (int) substr((string) $r->{$column}, strlen($prefix)))
+                    ->max();
+            }
+
+            return $prefix.str_pad((string) ($highest + 1), $pad, '0', STR_PAD_LEFT);
         });
     }
 }

@@ -55,6 +55,8 @@ interface Settings {
     end: string;
     now: string;
     open_now: boolean;
+    /* سقفُ الرسائل الخارجيّة في الدورة الواحدة — المرحلة 12 */
+    external_per_tick: number;
 }
 
 interface Props {
@@ -431,6 +433,7 @@ function HoursDialog({ settings, timezones, onClose }: { settings: Settings; tim
     const [days, setDays] = useState<number[]>(settings.days);
     const [start, setStart] = useState(settings.start);
     const [end, setEnd] = useState(settings.end);
+    const [cap, setCap] = useState(String(settings.external_per_tick ?? 50));
     const [saving, setSaving] = useState(false);
 
     return (
@@ -462,6 +465,9 @@ function HoursDialog({ settings, timezones, onClose }: { settings: Settings; tim
                             <Input dir="ltr" value={end} onChange={(e) => setEnd(e.target.value)} placeholder="17:00" />
                         </Field>
                     </div>
+                    <Field label="سقف الرسائل الخارجية في الدورة الواحدة" hint="كلّ ربع ساعة تخرج هذا العددُ على الأكثر إلى العملاء — والباقي ينتظر الدورةَ التالية. حدُّ انفجارٍ لقاعدةٍ معطوبة">
+                        <Input dir="ltr" type="number" min={1} max={1000} value={cap} onChange={(e) => setCap(e.target.value)} />
+                    </Field>
                 </div>
                 <DialogFooter>
                     <Button variant="outline" onClick={onClose}>
@@ -472,7 +478,7 @@ function HoursDialog({ settings, timezones, onClose }: { settings: Settings; tim
                         disabled={saving || days.length === 0}
                         onClick={() => {
                             setSaving(true);
-                            router.post(route('admin.automation.settings'), { timezone, days, start, end }, { preserveScroll: true, onSuccess: onClose, onFinish: () => setSaving(false) });
+                            router.post(route('admin.automation.settings'), { timezone, days, start, end, external_cap: Number(cap) || 50 }, { preserveScroll: true, onSuccess: onClose, onFinish: () => setSaving(false) });
                         }}
                     >
                         {t('حفظ')}

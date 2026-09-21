@@ -24,6 +24,27 @@ use PhpOffice\PhpSpreadsheet\Spreadsheet;
 class Sheet
 {
     /**
+     * هل يبدأ النصُّ بما يجعل إكسل يعدّه معادلة؟
+     *
+     * «=» و«+» و«-» و«@» وحرفا التبويب والعودة — على ما توصي به OWASP.
+     * والرقمُ السالب («-5») رقمٌ لا معادلة، فلا يُلمس.
+     */
+    public static function looksLikeFormula(string $value): bool
+    {
+        return $value !== '' && ! is_numeric($value) && preg_match('/^[=+\-@\t\r]/', $value) === 1;
+    }
+
+    /**
+     * خليّةُ CSV آمنة — ما بدا معادلةً يُسبق بفاصلةٍ عليا فيُقرأ نصًّا (المرحلة 12 §50).
+     *
+     * يُطبَّق على كلّ صفٍّ قبل `fputcsv`: `array_map([Sheet::class, 'guard'], $row)`.
+     */
+    public static function guard(mixed $value): mixed
+    {
+        return is_string($value) && self::looksLikeFormula($value) ? "'".$value : $value;
+    }
+
+    /**
      * ترميزُ ملفّ CSV كما هو لا كما يُفترض.
      *
      * وUTF-8 هي الافتراض حين تصحّ: ملفٌّ لاتينيٌّ كلُّه صالحٌ فيها، وما لا

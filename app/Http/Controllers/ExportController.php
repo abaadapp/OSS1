@@ -168,7 +168,7 @@ class ExportController extends Controller
              */
             fputcsv($out, $headers, escape: '');
             foreach ($rows as $row) {
-                fputcsv($out, $row, escape: '');
+                fputcsv($out, array_map([\App\Support\Sheet::class, 'guard'], $row), escape: '');
             }
             fclose($out);
         }, $filename, ['Content-Type' => 'text/csv; charset=UTF-8']);

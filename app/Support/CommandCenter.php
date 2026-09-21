@@ -346,7 +346,8 @@ final class CommandCenter
 
         /* والتكرارُ: القاعدةُ نفسُها تفشل ثلاثًا فأكثر في أسبوع — تُقال مرّةً */
         $repeated = AutomationRun::where('business_id', $bid)->where('status', AutomationRun::FAILED)->where('created_at', '>=', $since)
-            ->selectRaw('automation_rule_id, COUNT(*) AS n')->groupBy('automation_rule_id')->having('n', '>=', 3)->with('rule')->get();
+            /* `HAVING COUNT(*)` لا `HAVING n`: PostgreSQL لا يقرأ الاسمَ المستعار في HAVING — وكانت الشاشةُ تسقط عليه (المرحلة 12) */
+            ->selectRaw('automation_rule_id, COUNT(*) AS n')->groupBy('automation_rule_id')->havingRaw('COUNT(*) >= 3')->with('rule')->get();
         foreach ($repeated as $r) {
             $rows->push(self::row('automation_repeated', 'danger',
                 __('الأتمتة «:rule» تفشل تكرارًا (:n خلال أسبوع)', ['rule' => (string) $r->rule?->name, 'n' => (int) $r->n]),
@@ -442,7 +443,7 @@ final class CommandCenter
                 __('أنجز المهمّة أو أعد جدولتها'), route('admin.projects.show', $task->project_id), $task->due_at));
         }
 
-        foreach (CustomerInvoice::where('business_id', $bid)->overdue()->with('customer')->orderBy('due_at')->limit(self::LIMIT)->get() as $inv) {
+        foreach (CustomerInvoice::where('business_id', $bid)->overdue()->withMoney()->with('customer')->orderBy('due_at')->limit(self::LIMIT)->get() as $inv) {
             $rows->push(self::row('customer_invoice', 'danger',
                 __('فاتورة :number — :customer', ['number' => (string) $inv->number, 'customer' => (string) ($inv->customer?->name ?? $inv->customer_name)]),
                 null, __('طالب بالسداد — ذكّر العميل'), route('admin.customerInvoices.show', $inv->id),

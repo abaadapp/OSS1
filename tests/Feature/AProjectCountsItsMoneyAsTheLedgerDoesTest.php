@@ -160,7 +160,8 @@ class AProjectCountsItsMoneyAsTheLedgerDoesTest extends TestCase
         $s = ProjectFinancials::summary($this->project);
         $this->assertEqualsWithDelta(1000.0, $s['supplier_actual'], 0.0005, 'التكلفةُ صافيةٌ من ضريبةٍ تُستردّ');
         $this->assertEqualsWithDelta(1000.0, $s['actual'], 0.0005);
-        $this->assertEqualsWithDelta($this->ledgerBalance('inventory'), $s['actual'], 0.0005, 'وهي ما قيّده الدفترُ ثمنًا');
+        /* المرحلة 12 §18: أمرٌ بلا أصنافٍ مخزونة تكلفةٌ مباشرة (5150) لا مخزون — والرقمُ هو هو */
+        $this->assertEqualsWithDelta($this->ledgerBalance('direct_purchases'), $s['actual'], 0.0005, 'وهي ما قيّده الدفترُ ثمنًا');
         $this->assertEqualsWithDelta(50.0, $this->ledgerBalance('tax_payable'), 0.0005, 'والضريبةُ في حسابها لا في التكلفة');
         $this->assertEqualsWithDelta(1050.0, $s['supplier_outstanding'], 0.0005, 'والذمّةُ للمورّد بكاملها — ما يُدفع له');
         $this->assertEqualsWithDelta(0.0, $s['open_purchase_orders'], 0.0005, 'وسندٌ صافيه 1000 يغطّي أمرًا صافيه 1000');
@@ -183,7 +184,7 @@ class AProjectCountsItsMoneyAsTheLedgerDoesTest extends TestCase
 
         $s = ProjectFinancials::summary($this->project);
         $this->assertEqualsWithDelta(1050.0, $s['supplier_actual'], 0.0005, 'من لا يستردّ الضريبةَ يدفعها ثمنًا');
-        $this->assertEqualsWithDelta($this->ledgerBalance('inventory'), $s['actual'], 0.0005);
+        $this->assertEqualsWithDelta($this->ledgerBalance('direct_purchases'), $s['actual'], 0.0005);
         $this->assertEqualsWithDelta(0.0, $s['open_purchase_orders'], 0.0005);
     }
 

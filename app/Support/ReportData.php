@@ -583,7 +583,7 @@ class ReportData
 
         $branches = Branch::where('business_id', $bid)->pluck('name', 'id');
 
-        $rows = (clone $base)->orderByDesc('issued_at')->orderByDesc('id')->limit(self::LIMIT)->get()
+        $rows = (clone $base)->withMoney()->orderByDesc('issued_at')->orderByDesc('id')->limit(self::LIMIT)->get()
             ->map(fn ($i) => [
                 'id' => $i->id,
                 'number' => $i->number,

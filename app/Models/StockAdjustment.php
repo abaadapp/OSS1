@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\Numbering;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -54,9 +55,6 @@ class StockAdjustment extends Model
 
     public static function nextNumber(int $businessId): string
     {
-        $last = static::where('business_id', $businessId)->orderByDesc('id')->value('number');
-        $n = $last ? ((int) substr($last, 3)) + 1 : 1;
-
-        return 'SA-'.str_pad((string) $n, 6, '0', STR_PAD_LEFT);
+        return Numbering::next($businessId, static::class, 'SA-');
     }
 }

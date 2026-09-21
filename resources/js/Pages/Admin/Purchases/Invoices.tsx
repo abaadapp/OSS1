@@ -53,6 +53,11 @@ interface Invoice {
     order_total: number | null;
     overdue: boolean;
     notes: string | null;
+    /* طبيعةُ التكلفة وما رُحِّل على كلّ حساب — المرحلة 12 */
+    cost_kind: string | null;
+    cost_kind_label: string | null;
+    inventory_cost: number | null;
+    direct_cost: number | null;
     /** ما يقبله الخادم — لا يُعاد اشتقاقُه هنا من الحالة فيفترق عنه */
     can_delete: boolean;
 }
@@ -82,12 +87,14 @@ interface Props {
     canSeeAttachment: boolean;
     /** المشاريعُ القائمة — وسندٌ على أمرِ مشروعٍ يرث مشروعَه إن تُرك فارغًا */
     projects: { id: number; code: string; name: string }[];
+    /** طبائعُ التكلفة التي يقولها المحاسب بيده — المرحلة 12 */
+    cost_kinds: { value: string; label: string }[];
 }
 
 export default function SupplierInvoices() {
     const { invoices, pagination, filters, sorts, suppliers, orders, summary, today,
         pendingCount, canApprove, canOverride, canReject, canCreate, canPay,
-        canSeeAttachment, projects, context } = usePage<PageProps<Props>>().props;
+        canSeeAttachment, projects, cost_kinds, context } = usePage<PageProps<Props>>().props;
     const t = useTranslate();
     // نافذةُ التأكيد من النظام لا من المتصفّح — انظر ConfirmDialog
     const [ask, confirmDialog] = useConfirm();
@@ -117,6 +124,7 @@ export default function SupplierInvoices() {
         tax: '0',
         notes: '',
         project_id: '',
+        cost_kind: '',
     });
 
     const payForm = useForm({ amount: '', paid_at: today, from: 'cash' });
@@ -173,6 +181,14 @@ export default function SupplierInvoices() {
                         >
                             {i.order}
                         </SmartLink>
+                    )}
+                    {i.cost_kind && (
+                        <span className="block text-[11px] text-[#9ca3af]" title={i.cost_kind_label ?? ''}>
+                            {i.cost_kind === 'inventory' ? t('مخزون') : i.cost_kind === 'direct' ? t('تكلفة مباشرة') : t('مختلط')}
+                            {i.cost_kind === 'mixed' && i.inventory_cost !== null && i.direct_cost !== null && (
+                                <span dir="ltr"> ({m(i.inventory_cost)} / {m(i.direct_cost)})</span>
+                            )}
+                        </span>
                     )}
                 </>
             ),
@@ -499,6 +515,10 @@ export default function SupplierInvoices() {
 
                         <Field label="ملاحظات" error={form.errors.notes}>
                             <Input value={form.data.notes} onChange={(e) => form.setData('notes', e.target.value)} />
+                        </Field>
+
+                        <Field label="طبيعة التكلفة" hint="تُترك فارغةً فتُقرأ من بنود أمر الشراء عند الاعتماد: أصنافٌ مخزونة تدخل الرفّ، وما سواها تكلفةٌ مباشرة في الدخل" error={form.errors.cost_kind}>
+                            <Select placeholder="تُقرأ من أمر الشراء" value={form.data.cost_kind} onChange={(e) => form.setData('cost_kind', e.target.value)} options={(cost_kinds ?? []).map((k) => ({ label: k.label, value: k.value }))} />
                         </Field>
 
                         {(projects ?? []).length > 0 && (

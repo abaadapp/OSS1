@@ -21,6 +21,12 @@ class PurchaseOrderItem extends Model
         return $this->belongsTo(PurchaseOrder::class);
     }
 
+    /** الصنفُ من الكتالوج إن كان البندُ عليه — والبندُ الحرّ بلا صنف */
+    public function product(): BelongsTo
+    {
+        return $this->belongsTo(Product::class);
+    }
+
     /** المتبقّي — بوحدة الشراء كما طُلب، لا بوحدة التخزين */
     public function getRemainingAttribute(): int
     {

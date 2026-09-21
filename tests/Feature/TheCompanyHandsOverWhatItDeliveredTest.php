@@ -432,7 +432,8 @@ class TheCompanyHandsOverWhatItDeliveredTest extends TestCase
         ])->assertSessionHasErrors('file');
         $this->assertCount(2, $p->fresh()->items);
 
-        $this->post(route('admin.deliveries.store'), ['title' => 'حزمة ثانية', 'customer_id' => $this->customer->id])
-            ->assertRedirect(route('admin.deliveries.show', 2));
+        $response = $this->post(route('admin.deliveries.store'), ['title' => 'حزمة ثانية', 'customer_id' => $this->customer->id]);
+        /* بالمعرّف الفعليّ لا بـ2: تسلسلاتُ PostgreSQL لا تعود مع كلّ اختبار */
+        $response->assertRedirect(route('admin.deliveries.show', \App\Models\DeliveryPackage::orderByDesc('id')->value('id')));
     }
 }

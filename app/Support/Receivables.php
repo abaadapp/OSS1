@@ -8,6 +8,7 @@ use App\Models\CustomerPayment;
 use App\Models\Order;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 
 /**
  * الذممُ المدينة — «ما لك» — من موضعٍ واحد.
@@ -38,7 +39,21 @@ final class Receivables
     /** فواتيرُ المتجر القائمة — الصادرةُ وحدها، وما بقي منها أكبرُ من صفر */
     public static function openInvoices(int $businessId, ?int $customerId = null): Collection
     {
-        $q = CustomerInvoice::where('business_id', $businessId)->live()
+        /*
+         * تُقرأ مرّةً في العمليّة وتُمسح مع أيّ كتابة (المرحلة 12 §57).
+         *
+         * شاشةُ الذمم تسأل عن الفواتير القائمة خمسَ مرّاتٍ في الطلب الواحد
+         * (الإجماليّات والأعمار والقائمة…) — خمسةُ آلاف صفٍّ خمسَ مرّات. فتُحفظ
+         * القراءةُ، وأيُّ فاتورةٍ أو دفعةٍ أو تخصيصٍ أو إشعارٍ يُكتب أو يُمحى
+         * يُسقطها من أحداث نماذجها — فلا تُقرأ ذمّةُ أمس بعد دفعة اليوم.
+         */
+        $key = $businessId.'|'.($customerId ?? '*');
+        if (isset(self::$open[$key])) {
+            return self::$open[$key];
+        }
+
+        /* والمبالغُ مع الصفوف لا بعدها — انظر `CustomerInvoice::scopeWithMoney` */
+        $q = CustomerInvoice::where('business_id', $businessId)->live()->withMoney()
             ->with('customer')
             ->orderBy('due_at')->orderBy('id');
 
@@ -46,8 +61,18 @@ final class Receivables
             $q->where('customer_id', $customerId);
         }
 
-        return $q->get()->filter(fn (CustomerInvoice $i) => $i->outstanding() > 0)->values();
+        /* والقرّاءُ لا يكتبون على ما يُعاد — من كتب فعليه `flush` (وأحداثُ النماذج تفعل) */
+        return self::$open[$key] = $q->get()->filter(fn (CustomerInvoice $i) => $i->outstanding() > 0)->values();
     }
+
+    /** @var array<string, Collection> */
+    private static array $open = [];
+
+    public static function flush(): void
+    {
+        self::$open = [];
+    }
+
 
     /**
      * بيعاتٌ آجلةٌ لم تُفوتَر بعد.

@@ -194,7 +194,8 @@ class HistoricalMoneyEntersTheLedgerOnceTest extends ImportTestCase
         $this->assertSame(SupplierInvoices::PENDING, $pending->approval_status);
 
         /* الدفترُ: مخزونٌ 1600 صافيًا · ضريبةٌ 80 مدينة · ذممٌ 630 باقية بعد سداد 1050 من البنك */
-        $this->assertEqualsWithDelta(1600.0, $this->balance('inventory'), 0.0005);
+        /* المرحلة 12 §18: سندٌ تاريخيٌّ بلا أمرِ شراءٍ لأصنافٍ مخزونة — مشترياتٌ مباشرة لا مخزون */
+        $this->assertEqualsWithDelta(1600.0, $this->balance('direct_purchases'), 0.0005);
         $this->assertEqualsWithDelta(80.0, $this->balance('tax_payable'), 0.0005);
         $this->assertEqualsWithDelta(-630.0, $this->balance('payable'), 0.0005);
         $this->assertEqualsWithDelta(-1050.0, $this->balance('bank'), 0.0005);
