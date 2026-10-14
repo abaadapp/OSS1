@@ -981,7 +981,7 @@ class Permissions
     public static function sectionLabels(): array
     {
         $labels = [
-            'dashboard' => 'لوحة التحكم', 'customers' => 'العملاء', 'products' => 'المنتجات',
+            'dashboard' => 'الملخص', 'customers' => 'العملاء', 'products' => 'المنتجات والخدمات',
             'orders' => 'المبيعات', 'inventory' => 'المخزون',
             'finance' => 'المالية', 'expenses' => 'مصاريف شهرية', 'settings' => 'الإعدادات',
             'suppliers' => 'الموردين', 'purchases' => 'المشتريات',
@@ -989,7 +989,7 @@ class Permissions
             // كانت ساقطةً فتُعرض «reports» بحروفٍ لاتينية في قائمة صلاحيات عربية
             'reports' => 'التقارير',
             'quotations' => 'عروض الأسعار',
-            'projects' => 'المشاريع',
+            'projects' => 'المشاريع والمعارض',
             'communications' => 'المراسلات',
             'command' => 'مركز العمليات',
             'automation' => 'الأتمتة',
@@ -1088,6 +1088,10 @@ class Permissions
         'activity' => 'settings',
         // وأمرُ التغيير تعديلٌ على مشروع: بابُه بابُ المشاريع، ولا قسمَ له
         'changeOrders' => 'projects',
+        // والمهامُّ مهامُّ المشاريع: من يرى المشاريعَ يرى مهامَّها
+        'tasks' => 'projects',
+        // وصندوقُ وارد واتساب محادثاتٌ مع العملاء: بابُه بابُ المراسلات
+        'whatsapp' => 'communications',
     ];
 
     /**

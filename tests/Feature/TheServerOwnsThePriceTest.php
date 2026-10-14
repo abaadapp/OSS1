@@ -479,6 +479,28 @@ class TheServerOwnsThePriceTest extends TestCase
     }
 
     /** والمعاينةُ تخضع للضبط نفسِه: بائعٌ لا يعاين خصمًا لا يملكه */
+    /**
+     * والورقةُ تُرسم من أوّل بند — قبل العنوان وقبل العميل.
+     *
+     * كانت المعاينةُ تشترط العنوانَ كالحفظ، فتُردّ بـ٤٢٢ صامتة على شاشةٍ
+     * فُتحت للتوّ، ولا تظهر الورقةُ بجانب النموذج حتّى يُكتب. والحفظُ يبقى
+     * يشترطه.
+     */
+    public function test_the_paper_shows_beside_the_form_before_the_title_is_written(): void
+    {
+        $this->actingAs($this->owner)
+            ->postJson(route('admin.quotations.preview'), [
+                'customer_id' => '', 'title' => '',
+                'items' => [['product_id' => null, 'description' => '', 'quantity' => 1, 'unit_price' => 0]],
+            ])->assertOk()->assertJsonStructure(['html']);
+
+        $this->actingAs($this->owner)
+            ->post(route('admin.quotations.store'), [
+                'customer_id' => $this->customer->id, 'title' => '',
+                'items' => [['description' => 'تنظيم', 'quantity' => 1, 'unit_price' => 100]],
+            ])->assertSessionHasErrors('title');
+    }
+
     public function test_the_preview_obeys_the_same_price_rules(): void
     {
         $this->actingAs($this->seller)

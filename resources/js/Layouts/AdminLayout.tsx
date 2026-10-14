@@ -17,9 +17,13 @@ interface AdminLayoutProps {
     nav?: NavGroup[];
     /** السطر تحت الشعار في الشريط الجانبي */
     sidebarSubtitle?: string;
+    /**
+     * بلا البطاقة البيضاء — لصفحةٍ تملأ الشاشة بتصميمها هي (واتساب).
+     */
+    bare?: boolean;
 }
 
-export default function AdminLayout({ title, children, nav, sidebarSubtitle }: AdminLayoutProps) {
+export default function AdminLayout({ title, children, nav, sidebarSubtitle, bare = false }: AdminLayoutProps) {
     const { flash } = usePage<PageProps>().props;
     const t = useTranslate();
     const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -118,7 +122,20 @@ export default function AdminLayout({ title, children, nav, sidebarSubtitle }: A
                     className="mx-auto w-full max-w-[1600px] p-4 lg:p-6"
                 >
                     <SetupBanner />
-                    {children}
+                    {/*
+                     * محتوى الصفحة في بطاقةٍ بيضاء واحدة فوق الرماديّ.
+                     *
+                     * هنا لا في كلّ صفحة: ثمانٍ وتسعون صفحةً تلبسها معًا، وصفحةٌ
+                     * تُضاف غدًا تلبسها بلا أن تعرف. وبطاقاتُ الصفحة الداخليّة
+                     * بيضاءُ بحدودها، فتبقى متميّزةً داخلها بالحدّ لا باللون.
+                     */}
+                    {bare ? (
+                        children
+                    ) : (
+                        <div className="rounded-[20px] border border-[var(--ui-border,#e8e8e8)] bg-white p-4 shadow-[0_1px_2px_rgba(17,17,17,0.04)] sm:p-5 lg:p-6">
+                            {children}
+                        </div>
+                    )}
                 </motion.main>
             </div>
 

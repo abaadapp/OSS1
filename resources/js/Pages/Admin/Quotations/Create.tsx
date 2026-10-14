@@ -5,6 +5,7 @@ import AdminLayout from '@/Layouts/AdminLayout';
 import BackLink from '@/Components/BackLink';
 import PageHeader from '@/Components/PageHeader';
 import PaperFrame from '@/Components/PaperFrame';
+import CatalogPicker, { type CatalogCategory } from '@/Components/CatalogPicker';
 import Field, { Select } from '@/Components/Field';
 import { Button } from '@/Components/ui/button';
 import { Card } from '@/Components/ui/card';
@@ -34,6 +35,8 @@ interface CatalogRow {
     /** السعرُ المعتمد — من الخادم، وهو ما سيُحسب به عند الحفظ */
     list_price: number;
     tax_rate: number;
+    /** تصنيفُ البند — وسمٌ ملوّن في القائمة وفي السطر */
+    category: CatalogCategory | null;
     members: { product_id: number; description: string; unit: string | null; quantity: number; unit_price: number }[];
 }
 
@@ -403,7 +406,12 @@ export default function QuotationCreate({ quotation, customers, catalog, may, va
 
     return (
         <AdminLayout title={title}>
-            <BackLink routeName="admin.quotations.index" href={route('admin.quotations.index')} label="عروض الأسعار" />
+            {/* وتعديلُ عرضٍ يرجع إليه، والجديدُ إلى المشاريع حيث بدأ */}
+            {editing ? (
+                <BackLink routeName="admin.quotations.show" href={route('admin.quotations.show', quotation!.id)} label={String(quotation!.label ?? 'عرض السعر')} />
+            ) : (
+                <BackLink routeName="admin.projects.index" href={route('admin.projects.index')} label="المشاريع" />
+            )}
 
             <PageHeader
                 title={title}
@@ -416,7 +424,8 @@ export default function QuotationCreate({ quotation, customers, catalog, may, va
                 }
             />
 
-            <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_420px]">
+            {/* والورقةُ تتّسع مع الشاشة: ما يُطبع يُقرأ في المعاينة لا يُخمَّن منها */}
+            <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_480px] xl:grid-cols-[minmax(0,1fr)_560px] 2xl:grid-cols-[minmax(0,1fr)_680px]">
                 <div className="space-y-4">
                     {/* ─────────── الجهة والفعاليّة ─────────── */}
                     <Card className="space-y-4 p-4">
@@ -572,14 +581,13 @@ export default function QuotationCreate({ quotation, customers, catalog, may, va
                                     <div key={index} className="rounded-lg border border-[#e8e8e8] p-3">
                                         <div className="grid gap-2 sm:grid-cols-12">
                                             <div className="sm:col-span-5">
-                                                <Select
-                                                    value={row.product_id ? String(row.product_id) : ''}
-                                                    onChange={(e) => pick(index, e.target.value)}
+                                                <CatalogPicker
+                                                    value={row.product_id}
+                                                    rows={catalog}
+                                                    onPick={(v) => pick(index, v)}
                                                     placeholder="بند حر (بلا كتالوج)"
-                                                    options={catalog.map((c) => ({
-                                                        value: String(c.id),
-                                                        label: `${t(KIND_LABEL[c.kind])} — ${c.name}`,
-                                                    }))}
+                                                    kindLabel={(k) => t(KIND_LABEL[k])}
+                                                    money={m}
                                                 />
                                                 <Input
                                                     className="mt-2"
@@ -862,7 +870,7 @@ export default function QuotationCreate({ quotation, customers, catalog, may, va
                 {/* ─────────── المعاينة ─────────── */}
                 <div className="space-y-2 lg:sticky lg:top-4 lg:self-start">
                     {html ? (
-                        <PaperFrame html={html} title={t('معاينة عرض السعر')} viewport="min(72svh, 1000px)" />
+                        <PaperFrame html={html} title={t('معاينة عرض السعر')} viewport="min(84svh, 1200px)" />
                     ) : (
                         <Card className="p-8 text-center text-[13px] text-[#9ca3af]">
                             {t('أضف بندًا لترى الورقة.')}

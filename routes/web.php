@@ -11,6 +11,7 @@ use App\Http\Controllers\Admin\ChangeOrderController;
 use App\Http\Controllers\Admin\ChequeController;
 use App\Http\Controllers\Admin\CommandCenterController;
 use App\Http\Controllers\Admin\CommunicationController;
+use App\Http\Controllers\Admin\WhatsAppController;
 use App\Http\Controllers\Admin\CommunicationTemplateController;
 use App\Http\Controllers\Admin\CurrencyController;
 use App\Http\Controllers\Admin\CustomAlertController;
@@ -65,6 +66,7 @@ use App\Http\Controllers\Admin\ReportPageController;
 use App\Http\Controllers\Admin\SetupController;
 use App\Http\Controllers\Admin\SupplierController;
 use App\Http\Controllers\Admin\SupplierExportController;
+use App\Http\Controllers\Admin\TaskController;
 use App\Http\Controllers\Admin\TemplateController;
 use App\Http\Controllers\Admin\TrashController;
 use App\Http\Controllers\Admin\WasteAnalyticsController;
@@ -345,6 +347,8 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'tenant', 'business'
 
     // العملاء
     Route::get('/customers', [CustomerController::class, 'index'])->name('customers.index');
+    /* الشركاتُ والجهات — العملاءُ الاعتباريّون في تبويبٍ وحدَهم، والأفرادُ في «العملاء» */
+    Route::get('/customers/organizations', [CustomerController::class, 'organizations'])->name('customers.organizations');
     // تصدير/استيراد العملاء (Excel/PDF + معاينة قبل التأكيد)
     Route::get('/customers/export/xlsx', [CustomerImportExportController::class, 'exportXlsx'])->name('customers.export.xlsx');
     Route::get('/customers/export/pdf', [CustomerImportExportController::class, 'exportPdf'])->name('customers.export.pdf');
@@ -609,6 +613,8 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'tenant', 'business'
      * المشاريع — المرحلة 4. القسمُ `projects`، وأوامرُ التغيير تحته
      * (`ALIASES['changeOrders']`). ولا `create` للمشروع: يُنشأ من قبول العرض.
      */
+    // المهامّ: مهامُّ المشاريع كلِّها في شاشةٍ واحدة — وتُكتب من مسارات المشروع
+    Route::get('/tasks', [TaskController::class, 'index'])->name('tasks.index');
     Route::get('/projects', [ProjectController::class, 'index'])->name('projects.index');
     Route::get('/projects/{id}', [ProjectController::class, 'show'])->name('projects.show');
     Route::put('/projects/{id}', [ProjectController::class, 'update'])->name('projects.update');
@@ -1117,6 +1123,14 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'tenant', 'business'
     Route::post('/communications/templates/preview', [CommunicationTemplateController::class, 'preview'])->name('communications.templates.preview');
     Route::get('/communications/{id}', [CommunicationController::class, 'show'])->name('communications.show');
     Route::post('/communications/{id}/retry', [CommunicationController::class, 'retry'])->name('communications.retry');
+
+    /*
+     * واتساب — صندوقُ الوارد. قسمُه «المراسلات» (`Permissions::ALIASES`)،
+     * والردُّ فعلُ «الإرسال» يُسأل عنه في المتحكّم.
+     */
+    Route::get('/whatsapp', [WhatsAppController::class, 'index'])->name('whatsapp.index');
+    Route::post('/whatsapp/{id}/reply', [WhatsAppController::class, 'reply'])->whereNumber('id')->name('whatsapp.reply');
+    Route::get('/whatsapp/media/{id}', [WhatsAppController::class, 'media'])->whereNumber('id')->name('whatsapp.media');
 
     /* اسمُ المسار · مسارُه في العنوان · نوعُ الموضوع في `Subjects::TYPES` */
     foreach ([

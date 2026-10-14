@@ -27,6 +27,8 @@ import type { PageProps } from '@/types';
 import type { Branch, Customer } from '@/types/models';
 
 interface Props {
+    /** التبويب: الشركاتُ والجهات، أو الأفراد */
+    kind: 'organizations' | 'individuals';
     customers: Customer[];
     pagination: ServerPagination;
     filters: Record<string, string | null>;
@@ -38,8 +40,10 @@ interface Props {
 }
 
 export default function CustomersIndex() {
-    const { customers, pagination, filters, sorts, stats, branches, currentBranchId, context } =
+    const { kind, customers, pagination, filters, sorts, stats, branches, currentBranchId, context } =
         usePage<PageProps<Props>>().props;
+    const orgs = kind === 'organizations';
+    const currentRoute = orgs ? 'admin.customers.organizations' : 'admin.customers.index';
     const t = useTranslate();
     const currency = context!.currency;
     const [adding, setAdding] = useState(false);
@@ -60,6 +64,8 @@ export default function CustomersIndex() {
         phone: '',
         email: '',
         branch_id: currentBranchId ? String(currentBranchId) : '',
+        /* النوعُ من التبويب: ما يُضاف من «شركات وجهات» يبقى فيها */
+        customer_type: orgs ? 'شركة' : 'فرد',
     });
 
     const upload = useForm<{ file: File | null; branch_id: string }>({ file: null, branch_id: '' });
@@ -164,10 +170,10 @@ export default function CustomersIndex() {
      * أحدهما الآخر بلا أن يقول أيّهما غلب.
      */
     return (
-        <AdminLayout title="العملاء">
+        <AdminLayout title={orgs ? 'شركات وجهات' : 'العملاء'}>
             <PageHeader
-                title="العملاء"
-                subtitle={t('إدارة قاعدة عملاء المحل وسجل مشترياتهم ونقاط ولائهم')}
+                title={orgs ? 'شركات وجهات' : 'العملاء'}
+                subtitle={orgs ? t('الشركات والجهات الحكومية التي تتعامل معها الشركة') : t('العملاء الأفراد وسجل تعاملهم مع الشركة')}
                 actions={
                     <>
                         <DropdownMenu>
@@ -207,13 +213,13 @@ export default function CustomersIndex() {
 
                         <Button onClick={() => setAdding(true)}>
                             <UserPlus />
-                            {t('إضافة عميل')}
+                            {orgs ? t('إضافة جهة') : t('إضافة عميل')}
                         </Button>
                     </>
                 }
             />
 
-            <SectionTabs tabs={CUSTOMER_TABS} current="admin.customers.index" />
+            <SectionTabs tabs={CUSTOMER_TABS} current={currentRoute} />
 
             <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 {stats.map((s, i) => (
@@ -228,7 +234,7 @@ export default function CustomersIndex() {
                     rowKey={(c) => c.id}
                     searchPlaceholder="ابحث بالاسم أو رقم الهاتف أو البريد…"
                     searchable={() => ''}
-                    empty="لا يوجد عملاء بعد"
+                    empty={orgs ? 'لا توجد شركات أو جهات بعد' : 'لا يوجد عملاء بعد'}
                     server={{ pagination, params: filters, sorts }}
                 />
             </Card>
@@ -237,10 +243,22 @@ export default function CustomersIndex() {
             <Dialog open={adding} onOpenChange={setAdding}>
                 <DialogContent className="max-w-lg">
                     <DialogHeader>
-                        <DialogTitle>{t('إضافة عميل جديد')}</DialogTitle>
+                        <DialogTitle>{orgs ? t('إضافة شركة أو جهة') : t('إضافة عميل جديد')}</DialogTitle>
                     </DialogHeader>
                     <form onSubmit={submitAdd} className="space-y-4 px-5 pb-5">
-                        <Field label="اسم العميل" required error={add.errors.name}>
+                        {orgs && (
+                            <Field label="النوع" required error={add.errors.customer_type}>
+                                <Select
+                                    value={add.data.customer_type}
+                                    onChange={(e) => add.setData('customer_type', e.target.value)}
+                                    options={[
+                                        { label: 'شركة', value: 'شركة' },
+                                        { label: 'جهة حكومية', value: 'جهة حكومية' },
+                                    ]}
+                                />
+                            </Field>
+                        )}
+                        <Field label={orgs ? 'اسم الشركة أو الجهة' : 'اسم العميل'} required error={add.errors.name}>
                             <Input
                                 value={add.data.name}
                                 onChange={(e) => add.setData('name', e.target.value)}

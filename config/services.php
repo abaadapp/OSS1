@@ -51,6 +51,8 @@ return [
         'app_secret' => env('WHATSAPP_APP_SECRET'),
         'verify_token' => env('WHATSAPP_VERIFY_TOKEN'),
         'api_version' => env('WHATSAPP_API_VERSION', 'v21.0'),
+        /* شركةُ الرقم — يُقرأ منها صندوقُ الوارد. وبلا قيمةٍ: الشركةُ الوحيدة على الخادم */
+        'business_id' => env('WHATSAPP_BUSINESS_ID'),
     ],
 
     'ses' => [

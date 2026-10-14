@@ -7,6 +7,7 @@ use App\Models\Customer;
 use App\Models\DocumentApproval;
 use App\Models\PolicyException;
 use App\Models\Product;
+use App\Models\Project;
 use App\Models\Quotation;
 use App\Support\Communication\Communications;
 use App\Support\CompanyPolicies;
@@ -214,6 +215,8 @@ class QuotationController extends Controller
             'may' => $this->may(),
             /* وسلسلةُ التنقيحات تُعرض كاملة: من قرأ النسخةَ الثانية يجد الأولى */
             'chain' => $this->chain($quotation),
+            /* والمشروعُ الذي صار إليه — فالرجوعُ منه إلى مشروعه لا إلى قائمة العروض */
+            'project' => Project::where('business_id', $bid)->where('quotation_id', $quotation->id)->first(['id', 'code']),
         ]);
     }
 
@@ -401,7 +404,7 @@ class QuotationController extends Controller
     {
         $products = Product::where('business_id', $bid)
             ->where('active', true)
-            ->with('packageItems.item:id,name,price,discount')
+            ->with('packageItems.item:id,name,price,discount', 'category:id,name,color')
             ->orderBy('name')
             ->limit(self::CATALOG_LIMIT)
             ->get(['id', 'name', 'sku', 'kind', 'price', 'discount', 'tax', 'category_id']);
@@ -413,6 +416,8 @@ class QuotationController extends Controller
             'kind' => $p->kind ?? Product::ITEM,
             'list_price' => $p->sellingPrice(),
             'tax_rate' => Vat::rateFor($p, $bid),
+            /* والتصنيفُ وسمٌ ملوّن في القائمة — يميّز الأجهزةَ من الخدمات من الباقات */
+            'category' => $p->category ? ['id' => $p->category->id, 'name' => $p->category->name, 'color' => $p->category->color] : null,
             /* وبنودُ الباقة تُرسَل معها: من اختارها يراها قبل أن يفكّها */
             'members' => $p->packageItems->map(fn ($row) => [
                 'product_id' => $row->item_id,
@@ -434,12 +439,12 @@ class QuotationController extends Controller
      *
      * @return array<string, mixed>
      */
-    private function rules(int $bid, bool $requireCustomer = true): array
+    private function rules(int $bid, bool $requireCustomer = true, bool $requireTitle = true): array
     {
         return [
             'customer_id' => [$requireCustomer ? 'required' : 'nullable',
                 Rule::exists('customers', 'id')->where('business_id', $bid)->whereNull('deleted_at')],
-            'title' => ['required', 'string', 'max:255'],
+            'title' => [$requireTitle ? 'required' : 'nullable', 'string', 'max:255'],
             'issued_at' => ['nullable', 'date'],
             'valid_until' => ['nullable', 'date'],
             'event_location' => ['nullable', 'string', 'max:255'],
@@ -543,7 +548,13 @@ class QuotationController extends Controller
         abort_if(! auth()->user()?->may(Permissions::QUOTATION_CREATE), 403);
 
         $bid = $this->bid();
-        $data = $request->validate($this->rules($bid, requireCustomer: false), [], $this->labels());
+        /*
+         * والمعاينةُ لا تشترط العنوان: الورقةُ تُرسم من أوّل بند، والعنوانُ
+         * الفارغ يُكتب «عرض سعر» في `Quotations::attributes`. وكانت تشترطه
+         * كالحفظ، فتُردّ بـ٤٢٢ صامتة ما دام فارغًا — وتبقى الشاشةُ تقول
+         * «أضف بندًا لترى الورقة» ولو أُضيفت البنودُ كلُّها. والحفظُ يشترطه.
+         */
+        $data = $request->validate($this->rules($bid, requireCustomer: false, requireTitle: false), [], $this->labels());
 
         $customer = isset($data['customer_id'])
             ? Customer::where('business_id', $bid)->find($data['customer_id'])

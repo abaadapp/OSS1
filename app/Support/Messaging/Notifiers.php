@@ -17,7 +17,7 @@ class Notifiers
         return new EmailNotifier;
     }
 
-    public static function whatsapp(): Notifier
+    public static function whatsapp(): WhatsAppNotifier
     {
         return new WhatsAppNotifier;
     }

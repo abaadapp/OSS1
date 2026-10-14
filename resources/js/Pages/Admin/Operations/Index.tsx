@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { router, usePage } from '@inertiajs/react';
-import { CalendarCheck, ClipboardList, Plus, Radio } from 'lucide-react';
+import { CalendarCheck, CalendarDays, ClipboardList, List, Plus } from 'lucide-react';
 import AdminLayout from '@/Layouts/AdminLayout';
 import PageHeader from '@/Components/PageHeader';
 import SmartLink from '@/Components/SmartLink';
@@ -9,9 +9,11 @@ import { Button } from '@/Components/ui/button';
 import { Card } from '@/Components/ui/card';
 import { Input, Textarea } from '@/Components/ui/input';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/Components/ui/dialog';
-import { number } from '@/lib/format';
 import { useTranslate } from '@/lib/i18n';
 import { label, operationTone, type Labels } from '@/lib/operations';
+import SectionTabs, { PROJECT_TABS } from '@/Components/SectionTabs';
+import { cn } from '@/lib/utils';
+import OperationsCalendar, { type CalendarData } from './partials/OperationsCalendar';
 
 interface OperationRow {
     id: number;
@@ -28,7 +30,9 @@ interface OperationRow {
 interface Props {
     operations: OperationRow[];
     pagination: { current_page: number; last_page: number; total: number };
-    filters: { q?: string; status?: string; window?: string };
+    filters: { q?: string; status?: string; window?: string; month?: string };
+    view: 'calendar' | 'list';
+    calendar: CalendarData;
     statuses: string[];
     projects: { id: number; code: string; name: string }[];
     totals: { live: number; today: number; week: number; active: number };
@@ -42,14 +46,16 @@ interface Props {
  * كلُّ صفٍّ فعاليّةٌ بموعدها ومكانها وقائدها وحالها. والإنشاءُ من مشروعٍ
  * قائم: الفعاليّةُ تنفيذٌ لمشروع، لا تُنشأ في فراغ.
  */
-export default function OperationsIndex({ operations, pagination, filters, statuses, projects, totals, labels, may }: Props) {
+export default function OperationsIndex({ operations, pagination, filters, view, calendar, statuses, projects, labels, may }: Props) {
     const t = useTranslate();
     const { errors } = usePage().props as { errors?: Record<string, string> };
     const [creating, setCreating] = useState(false);
     const [form, setForm] = useState({ project_id: '', name: '', venue_name: '', event_starts_at: '', event_ends_at: '', setup_starts_at: '', teardown_ends_at: '', notes: '' });
 
-    const filter = (patch: Record<string, string>) =>
-        router.get(route('admin.operations.index'), { ...filters, ...patch, page: undefined }, { preserveState: true, replace: true });
+    /* والعرضُ والشهرُ في الرابط: من ينسخه أو يحدّث الصفحة يعود إلى ما كان يراه */
+    const base = { ...filters, view: view === 'list' ? 'list' : undefined, month: view === 'calendar' ? calendar.month : undefined };
+    const filter = (patch: Record<string, string | undefined>) =>
+        router.get(route('admin.operations.index'), { ...base, ...patch, page: undefined }, { preserveState: true, preserveScroll: true, replace: true });
 
     const submit = () => router.post(route('admin.operations.store'), form, { onSuccess: () => setCreating(false) });
 
@@ -59,16 +65,39 @@ export default function OperationsIndex({ operations, pagination, filters, statu
         <AdminLayout title="العمليات">
             <PageHeader
                 title="العمليات"
-                subtitle={t('تنفيذُ الفعاليّات على الأرض — الموعدُ والمكانُ والفريقُ والمعدّاتُ والجاهزيّة')}
                 actions={
-                    <div className="flex flex-wrap gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                        {/* تقويمٌ أو قائمة — والتقويمُ أوّلًا */}
+                        <div className="inline-flex rounded-[10px] border border-[var(--ui-border,#e8e8e8)] p-0.5">
+                            {(
+                                [
+                                    ['calendar', CalendarDays, 'تقويم'],
+                                    ['list', List, 'قائمة'],
+                                ] as const
+                            ).map(([key, Icon, text]) => (
+                                <button
+                                    key={key}
+                                    type="button"
+                                    aria-pressed={view === key}
+                                    onClick={() => filter(key === 'list' ? { view: 'list', month: undefined } : { view: undefined, window: undefined, month: undefined })}
+                                    className={cn(
+                                        'inline-flex items-center gap-1.5 rounded-[8px] px-3 py-1.5 text-[13px] font-medium transition-colors',
+                                        view === key ? 'bg-[#111] text-white' : 'text-[#4b4b4b] hover:bg-[#f5f5f4]',
+                                    )}
+                                >
+                                    <Icon className="size-4" />
+                                    {t(text)}
+                                </button>
+                            ))}
+                        </div>
                         <Button variant="outline" asChild>
                             <SmartLink routeName="admin.operations.templates" href={route('admin.operations.templates')}>
                                 <ClipboardList />
                                 {t('قوالب التحقّق')}
                             </SmartLink>
                         </Button>
-                        {may.manage && (
+                        {/* وفي التقويم زرُّ الإنشاء بجانب فعاليّات الشهر — لا مرّتين */}
+                        {may.manage && view === 'list' && (
                             <Button onClick={() => setCreating(true)}>
                                 <Plus />
                                 {t('فعاليّة جديدة')}
@@ -78,19 +107,18 @@ export default function OperationsIndex({ operations, pagination, filters, statu
                 }
             />
 
+            <SectionTabs tabs={PROJECT_TABS} current="admin.operations.index" />
+
             {errors?.operation && <div className="mb-4 rounded-lg bg-[#fef2f2] px-4 py-3 text-[13px] text-[#b91c1c]">{errors.operation}</div>}
 
-            <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4">
-                <Stat label="على الهواء الآن" value={totals.live} tone={totals.live > 0 ? 'bg-[#059669]' : 'bg-[#d1d5db]'} icon={Radio} onClick={() => filter({ status: 'live', window: '' })} />
-                <Stat label="اليوم" value={totals.today} tone="bg-[#2563eb]" icon={CalendarCheck} onClick={() => filter({ window: 'today', status: '' })} />
-                <Stat label="خلال أسبوع" value={totals.week} tone="bg-[#d97706]" icon={CalendarCheck} onClick={() => filter({ window: 'week', status: '' })} />
-                <Stat label="قائمة" value={totals.active} tone="bg-[#6b7280]" icon={ClipboardList} onClick={() => filter({ window: '', status: '' })} />
-            </div>
-
-            <Card className="mb-4 p-4">
-                <div className="flex flex-wrap items-end gap-3">
+            {/*
+             * والتصفيةُ للقائمة وحدَها: التقويمُ يُصفّي من «الكل» بجانب فعاليّاته.
+             * وبطاقاتُ الأرقام نُزعت — التقويمُ نفسُه يقول ما اليومَ وما هذا الأسبوع.
+             */}
+            {view === 'list' && (
+                <div className="mb-4 flex flex-wrap items-end gap-3">
                     <Field label="بحث" className="min-w-[220px] flex-1">
-                        <Input defaultValue={filters.q ?? ''} placeholder="الرمز أو الاسم أو المكان أو المشروع" onKeyDown={(e) => e.key === 'Enter' && filter({ q: (e.target as HTMLInputElement).value })} />
+                        <Input type="search" defaultValue={filters.q ?? ''} placeholder="الرمز أو الاسم أو المكان أو المشروع" onKeyDown={(e) => e.key === 'Enter' && filter({ q: (e.target as HTMLInputElement).value })} />
                     </Field>
                     <Field label="الحالة" className="min-w-[160px]">
                         <Select value={filters.status ?? ''} placeholder="كل الحالات" onChange={(e) => filter({ status: e.target.value })} options={statuses.map((s) => ({ value: s, label: statusLabel(s) }))} />
@@ -109,8 +137,13 @@ export default function OperationsIndex({ operations, pagination, filters, statu
                         />
                     </Field>
                 </div>
-            </Card>
+            )}
 
+            {view === 'calendar' && (
+                <OperationsCalendar data={calendar} statusLabel={statusLabel} onMonth={(month) => filter({ month })} onCreate={may.manage ? () => setCreating(true) : undefined} />
+            )}
+
+            {view === 'list' && (
             <Card className="overflow-hidden">
                 <div className="overflow-x-auto">
                     <table className="w-full text-[13px]">
@@ -170,12 +203,13 @@ export default function OperationsIndex({ operations, pagination, filters, statu
                     <div className="flex items-center justify-between border-t border-[#f4f4f5] px-4 py-2 text-[12px] text-[#6b7280]">
                         <span>{t('صفحة :n من :m', { n: String(pagination.current_page), m: String(pagination.last_page) })}</span>
                         <div className="flex gap-2">
-                            <Button variant="outline" size="sm" disabled={pagination.current_page <= 1} onClick={() => router.get(route('admin.operations.index'), { ...filters, page: pagination.current_page - 1 })}>{t('السابق')}</Button>
-                            <Button variant="outline" size="sm" disabled={pagination.current_page >= pagination.last_page} onClick={() => router.get(route('admin.operations.index'), { ...filters, page: pagination.current_page + 1 })}>{t('التالي')}</Button>
+                            <Button variant="outline" size="sm" disabled={pagination.current_page <= 1} onClick={() => router.get(route('admin.operations.index'), { ...base, page: pagination.current_page - 1 })}>{t('السابق')}</Button>
+                            <Button variant="outline" size="sm" disabled={pagination.current_page >= pagination.last_page} onClick={() => router.get(route('admin.operations.index'), { ...base, page: pagination.current_page + 1 })}>{t('التالي')}</Button>
                         </div>
                     </div>
                 )}
             </Card>
+            )}
 
             <Dialog open={creating} onOpenChange={(v) => !v && setCreating(false)}>
                 <DialogContent>
@@ -218,21 +252,5 @@ export default function OperationsIndex({ operations, pagination, filters, statu
                 </DialogContent>
             </Dialog>
         </AdminLayout>
-    );
-}
-
-function Stat({ label: text, value, tone, icon: Icon, onClick }: { label: string; value: number; tone: string; icon: typeof Radio; onClick: () => void }) {
-    const t = useTranslate();
-
-    return (
-        <button type="button" onClick={onClick} className="flex items-center gap-3 rounded-xl border border-[#e5e7eb] bg-white p-3 text-start transition hover:bg-[#fafafa]">
-            <span className={'flex size-9 shrink-0 items-center justify-center rounded-lg text-white ' + tone}>
-                <Icon className="size-4" />
-            </span>
-            <span className="min-w-0">
-                <span className="block text-[22px] font-bold leading-none tabular-nums text-[#111]">{number(value)}</span>
-                <span className="block truncate text-[12px] text-[#6b7280]">{t(text)}</span>
-            </span>
-        </button>
     );
 }

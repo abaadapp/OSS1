@@ -111,6 +111,8 @@ class TenantTables
          * (`retry_of_id`) ذاتيّة: الأصلُ أصغرُ معرّفًا فيُكتب أوّلًا — المرحلة 6
          */
         'communications', 'communication_events', 'communication_templates',
+        /* وصندوقُ وارد واتساب بعدها: الرسالةُ تشير إلى محادثتها وإلى قيد المراسلات */
+        'whatsapp_conversations', 'whatsapp_messages',
         /* والأتمتةُ بعد المراسلات: التنفيذُ يشير إلى الرسالة التي أخرجها — المرحلة 8 */
         'automation_rules', 'automation_runs', 'internal_notifications',
         /*

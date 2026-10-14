@@ -66,7 +66,11 @@ export default function DeliveryPackageCreate({ customers, quotations, projects,
 
     return (
         <AdminLayout title={t('حزمة تسليم جديدة')}>
-            <BackLink routeName="admin.deliveries.index" href={route('admin.deliveries.index')} label="حزم التسليم" />
+            {presetP ? (
+                <BackLink routeName="admin.projects.show" href={route('admin.projects.show', { id: presetP.id, tab: 'delivery' })} label={presetP.label} />
+            ) : (
+                <BackLink routeName="admin.projects.index" href={route('admin.projects.index')} label="المشاريع" />
+            )}
             <PageHeader title={t('حزمة تسليم جديدة')} subtitle={t('ما سيُسلَّم للعميل — والبنود والملفّات تُضاف بعد الحفظ.')} />
 
             <form onSubmit={submit} className="max-w-3xl space-y-4">

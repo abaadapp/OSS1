@@ -75,11 +75,11 @@ export default function Dashboard() {
     const { stats: liveStats, updatedAt } = useLiveStats(route('admin.dashboard.stats'), stats);
 
     return (
-        <AdminLayout title="لوحة التحكم">
+        <AdminLayout title="الملخص">
             {/* زرّا «نقطة البيع» و«الموقع الإلكتروني» انتقلا إلى الهيدر ثابتين
                 على كل الصفحات، فرُفعا من ترويسة اللوحة كي لا يتكرّرا. */}
             <PageHeader
-                title="لوحة التحكم"
+                title="الملخص"
                 subtitle={t('نظرة عامة على أداء :name', { name: context?.businessName ?? t('شركتك') })}
             />
 

@@ -501,35 +501,9 @@ final class Projects
 
             $summary = ProjectFinancials::summary($locked);
 
-            if ($summary['committed'] > 0.0005) {
-                throw new RuntimeException(__('على هذا المشروع التزامٌ لم يصر تكلفةً بعد (:amount) — سوِّه قبل الإقفال.', [
-                    'amount' => number_format($summary['committed'], 3),
-                ]));
-            }
-
-            if ($locked->invoices()->where('status', CustomerInvoice::DRAFT)->exists()) {
-                throw new RuntimeException(__('على هذا المشروع فاتورةٌ مسودّة — أصدرها أو احذفها قبل الإقفال.'));
-            }
-
-            /* ولا أمرَ تغييرٍ ينتظر: قبولٌ يأتي بعد الإقفال يغيّر نطاقًا جُمّدت أرقامُه */
-            $pending = $locked->changeOrders()
-                ->whereIn('status', [ChangeOrder::PENDING_APPROVAL, ChangeOrder::SENT])->count();
-
-            if ($pending > 0) {
-                throw new RuntimeException(__('على هذا المشروع :n أمرَ تغييرٍ ينتظر قرارًا — قرّر فيه أو ألغِه قبل الإقفال.', ['n' => $pending]));
-            }
-
-            /*
-             * ولا يُقفَل ما لم يُسلَّم ويُقبَل — المرحلة 5.
-             *
-             * حزمةُ تسليمٍ قَبِلها العميل هي ما يقول «انتهى العمل»؛ ومرسَلةٌ
-             * تنتظر، أو مرفوضةٌ لم تُعالَج، أو لا حزمةَ أصلًا — كلُّها تمنع.
-             * والموانعُ من مصدرها لا تُعاد كتابتُها هنا.
-             */
-            $delivery = DeliveryReadiness::forProject($locked);
-
-            if (! $delivery->ready) {
-                throw new RuntimeException(__('لا يُقفَل المشروع: :why', ['why' => implode(' · ', $delivery->blockers)]));
+            $blockers = self::closeBlockers($locked, $summary);
+            if ($blockers !== []) {
+                throw new RuntimeException($blockers[0]);
             }
 
             $locked->update([
@@ -547,6 +521,51 @@ final class Projects
 
             return $locked->fresh();
         });
+    }
+
+    /**
+     * ما يمنع إقفالَ المشروع الآن — بالنصّ نفسِه الذي يردّ به الإقفال.
+     *
+     * الشاشةُ تعرضه قبل أن يُضغط الزرّ، و`close` يرمي أوّلَه: مصدرٌ واحدٌ
+     * للموانع فلا تقول الصفحةُ «جاهز» ويرفض الإقفال.
+     *
+     * - التزامٌ لم يصر تكلفةً (أمرُ شراءٍ مفتوح، فاتورةُ مورّدٍ معلَّقة…).
+     * - فاتورةُ عميلٍ مسودّة.
+     * - أمرُ تغييرٍ ينتظر قرارًا: قبولُه بعد الإقفال يغيّر نطاقًا جُمّدت أرقامُه.
+     * - تسليمٌ لم يُقبل — المرحلة 5: حزمةٌ قَبِلها العميل هي ما يقول «انتهى العمل».
+     *
+     * @param  array<string, mixed>|null  $summary  ملخّصُ المال إن حُسب قبلُ
+     * @return list<string>
+     */
+    public static function closeBlockers(Project $project, ?array $summary = null): array
+    {
+        $summary ??= ProjectFinancials::summary($project);
+        $out = [];
+
+        if ($summary['committed'] > 0.0005) {
+            $out[] = __('على هذا المشروع التزامٌ لم يصر تكلفةً بعد (:amount) — سوِّه قبل الإقفال.', [
+                'amount' => number_format($summary['committed'], 3),
+            ]);
+        }
+
+        if ($project->invoices()->where('status', CustomerInvoice::DRAFT)->exists()) {
+            $out[] = __('على هذا المشروع فاتورةٌ مسودّة — أصدرها أو احذفها قبل الإقفال.');
+        }
+
+        $pending = $project->changeOrders()
+            ->whereIn('status', [ChangeOrder::PENDING_APPROVAL, ChangeOrder::SENT])->count();
+
+        if ($pending > 0) {
+            $out[] = __('على هذا المشروع :n أمرَ تغييرٍ ينتظر قرارًا — قرّر فيه أو ألغِه قبل الإقفال.', ['n' => $pending]);
+        }
+
+        $delivery = DeliveryReadiness::forProject($project);
+
+        if (! $delivery->ready) {
+            $out[] = __('لا يُقفَل المشروع: :why', ['why' => implode(' · ', $delivery->blockers)]);
+        }
+
+        return $out;
     }
 
     /**

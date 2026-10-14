@@ -122,8 +122,21 @@ export default function SectionTabs({ tabs: all, current, className }: Props) {
  * المورّدون في المخزون، فيبحث عنهم من يريد بياناتهم حيث تُعدّ البضاعة.
  */
 export const CUSTOMER_TABS: SectionTab[] = [
+    /* الاعتباريّون أوّلًا: وزاراتٌ وشركاتٌ هي أكثرُ من تعمل له الشركة */
+    { label: 'شركات وجهات', routeName: 'admin.customers.organizations', section: 'customers' },
     { label: 'العملاء', routeName: 'admin.customers.index', section: 'customers' },
     { label: 'الموردين', routeName: 'admin.suppliers.index', section: 'suppliers' },
+];
+
+/**
+ * قسم المشاريع — المشاريعُ وتنفيذُها.
+ *
+ * العمليّاتُ هي المشروعُ على الأرض: موعدُه ومكانُه وفريقُه. فمكانُها بجانبه
+ * لا قسمًا وحدَه في القائمة.
+ */
+export const PROJECT_TABS: SectionTab[] = [
+    { label: 'المشاريع', routeName: 'admin.projects.index', section: 'projects' },
+    { label: 'العمليات', routeName: 'admin.operations.index', section: 'operations' },
 ];
 
 /**

@@ -25,7 +25,23 @@ class CustomerController extends Controller
 
     private function bid(): int { return auth()->user()->business_id ?? Demo::bid(); }
 
-    public function index(Request $request)
+    /**
+     * العملاءُ بنوعهم — تبويبان في قسمٍ واحد.
+     *
+     * «شركات وجهات» للاعتباريّين (شركةٌ أو جهةٌ حكوميّة)، و«العملاء» للأفراد.
+     * والنوعُ عمودٌ في العميل (`customer_type`) لا جدولٌ ثانٍ: الفاتورةُ
+     * والعرضُ وكشفُ الحساب يقرؤون عميلًا واحدًا أيًّا كان نوعُه.
+     */
+    public const ORGANIZATIONS = ['شركة', 'جهة حكومية'];
+
+    public const TYPES = ['فرد', 'شركة', 'جهة حكومية'];
+
+    public function organizations(Request $request)
+    {
+        return $this->index($request, 'organizations');
+    }
+
+    public function index(Request $request, string $kind = 'individuals')
     {
         /*
          * ما تعامل به العميل فعلًا — لا مسودّةً ولا ملغاة.
@@ -49,6 +65,11 @@ class CustomerController extends Controller
         // القاعدة نفسها التي يقرأ بها الملفّ — انظر App\Support\ListFilters
         \App\Support\ListFilters::customers($q, $request);
 
+        /* والأفرادُ ما ليس اعتباريًّا — وقيمةٌ قديمةٌ فارغة تُحسب فردًا كما يقول عمودُها */
+        $kind === 'organizations'
+            ? $q->whereIn('customer_type', self::ORGANIZATIONS)
+            : $q->where(fn ($w) => $w->whereNotIn('customer_type', self::ORGANIZATIONS)->orWhereNull('customer_type'));
+
         /*
          * الافتراضي: الأحدث تسجيلًا، حتى يظهر العميل المُضاف حديثًا في الأعلى.
          *
@@ -62,6 +83,7 @@ class CustomerController extends Controller
             'id' => $c->id, 'name' => $c->name, 'name_en' => $c->name_en,
             'label' => Demo::ln($c->name, $c->name_en),
             'phone' => $c->phone, 'email' => $c->email,
+            'customer_type' => $c->customer_type,
             'orders' => $c->orders_count,
             'total_spent' => (float) ($c->orders_sum_total ?? 0),
             'last_order' => $c->orders_max_ordered_at
@@ -81,6 +103,7 @@ class CustomerController extends Controller
         $stats = Demo::customerStats();
 
         return \Inertia\Inertia::render('Admin/Customers/Index', [
+            'kind' => $kind,
             'customers' => $customers->items(),
             'pagination' => \App\Support\Pagination::meta($customers),
             'filters' => $request->only('q') + \App\Support\Sort::params($request, self::SORTS),
@@ -108,8 +131,10 @@ class CustomerController extends Controller
             'tax_number' => ['nullable', 'string', 'max:50'],
             'address' => ['nullable', 'string', 'max:255'],
             'branch_id' => ['nullable', 'integer'],
+            'customer_type' => ['nullable', 'string', \Illuminate\Validation\Rule::in(self::TYPES)],
         ]);
         $data['business_id'] = $this->bid();
+        $data['customer_type'] = $data['customer_type'] ?? 'فرد';
 
         // الفرع اختياري — ويجب أن يكون تابعًا لنفس النشاط
         $branchId = $data['branch_id'] ?? null;
@@ -121,7 +146,10 @@ class CustomerController extends Controller
         Customer::create($data);
         \App\Support\Activity::log('created', 'أضاف عميلًا: ' . $data['name']);
 
-        return redirect()->route('admin.customers.index')->with('toast', ['msg' => __('تم إضافة العميل بنجاح'), 'type' => 'success']);
+        /* ويعود إلى تبويب نوعه: شركةٌ تُضاف من «شركات وجهات» لا تختفي إلى «العملاء» */
+        $tab = in_array($data['customer_type'], self::ORGANIZATIONS, true) ? 'admin.customers.organizations' : 'admin.customers.index';
+
+        return redirect()->route($tab)->with('toast', ['msg' => __('تم إضافة العميل بنجاح'), 'type' => 'success']);
     }
 
     /**

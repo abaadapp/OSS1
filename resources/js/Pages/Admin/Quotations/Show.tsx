@@ -116,6 +116,8 @@ interface Quotation {
 
 interface Props {
     quotation: Quotation;
+    /** المشروعُ الذي صار إليه العرضُ بقبوله — إن صار */
+    project: { id: number; code: string } | null;
     paper: string;
     chain: { id: number; label: string; revision: number; status: string; total: number; sent_at: string | null; current: boolean }[];
     may: {
@@ -139,7 +141,7 @@ interface Props {
  * ومتى خرج، وهل فُتح. والثاني هو ما يُسأل عنه بعد شهرٍ حين لا يردّ العميل
  * — «هل وصله أصلًا؟» — ولا تجيبه ورقةٌ مهما طُبعت.
  */
-export default function QuotationShow({ quotation: q, paper, chain, may }: Props) {
+export default function QuotationShow({ quotation: q, paper, chain, project, may }: Props) {
     const t = useTranslate();
     const { context } = usePage<PageProps>().props;
     const m = (v: number) => money(v, context!.currency);
@@ -160,7 +162,12 @@ export default function QuotationShow({ quotation: q, paper, chain, may }: Props
 
     return (
         <AdminLayout title={q.label}>
-            <BackLink routeName="admin.quotations.index" href={route('admin.quotations.index')} label="عروض الأسعار" />
+            {/* العرضُ أوّلُ مراحل المشروع: الرجوعُ إلى مشروعه إن قُبل، وإلّا إلى المشاريع */}
+            {project ? (
+                <BackLink routeName="admin.projects.show" href={route('admin.projects.show', project.id)} label={project.code} />
+            ) : (
+                <BackLink routeName="admin.projects.index" href={route('admin.projects.index')} label="المشاريع" />
+            )}
 
             <PageHeader
                 title={q.number ? q.label : `${t('مسودة')} #${q.id}`}

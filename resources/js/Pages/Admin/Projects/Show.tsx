@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { router, usePage } from '@inertiajs/react';
-import { AlertTriangle, CalendarCheck, Check, CheckCircle2, Lock, PackageCheck, Pause, Play, Plus, ShieldCheck, Slash, Smartphone, Trash2, Unlock, Wallet } from 'lucide-react';
+import { AlertTriangle, CalendarCheck, Check, CheckCircle2, Lock, MoreHorizontal, PackageCheck, Pause, Play, Plus, ShieldCheck, Slash, Smartphone, Trash2, Unlock, Wallet } from 'lucide-react';
 import AdminLayout from '@/Layouts/AdminLayout';
 import BackLink from '@/Components/BackLink';
 import PageHeader from '@/Components/PageHeader';
@@ -26,6 +26,10 @@ import { operationTone } from '@/lib/operations';
 import CompletenessBadge from '@/Components/management/CompletenessBadge';
 import { marginTone, pct, type CompletenessInfo } from '@/lib/management';
 import CommunicationsTab from './partials/CommunicationsTab';
+import ProcessTab, { type ProcessData } from './partials/ProcessTab';
+import ProjectStepper from '@/Components/ProjectStepper';
+import { projectStages, type StageKey } from '@/lib/projectStages';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/Components/ui/dropdown-menu';
 import type { PageProps } from '@/types';
 
 interface Project {
@@ -175,8 +179,11 @@ interface Props {
     operations: OperationRow[] | null;
     /* الأداء — المرحلة 11: الربحيّةُ بصيغتها الواحدة واكتمالُها وخطُّ زمنِها؛ لمن يقرأ تحليلات المشاريع */
     performance: Performance | null;
+    billing: ProcessData['billing'];
+    invoices: ProcessData['invoices'];
+    close_blockers: string[];
     users: { id: number; name: string }[];
-    may: { manage: boolean; budget: boolean; close: boolean; reopen: boolean; change_order: boolean; override_policy: boolean; delivery: boolean; operations: boolean; operations_manage: boolean; performance: boolean };
+    may: { manage: boolean; budget: boolean; close: boolean; reopen: boolean; change_order: boolean; override_policy: boolean; delivery: boolean; operations: boolean; operations_manage: boolean; performance: boolean; invoice: boolean };
 }
 
 interface Performance {
@@ -211,7 +218,7 @@ interface Performance {
  * المقبولة)، وما يجب على الفريق تنفيذَه الآن (الحاليّ). والقيمةُ الحاليّة
  * تُشتقّ في الخادم — انظر `ProjectScope`.
  */
-export default function ProjectShow({ project: p, scope, requirements, members, tasks, change_orders, financials, delivery, cancellation, operations, performance, users, may }: Props) {
+export default function ProjectShow({ project: p, scope, requirements, members, tasks, change_orders, financials, delivery, cancellation, operations, performance, billing, invoices, close_blockers, users, may }: Props) {
     const t = useTranslate();
     const { context } = usePage<PageProps>().props;
     const { errors } = usePage().props as { errors?: Record<string, string> };
@@ -219,7 +226,20 @@ export default function ProjectShow({ project: p, scope, requirements, members, 
     const m = (v: number | null | undefined) => (v === null || v === undefined ? '—' : money(v, context!.currency));
     const open = p.status === 'confirmed' || p.status === 'in_progress' || p.status === 'on_hold';
 
-    const [tab, setTab] = useState('overview');
+    /*
+     * التبويبُ من الرابط: «تجهيز التسليم» على بطاقة المشروع يفتح التسليمَ لا
+     * النظرةَ العامّة. والتنقّلُ بين التبويبات يكتبه في الرابط، فالتحديثُ
+     * والنسخُ يعودان إليه.
+     */
+    const [tab, setTabState] = useState(() => (typeof window === 'undefined' ? null : new URLSearchParams(window.location.search).get('tab')) ?? 'process');
+    const [focus, setFocus] = useState<StageKey | null>(null);
+    const setTab = (key: string) => {
+        setTabState(key);
+        const url = new URL(window.location.href);
+        if (key === 'process') url.searchParams.delete('tab');
+        else url.searchParams.set('tab', key);
+        window.history.replaceState(window.history.state, '', url.toString());
+    };
     const [cancelling, setCancelling] = useState(false);
     const [reason, setReason] = useState('');
     const [waiveReason, setWaiveReason] = useState('');
@@ -230,7 +250,9 @@ export default function ProjectShow({ project: p, scope, requirements, members, 
         router.post(route(name, p.id), data, { preserveScroll: true });
 
     const tabs = [
-        { key: 'overview', label: 'نظرة عامة' },
+        /* المسارُ أوّلًا: من عرض السعر إلى الإقفال، وكلُّ مرحلةٍ بزرّها */
+        { key: 'process', label: 'المسار' },
+        { key: 'overview', label: 'البيانات' },
         { key: 'scope', label: 'النطاق', count: scope.current.items.length },
         { key: 'requirements', label: 'المتطلّبات', count: requirements.filter((r) => r.active).length, alert: !p.baselined && open },
         { key: 'team', label: 'الفريق', count: members.length },
@@ -245,60 +267,121 @@ export default function ProjectShow({ project: p, scope, requirements, members, 
         /* الأداء — المرحلة 11 */
         ...(performance !== null ? [{ key: 'performance', label: 'الأداء', alert: performance.contribution < 0 }] : []),
     ];
+    /* وتبويبٌ في الرابط لا يملكه الناظر (المالُ مثلًا) يرجع إلى النظرة العامّة */
+    const current = tabs.some((x) => x.key === tab) ? tab : 'process';
+
+    /*
+     * والمراحلُ من مصدرها الواحد — كما على بطاقة القائمة. والفعاليّةُ
+     * المعتبَرة أوّلُ ما لم يُلغَ، والحزمةُ أبعدُ ما بلغ: مقبولةٌ ثمّ مرسلة.
+     */
+    const liveOp = operations?.find((o) => o.status !== 'cancelled') ?? null;
+    const bestPkg =
+        delivery.packages.find((x) => x.status === 'accepted') ??
+        delivery.packages.find((x) => x.status === 'sent') ??
+        delivery.packages.find((x) => x.status !== 'cancelled' && x.status !== 'declined') ??
+        null;
+    const stages = projectStages({ status: p.status, operation: liveOp?.status ?? null, delivery: bestPkg?.status ?? null, billed: billing.billed });
+    const at = stages.find((x) => x.state === 'current')?.key ?? null;
+    const pick = (key: StageKey) => {
+        setTab('process');
+        setFocus(null);
+        window.setTimeout(() => setFocus(key), 0);
+    };
+
+    /* الخطوةُ التالية — زرٌّ واحدٌ في الرأس يقود إلى ما يُنتظر الآن */
+    const next: { label: string; icon: React.ReactNode; run?: () => void; href?: string; routeName?: string } | null = (() => {
+        if (at === 'planning') {
+            if (!p.baselined && may.manage) return { label: 'تثبيت المتطلّبات', icon: <Lock />, run: () => setBaselining(true) };
+            if (may.manage) return { label: p.status === 'on_hold' ? 'استئناف التنفيذ' : 'بدء التنفيذ', icon: <Play />, run: () => post('admin.projects.transition', { status: 'in_progress' }) };
+        }
+        if (at === 'execution' && operations !== null) {
+            return liveOp ? { label: 'متابعة الفعاليّة', icon: <CalendarCheck />, href: liveOp.url } : { label: 'جدولة الفعاليّة', icon: <CalendarCheck />, run: () => setTab('operations') };
+        }
+        if (at === 'delivery' && may.delivery) {
+            return bestPkg
+                ? { label: 'متابعة التسليم', icon: <PackageCheck />, routeName: 'admin.deliveries.show', href: route('admin.deliveries.show', bestPkg.id) }
+                : { label: 'تجهيز التسليم', icon: <PackageCheck />, routeName: 'admin.deliveries.create', href: route('admin.deliveries.create', { project_id: p.id }) };
+        }
+        if (at === 'billing' && may.invoice) return { label: 'إصدار فاتورة', icon: <Wallet />, routeName: 'admin.customerInvoices.create', href: route('admin.customerInvoices.create', { project_id: p.id }) };
+        if (at === 'closing' && may.close) return close_blockers.length === 0 ? { label: 'إقفال المشروع', icon: <Lock />, run: () => post('admin.projects.close') } : { label: 'ما يمنع الإقفال', icon: <AlertTriangle />, run: () => pick('closing') };
+        return null;
+    })();
 
     return (
         <AdminLayout title={p.code}>
-            <BackLink routeName="admin.projects.index" href={route('admin.projects.index')} label="المشاريع" />
+            <BackLink routeName="admin.projects.index" href={route('admin.projects.index')} label="المشاريع والمعارض" />
 
             <PageHeader
-                title={p.code}
-                subtitle={`${p.name} — ${p.customer}`}
+                title={p.name}
+                subtitle={`${p.code} · ${p.customer}`}
                 actions={
-                    <div className="flex flex-wrap gap-2">
-                        {open && may.change_order && (
-                            <Button asChild>
-                                <SmartLink routeName="admin.changeOrders.create" href={route('admin.changeOrders.create', p.id)}>
-                                    <Plus />
-                                    {t('أمر تغيير')}
-                                </SmartLink>
-                            </Button>
-                        )}
-                        {open && !p.baselined && may.manage && (
-                            <Button variant="outline" onClick={() => setBaselining(true)}>
-                                <Lock />
-                                {t('تثبيت المتطلّبات')}
-                            </Button>
-                        )}
-                        {(p.status === 'confirmed' || p.status === 'on_hold') && may.manage && (
-                            <Button variant="outline" onClick={() => post('admin.projects.transition', { status: 'in_progress' })}>
-                                <Play />
-                                {t('بدء التنفيذ')}
-                            </Button>
-                        )}
-                        {p.status === 'in_progress' && may.manage && (
-                            <Button variant="outline" onClick={() => post('admin.projects.transition', { status: 'on_hold' })}>
-                                <Pause />
-                                {t('تأجيل')}
-                            </Button>
-                        )}
-                        {open && may.close && (
-                            <Button variant="outline" onClick={() => post('admin.projects.close')}>
-                                <Lock />
-                                {t('إقفال')}
-                            </Button>
-                        )}
-                        {p.status === 'closed' && may.reopen && (
-                            <Button variant="outline" onClick={() => post('admin.projects.reopen')}>
-                                <Unlock />
-                                {t('إعادة فتح')}
-                            </Button>
-                        )}
-                        {open && may.manage && (
-                            <Button variant="outline" onClick={() => setCancelling(true)}>
-                                <Slash />
-                                {t('إلغاء')}
-                            </Button>
-                        )}
+                    <div className="flex flex-wrap items-center gap-2">
+                        {next &&
+                            (next.href ? (
+                                <Button asChild>
+                                    <SmartLink routeName={next.routeName ?? 'admin.operations.show'} href={next.href}>
+                                        {next.icon}
+                                        {t(next.label)}
+                                    </SmartLink>
+                                </Button>
+                            ) : (
+                                <Button onClick={next.run}>
+                                    {next.icon}
+                                    {t(next.label)}
+                                </Button>
+                            ))}
+                        {/* وبقيّةُ الأفعال في قائمةٍ واحدة — لا صفَّ أزرارٍ يتنافس على العين */}
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <Button variant="outline" size="icon" aria-label={t('خيارات')}>
+                                    <MoreHorizontal />
+                                </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                                {open && may.change_order && (
+                                    <DropdownMenuItem onSelect={() => router.visit(route('admin.changeOrders.create', p.id))}>
+                                        <Plus />
+                                        {t('أمر تغيير')}
+                                    </DropdownMenuItem>
+                                )}
+                                {open && !p.baselined && may.manage && (
+                                    <DropdownMenuItem onSelect={() => setBaselining(true)}>
+                                        <Lock />
+                                        {t('تثبيت المتطلّبات')}
+                                    </DropdownMenuItem>
+                                )}
+                                {(p.status === 'confirmed' || p.status === 'on_hold') && may.manage && (
+                                    <DropdownMenuItem onSelect={() => post('admin.projects.transition', { status: 'in_progress' })}>
+                                        <Play />
+                                        {t('بدء التنفيذ')}
+                                    </DropdownMenuItem>
+                                )}
+                                {p.status === 'in_progress' && may.manage && (
+                                    <DropdownMenuItem onSelect={() => post('admin.projects.transition', { status: 'on_hold' })}>
+                                        <Pause />
+                                        {t('تأجيل')}
+                                    </DropdownMenuItem>
+                                )}
+                                {open && may.close && (
+                                    <DropdownMenuItem onSelect={() => post('admin.projects.close')}>
+                                        <Lock />
+                                        {t('إقفال')}
+                                    </DropdownMenuItem>
+                                )}
+                                {p.status === 'closed' && may.reopen && (
+                                    <DropdownMenuItem onSelect={() => post('admin.projects.reopen')}>
+                                        <Unlock />
+                                        {t('إعادة فتح')}
+                                    </DropdownMenuItem>
+                                )}
+                                {open && may.manage && (
+                                    <DropdownMenuItem onSelect={() => setCancelling(true)} className="text-[#b91c1c]">
+                                        <Slash />
+                                        {t('إلغاء المشروع')}
+                                    </DropdownMenuItem>
+                                )}
+                            </DropdownMenuContent>
+                        </DropdownMenu>
                     </div>
                 }
             />
@@ -336,19 +419,47 @@ export default function ProjectShow({ project: p, scope, requirements, members, 
                 )}
             </div>
 
-            <Tabs tabs={tabs} current={tab} onChange={setTab} className="mb-4" />
+            <ProjectStepper stages={stages} onPick={pick} size="lg" className="mb-4" />
 
-            {tab === 'overview' && <Overview p={p} users={users} may={may} scope={scope} />}
-            {tab === 'scope' && <ScopeTab scope={scope} m={m} />}
-            {tab === 'requirements' && <RequirementsTab p={p} requirements={requirements} items={scope.current.items} may={may} open={open} />}
-            {tab === 'team' && <TeamTab p={p} members={members} users={users} may={may} open={open} />}
-            {tab === 'tasks' && <TasksTab p={p} tasks={tasks} users={users} may={may} />}
-            {tab === 'change_orders' && <ChangeOrdersTab p={p} rows={change_orders} m={m} may={may} open={open} />}
-            {tab === 'delivery' && <DeliveryTab p={p} delivery={delivery} may={may} open={open} />}
-            {tab === 'communications' && <CommunicationsTab projectId={p.id} open={open} />}
-            {tab === 'operations' && operations !== null && <OperationsTab p={p} rows={operations} may={may} open={open} />}
-            {tab === 'financials' && financials && <FinancialsTab f={financials} m={m} frozen={p.financials_frozen} />}
-            {tab === 'performance' && performance !== null && <PerformanceTab perf={performance} m={m} />}
+            <Tabs tabs={tabs} current={current} onChange={setTab} className="mb-4" />
+
+            {current === 'process' && (
+                <ProcessTab
+                    p={p}
+                    d={{
+                        quotation: scope.original.quotation,
+                        requirements: { active: requirements.filter((r) => r.active).length },
+                        members,
+                        tasks,
+                        change_orders,
+                        operations,
+                        delivery,
+                        billing,
+                        invoices,
+                        close_blockers,
+                        users,
+                    }}
+                    stages={stages}
+                    may={may}
+                    m={m}
+                    focus={focus}
+                    onTab={setTab}
+                    onBaseline={() => setBaselining(true)}
+                    post={post}
+                />
+            )}
+
+            {current === 'overview' && <Overview p={p} users={users} may={may} scope={scope} />}
+            {current === 'scope' && <ScopeTab scope={scope} m={m} />}
+            {current === 'requirements' && <RequirementsTab p={p} requirements={requirements} items={scope.current.items} may={may} open={open} />}
+            {current === 'team' && <TeamTab p={p} members={members} users={users} may={may} open={open} />}
+            {current === 'tasks' && <TasksTab p={p} tasks={tasks} users={users} may={may} />}
+            {current === 'change_orders' && <ChangeOrdersTab p={p} rows={change_orders} m={m} may={may} open={open} />}
+            {current === 'delivery' && <DeliveryTab p={p} delivery={delivery} may={may} open={open} />}
+            {current === 'communications' && <CommunicationsTab projectId={p.id} open={open} />}
+            {current === 'operations' && operations !== null && <OperationsTab p={p} rows={operations} may={may} open={open} />}
+            {current === 'financials' && financials && <FinancialsTab f={financials} m={m} frozen={p.financials_frozen} />}
+            {current === 'performance' && performance !== null && <PerformanceTab perf={performance} m={m} />}
 
             <Dialog open={baselining} onOpenChange={setBaselining}>
                 <DialogContent className="max-w-md">

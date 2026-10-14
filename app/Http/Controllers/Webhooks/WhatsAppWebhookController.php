@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Webhooks;
 
 use App\Http\Controllers\Controller;
 use App\Support\Communication\Communications;
+use App\Support\WhatsApp\Inbox;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Carbon;
@@ -19,10 +20,11 @@ use Illuminate\Support\Carbon;
  * ويُقارَن بزمنٍ ثابت. وبلا سرٍّ مضبوطٍ لا يُقبل طلبٌ: بابٌ بلا قفلٍ خيرٌ
  * منه بابٌ مغلق.
  *
- * ═══ الحالاتُ وحدَها ═══
+ * ═══ الحالاتُ والوارد ═══
  *
- * `statuses[]` هي ما يُقرأ. و`messages[]` — ردودُ العملاء — تُقبل بـ٢٠٠
- * وتُترك: هذه المرحلةُ إرسالٌ تشغيليٌّ وتتبّعٌ، لا صندوقُ وارد.
+ * `statuses[]` تُكتب على قيد المراسلات وعلى فقاعة المحادثة معًا. و`messages[]`
+ * — ما كتبه العميل — تذهب إلى صندوق الوارد (`Inbox::receive`) في شركة الرقم؛
+ * وما لا تُعرف شركتُه يُقبل بـ٢٠٠ ويُترك، ولا يُخمَّن له صاحب.
  *
  * ═══ ولا يُكتب مرّتين ═══
  *
@@ -57,9 +59,13 @@ class WhatsAppWebhookController extends Controller
 
         foreach ((array) ($payload['entry'] ?? []) as $entry) {
             foreach ((array) ($entry['changes'] ?? []) as $change) {
-                foreach ((array) ($change['value']['statuses'] ?? []) as $status) {
+                $value = (array) ($change['value'] ?? []);
+
+                foreach ((array) ($value['statuses'] ?? []) as $status) {
                     $this->apply((array) $status);
                 }
+
+                $this->receive($value);
             }
         }
 
@@ -89,5 +95,30 @@ class WhatsAppWebhookController extends Controller
             : null;
 
         Communications::applyEvent('meta', $messageId, $kind, $messageId.':'.$kind.':'.$timestamp, $occurredAt, $code, $description, $status);
+        Inbox::applyStatus($messageId, $kind, $occurredAt, $description);
+    }
+
+    /** ما كتبه العميل — في محادثة رقمه، باسمه كما سمّى نفسَه */
+    private function receive(array $value): void
+    {
+        $messages = (array) ($value['messages'] ?? []);
+
+        if ($messages === []) {
+            return;
+        }
+
+        $businessId = Inbox::businessFor(isset($value['metadata']['phone_number_id']) ? (string) $value['metadata']['phone_number_id'] : null);
+
+        if ($businessId === null) {
+            return;
+        }
+
+        $names = collect((array) ($value['contacts'] ?? []))
+            ->mapWithKeys(fn ($c) => [(string) ($c['wa_id'] ?? '') => $c['profile']['name'] ?? null]);
+
+        foreach ($messages as $message) {
+            $message = (array) $message;
+            Inbox::receive($businessId, $message, $names[(string) ($message['from'] ?? '')] ?? null);
+        }
     }
 }

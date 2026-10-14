@@ -5,6 +5,7 @@ namespace App\Support\Messaging;
 use App\Support\Communication\Communications;
 use App\Support\Communication\Templates;
 use App\Support\PhoneNumber;
+use App\Support\WhatsApp\Inbox;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Http;
 use Throwable;
@@ -92,6 +93,83 @@ final class WhatsAppNotifier implements Notifier
             ],
         ];
 
+        return $this->done($intent, $this->post($body));
+    }
+
+    /**
+     * نصٌّ حرٌّ إلى رقم — ردٌّ من صندوق الوارد داخل نافذة اليوم.
+     *
+     * ولا يُقيَّد في المراسلات: سجلُّه المحادثةُ نفسُها — انظر `Inbox::reply`.
+     */
+    public function sendText(string $to, string $text): MessageResult
+    {
+        if (! $this->configured()) {
+            return MessageResult::failed(__('واتساب غير موصول على الخادم.'));
+        }
+
+        return $this->post([
+            'messaging_product' => 'whatsapp',
+            'recipient_type' => 'individual',
+            'to' => $to,
+            'type' => 'text',
+            'text' => ['preview_url' => true, 'body' => $text],
+        ]);
+    }
+
+    /**
+     * «قُرئت» إلى العميل — العلامتان الزرقاوان عنده.
+     *
+     * جهدٌ لا وعد: إن سقط لم يسقط معه شيء.
+     */
+    public function markRead(string $providerMessageId): void
+    {
+        if (! $this->configured() || $providerMessageId === '') {
+            return;
+        }
+
+        try {
+            Http::withToken((string) config('services.whatsapp.token'))->acceptJson()->timeout(5)
+                ->post($this->endpoint(), ['messaging_product' => 'whatsapp', 'status' => 'read', 'message_id' => $providerMessageId]);
+        } catch (Throwable $e) {
+            report($e);
+        }
+    }
+
+    /**
+     * ملفٌّ أرسله العميل — معرّفُه عند Meta يُسأل عن رابطه، والرابطُ يُنزَّل بالرمز نفسه.
+     *
+     * @return array{body: string, mime: string}|null
+     */
+    public function download(string $mediaId): ?array
+    {
+        if (! $this->configured() || $mediaId === '') {
+            return null;
+        }
+
+        try {
+            $meta = Http::withToken((string) config('services.whatsapp.token'))->acceptJson()->timeout(self::TIMEOUT)
+                ->get(sprintf('https://graph.facebook.com/%s/%s', $this->version(), rawurlencode($mediaId)));
+
+            $url = (string) $meta->json('url');
+            if (! $meta->successful() || $url === '') {
+                return null;
+            }
+
+            $file = Http::withToken((string) config('services.whatsapp.token'))->timeout(60)->get($url);
+
+            return $file->successful()
+                ? ['body' => $file->body(), 'mime' => (string) ($meta->json('mime_type') ?: $file->header('Content-Type'))]
+                : null;
+        } catch (Throwable $e) {
+            report($e);
+
+            return null;
+        }
+    }
+
+    /** الطلبُ نفسُه — ونتيجتُه بلا رمزٍ في نصّ الخطأ */
+    private function post(array $body): MessageResult
+    {
         try {
             $response = Http::withToken((string) config('services.whatsapp.token'))
                 ->acceptJson()
@@ -100,36 +178,41 @@ final class WhatsAppNotifier implements Notifier
         } catch (ConnectionException $e) {
             report($e);
 
-            return $this->done($intent, MessageResult::failed(__('تعذّر الوصول إلى واتساب — :reason', ['reason' => $this->safe($e->getMessage())])));
+            return MessageResult::failed(__('تعذّر الوصول إلى واتساب — :reason', ['reason' => $this->safe($e->getMessage())]));
         } catch (Throwable $e) {
             report($e);
 
-            return $this->done($intent, MessageResult::failed(__('تعذّر إرسال واتساب — :reason', ['reason' => $this->safe($e->getMessage())])));
+            return MessageResult::failed(__('تعذّر إرسال واتساب — :reason', ['reason' => $this->safe($e->getMessage())]));
         }
 
         if (! $response->successful()) {
             $error = $response->json('error') ?? [];
             $reason = trim(((string) ($error['code'] ?? $response->status())).' — '.((string) ($error['message'] ?? __('رفض المزوّد الطلب'))));
 
-            return $this->done($intent, MessageResult::failed($this->safe($reason)));
+            return MessageResult::failed($this->safe($reason));
         }
 
         $id = $response->json('messages.0.id');
 
         if (! filled($id)) {
-            return $this->done($intent, MessageResult::failed(__('قبل المزوّد الطلب ولم يُعِد معرّفًا للرسالة.')));
+            return MessageResult::failed(__('قبل المزوّد الطلب ولم يُعِد معرّفًا للرسالة.'));
         }
 
-        return $this->done($intent, MessageResult::ok((string) $id));
+        return MessageResult::ok((string) $id);
     }
 
     /** عنوانُ الإرسال — إصدارُ الواجهة ومعرّفُ الرقم من الإعداد */
     public function endpoint(): string
     {
         return sprintf('https://graph.facebook.com/%s/%s/messages',
-            trim((string) config('services.whatsapp.api_version', 'v21.0'), '/'),
+            $this->version(),
             (string) config('services.whatsapp.phone_number_id'),
         );
+    }
+
+    private function version(): string
+    {
+        return trim((string) config('services.whatsapp.api_version', 'v21.0'), '/');
     }
 
     /** نصُّ خطأٍ بلا رمز: لو ورد الرمزُ في رسالةٍ ما، لا يبلغ الشاشةَ ولا القيد */
@@ -142,7 +225,12 @@ final class WhatsAppNotifier implements Notifier
 
     private function done(MessageIntent $intent, MessageResult $result): MessageResult
     {
-        Communications::record($this->channel(), $this->provider(), $intent, $result);
+        $communication = Communications::record($this->channel(), $this->provider(), $intent, $result);
+
+        /* ورسالةُ القالب تظهر في محادثة العميل أيضًا — كما يراها هو */
+        if ($communication !== null) {
+            Inbox::mirror($communication);
+        }
 
         return $result;
     }

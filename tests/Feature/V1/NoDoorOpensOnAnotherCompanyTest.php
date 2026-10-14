@@ -197,6 +197,9 @@ class NoDoorOpensOnAnotherCompanyTest extends TestCase
         $communication = Communication::create(['business_id' => $bid, 'customer_id' => $customer->id, 'project_id' => $project->id, 'subject_type' => Project::class, 'subject_id' => $project->id,
             'channel' => 'email', 'recipient' => 'buyer@a.om', 'template_key' => 'project.update', 'title' => "رسالة $m", 'provider' => 'postmark', 'provider_message_id' => "pm-$m",
             'status' => Communication::BOUNCED, 'sent_at' => now(), 'failed_at' => now(), 'failure_reason' => 'x', 'initiated_by_name' => 'المالك']);
+        $waConversation = \App\Models\WhatsAppConversation::create(['business_id' => $bid, 'customer_id' => $customer->id, 'wa_id' => '96890000001', 'contact_name' => "محادثة $m", 'last_inbound_at' => now(), 'last_preview' => "رسالة $m"]);
+        $waMessage = \App\Models\WhatsAppMessage::create(['business_id' => $bid, 'conversation_id' => $waConversation->id, 'direction' => 'inbound', 'type' => 'document',
+            'body' => "مستند $m", 'media_id' => "media-$m", 'media_filename' => "ملف $m.pdf", 'provider_message_id' => "wamid-$m", 'status' => 'delivered', 'occurred_at' => now()]);
         \App\Support\Automation\Rules::ensure($bid);
         $rule = \App\Models\AutomationRule::where('business_id', $bid)->firstOrFail();
         $run = \App\Models\AutomationRun::create(['business_id' => $bid, 'automation_rule_id' => $rule->id, 'trigger' => 'invoice_due', 'step' => 0, 'audience' => 'management', 'occurrence' => 'x', 'status' => 'pending', 'idempotency_key' => "k-$m", 'scheduled_for' => now()]);
@@ -225,7 +228,7 @@ class NoDoorOpensOnAnotherCompanyTest extends TestCase
             'deliveries' => $package->id, 'item' => $packageItem->id, 'customerInvoices' => $invoice->id, 'customerInvoices.draft' => $draftInvoice->id,
             'customerPayments' => $payment->id, 'note' => $creditNote->id, 'purchases' => $po->id, 'purchases.invoices' => $si->id,
             'finance.journal' => $journal->id, 'orders.number' => $order->number, 'finance.banks' => $bank->id, 'finance.chart' => $account->id, 'finance.assets' => $fixedAsset->id,
-            'communications' => $communication->id, 'automation.rules' => $rule->id, 'automation.runs' => $run->id, 'automation.history' => $run->id,
+            'communications' => $communication->id, 'whatsapp.reply' => $waConversation->id, 'whatsapp.media' => $waMessage->id, 'automation.rules' => $rule->id, 'automation.runs' => $run->id, 'automation.history' => $run->id,
             'notifications' => $notification->id, 'alerts' => $alert->id, 'management.budgets' => $budget->id, 'management.forecasts' => $forecast->id,
             'management.scenarios' => $scenario->id, 'management.reviews' => $review->id, 'did' => $decision->id, 'imports' => $dataset->id,
             'payroll' => $payroll->id, 'branches' => (int) Branch::where('business_id', $bid)->value('id'), 'settings.policies' => $policy->id,
@@ -392,7 +395,7 @@ class NoDoorOpensOnAnotherCompanyTest extends TestCase
         $this->ownerB->update(['permissions' => array_values(array_unique(array_merge(Permissions::SECTIONS, array_keys(Permissions::ACTION_ROLES))))]);
         $b = $this->ownerB->fresh();
 
-        foreach (['admin.search', 'admin.customers.index', 'admin.projects.index', 'admin.quotations.index', 'admin.operations.index', 'admin.assets.index', 'admin.communications.index', 'admin.management.projects', 'admin.management.customers'] as $name) {
+        foreach (['admin.search', 'admin.customers.index', 'admin.projects.index', 'admin.quotations.index', 'admin.operations.index', 'admin.assets.index', 'admin.communications.index', 'admin.whatsapp.index', 'admin.management.projects', 'admin.management.customers'] as $name) {
             if (! app('router')->has($name)) {
                 continue;
             }

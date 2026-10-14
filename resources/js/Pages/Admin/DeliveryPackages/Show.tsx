@@ -211,7 +211,12 @@ export default function DeliveryPackageShow({ package: p, scope_items, customers
 
     return (
         <AdminLayout title={p.label}>
-            <BackLink routeName="admin.deliveries.index" href={route('admin.deliveries.index')} label="حزم التسليم" />
+            {/* الحزمةُ مرحلةُ تسليمٍ في مشروعها — فالرجوعُ إلى تبويب التسليم فيه */}
+            {p.project_id ? (
+                <BackLink routeName="admin.projects.show" href={route('admin.projects.show', { id: p.project_id, tab: 'delivery' })} label={p.project ?? 'المشروع'} />
+            ) : (
+                <BackLink routeName="admin.deliveries.index" href={route('admin.deliveries.index')} label="حزم التسليم" />
+            )}
 
             <PageHeader
                 title={p.number ? p.label : `${t('مسودة')} #${p.id}`}

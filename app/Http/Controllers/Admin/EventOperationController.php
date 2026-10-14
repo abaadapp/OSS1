@@ -33,6 +33,7 @@ use App\Support\Pagination;
 use App\Support\Permissions;
 use App\Support\Search;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Inertia\Inertia;
 use Inertia\Response;
 use RuntimeException;
@@ -90,7 +91,65 @@ class EventOperationController extends Controller
         $bid = $this->bid();
         $today = now()->startOfDay();
 
+        /*
+         * التقويمُ أوّلًا، والقائمةُ بابٌ ثانٍ.
+         *
+         * الفعاليّاتُ مواعيدُ قبل أن تكون صفوفًا: من يفتح «العمليات» يسأل
+         * «ماذا عندنا هذا الشهر؟» — وجوابُه شبكةُ أيّام لا جدولٌ مرقَّم.
+         * والبحثُ والحالُ يصفّيان الاثنين معًا.
+         */
+        $view = $request->string('view')->toString() === 'list' ? 'list' : 'calendar';
+        $month = preg_match('/^\d{4}-\d{2}$/', (string) $request->query('month', '')) ? Carbon::createFromFormat('Y-m-d', $request->query('month').'-01')->startOfDay() : $today->copy()->startOfMonth();
+        /* والشبكةُ أسابيعُ كاملة: من أحدِ الأسبوع الأوّل إلى سبتِ الأخير */
+        $gridStart = $month->copy()->startOfWeek(Carbon::SUNDAY);
+        $gridEnd = $month->copy()->endOfMonth()->endOfWeek(Carbon::SATURDAY);
+
+        $filtered = fn () => EventOperation::where('business_id', $bid)->with('project:id,code,name', 'lead:id,name')
+            ->when($request->string('q')->toString(), fn ($q, $s) => $q->where(
+                fn ($w) => $w->where('code', Search::like(), "%{$s}%")
+                    ->orWhere('name', Search::like(), "%{$s}%")
+                    ->orWhere('venue_name', Search::like(), "%{$s}%")
+                    ->orWhereHas('project', fn ($p) => $p->where('code', Search::like(), "%{$s}%")->orWhere('name', Search::like(), "%{$s}%"))
+            ))
+            ->when($request->string('status')->toString(), fn ($q, $s) => in_array($s, EventOperation::STATUSES, true) ? $q->where('status', $s) : $q->whereRaw('1 = 0'));
+
+        /* وما يقع في الشبكة: نافذتُه (التجهيزُ إلى الفكّ) تتقاطع معها */
+        $calendar = $view === 'calendar'
+            ? $filtered()
+                ->whereNotNull('event_starts_at')
+                ->where(fn ($w) => $w->where(fn ($x) => $x->whereNotNull('setup_starts_at')->where('setup_starts_at', '<=', $gridEnd))
+                    ->orWhere(fn ($x) => $x->whereNull('setup_starts_at')->where('event_starts_at', '<=', $gridEnd)))
+                ->where(fn ($w) => $w->where('teardown_ends_at', '>=', $gridStart)
+                    ->orWhere(fn ($x) => $x->whereNull('teardown_ends_at')->where('event_ends_at', '>=', $gridStart))
+                    ->orWhere(fn ($x) => $x->whereNull('teardown_ends_at')->whereNull('event_ends_at')->where('event_starts_at', '>=', $gridStart)))
+                ->orderBy('event_starts_at')->limit(500)->get()
+                ->map(fn (EventOperation $o) => $this->row($o) + [
+                    'window_starts_at' => $o->windowStart()?->format('Y-m-d H:i'),
+                    'window_ends_at' => $o->windowEnd()?->format('Y-m-d H:i'),
+                ])->all()
+            : [];
+        /*
+         * والفعاليّاتُ القادمة بجانب الشبكة — من اليوم فصاعدًا، لا من الشهر
+         * المعروض: من تصفّح إلى شهرٍ مضى لا يفقد ما ينتظره. والجاريةُ الآن
+         * منها، والمكتملةُ والملغاةُ ليست «قادمة».
+         */
+        $upcoming = $view === 'calendar'
+            ? $filtered()
+                ->whereNotNull('event_starts_at')
+                ->whereNotIn('status', [EventOperation::COMPLETED, EventOperation::CANCELLED])
+                ->where(fn ($w) => $w->where('event_ends_at', '>=', $today)
+                    ->orWhere(fn ($x) => $x->whereNull('event_ends_at')->where('event_starts_at', '>=', $today)))
+                ->orderBy('event_starts_at')->limit(30)->get()
+                ->map(fn (EventOperation $o) => $this->row($o) + [
+                    'window_starts_at' => $o->windowStart()?->format('Y-m-d H:i'),
+                    'window_ends_at' => $o->windowEnd()?->format('Y-m-d H:i'),
+                ])->all()
+            : [];
+        /* وما لا موعدَ له لا مكانَ له في الشبكة — يُعدّ ويُدلّ عليه في القائمة */
+        $undated = $view === 'calendar' ? (int) $filtered()->whereNull('event_starts_at')->count() : 0;
+
         $page = EventOperation::where('business_id', $bid)->with('project:id,code,name', 'lead:id,name')
+            ->when($view === 'calendar', fn ($q) => $q->whereRaw('1 = 0'))
             ->when($request->string('q')->toString(), fn ($q, $s) => $q->where(
                 fn ($w) => $w->where('code', Search::like(), "%{$s}%")
                     ->orWhere('name', Search::like(), "%{$s}%")
@@ -114,6 +173,16 @@ class EventOperationController extends Controller
             'operations' => collect($page->items())->map(fn (EventOperation $o) => $this->row($o))->all(),
             'pagination' => Pagination::meta($page),
             'filters' => $request->only('q', 'status', 'window'),
+            'view' => $view,
+            'calendar' => [
+                'month' => $month->format('Y-m'),
+                'from' => $gridStart->toDateString(),
+                'to' => $gridEnd->toDateString(),
+                'today' => $today->toDateString(),
+                'events' => $calendar,
+                'upcoming' => $upcoming,
+                'undated' => $undated,
+            ],
             'statuses' => EventOperation::STATUSES,
             'projects' => Project::where('business_id', $bid)->open()->orderByDesc('id')->limit(200)->get(['id', 'code', 'name'])->all(),
             'totals' => [

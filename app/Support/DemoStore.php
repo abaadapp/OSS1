@@ -122,7 +122,7 @@ class DemoStore
         $business = Business::create([
             'name' => $name,
             'is_demo' => true,
-            'type' => 'محل ورود',
+            'type' => 'تنظيم فعاليات',
             'owner_name' => 'سالم الحارثي',
             'phone' => '+968 90000000',
             'country' => 'عُمان',
@@ -172,25 +172,28 @@ class DemoStore
         DemoGuard::assertDemo($business);
 
         DB::transaction(function () use ($business, $keepBusiness) {
-            $bid = $business->id;
+            $bid = (int) $business->id;
 
-            $viaParent = [
-                'order_items' => ['orders', 'order_id'],
-                'purchase_order_items' => ['purchase_orders', 'purchase_order_id'],
-                'delivery_note_items' => ['delivery_notes', 'delivery_note_id'],
-                'payroll_lines' => ['payroll_runs', 'payroll_run_id'],
-                'journal_lines' => ['journal_entries', 'journal_entry_id'],
-                'customer_addresses' => ['customers', 'customer_id'],
-                'dismissed_notifications' => ['users', 'user_id'],
-            ];
-
-            foreach ($viaParent as $child => [$parent, $key]) {
-                if (! Schema::hasTable($child) || ! Schema::hasTable($parent)) {
-                    continue;
+            /*
+             * بترتيب `TenantTables` معكوسًا — كما تمحو الاستعادةُ قبل أن تكتب.
+             *
+             * المرورُ على الجداول بترتيب القاعدة كان يحذف العميلَ قبل ما يشير
+             * إليه (عرضُه ومشروعُه ومحادثتُه) فيسقط المحوُ على المفتاح الأجنبيّ.
+             * والحلقاتُ (`DEFERRED`) تُفكّ أوّلًا: مشروعٌ يشير إلى فاتورةٍ تشير إليه.
+             */
+            foreach (TenantTables::DEFERRED as $table => $columns) {
+                if (Schema::hasTable($table)) {
+                    TenantTables::scope($table, $bid)->update(array_fill_keys($columns, null));
                 }
-                DB::table($child)->whereIn($key, DB::table($parent)->where('business_id', $bid)->pluck('id'))->delete();
             }
 
+            foreach (array_reverse(TenantTables::all()) as $table) {
+                if (Schema::hasTable($table)) {
+                    TenantTables::scope($table, $bid)->delete();
+                }
+            }
+
+            /* وما يحمل `business_id` ولم يُصنَّف بعد — لا يتخلّف صفٌّ وهميّ */
             foreach (self::scopedTables() as $table) {
                 DB::table($table)->where('business_id', $bid)->delete();
             }
@@ -229,16 +232,25 @@ class DemoStore
             Ledger::seedChart($this->business->id);
             $this->bank($registered);
 
-            $products = $this->products($branches);
+            /*
+             * الكتالوجُ كتالوجُ الشركة المطبوع (`DemoCatalog`). وما له رفٌّ
+             * (البطاقاتُ المطبوعة) وحدَه يُشترى ويُجرد، والمبيعاتُ من البنود
+             * ذوات السعر الثابت.
+             */
+            $catalog = $this->products($branches);
+            $stocked = array_values(array_filter($catalog, fn ($p) => $p->kind === Product::ITEM));
+            $sellable = array_values(array_filter($catalog, fn ($p) => $p->kind !== Product::PACKAGE && $p->price > 0 && $p->price <= 100));
             $customers = $this->customers();
             $suppliers = $this->suppliers();
 
-            $this->purchases($suppliers, $products, $registered);
-            $this->sales($products, $customers, $staff, $branches, $registered);
+            $this->purchases($suppliers, $stocked, $registered);
+            $this->sales($sellable, $customers, $staff, $branches, $registered);
             $this->expenses($registered);
             $this->payroll($staff, $registered);
             $this->assets($registered);
-            $this->inventory($products, $staff, $branches, $registered);
+            $this->inventory($stocked, $staff, $branches, $registered);
+            /* وما صار للشركة فوق ما كان للمتجر: عروضٌ ومشاريعُ وفعاليّاتٌ وواتساب — بأسعار الكتالوج */
+            DemoEvents::fill($this->business, $staff[0], $staff, $registered, $catalog);
             $this->activity($staff);
         });
     }
@@ -355,45 +367,25 @@ class DemoStore
 
     /* ------------------------------ الكتالوج ------------------------------ */
 
-    /** @return list<Product> */
+    /**
+     * الكتالوجُ المطبوع — لا أصنافٌ مخترعة.
+     *
+     * @return array<string, Product> بالرمز (`01.01`)
+     */
     private function products(array $branches): array
     {
         $bid = $this->business->id;
-        $names = ['باقة ورد', 'شتلة', 'مزهرية', 'صندوق هدايا', 'بوكيه', 'إكليل', 'نبتة زينة',
-            'سلة فواكه', 'شمعة معطّرة', 'بطاقة تهنئة', 'تربة زراعية', 'سماد', 'مرشّة', 'أصيص'];
-        $adjectives = ['أحمر', 'أبيض', 'ملكي', 'فاخر', 'صغير', 'كبير', 'مستورد', 'محلي', 'مميّز', 'كلاسيكي'];
+        $catalog = DemoCatalog::build($this->business);
 
-        $products = [];
+        // الرصيد موزَّعٌ على الفروع ومجموعُه كميّة الصنف — وإلا اختلّ التوازن
+        foreach ($catalog as $p) {
+            if ($p->kind !== Product::ITEM) {
+                continue;
+            }
 
-        for ($i = 0; $i < $this->size['products']; $i++) {
-            $cost = round(mt_rand(500, 45000) / 100, 3);
-            $price = round($cost * (1 + mt_rand(20, 85) / 100), 3);
-            $qty = mt_rand(0, 260);
-
-            $products[] = $p = Product::create([
-                'business_id' => $bid,
-                'name' => $names[$i % count($names)] . ' ' . $adjectives[intdiv($i, count($names)) % count($adjectives)] . ' ' . ($i + 1),
-                'description' => 'صنفٌ من كتالوج المتجر التجريبيّ',
-                'sku' => 'DEMO-' . str_pad((string) ($i + 1), 4, '0', STR_PAD_LEFT),
-                'barcode' => '628' . str_pad((string) (1000000 + $i), 10, '0', STR_PAD_LEFT),
-                'price' => $price, 'cost' => $cost, 'quantity' => $qty,
-                'alert_qty' => mt_rand(5, 25), 'tax' => 5, 'discount' => $i % 11 === 0 ? 10 : 0,
-                'active' => $i % 17 !== 0,
-                /*
-                 * وصورةُ العرض تُكتب هنا لا تُخترع عند القراءة.
-                 *
-                 * `Product::getImageAttribute` كانت تصنع رابطًا عشوائيًّا لكلّ
-                 * منتجٍ بلا صورة — فيرى التاجرُ الحقيقيّ صورةَ شيءٍ لا يبيعه.
-                 * والمتجرُ التجريبيّ يحتاجها فعلًا: كتالوجٌ بلا صور لا يُعرض.
-                 * فتُكتب في بياناته هو، وتبقى بياناتُ التاجر كما كتبها.
-                 */
-                'image' => Demo::image('demo'.$bid.'-'.$i),
-            ]);
-
-            // الرصيد موزَّعٌ على الفروع ومجموعُه كميّة المنتج — وإلا اختلّ التوازن
-            $left = $qty;
+            $left = (int) $p->quantity;
             foreach ($branches as $k => $branch) {
-                $share = $k === count($branches) - 1 ? $left : intdiv($qty, count($branches));
+                $share = $k === count($branches) - 1 ? $left : intdiv((int) $p->quantity, count($branches));
                 BranchStock::create([
                     'business_id' => $bid, 'branch_id' => $branch->id,
                     'product_id' => $p->id, 'quantity' => max(0, $share),
@@ -402,7 +394,7 @@ class DemoStore
             }
         }
 
-        return $products;
+        return $catalog;
     }
 
     /** @return list<Customer> */
@@ -536,8 +528,11 @@ class DemoStore
         /** مجاميع الشهر لترحيلها قيدًا واحدًا — انظر ترويسة الصنف */
         $monthly = [];
 
-        for ($i = 0; $i < $this->size['orders']; $i++) {
-            $at = $from->copy()->addDays(intdiv($i * $days, $this->size['orders']))
+        /* والمبيعاتُ المباشرة سُدسُ الحجم: عملُ الشركة عروضٌ وفواتير، لا كاشير */
+        $orders = max(60, intdiv($this->size['orders'], 6));
+
+        for ($i = 0; $i < $orders; $i++) {
+            $at = $from->copy()->addDays(intdiv($i * $days, $orders))
                 ->setTime(9 + ($i % 12), ($i * 13) % 60);
             $branch = $branches[$i % count($branches)];
             $customer = $customers[($i * 7) % count($customers)];

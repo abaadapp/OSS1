@@ -1,13 +1,32 @@
 import { useEffect, useState } from 'react';
-import { usePage } from '@inertiajs/react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ChevronDown } from 'lucide-react';
 import Logo from '@/Components/Logo';
 import SmartLink from '@/Components/SmartLink';
 import { useTranslate } from '@/lib/i18n';
 import { NAV, type NavGroup, type NavItem } from '@/lib/nav';
+import { useNavSections } from '@/lib/navSections';
 import { cn } from '@/lib/utils';
-import type { PageProps } from '@/types';
+
+const OPEN_KEY = 'eventplus.sidebar.open';
+
+function readOpenGroups(): string[] | null {
+    try {
+        const raw = window.localStorage.getItem(OPEN_KEY);
+        const parsed = raw ? JSON.parse(raw) : null;
+        return Array.isArray(parsed) ? parsed.filter((k): k is string => typeof k === 'string') : null;
+    } catch {
+        return null;
+    }
+}
+
+function writeOpenGroups(keys: string[]) {
+    try {
+        window.localStorage.setItem(OPEN_KEY, JSON.stringify(keys));
+    } catch {
+        // تخزينٌ محجوب: تُفتح مجموعةُ الصفحة وحدَها في كلّ زيارة
+    }
+}
 
 interface SidebarProps {
     open: boolean;
@@ -19,51 +38,14 @@ interface SidebarProps {
 }
 
 export default function Sidebar({ open, onClose, nav = NAV, subtitle }: SidebarProps) {
-    const { auth } = usePage<PageProps>().props;
     const t = useTranslate();
     const current = route().current();
+    const { groups, activeRoute } = useNavSections(nav);
 
-    // بلا قسم صلاحية يظهر العنصر دائمًا — انظر NavItem.section
-    const can = (section?: string) => !section || (auth?.abilities.includes(section) ?? false);
-
-    const shown = (item: NavItem) => can(item.section);
-
-    /*
-     * والأب يقود إلى أوّل ما بقي من بنيه.
-     *
-     * أبٌ لا وجهةَ له يفتح ما تحته؛ فإن حُجب كلُّ بنيه بالصلاحية سقط هو
-     * معهم بدل أن يبقى مقبضًا لا يفتح شيئًا.
-     */
-    const visible = (items: NavItem[]): NavItem[] =>
-        items
-            .filter(shown)
-            .map((i) => {
-                if (! i.children) return i;
-
-                const kids = i.children.filter(shown);
-
-                return kids.length === 0 ? null : { ...i, children: kids, route: kids[0].route };
-            })
-            .filter((i): i is NavItem => i !== null);
-
-    // المطابقة بالعائلة تُبقي العنصر مضيئًا في الصفحات الفرعية
-    // (admin.products.create مثلًا)
     const matches = (name: string) =>
         current === name || (current?.startsWith(name.replace(/\.index$/, '.')) ?? false);
 
-    /*
-     * عنصرٌ مضيء واحد لا أكثر.
-     *
-     * مسارُ العنصر نفسه يُقدَّم على ما يغطّيه، وأبناءُ القائمة المنسدلة
-     * تُقدَّم على آبائها: «تقييمات العملاء» ابنُ «أدوات التسويق»، فلولا
-     * الترتيب لأضاء الأب وحده ولم يُعرف أيّ أداةٍ مفتوحة.
-     */
-    const flat = visible(nav.flatMap((g) => g.items));
-    const leaves = flat.flatMap((i) => i.children ?? [i]);
-
-    const activeRoute =
-        leaves.find((i) => matches(i.route))?.route ??
-        flat.find((i) => i.covers?.some(matches))?.route;
+    const flat = groups.flatMap((g) => g.items);
 
     /*
      * القائمة المنسدلة تُفتح على الأداة المفتوحة.
@@ -77,6 +59,44 @@ export default function Sidebar({ open, onClose, nav = NAV, subtitle }: SidebarP
     useEffect(() => {
         if (openBranch) setExpanded(openBranch);
     }, [openBranch]);
+
+    /*
+     * المجموعاتُ المفتوحة — تُحفظ في المتصفّح وتعود كما تُركت.
+     *
+     * ومجموعةُ الصفحة المفتوحة تُفتح دائمًا: مطويّةً تُخفي أين المستخدم،
+     * فلا يرى العنصرَ المضيء ولا يعرف تحت أيّ قسمٍ هو.
+     */
+    const holds = (g: NavGroup) =>
+        g.items.some((i) => i.route === activeRoute || i.children?.some((c) => c.route === activeRoute));
+    const activeIndex = groups.findIndex(holds);
+    const activeGroupKey = activeIndex < 0 ? null : (groups[activeIndex].key ?? String(activeIndex));
+
+    const [openGroups, setOpenGroups] = useState<string[]>(() => {
+        const saved = readOpenGroups();
+        const base = saved ?? [];
+        return activeGroupKey && !base.includes(activeGroupKey) ? [...base, activeGroupKey] : base;
+    });
+
+    useEffect(() => {
+        if (activeGroupKey) setOpenGroups((o) => (o.includes(activeGroupKey) ? o : [...o, activeGroupKey]));
+    }, [activeGroupKey]);
+
+    const toggleGroup = (key: string) =>
+        setOpenGroups((o) => {
+            const next = o.includes(key) ? o.filter((k) => k !== key) : [...o, key];
+            writeOpenGroups(next);
+            return next;
+        });
+
+    /* المجموعاتُ ذواتُ العناوين — ما يُطوى ويُفتح */
+    const foldable = groups.flatMap((g, gi) => (g.heading ? [g.key ?? String(gi)] : []));
+    const allOpen = foldable.length > 0 && foldable.every((k) => openGroups.includes(k));
+
+    const toggleAll = () => {
+        const next = allOpen ? [] : foldable;
+        writeOpenGroups(next);
+        setOpenGroups(next);
+    };
 
     const link = (item: NavItem, depth = 0) => {
         const Icon = item.icon;
@@ -125,50 +145,70 @@ export default function Sidebar({ open, onClose, nav = NAV, subtitle }: SidebarP
                         : 'max-lg:rtl:translate-x-full max-lg:ltr:-translate-x-full',
                 )}
             >
-                {/* الشعار وحده في منتصف رأس الشريط. كان مُلصقًا بحافة البداية
-                    وتحته اسم المتجر — والاسم حاضر أصلًا في عنوان اللوحة وفي
-                    مبدّل الفروع، فكان تكرارًا يزاحم الشعار.
-                    justify-center أفقي هنا لأن الاتجاه عمودي في هذه الكتلة. */}
-                <div className="flex h-16 shrink-0 flex-col items-center justify-center gap-1 px-5">
-                    <Logo className="h-5 w-auto text-[#111]" />
-                    {/* لوحة المنصة وحدها تسمّي نفسها — بلا هذا السطر يتعذّر
-                        تمييز لوحتها من لوحة التاجر: القائمتان بالشعار نفسه */}
-                    {subtitle && (
-                        <p className="truncate text-[12px] font-medium text-[#6b7280]">{t(subtitle)}</p>
-                    )}
-                </div>
+                {/*
+                 * الشعارُ مقبضُ القائمة كلِّها: ضغطةٌ تفتح الأقسامَ جميعًا،
+                 * والثانيةُ تطويها جميعًا. ويُقرأ حالُه من المجموعات نفسِها —
+                 * فمن فتحها واحدةً واحدة حتّى اكتملت يطويها الشعارُ بضغطة.
+                 */}
+                <button
+                    type="button"
+                    onClick={toggleAll}
+                    aria-expanded={allOpen}
+                    aria-label={t(allOpen ? 'إخفاء الأقسام الفرعية' : 'إظهار الأقسام الفرعية')}
+                    title={t(allOpen ? 'إخفاء الأقسام الفرعية' : 'إظهار الأقسام الفرعية')}
+                    className="mx-3 flex h-16 shrink-0 items-center justify-center rounded-[12px] px-2 transition-colors hover:bg-[rgba(17,17,17,0.045)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#111]/20"
+                >
+                    <Logo className="pointer-events-none h-5 w-auto text-[#111]" />
+                </button>
+                {/* لوحة المنصة وحدها تسمّي نفسها — القائمتان بالعلامة نفسها */}
+                {subtitle && (
+                    <p className="truncate px-5 pt-3 text-center text-[12px] font-medium text-[#6b7280]">{t(subtitle)}</p>
+                )}
 
                 <nav className="flex flex-1 flex-col overflow-y-auto px-3 pb-4">
-                    {nav.map((group, gi) => {
-                        const items = visible(group.items);
-                        if (items.length === 0) return null;
-
-                        /*
-                         * الفاصل بين المجموعات خطٌّ لا عنوان.
-                         *
-                         * العناوين («المتجر»، «الإدارة») تسميةٌ لا تُقرأ: لا
-                         * أحد يبحث عن «المالية» تحت «الإدارة»، ويبحث عن
-                         * «المالية». والخطّ يفصل بلا أن يشغل سطرًا ولا أن
-                         * يدّعي معنى. ولوحة المنصة تُبقي عناوينها كما هي.
-                         */
-                        const first = nav.slice(0, gi).every((g) => visible(g.items).length === 0);
+                    {groups.map((group, gi) => {
+                        const items = group.items.filter((i) => !i.hidden);
+                        const gkey = group.key ?? String(gi);
+                        const holdsActiveGroup = holds(group);
+                        /* مجموعةٌ بلا عنوانٍ لا سهمَ لها يفتحها — فتبقى مفتوحة */
+                        const groupOpen = !group.heading || openGroups.includes(gkey);
 
                         return (
                             <div
-                                key={gi}
+                                key={group.key ?? gi}
                                 className={cn(
                                     'mb-1',
                                     // تُدفع «الإعدادات» إلى الأسفل، وخطُّها يفصلها عمّا فوقها
                                     group.footer && 'mt-auto',
-                                    !group.heading && !first && 'border-t border-[var(--ui-border,#e8e8e8)] pt-2',
+                                    !group.heading && gi > 0 && 'border-t border-[var(--ui-border,#e8e8e8)] pt-2',
                                 )}
                             >
                                 {group.heading && (
-                                    <p className="px-3 pb-1.5 pt-4 text-[11px] font-semibold uppercase tracking-wide text-[#9ca3af]">
-                                        {t(group.heading)}
-                                    </p>
+                                    <button
+                                        type="button"
+                                        aria-expanded={groupOpen}
+                                        onClick={() => toggleGroup(gkey)}
+                                        className={cn(
+                                            'flex w-full items-center gap-2 rounded-[10px] px-3 py-2 text-start text-[13px] font-semibold transition-colors hover:bg-[rgba(17,17,17,0.045)]',
+                                            holdsActiveGroup ? 'text-[#111]' : 'text-[#4b4b4b]',
+                                        )}
+                                    >
+                                        <span className="truncate">{t(group.heading)}</span>
+                                        <ChevronDown
+                                            className={cn('ms-auto size-4 shrink-0 text-[#9ca3af] transition-transform', groupOpen && 'rotate-180')}
+                                        />
+                                    </button>
                                 )}
 
+                                <AnimatePresence initial={false}>
+                                {groupOpen && (
+                                <motion.div
+                                    initial={{ height: 0, opacity: 0 }}
+                                    animate={{ height: 'auto', opacity: 1 }}
+                                    exit={{ height: 0, opacity: 0 }}
+                                    transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
+                                    className="overflow-hidden"
+                                >
                                 {items.map((item) => {
                                     if (! item.children) {
                                         return link(item);
@@ -210,15 +250,16 @@ export default function Sidebar({ open, onClose, nav = NAV, subtitle }: SidebarP
                                                         transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
                                                         className="overflow-hidden"
                                                     >
-                                                        {item.children
-                                                            .filter((c) => can(c.section))
-                                                            .map((child) => link(child, 1))}
+                                                        {item.children.map((child) => link(child, 1))}
                                                     </motion.div>
                                                 )}
                                             </AnimatePresence>
                                         </div>
                                     );
                                 })}
+                                </motion.div>
+                                )}
+                                </AnimatePresence>
                             </div>
                         );
                     })}

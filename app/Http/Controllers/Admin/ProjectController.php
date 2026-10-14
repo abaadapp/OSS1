@@ -5,12 +5,14 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\ChangeOrder;
 use App\Models\Customer;
+use App\Models\CustomerInvoice;
 use App\Models\DeliveryPackage;
 use App\Models\EventOperation;
 use App\Models\Project;
 use App\Models\ProjectMember;
 use App\Models\ProjectRequirement;
 use App\Models\ProjectTask;
+use App\Models\Quotation;
 use App\Models\User;
 use App\Support\ChangeOrders;
 use App\Support\DeliveryPackages;
@@ -82,6 +84,8 @@ class ProjectController extends Controller
             'operations_manage' => (bool) $user?->may(Permissions::OPERATIONS_MANAGE),
             /* والأداءُ الماليّ — المرحلة 11: لمن يقرأ ربحيّة المشاريع */
             'performance' => (bool) $user?->may(Permissions::ANALYTICS_PROJECTS),
+            /* والفوترةُ من صفحة المشروع لمن يفتح فواتيرَ العملاء — والإصدارُ فعلٌ يُحرس في شاشتها */
+            'invoice' => (bool) $user?->allows('orders'),
         ];
     }
 
@@ -94,7 +98,12 @@ class ProjectController extends Controller
         $per = (int) $request->integer('per_page');
         $per = in_array($per, self::PER_PAGE, true) ? $per : self::PER_PAGE[0];
 
-        $page = Project::where('business_id', $bid)->with('customer', 'owner')
+        $page = Project::where('business_id', $bid)->with('customer', 'owner', 'quotation:id,number,issued_at')
+            // ومهامُّه على بطاقته: كم بقي منها، وكم تأخّر
+            ->withCount([
+                'tasks as open_tasks' => fn ($t) => $t->where('status', ProjectTask::OPEN),
+                'tasks as late_tasks' => fn ($t) => $t->where('status', ProjectTask::OPEN)->whereDate('due_at', '<', now()->toDateString()),
+            ])
             ->when($request->string('q')->toString(), fn ($q, $s) => $q->where(
                 fn ($w) => $w->where('code', Search::like(), "%{$s}%")
                     ->orWhere('name', Search::like(), "%{$s}%")
@@ -103,14 +112,28 @@ class ProjectController extends Controller
             ->when($request->integer('customer_id'), fn ($q, $id) => $q->where('customer_id', $id))
             ->when($request->string('status')->toString(), fn ($q, $s) => in_array($s, Project::STATUSES, true)
                 ? $q->where('status', $s) : $q->whereRaw('1 = 0'))
+            // القائمُ قبل المُقفَل والملغى: ما يُعمل عليه أوّلُ ما يُرى
+            ->orderByRaw('case when status in (?, ?) then 1 else 0 end', [Project::CLOSED, Project::CANCELLED])
             ->orderByDesc('id')
             ->paginate($per)
             ->withQueryString();
 
         $base = fn () => Project::where('business_id', $bid);
 
+        /*
+         * ومراحلُ كلّ مشروعٍ على بطاقته: فعاليّتُه وحزمةُ تسليمه. تُقرأ دفعةً
+         * واحدةً لكلّ الصفحة لا مشروعًا مشروعًا.
+         */
+        $ids = collect($page->items())->pluck('id')->all();
+        $operations = EventOperation::whereIn('project_id', $ids)->orderByDesc('id')->get(['id', 'project_id', 'status'])->groupBy('project_id');
+        $packages = DeliveryPackage::whereIn('project_id', $ids)->orderByDesc('id')->get(['id', 'project_id', 'status'])->groupBy('project_id');
+        $money = ProjectFinancials::summaries($bid, collect($page->items()));
+
         return Inertia::render('Admin/Projects/Index', [
-            'projects' => collect($page->items())->map(fn (Project $p) => $this->row($p, $may['commercial']))->all(),
+            'projects' => collect($page->items())->map(fn (Project $p) => $this->row($p, $may['commercial']) + $this->stages($p, $operations[$p->id] ?? collect(), $packages[$p->id] ?? collect(), $money[$p->id] ?? null))->all(),
+            'quotes' => $this->pendingQuotes($request, $bid, $may['commercial'], $page->currentPage()),
+            /* و«مسؤوليتي» على بطاقة ما يملكه الناظر */
+            'me' => auth()->id(),
             'pagination' => Pagination::meta($page),
             'filters' => $request->only('q', 'customer_id', 'status', 'per_page'),
             'statuses' => Project::STATUSES,
@@ -124,6 +147,77 @@ class ProjectController extends Controller
             ],
             'may' => $may,
         ]);
+    }
+
+    /**
+     * ما يحتاجه شريطُ المراحل: عرضُ السعر الذي بدأ منه، وفعاليّتُه، وتسليمُه.
+     *
+     * الحزمةُ المقبولةُ تُقدَّم على غيرها، ثمّ المرسلة، ثمّ أحدثُ ما كُتب —
+     * فالمرحلةُ تُقرأ من أبعد ما بلغه المشروع لا من آخر ما لُمس.
+     *
+     * @return array<string, mixed>
+     */
+    private function stages(Project $p, $operations, $packages, ?array $money = null): array
+    {
+        $value = (float) ($money['current_value'] ?? 0);
+
+        $op = $operations->first(fn (EventOperation $o) => $o->status !== EventOperation::CANCELLED) ?? $operations->first();
+        $pkg = $packages->firstWhere('status', DeliveryPackage::ACCEPTED)
+            ?? $packages->firstWhere('status', DeliveryPackage::SENT)
+            ?? $packages->first(fn (DeliveryPackage $d) => ! in_array($d->status, [DeliveryPackage::CANCELLED, DeliveryPackage::DECLINED], true))
+            ?? $packages->first();
+
+        return [
+            'location' => $p->location,
+            'owner_id' => $p->owner_id,
+            'created_at' => $p->created_at?->format('Y-m-d'),
+            'quotation' => $p->quotation ? ['id' => $p->quotation->id, 'number' => $p->quotation->number] : null,
+            'operation' => $op ? ['id' => $op->id, 'status' => $op->status] : null,
+            'delivery' => $pkg ? ['id' => $pkg->id, 'status' => $pkg->status] : null,
+            /* والفوترةُ: هل فُوترت القيمةُ كلُّها — حكمٌ لا مبلغ */
+            'billed' => $money !== null && $value > 0 && (float) $money['net_invoiced'] >= $value - 0.0005,
+        ];
+    }
+
+    /**
+     * العروضُ التي لم تصر مشاريعَ بعد — أوّلُ مرحلةٍ في حياة المشروع.
+     *
+     * المشروعُ يبدأ عرضَ سعر: فما كُتب ولم يُقرَّر فيه بعدُ يُرى في قائمة
+     * المشاريع بطاقةً مرحلتُها الأولى، والمرفوضُ حديثًا يُرى بعلامته. وتظهر
+     * في الصفحة الأولى وحدَها — قليلةٌ بطبعها ولا تُرقَّم مع المشاريع.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function pendingQuotes(Request $request, int $bid, bool $commercial, int $page): array
+    {
+        $status = $request->string('status')->toString();
+        if ($page > 1 || ! in_array($status, ['', 'quote'], true) || ! auth()->user()?->allows('quotations')) {
+            return [];
+        }
+
+        return Quotation::where('business_id', $bid)->with('customer:id,name')
+            ->where(fn ($w) => $w->whereIn('status', [Quotation::DRAFT, Quotation::PENDING_APPROVAL, Quotation::SENT])
+                ->orWhere(fn ($r) => $r->where('status', Quotation::REJECTED)->where('updated_at', '>=', now()->subDays(60))))
+            ->when($request->string('q')->toString(), fn ($q, $s) => $q->where(
+                fn ($w) => $w->where('number', Search::like(), "%{$s}%")
+                    ->orWhere('title', Search::like(), "%{$s}%")
+                    ->orWhereHas('customer', fn ($c) => $c->where('name', Search::like(), "%{$s}%"))
+            ))
+            ->when($request->integer('customer_id'), fn ($q, $id) => $q->where('customer_id', $id))
+            ->orderByDesc('id')->limit(50)->get()
+            ->map(fn (Quotation $q) => [
+                'id' => $q->id,
+                'number' => $q->number,
+                'title' => $q->title,
+                'customer' => $q->customer?->name ?? $q->customer_name ?? '—',
+                'status' => $q->status,
+                'location' => $q->event_location,
+                'starts_at' => $q->event_starts_at?->format('Y-m-d'),
+                'ends_at' => $q->event_ends_at?->format('Y-m-d'),
+                'total' => $commercial ? (float) $q->total : null,
+                'created_at' => $q->created_at?->format('Y-m-d'),
+                'created_by' => $q->created_by,
+            ])->all();
     }
 
     /** @return array<string, mixed> */
@@ -142,6 +236,8 @@ class ProjectController extends Controller
             'current_value' => $commercial ? ProjectScope::currentValue($p) : null,
             'owner' => $p->owner?->name,
             'baselined' => $p->isBaselined(),
+            'open_tasks' => (int) ($p->open_tasks ?? 0),
+            'late_tasks' => (int) ($p->late_tasks ?? 0),
         ];
     }
 
@@ -270,9 +366,50 @@ class ProjectController extends Controller
             'operations' => $may['operations'] ? $this->operations($project) : null,
             /* الأداءُ الماليّ — المرحلة 11: الصيغةُ في `ProjectFinancials` والاكتمالُ في `ProjectProfitability` */
             'performance' => $may['performance'] ? ProjectProfitability::forProject($project) + ['timeline' => ProjectProfitability::timeline($project)] : null,
+            /*
+             * والفوترةُ والتحصيل — مرحلةٌ في مسار المشروع: فواتيرُه بحالها،
+             * وكم فُوتر وحُصّل من قيمته. والأرقامُ لمن يملك المال، والفواتيرُ
+             * لمن يفتح قسمَها.
+             */
+            'billing' => $this->billing($project, $may),
+            'invoices' => $may['invoice'] ? $project->invoices()->orderByDesc('id')->get()->map(fn (CustomerInvoice $i) => [
+                'id' => $i->id,
+                'number' => $i->number,
+                'status' => $i->status,
+                'payment_state' => $i->paymentState(),
+                'issued_at' => optional($i->issued_at)->format('Y-m-d'),
+                'due_at' => optional($i->due_at)->format('Y-m-d'),
+                'total' => $may['commercial'] ? (float) $i->total : null,
+                'outstanding' => $may['commercial'] ? $i->outstanding() : null,
+            ])->all() : null,
+            /* وما يمنع الإقفالَ الآن — بنصّ الإقفال نفسِه، يُقرأ قبل الزرّ */
+            'close_blockers' => $project->isOpen() ? Projects::closeBlockers($project) : [],
             'users' => User::where('business_id', $this->bid())->orderBy('name')->get(['id', 'name'])->all(),
             'may' => $may,
         ]);
+    }
+
+    /**
+     * مرحلةُ الفوترة: هل فُوترت القيمةُ كلُّها، وهل حُصّلت.
+     *
+     * الحكمُ يُرسَل للجميع (هو ما يُضيء المرحلة)، والمبالغُ لمن يملك المال.
+     *
+     * @param  array<string, bool>  $may
+     * @return array<string, mixed>
+     */
+    private function billing(Project $project, array $may): array
+    {
+        $f = ProjectFinancials::summary($project);
+        $value = (float) $f['current_value'];
+
+        return [
+            'billed' => $value > 0 && (float) $f['net_invoiced'] >= $value - 0.0005,
+            'paid' => (float) $f['net_invoiced'] > 0 && (float) $f['customer_outstanding'] <= 0.0005,
+            'value' => $may['commercial'] ? $value : null,
+            'invoiced' => $may['commercial'] ? (float) $f['net_invoiced'] : null,
+            'collected' => $may['commercial'] ? (float) $f['collected'] : null,
+            'outstanding' => $may['commercial'] ? (float) $f['customer_outstanding'] : null,
+        ];
     }
 
     /**

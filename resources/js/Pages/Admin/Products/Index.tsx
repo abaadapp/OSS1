@@ -57,6 +57,30 @@ interface Props {
     lastImport: { file: string; added: number; updated: number; created_at: string } | null;
 }
 
+/*
+ * الخدمةُ والباقةُ لا رفَّ لهما — فلا «نفد المخزون» عليهما.
+ *
+ * كميّتُهما صفرٌ دائمًا (`Product::UNSTOCKED`)، فكان الشريطُ يرسم لكلّ خدمةٍ
+ * شارةَ نفادٍ حمراء: كتالوجٌ من خدماتٍ يبدو كلُّه ناقصًا.
+ */
+function stockBadge(p: Product) {
+    if (p.kind === 'service' || p.kind === 'package') {
+        return <StockKind kind={p.kind} />;
+    }
+
+    return <Badge status={p.stock_status} />;
+}
+
+function StockKind({ kind }: { kind: 'service' | 'package' }) {
+    const t = useTranslate();
+
+    return (
+        <span className="inline-flex items-center rounded-full bg-[#f2f2f0] px-2 py-0.5 text-[11px] font-medium text-[#6b7280]">
+            {kind === 'service' ? t('خدمة') : t('باقة')}
+        </span>
+    );
+}
+
 export default function ProductsIndex() {
     const { products: serverProducts, pagination, categories, filters, sorts, branches, currentBranchId, lastImport, context } =
         usePage<PageProps<Props>>().props;
@@ -223,7 +247,7 @@ export default function ProductsIndex() {
                 <QuickCell id={p.id} field="quantity" value={p.qty} display={number(p.qty)} />
             ),
         },
-        { key: 'stock_status', header: 'المخزون', cell: (p) => <Badge status={p.stock_status} /> },
+        { key: 'stock_status', header: 'المخزون', cell: (p) => stockBadge(p) },
         {
             key: 'active',
             header: 'الحالة',
@@ -263,10 +287,10 @@ export default function ProductsIndex() {
     ];
 
     return (
-        <AdminLayout title="المنتجات">
+        <AdminLayout title="المنتجات والخدمات">
             <PageHeader
-                title="المنتجات"
-                subtitle={t('إدارة منتجات محل الورود')}
+                title="المنتجات والخدمات"
+                subtitle={t('كتالوج الشركة: المنتجات والخدمات والباقات وأسعارها')}
                 actions={
                     <>
                         <DropdownMenu>
@@ -444,7 +468,7 @@ export default function ProductsIndex() {
                                                           <img src={p.image} alt="" className="size-full object-cover" loading="lazy" />
                                                       )}
                                                       <span className="absolute start-2 top-2">
-                                                          <Badge status={p.stock_status} />
+                                                          {stockBadge(p)}
                                                       </span>
                                                       <span className="absolute end-2 top-2">{actionsFor(p)}</span>
                                                   </div>

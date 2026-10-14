@@ -5,23 +5,23 @@ import {
     FINANCE_TABS,
     INVENTORY_TABS,
     MANAGEMENT_TABS,
+    PROJECT_TABS,
     PURCHASE_TABS,
     type SectionTab,
 } from '@/Components/SectionTabs';
 import {
     BarChart3,
     Boxes,
-    CalendarCheck,
     Gauge,
     Database,
     Briefcase,
-    FileSignature,
     FileText,
     LayoutDashboard,
+    ListChecks,
+    MessageCircle,
     MessageSquare,
     Radar,
     Package,
-    PackageCheck,
     Settings,
     ShoppingCart,
     Truck,
@@ -48,9 +48,18 @@ export interface NavItem {
     covers?: string[];
     /** قائمةٌ منسدلة تحت العنصر — لا وجهةَ له هو، بل يفتح ما تحته */
     children?: NavItem[];
+    /**
+     * لا يُرسم في الشريط، ويبقى في دليل الصفحات وتُضيء صفحاتُه قسمَه.
+     *
+     * «المراسلات» خرجت من الشريط، وسجلُّها وقوالبُها ما زالت صفحاتٍ تُفتح
+     * من البحث ومن روابط المستندات — فتبقى معروفةً لقسمها لا يتيمة.
+     */
+    hidden?: boolean;
 }
 
 export interface NavGroup {
+    /** مفتاحٌ ثابتٌ للمجموعة — يُرسم به ولا يُعرض */
+    key?: string;
     heading?: string;
     /**
      * مجموعةٌ تُدفع إلى أسفل الشريط.
@@ -71,26 +80,23 @@ export interface NavGroup {
 const covers = (tabs: SectionTab[]) => tabs.map((tb) => tb.routeName);
 
 /**
- * القائمة الجانبية للوحة التاجر.
+ * القائمة الجانبية للوحة التاجر — خمسُ مجموعاتٍ بعناوينها.
  *
- * المجموعات تفصلها خطوط لا عناوين: العناوين («المتجر»، «الإدارة») تسمية
- * لا تُقرأ — لا أحد يبحث عن «المالية» تحت «الإدارة»، ويبحث عن «المالية».
- * والخطّ يفصل بلا أن يشغل سطرًا ولا أن يدّعي معنى.
+ * كلُّها في الشريط معًا، والعنوانُ يقول ما تحته: «التشغيل» لما يُعمل كلَّ
+ * يوم، ثمّ المشاريعُ والمالُ والكتالوجُ والإعدادات.
  */
 export const NAV: NavGroup[] = [
     {
+        key: 'operations',
+        heading: 'التشغيل',
         items: [
-            { label: 'لوحة التحكم', icon: LayoutDashboard, route: 'admin.dashboard', section: 'dashboard' },
-            /* ومركزُ العمليات بعدها مباشرةً: ما يحتاج يدًا اليوم — المرحلة 7 */
-            { label: 'مركز العمليات', icon: Radar, route: 'admin.command.index', section: 'command' },
-            /* والإدارةُ: كيف تؤدّي الشركة — لا ما يحتاج يدًا — المرحلة 11 */
-            {
-                label: 'الإدارة',
-                icon: Gauge,
-                route: 'admin.management.index',
-                section: 'management',
-                covers: [...covers(MANAGEMENT_TABS), 'admin.management.reviews.show'],
-            },
+            /*
+             * الملخصُ خارجَ الشريط: صفحةُ الدخول، تُفتح منه ولا تُطلب من القائمة.
+             * ومركزُ العمليات مثلُه — حلّت محلَّه «المهام»: عملُ كلّ مشروعٍ بموعده
+             */
+            { label: 'الملخص', icon: LayoutDashboard, route: 'admin.dashboard', section: 'dashboard', hidden: true },
+            { label: 'مركز العمليات', icon: Radar, route: 'admin.command.index', section: 'command', hidden: true },
+            { label: 'المهام', icon: ListChecks, route: 'admin.tasks.index', section: 'projects' },
             {
                 label: 'العملاء',
                 icon: Users,
@@ -98,52 +104,68 @@ export const NAV: NavGroup[] = [
                 section: 'customers',
                 covers: covers(CUSTOMER_TABS),
             },
+            /* وواتساب: صندوقُ وارد الشركة — ما يكتبه العملاءُ ويُجاب من هنا */
+            { label: 'واتساب', icon: MessageCircle, route: 'admin.whatsapp.index', section: 'communications' },
+            /*
+             * والمراسلات خارجَ الشريط: سجلُّ ما أُرسل وقوالبُه يُفتحان من
+             * البحث ومن روابط المستندات — المرحلة 6
+             */
+            {
+                label: 'المراسلات',
+                icon: MessageSquare,
+                route: 'admin.communications.index',
+                section: 'communications',
+                covers: ['admin.communications.show', 'admin.communications.templates'],
+                hidden: true,
+            },
         ],
     },
     {
+        key: 'projects',
+        heading: 'المشاريع والمعارض',
         items: [
-            { label: 'المنتجات', icon: Package, route: 'admin.products.index', section: 'products' },
-            /*
-             * وعروضُ الأسعار قبل الفواتير: هي أوّلُ ما يُكتب في دورة العمل —
-             * يُعرض، ثمّ يُقبل، ثمّ يُفوتَر. وترتيبُ القائمة ترتيبُ اليوم لا
-             * ترتيبُ الجداول.
-             */
-            {
-                label: 'عروض الأسعار',
-                icon: FileSignature,
-                route: 'admin.quotations.index',
-                section: 'quotations',
-                covers: ['admin.quotations.show', 'admin.quotations.create'],
-            },
-            /*
-             * والمشاريعُ بعد العروض: العرضُ المقبول يصير مشروعًا. وأوامرُ
-             * التغيير صفحاتٌ تحته لا مدخلَ لها.
-             */
+            /* العرضُ المقبول يصير مشروعًا. وأوامرُ التغيير صفحاتٌ تحته لا مدخلَ لها */
             {
                 label: 'المشاريع',
                 icon: Briefcase,
                 route: 'admin.projects.index',
                 section: 'projects',
-                covers: ['admin.projects.show', 'admin.changeOrders.show', 'admin.changeOrders.create', 'admin.changeOrders.edit'],
+                covers: [
+                    'admin.projects.show',
+                    'admin.changeOrders.show',
+                    'admin.changeOrders.create',
+                    'admin.changeOrders.edit',
+                    /* والعملياتُ تبويبٌ في المشاريع: تنفيذُ الفعاليّة على الأرض — المرحلة 10 */
+                    ...covers(PROJECT_TABS),
+                    'admin.operations.show',
+                    'admin.operations.onsite',
+                    'admin.operations.templates',
+                    'admin.quotations.index',
+                    'admin.quotations.show',
+                    'admin.quotations.create',
+                    'admin.deliveries.index',
+                    'admin.deliveries.show',
+                    'admin.deliveries.create',
+                ],
             },
             /*
-             * والعمليات بعد المشاريع: تنفيذُ الفعاليّة على الأرض — الموعدُ
-             * والفريقُ والمعدّاتُ وشاشةُ الموقع — المرحلة 10
+             * وعروضُ الأسعار وحزمُ التسليم خرجت من الشريط: هي مراحلُ المشروع لا
+             * أقسامٌ بجانبه — العرضُ بطاقةٌ في قائمة المشاريع حتى يُقبل، والتسليمُ
+             * مرحلةٌ على بطاقته. وصفحاتُهما تبقى وتُضيء «المشاريع»
              */
+        ],
+    },
+    {
+        key: 'finance',
+        heading: 'المالية',
+        items: [
+            /* والإدارةُ: كيف تؤدّي الشركة — لا ما يحتاج يدًا — المرحلة 11 */
             {
-                label: 'العمليات',
-                icon: CalendarCheck,
-                route: 'admin.operations.index',
-                section: 'operations',
-                covers: ['admin.operations.show', 'admin.operations.onsite', 'admin.operations.templates'],
-            },
-            // وحزمُ التسليم: ما تسلّمه الشركةُ في ختام العمل ويقبله العميل — المرحلة 5
-            {
-                label: 'حزم التسليم',
-                icon: PackageCheck,
-                route: 'admin.deliveries.index',
-                section: 'quotations',
-                covers: ['admin.deliveries.show', 'admin.deliveries.create'],
+                label: 'الإدارة',
+                icon: Gauge,
+                route: 'admin.management.index',
+                section: 'management',
+                covers: [...covers(MANAGEMENT_TABS), 'admin.management.reviews.show'],
             },
             // «الطلبات» سابقًا: المتجر يبيع ولا يستقبل طلبات وحسب
             { label: 'المبيعات', icon: ShoppingCart, route: 'admin.orders.index', section: 'orders' },
@@ -156,7 +178,6 @@ export const NAV: NavGroup[] = [
                 section: 'orders',
                 covers: ['admin.customerInvoices.show', 'admin.customerInvoices.create'],
             },
-
             {
                 label: 'المشتريات',
                 icon: Truck,
@@ -164,10 +185,6 @@ export const NAV: NavGroup[] = [
                 section: 'purchases',
                 covers: covers(PURCHASE_TABS),
             },
-        ],
-    },
-    {
-        items: [
             {
                 label: 'المالية',
                 icon: Wallet,
@@ -182,10 +199,15 @@ export const NAV: NavGroup[] = [
                 section: 'employees',
                 covers: covers(EMPLOYEE_TABS),
             },
+            /* التقارير بابٌ لا شاشةُ أرقام — تجمع ما تفرّق وتقود إليه */
+            { label: 'التقارير', icon: BarChart3, route: 'admin.reports.index', section: 'reports' },
         ],
     },
     {
+        key: 'catalog',
+        heading: 'المنتجات والخدمات',
         items: [
+            { label: 'المنتجات', icon: Package, route: 'admin.products.index', section: 'products' },
             {
                 label: 'المخزون',
                 icon: Boxes,
@@ -204,21 +226,10 @@ export const NAV: NavGroup[] = [
         ],
     },
     {
-        /* التقارير مجموعةٌ وحدها: بابٌ لا شاشةُ أرقام — تجمع ما تفرّق وتقود إليه */
+        key: 'settings',
+        heading: 'الإعدادات',
         items: [
-            { label: 'التقارير', icon: BarChart3, route: 'admin.reports.index', section: 'reports' },
-            /*
-             * والمراسلات بجانبها: سجلٌّ يُقرأ لا شاشةُ عمل — ما قيل للعملاء
-             * وماذا صار إليه. والإرسالُ نفسُه من شاشة المستند — المرحلة 6
-             */
-            {
-                label: 'المراسلات',
-                icon: MessageSquare,
-                route: 'admin.communications.index',
-                section: 'communications',
-                covers: ['admin.communications.show', 'admin.communications.templates'],
-            },
-            /* والأتمتة بعدها: ما يتابعه النظام وحده — قواعدُه وسجلُّه — المرحلة 8 */
+            /* الأتمتة: ما يتابعه النظام وحده — قواعدُه وسجلُّه — المرحلة 8 */
             {
                 label: 'الأتمتة',
                 icon: Zap,
@@ -234,24 +245,7 @@ export const NAV: NavGroup[] = [
                 section: 'imports',
                 covers: ['admin.imports.show'],
             },
-        ],
-    },
-    {
-        /*
-         * الإعدادات — مجموعةُ القاع.
-         *
-         * `footer` يدفع مجموعتَه وحدها بـ`mt-auto` إلى أسفل الشريط: الإعدادات
-         * تُفتح مرّةً في الشهر ولا تُفتح مرّةً في الساعة، فمكانها أسفل القائمة
-         * لا وسطها بين ما يُستعمل كلّ يوم.
-         */
-        footer: true,
-        items: [
-            {
-                label: 'الإعدادات',
-                icon: Settings,
-                route: 'admin.settings.index',
-                section: 'settings',
-            },
+            { label: 'الإعدادات', icon: Settings, route: 'admin.settings.index', section: 'settings' },
         ],
     },
 ];
