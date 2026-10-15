@@ -37,6 +37,12 @@ final class Rules
             'steps' => [['offset' => -1, 'audience' => 'assignee'], ['offset' => 0, 'audience' => 'assignee'], ['offset' => 1, 'audience' => 'assignee'], ['offset' => 3, 'audience' => 'assignee'], ['offset' => 5, 'audience' => 'owner']],
             'enabled' => true, 'mode' => 'live', 'cooldown_hours' => 20, 'business_hours' => false,
         ],
+        /* ونقصُ مخزونٍ متوقَّع في مشروعٍ قادم — لصاحبه والمخزون، داخليٌّ لا يبلغ العميل */
+        'inventory.shortfall' => [
+            'name' => 'نقص مخزون في مشروع قادم', 'trigger' => 'project_inventory_shortfall', 'kind' => 'internal', 'channel' => 'internal',
+            'steps' => [['offset' => 0, 'audience' => 'owner'], ['offset' => 0, 'audience' => 'inventory']],
+            'enabled' => true, 'mode' => 'live', 'cooldown_hours' => 20, 'business_hours' => false,
+        ],
         'project.closable' => [
             'name' => 'مشروع جاهز للإقفال', 'trigger' => 'project_closable', 'kind' => 'internal', 'channel' => 'internal',
             'steps' => [['offset' => 0, 'audience' => 'owner'], ['offset' => 3, 'audience' => 'management']],

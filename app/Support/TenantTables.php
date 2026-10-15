@@ -152,6 +152,8 @@ class TenantTables
          */
         'budgets', 'budget_lines', 'financial_scenarios', 'financial_scenario_assumptions', 'financial_forecasts',
         'management_reviews', 'management_decisions', 'operation_consumable_issues',
+        /* وآخرُ نقصِ مخزونٍ نُبّه عنه لكلّ مشروع — بعد المشروع، ولا يشير إليه شيء */
+        'inventory_shortfall_states',
     ];
 
     /**

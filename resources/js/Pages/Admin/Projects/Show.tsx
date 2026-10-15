@@ -34,6 +34,7 @@ import ProjectStepper from '@/Components/ProjectStepper';
 import { STAGE_LABEL, toStages, type StageKey, type Workflow } from '@/lib/projectStages';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/Components/ui/dropdown-menu';
 import type { PageProps } from '@/types';
+import ProjectInventoryForecast, { type ProjectForecast } from '@/Components/InventoryForecast';
 
 interface Project {
     id: number;
@@ -181,6 +182,8 @@ interface Props {
     delivery: Delivery;
     cancellation: Cancellation | null;
     operations: OperationRow[] | null;
+    /** توقّعُ المخزون — قراءةٌ لا خصم، لمن يفتح المخزون (`InventoryForecast`) */
+    inventory_forecast?: ProjectForecast | null;
     /* الأداء — المرحلة 11: الربحيّةُ بصيغتها الواحدة واكتمالُها وخطُّ زمنِها؛ لمن يقرأ تحليلات المشاريع */
     performance: Performance | null;
     billing: Billing;
@@ -230,7 +233,7 @@ interface Performance {
  * المقبولة)، وما يجب على الفريق تنفيذَه الآن (الحاليّ). والقيمةُ الحاليّة
  * تُشتقّ في الخادم — انظر `ProjectScope`.
  */
-export default function ProjectShow({ project: p, scope, requirements, members, tasks, change_orders, financials, delivery, cancellation, operations, performance, billing, invoices, close_blockers, workflow, quotation, scope_of_work, channels, users, may, contacts = [], purchases = null }: Props) {
+export default function ProjectShow({ project: p, scope, requirements, members, tasks, change_orders, financials, delivery, cancellation, operations, performance, billing, invoices, close_blockers, workflow, quotation, scope_of_work, channels, users, may, contacts = [], purchases = null, inventory_forecast = null }: Props) {
     const t = useTranslate();
     const { context } = usePage<PageProps>().props;
     const { errors } = usePage().props as { errors?: Record<string, string> };
@@ -277,6 +280,7 @@ export default function ProjectShow({ project: p, scope, requirements, members, 
         ...(operations !== null ? [{ key: 'operations', label: 'العمليات', count: operations.filter((o) => !['completed', 'cancelled'].includes(o.status)).length, alert: operations.some((o) => !o.ready && !['completed', 'cancelled', 'ready', 'live', 'teardown'].includes(o.status)) }] : []),
         /* المشتريات — المرحلة 14: تبويبٌ مساند لا مرحلة؛ أوامرُ الشراء الحقيقيّة على المشروع */
         ...(purchases ? [{ key: 'purchases', label: 'المشتريات', count: purchases.summary.orders, alert: purchases.summary.pending > 0 }] : []),
+        ...(inventory_forecast ? [{ key: 'inventory', label: 'المخزون', count: inventory_forecast.shortages, alert: inventory_forecast.shortages > 0 }] : []),
         ...(may.budget ? [{ key: 'financials', label: 'المال' }] : []),
         /* الأداء — المرحلة 11 */
         ...(performance !== null ? [{ key: 'performance', label: 'الأداء', alert: performance.contribution < 0 }] : []),
@@ -432,6 +436,13 @@ export default function ProjectShow({ project: p, scope, requirements, members, 
 
             <ProjectStepper stages={stages} onPick={pick} size="lg" className="mb-4" />
 
+            {/* ونقصُ المخزون المتوقَّع يُقال فوق التبويبات — والتفصيلُ في تبويب «المخزون» */}
+            {inventory_forecast && inventory_forecast.shortages > 0 && current !== 'inventory' && (
+                <button type="button" onClick={() => setTab('inventory')} className="mb-3 flex w-full items-center gap-2 rounded-[12px] border border-[#fecaca] bg-[#fef2f2] px-4 py-2 text-start text-[13px] text-[#b91c1c]">
+                    {t('نقص مخزون: :n بنود', { n: String(inventory_forecast.shortages) })} — {t('افتح تبويب المخزون')}
+                </button>
+            )}
+
             <Tabs tabs={tabs} current={current} onChange={setTab} className="mb-4" />
 
             {current === 'process' && (
@@ -470,6 +481,13 @@ export default function ProjectShow({ project: p, scope, requirements, members, 
             {current === 'delivery' && <DeliveryTab p={p} delivery={delivery} may={may} open={open} />}
             {current === 'communications' && <CommunicationsTab projectId={p.id} open={open} />}
             {current === 'operations' && operations !== null && <OperationsTab p={p} rows={operations} may={may} open={open} />}
+            {current === 'inventory' && inventory_forecast && (
+                <Card className="p-4">
+                    <h2 className="mb-1 text-[15px] font-semibold">{t('توقّع المخزون')}</h2>
+                    <p className="mb-3 text-[12px] text-[#9ca3af]">{t('لكل منتج مخزّن: المتوفر الآن، وما تحتاجه مشاريع قبله في الجدول، واحتياج هذا المشروع، والمتوقع بعده.')}</p>
+                    <ProjectInventoryForecast data={inventory_forecast} projectId={p.id} />
+                </Card>
+            )}
             {current === 'purchases' && purchases && <PurchasesTab projectId={p.id} data={purchases} m={m} />}
             {current === 'financials' && financials && <FinancialsTab f={financials} m={m} frozen={p.financials_frozen} />}
             {current === 'performance' && performance !== null && <PerformanceTab perf={performance} m={m} />}

@@ -13,6 +13,7 @@ import { useTranslate } from '@/lib/i18n';
 import type { PageProps } from '@/types';
 import type { Branch } from '@/types';
 import type { InventoryItem } from '@/types/models';
+import ForecastPanel, { type InventoryForecastPanel } from './partials/ForecastPanel';
 
 interface Props {
     inventory: InventoryItem[];
@@ -20,10 +21,12 @@ interface Props {
     currentBranchId: number | null;
     /** حالة المخزون القادمة في الرابط (?stock=) — يرسلها تنبيه النظرة العامة */
     stockFilter: string | null;
+    /** توقّعُ المخزون للمشاريع القادمة — قراءةٌ لا خصم */
+    forecast?: InventoryForecastPanel;
 }
 
 export default function InventoryIndex() {
-    const { inventory: serverInventory, stockFilter, context } = usePage<PageProps<Props>>().props;
+    const { inventory: serverInventory, stockFilter, forecast, context } = usePage<PageProps<Props>>().props;
     const t = useTranslate();
     const currency = context!.currency;
 
@@ -131,6 +134,8 @@ export default function InventoryIndex() {
             />
 
             <SectionTabs tabs={INVENTORY_TABS} current="admin.inventory.index" />
+
+            {forecast && <ForecastPanel data={forecast} />}
 
             {updatedAt && (
                 <p className="mb-3 text-[12px] text-[#9ca3af]">

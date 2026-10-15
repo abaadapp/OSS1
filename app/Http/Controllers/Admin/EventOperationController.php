@@ -19,6 +19,7 @@ use App\Models\Product;
 use App\Models\Project;
 use App\Models\User;
 use App\Support\Demo;
+use App\Support\InventoryForecast;
 use App\Support\Operations\Assets;
 use App\Models\OperationConsumableIssue;
 use App\Support\Operations\Checklists;
@@ -296,6 +297,8 @@ class EventOperationController extends Controller
             'products' => Product::where('business_id', $bid)->orderBy('name')->limit(500)->get(['id', 'name', 'kind', 'quantity'])->all(),
             /* المستهلَكاتُ — المرحلة 11: ما صُرف وما عاد وما استُهلك بتكلفته */
             'consumables' => Consumables::summary($operation),
+            /* وتوقّعُ مخزون مشروعها — المتوفّرُ وما قبله في الخطّ واحتياجُها والمتوقَّع؛ لمن يفتح المخزون */
+            'inventory_forecast' => auth()->user()?->allows('inventory') ? InventoryForecast::forProject($bid, (int) $operation->project_id) : null,
             'categories' => $this->categories($bid),
             'assets' => Asset::where('business_id', $bid)->whereNotIn('status', Asset::OUT_OF_SERVICE)->orderBy('asset_code')->limit(500)->get()
                 ->map(fn (Asset $a) => ['id' => $a->id, 'code' => $a->asset_code, 'name' => $a->name, 'category' => $a->category, 'status' => $a->status, 'free' => ! isset($busy[$a->id])])->all(),
