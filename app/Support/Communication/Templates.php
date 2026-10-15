@@ -31,7 +31,7 @@ use RuntimeException;
  */
 final class Templates
 {
-    public const PURPOSES = ['quotation', 'change_order', 'delivery', 'invoice', 'project', 'event', 'notice'];
+    public const PURPOSES = ['quotation', 'scope', 'change_order', 'delivery', 'invoice', 'project', 'event', 'notice'];
 
     /**
      * ما يُقال عن كلّ مستند.
@@ -64,6 +64,29 @@ final class Templates
         ],
         'quotation.declined' => [
             'name' => 'خبر رفض العرض (إلى الشركة)', 'subject' => 'quotation', 'purpose' => 'notice',
+            'channels' => ['email'], 'variables' => ['label', 'customer_name'], 'internal' => true,
+        ],
+        /* نطاقُ العمل — رابطُ توقيعه وتذكيرٌ به، وخبرُ القرار إلى الشركة */
+        'scope.link' => [
+            'name' => 'رابط نطاق العمل للتوقيع', 'subject' => 'scope_of_work', 'purpose' => 'scope',
+            'channels' => ['email', 'whatsapp'],
+            'variables' => ['contact_name', 'customer_name', 'label', 'project', 'event_date', 'url', 'company'],
+            'title' => 'نطاق العمل {{label}} — {{company}}',
+            'body' => "السيد/ة {{contact_name}} المحترم/ة،\nنرفق نطاق العمل {{label}} لمشروع «{{project}}» للمراجعة والاعتماد الإلكتروني قبل بدء التنفيذ.\n{{url}}",
+        ],
+        'scope.reminder' => [
+            'name' => 'تذكير بتوقيع نطاق العمل', 'subject' => 'scope_of_work', 'purpose' => 'scope',
+            'channels' => ['email', 'whatsapp'],
+            'variables' => ['contact_name', 'customer_name', 'label', 'project', 'url', 'company'],
+            'title' => 'تذكير: نطاق العمل {{label}} — {{company}}',
+            'body' => "السيد/ة {{contact_name}} المحترم/ة،\nنذكّركم بنطاق العمل {{label}} لمشروع «{{project}}» — بانتظار اعتمادكم لنبدأ التنفيذ.\n{{url}}",
+        ],
+        'scope.signed' => [
+            'name' => 'خبر توقيع نطاق العمل (إلى الشركة)', 'subject' => 'scope_of_work', 'purpose' => 'notice',
+            'channels' => ['email'], 'variables' => ['label', 'customer_name'], 'internal' => true,
+        ],
+        'scope.declined' => [
+            'name' => 'خبر طلب تعديل نطاق العمل (إلى الشركة)', 'subject' => 'scope_of_work', 'purpose' => 'notice',
             'channels' => ['email'], 'variables' => ['label', 'customer_name'], 'internal' => true,
         ],
         'change_order.link' => [

@@ -162,6 +162,8 @@ class NoDoorOpensOnAnotherCompanyTest extends TestCase
         $task = Projects::addTask($project, ['title' => "مهمّة $m"], $owner);
         $requirement = Projects::addRequirement($project, ['title' => "متطلَّب $m", 'kind' => 'equipment'], $owner);
         $co = \App\Support\ChangeOrders::create($project, ['title' => "أمر تغيير $m", 'requested_by_party' => 'customer'], [['project_item_id' => $project->items()->first()->id, 'quantity' => 1]], [], $owner);
+        $scope = \App\Support\ScopesOfWork::start($project, $owner);
+        $scope->update(['description' => "نطاق $m"]);
 
         $op = EventOperations::create($project, ['name' => "فعاليّة $m", 'venue_name' => "قاعة $m", 'setup_starts_at' => '2026-10-01 06:00', 'event_starts_at' => '2026-10-01 09:00',
             'event_ends_at' => '2026-10-01 17:00', 'teardown_starts_at' => '2026-10-01 17:00', 'teardown_ends_at' => '2026-10-01 19:00', 'operations_lead_id' => $owner->id], $owner);
@@ -222,7 +224,7 @@ class NoDoorOpensOnAnotherCompanyTest extends TestCase
             'customers' => $customer->id, 'addressId' => $address->id, 'suppliers' => $supplier->id, 'products' => $product->id,
             'expenseTypes' => $expenseType->id, 'expenses' => $expense->id, 'employees' => $employee->id, 'jobTitles' => $jobTitle->id,
             'quotations' => $q->id, 'quotations.draft' => $draftQ->id, 'projects' => $project->id, 'mid' => $member->id, 'tid' => $task->id, 'projects.rid' => $requirement->id,
-            'changeOrders' => $co->id, 'operations' => $op->id, 'sid' => $schedule->id, 'assets' => $asset->id, 'operations.rid' => $opReq->id,
+            'changeOrders' => $co->id, 'scope' => $scope->id, 'projects.scopes' => $scope->id, 'operations' => $op->id, 'sid' => $schedule->id, 'assets' => $asset->id, 'operations.rid' => $opReq->id,
             'assets.rid' => $reservation->id, 'reservations' => $reservation->id, 'cid' => $crew->id, 'iid' => $incident->id, 'operations.tid' => $template->id,
             'clid' => $checklist->id, 'checklist.iid' => $checklistItem->id, 'consumables.cid' => $consumable->id,
             'deliveries' => $package->id, 'item' => $packageItem->id, 'customerInvoices' => $invoice->id, 'customerInvoices.draft' => $draftInvoice->id,
@@ -251,6 +253,7 @@ class NoDoorOpensOnAnotherCompanyTest extends TestCase
             $param === 'branch' => $this->ids['branches'],
             $param === 'addressId' => $this->ids['addressId'],
             $param === 'did' => $this->ids['did'],
+            $param === 'scope' => $this->ids['scope'],
             $param === 'mid' => $this->ids['mid'],
             $param === 'sid' => $this->ids['sid'],
             $param === 'clid' => $this->ids['clid'],

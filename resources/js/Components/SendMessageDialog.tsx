@@ -23,6 +23,7 @@ export const SUBJECT_ROUTES: Record<string, string> = {
     delivery_package: 'admin.deliveries',
     change_order: 'admin.changeOrders',
     customer: 'admin.customers',
+    scope_of_work: 'admin.projects.scopes',
 };
 
 interface Compose {

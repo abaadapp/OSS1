@@ -13,12 +13,15 @@ use App\Models\ProjectMember;
 use App\Models\ProjectRequirement;
 use App\Models\ProjectTask;
 use App\Models\Quotation;
+use App\Models\ScopeOfWork;
 use App\Models\User;
 use App\Support\ChangeOrders;
+use App\Support\Communication\Templates;
 use App\Support\DeliveryPackages;
 use App\Support\DeliveryReadiness;
 use App\Support\Demo;
 use App\Support\Intelligence\ProjectProfitability;
+use App\Support\Messaging\Notifiers;
 use App\Support\Operations\Checklists;
 use App\Support\Operations\Crew;
 use App\Support\Operations\EventOperations;
@@ -26,9 +29,14 @@ use App\Support\Operations\OperationReadiness;
 use App\Support\Operations\ResourceConflicts;
 use App\Support\Pagination;
 use App\Support\Permissions;
+use App\Support\ProjectBilling;
 use App\Support\ProjectFinancials;
 use App\Support\Projects;
 use App\Support\ProjectScope;
+use App\Support\ProjectWorkflow;
+use App\Support\PublicDocument;
+use App\Support\Quotations;
+use App\Support\ScopesOfWork;
 use App\Support\Search;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -121,16 +129,19 @@ class ProjectController extends Controller
         $base = fn () => Project::where('business_id', $bid);
 
         /*
-         * ومراحلُ كلّ مشروعٍ على بطاقته: فعاليّتُه وحزمةُ تسليمه. تُقرأ دفعةً
-         * واحدةً لكلّ الصفحة لا مشروعًا مشروعًا.
+         * ومسارُ كلّ مشروعٍ على بطاقته — من `ProjectWorkflow` نفسِه الذي تقرؤه
+         * صفحةُ المشروع، دفعةً واحدةً لكلّ الصفحة لا مشروعًا مشروعًا. فلا تقول
+         * البطاقةُ «التسليم» وتقول الصفحةُ «التنفيذ».
          */
         $ids = collect($page->items())->pluck('id')->all();
         $operations = EventOperation::whereIn('project_id', $ids)->orderByDesc('id')->get(['id', 'project_id', 'status'])->groupBy('project_id');
         $packages = DeliveryPackage::whereIn('project_id', $ids)->orderByDesc('id')->get(['id', 'project_id', 'status'])->groupBy('project_id');
-        $money = ProjectFinancials::summaries($bid, collect($page->items()));
+        $flows = ProjectWorkflow::forMany($bid, collect($page->items()));
 
         return Inertia::render('Admin/Projects/Index', [
-            'projects' => collect($page->items())->map(fn (Project $p) => $this->row($p, $may['commercial']) + $this->stages($p, $operations[$p->id] ?? collect(), $packages[$p->id] ?? collect(), $money[$p->id] ?? null))->all(),
+            'projects' => collect($page->items())->map(fn (Project $p) => $this->row($p, $may['commercial']) + $this->links($p, $operations[$p->id] ?? collect(), $packages[$p->id] ?? collect()) + [
+                'workflow' => self::compact($flows[$p->id]),
+            ])->all(),
             'quotes' => $this->pendingQuotes($request, $bid, $may['commercial'], $page->currentPage()),
             /* و«مسؤوليتي» على بطاقة ما يملكه الناظر */
             'me' => auth()->id(),
@@ -150,17 +161,33 @@ class ProjectController extends Controller
     }
 
     /**
-     * ما يحتاجه شريطُ المراحل: عرضُ السعر الذي بدأ منه، وفعاليّتُه، وتسليمُه.
+     * المسارُ مضغوطًا للبطاقة — حالُ كلّ مرحلة وأين يقف الفريق وما يمنع.
      *
-     * الحزمةُ المقبولةُ تُقدَّم على غيرها، ثمّ المرسلة، ثمّ أحدثُ ما كُتب —
-     * فالمرحلةُ تُقرأ من أبعد ما بلغه المشروع لا من آخر ما لُمس.
+     * @param  array<string, mixed>  $flow
+     * @return array<string, mixed>
+     */
+    private static function compact(array $flow): array
+    {
+        return [
+            'stages' => array_map(fn (array $s) => [
+                'key' => $s['key'], 'state' => $s['state'], 'focus' => $s['focus'], 'note' => $s['note'],
+            ], $flow['stages']),
+            'focus' => $flow['focus'],
+            'next' => $flow['next'],
+            'can_advance' => $flow['can_advance'],
+            'pending' => collect($flow['stages'])->firstWhere('key', $flow['focus'])['pending'] ?? [],
+        ];
+    }
+
+    /**
+     * روابطُ البطاقة: عرضُ السعر الذي بدأ منه، وفعاليّتُه، وتسليمُه.
+     *
+     * الحزمةُ المقبولةُ تُقدَّم على غيرها، ثمّ المرسلة، ثمّ أحدثُ ما كُتب.
      *
      * @return array<string, mixed>
      */
-    private function stages(Project $p, $operations, $packages, ?array $money = null): array
+    private function links(Project $p, $operations, $packages): array
     {
-        $value = (float) ($money['current_value'] ?? 0);
-
         $op = $operations->first(fn (EventOperation $o) => $o->status !== EventOperation::CANCELLED) ?? $operations->first();
         $pkg = $packages->firstWhere('status', DeliveryPackage::ACCEPTED)
             ?? $packages->firstWhere('status', DeliveryPackage::SENT)
@@ -174,8 +201,6 @@ class ProjectController extends Controller
             'quotation' => $p->quotation ? ['id' => $p->quotation->id, 'number' => $p->quotation->number] : null,
             'operation' => $op ? ['id' => $op->id, 'status' => $op->status] : null,
             'delivery' => $pkg ? ['id' => $pkg->id, 'status' => $pkg->status] : null,
-            /* والفوترةُ: هل فُوترت القيمةُ كلُّها — حكمٌ لا مبلغ */
-            'billed' => $money !== null && $value > 0 && (float) $money['net_invoiced'] >= $value - 0.0005,
         ];
     }
 
@@ -280,6 +305,7 @@ class ProjectController extends Controller
         $project->load('owner', 'baseliner', 'members.user', 'tasks.assignee',
             'requirements.addedBy', 'requirements.removedBy', 'requirements.item',
             'changeOrders.approval', 'deliveryPackages', 'cancellationFeeInvoice');
+        $summary = ProjectFinancials::summary($project);
 
         return Inertia::render('Admin/Projects/Show', [
             'project' => $this->row($project, $may['commercial']) + [
@@ -383,10 +409,88 @@ class ProjectController extends Controller
                 'outstanding' => $may['commercial'] ? $i->outstanding() : null,
             ])->all() : null,
             /* وما يمنع الإقفالَ الآن — بنصّ الإقفال نفسِه، يُقرأ قبل الزرّ */
-            'close_blockers' => $project->isOpen() ? Projects::closeBlockers($project) : [],
+            'close_blockers' => $project->isOpen() ? Projects::closeBlockers($project, $summary) : [],
+            /*
+             * المسارُ — سبعُ مراحل تُقرأ من حقيقتها (`ProjectWorkflow`)، ومعها
+             * ما تحتاجه مراحلُه: العرضُ ودليلُ قبوله، ونطاقُ العمل بنسخه،
+             * والفوترةُ على مراحلها.
+             */
+            'workflow' => ProjectWorkflow::for($project),
+            'quotation' => $this->quotation($project, $may),
+            'scope_of_work' => $this->scopeOfWork($project, $may),
+            'channels' => [
+                'email' => Notifiers::email()->configured(),
+                'whatsapp' => Notifiers::whatsapp()->configured(),
+                'scope_whatsapp_template' => Templates::whatsapp((int) $project->business_id, 'scope.link', 'ar') !== null,
+            ],
             'users' => User::where('business_id', $this->bid())->orderBy('name')->get(['id', 'name'])->all(),
             'may' => $may,
         ]);
+    }
+
+    /**
+     * العرضُ الذي بدأ منه المشروع — ودليلُ قبوله كما كُتب يومَها.
+     *
+     * @param  array<string, bool>  $may
+     * @return array<string, mixed>|null
+     */
+    private function quotation(Project $project, array $may): ?array
+    {
+        $quotation = $project->quotation?->loadMissing('approval');
+
+        if ($quotation === null) {
+            return null;
+        }
+
+        $approval = $quotation->approval;
+
+        return [
+            'id' => $quotation->id,
+            'label' => Quotations::label($quotation),
+            'title' => $quotation->title,
+            'total' => $may['commercial'] ? (float) $quotation->total : null,
+            'sent_at' => optional($quotation->sent_at)->format('Y-m-d H:i'),
+            'decided_at' => optional($quotation->decided_at)->format('Y-m-d H:i'),
+            'decided_by_name' => $quotation->decided_by_name,
+            'content_hash' => $quotation->content_hash,
+            /* والرابطُ العامّ لعرضٍ خرج — يُفتح كما قرأه العميلُ وقبله */
+            'public_url' => in_array($quotation->status, [Quotation::DRAFT, Quotation::PENDING_APPROVAL], true) ? null : PublicDocument::url($quotation),
+            'evidence' => $approval === null ? null : [
+                'channel' => 'link',
+                'signer_name' => $approval->signer_name,
+                'signer_title' => $approval->signer_title,
+                'signer_email' => $approval->signer_email,
+                'signer_phone' => $approval->signer_phone,
+                'decided_at' => optional($approval->decided_at)->format('Y-m-d H:i'),
+                'ip' => $approval->ip,
+                'consent_text' => $approval->consent_text,
+                'content_hash' => $approval->content_hash,
+                'verified' => $approval->verify(),
+            ],
+        ];
+    }
+
+    /**
+     * نطاقُ العمل في صفحة المشروع — النسخةُ الأحدث، والموقَّعةُ السارية، ونسخُه.
+     *
+     * @param  array<string, bool>  $may
+     * @return array<string, mixed>
+     */
+    private function scopeOfWork(Project $project, array $may): array
+    {
+        $revisions = ScopeOfWork::where('business_id', $project->business_id)->where('project_id', $project->id)
+            ->orderByDesc('revision')->get();
+        $signed = $revisions->firstWhere('status', ScopeOfWork::SIGNED);
+
+        return [
+            'required' => ScopesOfWork::required($project),
+            'latest' => $revisions->first() === null ? null : ScopesOfWork::present($revisions->first(), $may['commercial']),
+            'signed' => $signed === null ? null : ScopesOfWork::present($signed, $may['commercial']),
+            'revisions' => $revisions->map(fn (ScopeOfWork $s) => [
+                'id' => $s->id, 'number' => $s->number, 'revision' => $s->revision, 'status' => $s->status, 'state' => $s->presentedState(),
+                'sent_at' => optional($s->sent_at)->format('Y-m-d'), 'decided_at' => optional($s->decided_at)->format('Y-m-d'),
+            ])->all(),
+        ];
     }
 
     /**
@@ -400,15 +504,40 @@ class ProjectController extends Controller
     private function billing(Project $project, array $may): array
     {
         $f = ProjectFinancials::summary($project);
-        $value = (float) $f['current_value'];
+        $position = ProjectBilling::position($project, $f);
+        $c = $may['commercial'];
+        $deposits = ProjectBilling::invoices($project, ProjectBilling::DEPOSIT);
+        $finals = ProjectBilling::invoices($project, ProjectBilling::FINAL);
+        $user = auth()->user();
 
         return [
-            'billed' => $value > 0 && (float) $f['net_invoiced'] >= $value - 0.0005,
+            /* الحكمُ للجميع (هو ما يُضيء المرحلة)، والمبالغُ لمن يملك المال */
+            'billed' => (bool) $position['fully_billed'],
             'paid' => (float) $f['net_invoiced'] > 0 && (float) $f['customer_outstanding'] <= 0.0005,
-            'value' => $may['commercial'] ? $value : null,
-            'invoiced' => $may['commercial'] ? (float) $f['net_invoiced'] : null,
-            'collected' => $may['commercial'] ? (float) $f['collected'] : null,
-            'outstanding' => $may['commercial'] ? (float) $f['customer_outstanding'] : null,
+            'value' => $c ? $position['value'] : null,
+            'invoiced' => $c ? $position['net_invoiced'] : null,
+            'gross_invoiced' => $c ? $position['invoiced'] : null,
+            'credited' => $c ? $position['credited'] : null,
+            'drafts' => $c ? $position['drafts'] : null,
+            'unbilled' => $c ? $position['unbilled'] : null,
+            'billable' => $c ? $position['billable'] : null,
+            'collected' => $c ? $position['collected'] : null,
+            'outstanding' => $c ? $position['outstanding'] : null,
+            'rate' => $c ? $position['rate'] : null,
+            'deposit' => ProjectBilling::depositState($project, $position, $deposits) + [
+                'waived_at' => optional($project->deposit_waived_at)->format('Y-m-d H:i'),
+                'waiver_reason' => $project->deposit_waiver_reason,
+                'invoices' => $deposits->map(fn ($i) => ProjectBilling::row($i, $c))->values()->all(),
+            ],
+            'final' => [
+                'quote' => $c ? ProjectBilling::quoteFinal($project, $position) : null,
+                'invoices' => $finals->map(fn ($i) => ProjectBilling::row($i, $c))->values()->all(),
+            ],
+            'may' => [
+                'create' => (bool) $user?->allows('orders'),
+                'issue' => (bool) $user?->may(Permissions::CUSTOMER_INVOICE_ISSUE),
+                'waive' => (bool) $user?->may(Permissions::PROJECT_MANAGE),
+            ],
         ];
     }
 

@@ -35,6 +35,7 @@ use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
+use Tests\Concerns\SatisfiesThePathToClose;
 use Tests\TestCase;
 
 /**
@@ -49,6 +50,7 @@ use Tests\TestCase;
 class EachFollowUpChecksTheWorldAgainBeforeItSpeaksTest extends TestCase
 {
     use RefreshDatabase;
+    use SatisfiesThePathToClose;
 
     private Business $business;
 
@@ -397,7 +399,7 @@ class EachFollowUpChecksTheWorldAgainBeforeItSpeaksTest extends TestCase
         $this->assertSame(Project::IN_PROGRESS, $project->fresh()->status, 'لا يُقفل المشروع وحده');
 
         /* وبعد الإقفال بيد لا تذكيرَ ثانيًا — القاعدةُ تسأل عن مشروعٍ مفتوح */
-        $this->actingAs($this->owner);
+        $this->satisfyThePathToClose($project, $this->owner);
         Projects::close($project->fresh(), $this->owner);
         auth()->logout();
         $this->at('2026-09-23 10:00:00');

@@ -10,6 +10,7 @@ use App\Models\CustomerInvoiceItem;
 use App\Models\JournalEntry;
 use App\Models\Order;
 use App\Models\Product;
+use App\Models\Project;
 use App\Support\Document\Snapshot;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -299,6 +300,19 @@ final class CustomerInvoices
     {
         return DB::transaction(function () use ($invoice, $userId) {
             /*
+             * ═══ وفاتورةُ المشروع تُقاس بقيمته — هنا، لا في شاشةٍ واحدة ═══
+             *
+             * كلُّ بابٍ يُصدر من هنا: شاشةُ الفواتير العامّة ومسارُ المشروع
+             * والاستيراد. فالسقفُ هنا يحرسها كلَّها، وما لا يُقاس له اسمُه
+             * (`ProjectBilling::capped`). وصفُّ المشروع يُقفل **قبل** الفاتورة —
+             * بترتيب `ProjectBilling` و`Projects::cancel` نفسِه — فإصداران على
+             * مشروعٍ واحد يُسلسَلان ولا يمرّ كلٌّ منهما بما لم يره من الآخر.
+             */
+            $project = ProjectBilling::capped($invoice)
+                ? Project::where('business_id', $invoice->business_id)->lockForUpdate()->find($invoice->project_id)
+                : null;
+
+            /*
              * والحالةُ تُقرأ تحت قفلٍ داخل المعاملة لا قبلها.
              *
              * ضغطتان على «إصدار» — أو ردٌّ يبطؤ فيُعاد الطلب — كانتا تقرآن
@@ -317,6 +331,9 @@ final class CustomerInvoices
             }
             if ((float) $locked->total <= 0) {
                 throw new RuntimeException(__('لا تُصدَر فاتورةٌ بلا مبلغ.'));
+            }
+            if ($project !== null && ProjectBilling::capped($locked)) {
+                ProjectBilling::assertWithinValue($project, (float) $locked->total, (int) $locked->id);
             }
 
             /*

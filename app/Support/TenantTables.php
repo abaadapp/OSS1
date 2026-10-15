@@ -70,6 +70,11 @@ class TenantTables
         'quotations', 'quotation_items',
         'projects', 'project_members', 'project_tasks', 'change_orders',
         'project_items', 'project_requirements', 'change_order_items',
+        /*
+         * ونطاقُ العمل بعد المشروع وعرضه: نسخُه تشير إليهما وإلى سابقتها
+         * (`supersedes_id` ذاتيّةٌ — السابقةُ أصغرُ معرّفًا فتُكتب أوّلًا).
+         */
+        'scopes_of_work',
         'bank_accounts', 'bank_statement_lines',
         'journal_entries', 'journal_lines',
         'transactions', 'expenses',

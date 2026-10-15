@@ -50,11 +50,14 @@ use App\Http\Controllers\Admin\Payroll\PayrollRunController;
 use App\Http\Controllers\Admin\PolicyController;
 use App\Http\Controllers\Admin\ProductCompositionController;
 use App\Http\Controllers\Admin\ProductController;
+use App\Http\Controllers\Admin\ProjectBillingController;
 use App\Http\Controllers\Admin\ProjectController;
+use App\Http\Controllers\Admin\ProjectWorkflowController;
 use App\Http\Controllers\Admin\ProductImageController;
 use App\Http\Controllers\Admin\ProductImportExportController;
 use App\Http\Controllers\Admin\PurchaseOrderController;
 use App\Http\Controllers\Admin\QuotationController;
+use App\Http\Controllers\Admin\ScopeOfWorkController;
 use App\Http\Controllers\Admin\Purchasing\PurchaseRegisterController;
 use App\Http\Controllers\Admin\Purchasing\SupplierInvoiceController;
 use App\Http\Controllers\Admin\ReceivablesController;
@@ -630,6 +633,25 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'tenant', 'business'
     Route::post('/projects/{id}/tasks', [ProjectController::class, 'storeTask'])->name('projects.tasks.store');
     Route::put('/projects/{id}/tasks/{tid}', [ProjectController::class, 'updateTask'])->name('projects.tasks.update');
     Route::delete('/projects/{id}/tasks/{tid}', [ProjectController::class, 'destroyTask'])->name('projects.tasks.destroy');
+
+    /*
+     * مسارُ المشروع — نطاقُ العمل وتوقيعُه، والدفعةُ المقدّمة والفاتورةُ
+     * النهائيّة، و«تم — الانتقال» و«رجوع». كلُّها تحت `admin.projects.*`
+     * فتتبع قسمَ المشاريع، والأفعالُ تُسأل في متحكّماتها.
+     */
+    Route::get('/projects/{id}/scope', [ScopeOfWorkController::class, 'show'])->name('projects.scope.show');
+    Route::post('/projects/{id}/scope', [ScopeOfWorkController::class, 'store'])->name('projects.scope.store');
+    Route::put('/projects/{id}/scope/{scope}', [ScopeOfWorkController::class, 'update'])->whereNumber('scope')->name('projects.scope.update');
+    Route::post('/projects/{id}/scope/{scope}/ready', [ScopeOfWorkController::class, 'ready'])->whereNumber('scope')->name('projects.scope.ready');
+    Route::post('/projects/{id}/scope/{scope}/draft', [ScopeOfWorkController::class, 'draft'])->whereNumber('scope')->name('projects.scope.draft');
+    Route::post('/projects/{id}/scope/{scope}/send', [ScopeOfWorkController::class, 'send'])->whereNumber('scope')->name('projects.scope.send');
+    Route::get('/projects/{id}/scope/{scope}/preview', [ScopeOfWorkController::class, 'preview'])->whereNumber('scope')->name('projects.scope.preview');
+    Route::post('/projects/{id}/workflow/advance', [ProjectWorkflowController::class, 'advance'])->name('projects.workflow.advance');
+    Route::post('/projects/{id}/workflow/back', [ProjectWorkflowController::class, 'back'])->name('projects.workflow.back');
+    Route::get('/projects/{id}/billing/deposit/preview', [ProjectBillingController::class, 'preview'])->name('projects.billing.preview');
+    Route::post('/projects/{id}/billing/deposit', [ProjectBillingController::class, 'deposit'])->name('projects.billing.deposit');
+    Route::post('/projects/{id}/billing/waive-deposit', [ProjectBillingController::class, 'waive'])->name('projects.billing.waive');
+    Route::post('/projects/{id}/billing/final', [ProjectBillingController::class, 'final'])->name('projects.billing.final');
     Route::get('/projects/{id}/change-orders/create', [ChangeOrderController::class, 'create'])->name('changeOrders.create');
     Route::post('/projects/{id}/change-orders', [ChangeOrderController::class, 'store'])->name('changeOrders.store');
     Route::get('/change-orders/{id}', [ChangeOrderController::class, 'show'])->name('changeOrders.show');
@@ -1140,6 +1162,8 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'tenant', 'business'
         ['deliveries', 'deliveries', 'delivery_package'],
         ['changeOrders', 'change-orders', 'change_order'],
         ['customers', 'customers', 'customer'],
+        /* ونطاقُ العمل — رابطُ توقيعه يُرسَل من نافذة المراسلات نفسِها */
+        ['projects.scopes', 'projects/scopes', 'scope_of_work'],
     ] as [$name, $path, $type]) {
         Route::get("/{$path}/{id}/communications", [CommunicationController::class, 'history'])
             ->whereNumber('id')->name("{$name}.communications")->defaults('type', $type);

@@ -96,6 +96,11 @@ abstract class ManagementTestCase extends TestCase
         return $b;
     }
 
+    /**
+     * مشروعٌ بقيمته المعتمَدة **إجماليّةً بضريبتها** — كما يحملها العرضُ المقبول
+     * (`Projects::fromQuotation`). وفاتورةٌ عليه لا تتجاوزها (`ProjectBilling::assertWithinValue`):
+     * `invoice(1000)` بضريبة ٥٪ تحتاج مشروعًا بـ1050.
+     */
     protected function project(string $code = 'EP-2026-001', float $approved = 10000, array $over = [], ?Business $b = null, ?Customer $c = null): Project
     {
         $b ??= $this->business;

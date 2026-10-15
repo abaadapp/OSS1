@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { router, usePage } from '@inertiajs/react';
-import { CalendarDays, ListChecks, MapPin, MoreHorizontal, Plus, UserRound } from 'lucide-react';
+import { ArrowLeft, CalendarDays, ListChecks, MapPin, MoreHorizontal, Plus, UserRound } from 'lucide-react';
 import AdminLayout from '@/Layouts/AdminLayout';
 import PageHeader from '@/Components/PageHeader';
 import SmartLink from '@/Components/SmartLink';
@@ -14,7 +14,7 @@ import { useTranslate } from '@/lib/i18n';
 import { PROJECT_STATUS_LABEL } from '@/lib/projects';
 import { STATE_LABEL } from '@/lib/quotations';
 import { cn } from '@/lib/utils';
-import { projectStages, quoteStages, type Stage } from '@/lib/projectStages';
+import { quoteStages, STAGE_LABEL, toStages, type Stage, type Workflow } from '@/lib/projectStages';
 import ProjectStepper from '@/Components/ProjectStepper';
 import type { PageProps } from '@/types';
 
@@ -39,7 +39,8 @@ interface Row {
     quotation: { id: number; number: string | null } | null;
     operation: { id: number; status: string } | null;
     delivery: { id: number; status: string } | null;
-    billed: boolean;
+    /** المسارُ من الخادم — `ProjectWorkflow`، المصدرُ نفسُه الذي تقرؤه صفحةُ المشروع */
+    workflow: Workflow;
 }
 
 interface QuoteRow {
@@ -67,7 +68,7 @@ interface Props {
     statuses: string[];
     customers: { id: number; name: string }[];
     totals: { open: number; upcoming: number; unbaselined: number; pending_change_orders: number };
-    may: { delivery: boolean };
+    may: { delivery: boolean; manage: boolean };
 }
 
 /**
@@ -141,7 +142,7 @@ export default function ProjectsIndex({ projects, quotes, me, pagination, filter
                     <div className="space-y-3 pt-1">
                         {rows.map((i) =>
                             i.kind === 'project' ? (
-                                <ProjectCard key={`p-${i.p.id}`} p={i.p} mine={i.p.owner_id === me} money={m} />
+                                <ProjectCard key={`p-${i.p.id}`} p={i.p} mine={i.p.owner_id === me} money={m} manage={may.manage} />
                             ) : (
                                 <QuoteCard key={`q-${i.q.id}`} q={i.q} mine={i.q.created_by === me} money={m} />
                             ),
@@ -184,26 +185,51 @@ const PILL: Record<string, string> = {
 
 interface Next {
     label: string;
-    routeName: string;
-    href: string;
+    params?: Record<string, string>;
+    routeName?: string;
+    href?: string;
+    /** فعلٌ يُرسَل من البطاقة نفسِها — «تم — الانتقال» — والخادمُ يعيد السؤال */
+    run?: () => void;
 }
 
-/** الخطوةُ التالية للمشروع — زرٌّ واحدٌ يقود إلى حيث تُعمل */
-function projectNext(p: Row): Next | null {
-    /* كلُّ خطوةٍ تفتح تبويبَها في صفحة المشروع — لا النظرةَ العامّة */
+/**
+ * الخطوةُ التالية للمشروع — من المرحلة التي يقف عليها (`workflow.focus`).
+ *
+ * وما يُقرَّر هنا اسمُ الزرّ ووجهتُه فقط: أيُّ مرحلةٍ تمّت وهل يجوز الانتقال
+ * جاء من الخادم.
+ */
+function projectNext(p: Row, manage: boolean): Next | null {
+    const page = { routeName: 'admin.projects.show', href: route('admin.projects.show', p.id) };
     const at = (tab: string) => ({ routeName: 'admin.projects.show', href: route('admin.projects.show', { id: p.id, tab }) });
-    const project = { routeName: 'admin.projects.show', href: route('admin.projects.show', p.id) };
+    const w = p.workflow;
     if (p.status === 'closed' || p.status === 'cancelled') return null;
-    if (p.status === 'draft') return { label: 'تأكيد المشروع', ...project };
-    if (!p.operation) return { label: 'جدولة الفعاليّة', ...at('operations') };
-    if (p.operation.status !== 'completed' && p.operation.status !== 'cancelled')
-        return { label: 'متابعة الفعاليّة', routeName: 'admin.operations.show', href: route('admin.operations.show', p.operation.id) };
-    if (p.delivery?.status !== 'accepted')
-        return p.delivery
-            ? { label: 'متابعة التسليم', routeName: 'admin.deliveries.show', href: route('admin.deliveries.show', p.delivery.id) }
-            : { label: 'تجهيز التسليم', ...at('delivery') };
-    if (!p.billed) return { label: 'إصدار فاتورة', ...at('process') };
-    return { label: 'إغلاق المشروع', ...at('process') };
+    if (w.can_advance && w.next && manage) {
+        return {
+            label: 'تم — الانتقال إلى :stage',
+            params: { stage: STAGE_LABEL[w.next] },
+            run: () => router.post(route('admin.projects.workflow.advance', p.id), {}, { preserveScroll: true }),
+        };
+    }
+    switch (w.focus) {
+        case 'quote':
+            return p.quotation ? { label: 'فتح العرض', routeName: 'admin.quotations.show', href: route('admin.quotations.show', p.quotation.id) } : { label: 'فتح المشروع', ...page };
+        case 'scope':
+            return { label: 'نطاق العمل', routeName: 'admin.projects.scope.show', href: route('admin.projects.scope.show', p.id) };
+        case 'deposit':
+            return { label: 'الدفعة المقدمة', ...page };
+        case 'execution':
+            return p.operation && !['completed', 'cancelled'].includes(p.operation.status)
+                ? { label: 'متابعة الفعاليّة', routeName: 'admin.operations.show', href: route('admin.operations.show', p.operation.id) }
+                : { label: 'جدولة الفعاليّة', ...at('operations') };
+        case 'delivery':
+            return p.delivery
+                ? { label: 'متابعة التسليم', routeName: 'admin.deliveries.show', href: route('admin.deliveries.show', p.delivery.id) }
+                : { label: 'تجهيز التسليم', ...at('delivery') };
+        case 'final':
+            return { label: 'الفاتورة النهائية', ...page };
+        default:
+            return { label: 'إغلاق المشروع', ...page };
+    }
 }
 
 function quoteNext(q: QuoteRow): Next | null {
@@ -226,6 +252,7 @@ function Card({
     steps,
     next,
     menu,
+    hint,
 }: {
     edge: string;
     title: string;
@@ -238,6 +265,8 @@ function Card({
     steps: Stage[];
     next: Next | null;
     menu: { label: string; routeName: string; href: string }[];
+    /** ما ينقص المرحلةَ الحاليّة — سطرٌ تحت الشريط */
+    hint?: string | null;
 }) {
     const t = useTranslate();
     const { locale } = usePage<PageProps>().props;
@@ -294,14 +323,23 @@ function Card({
             <div className="mx-5 my-3 h-px bg-[#f0f0f0]" />
 
             <div className="flex flex-col gap-3 px-5 pb-4 sm:flex-row sm:items-center sm:justify-between">
-                <ProjectStepper stages={steps} />
-                {next && (
-                    <Button variant="outline" asChild className="shrink-0">
-                        <SmartLink routeName={next.routeName} href={next.href}>
-                            {t(next.label)}
-                        </SmartLink>
-                    </Button>
-                )}
+                <div className="min-w-0">
+                    <ProjectStepper stages={steps} />
+                    {hint && <p className="mt-1.5 truncate text-[12px] text-[#71717a]">{hint}</p>}
+                </div>
+                {next &&
+                    (next.run ? (
+                        <Button variant="primary" className="shrink-0" onClick={next.run}>
+                            {t(next.label, next.params)}
+                            <ArrowLeft className="ltr:rotate-180" />
+                        </Button>
+                    ) : (
+                        <Button variant="outline" asChild className="shrink-0">
+                            <SmartLink routeName={next.routeName ?? 'admin.projects.show'} href={next.href ?? '#'}>
+                                {t(next.label, next.params)}
+                            </SmartLink>
+                        </Button>
+                    ))}
             </div>
         </article>
     );
@@ -354,11 +392,12 @@ function Meta({ code, customer, starts, location, value }: { code: string | null
     );
 }
 
-function ProjectCard({ p, mine, money: m }: { p: Row; mine: boolean; money: (v: number | null) => string }) {
+function ProjectCard({ p, mine, money: m, manage }: { p: Row; mine: boolean; money: (v: number | null) => string; manage: boolean }) {
     const t = useTranslate();
     const show = { routeName: 'admin.projects.show', href: route('admin.projects.show', p.id) };
     const menu = [
         { label: 'فتح المشروع', ...show },
+        { label: 'نطاق العمل', routeName: 'admin.projects.scope.show', href: route('admin.projects.scope.show', p.id) },
         { label: 'المهامّ', routeName: 'admin.projects.show', href: route('admin.projects.show', { id: p.id, tab: 'tasks' }) },
         ...(p.quotation ? [{ label: 'عرض السعر', routeName: 'admin.quotations.show', href: route('admin.quotations.show', p.quotation.id) }] : []),
         ...(p.operation ? [{ label: 'الفعاليّة', routeName: 'admin.operations.show', href: route('admin.operations.show', p.operation.id) }] : []),
@@ -385,9 +424,10 @@ function ProjectCard({ p, mine, money: m }: { p: Row; mine: boolean; money: (v: 
                     )}
                 </>
             }
-            steps={projectStages({ status: p.status, operation: p.operation?.status ?? null, delivery: p.delivery?.status ?? null, billed: p.billed })}
-            next={projectNext(p)}
+            steps={toStages(p.workflow)}
+            next={projectNext(p, manage)}
             menu={menu}
+            hint={p.workflow.can_advance ? null : (p.workflow.pending?.[0] ?? null)}
         />
     );
 }

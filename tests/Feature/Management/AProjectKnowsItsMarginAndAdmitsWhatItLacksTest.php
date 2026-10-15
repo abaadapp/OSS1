@@ -24,7 +24,7 @@ class AProjectKnowsItsMarginAndAdmitsWhatItLacksTest extends ManagementTestCase
 
     public function test_contribution_is_net_revenue_minus_direct_costs_with_stock_and_expenses(): void
     {
-        $project = $this->project('EP-1', 2000);
+        $project = $this->project('EP-1', 2100);
         $invoice = $this->invoice(2000, '2026-09-10', $project);
         $this->pay($invoice, 1000, '2026-09-12');
         $this->supplierInvoice(600, 30, $project);
@@ -58,7 +58,7 @@ class AProjectKnowsItsMarginAndAdmitsWhatItLacksTest extends ManagementTestCase
 
     public function test_costs_without_a_project_inside_the_window_make_every_open_project_partial(): void
     {
-        $project = $this->project('EP-3', 1000);
+        $project = $this->project('EP-3', 1050);
         $this->invoice(1000, '2026-09-10', $project);
         $this->supplierInvoice(200, 0, $project);
         $project->update(['status' => Project::CLOSED]);
@@ -74,7 +74,7 @@ class AProjectKnowsItsMarginAndAdmitsWhatItLacksTest extends ManagementTestCase
 
     public function test_a_credit_note_and_a_cancelled_invoice_shrink_project_revenue(): void
     {
-        $project = $this->project('EP-4', 1000);
+        $project = $this->project('EP-4', 1470);
         $invoice = $this->invoice(1000, '2026-09-10', $project);
         $void = $this->invoice(400, '2026-09-11', $project);
         CustomerInvoices::cancel($void, 'خطأ', $this->owner->id);
@@ -88,10 +88,10 @@ class AProjectKnowsItsMarginAndAdmitsWhatItLacksTest extends ManagementTestCase
 
     public function test_the_list_puts_the_weakest_margin_first_and_never_hides_a_loss(): void
     {
-        $good = $this->project('EP-5', 1000);
+        $good = $this->project('EP-5', 1050);
         $this->invoice(1000, '2026-09-10', $good);
         $this->supplierInvoice(200, 0, $good);
-        $bad = $this->project('EP-6', 500);
+        $bad = $this->project('EP-6', 525);
         $this->invoice(500, '2026-09-10', $bad);
         $this->supplierInvoice(800, 0, $bad);
         $this->project('EP-7', 100, ['starts_at' => '2024-01-01', 'ends_at' => '2024-01-02']);
@@ -110,7 +110,7 @@ class AProjectKnowsItsMarginAndAdmitsWhatItLacksTest extends ManagementTestCase
 
     public function test_the_timeline_lists_every_financial_fact_in_order_with_a_link(): void
     {
-        $project = $this->project('EP-8', 1000);
+        $project = $this->project('EP-8', 1050);
         $invoice = $this->invoice(1000, '2026-09-10', $project);
         $this->pay($invoice, 300, '2026-09-12');
         $this->supplierInvoice(200, 0, $project, '2026-09-08');
@@ -130,7 +130,7 @@ class AProjectKnowsItsMarginAndAdmitsWhatItLacksTest extends ManagementTestCase
     public function test_customers_are_measured_not_graded_and_concentration_uses_the_threshold(): void
     {
         $bid = (int) $this->business->id;
-        $big = $this->project('EP-9', 9000);
+        $big = $this->project('EP-9', 9450);
         $this->invoice(9000, '2026-09-10', $big);
         $small = \App\Models\Customer::create(['business_id' => $bid, 'name' => 'شركة صغيرة']);
         $this->invoice(1000, '2026-09-11', null, $small);

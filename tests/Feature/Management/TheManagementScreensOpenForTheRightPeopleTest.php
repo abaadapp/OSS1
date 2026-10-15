@@ -68,7 +68,7 @@ class TheManagementScreensOpenForTheRightPeopleTest extends ManagementTestCase
     public function test_a_neighbouring_business_sees_only_its_own_empty_numbers(): void
     {
         $bid = (int) $this->business->id;
-        $project = $this->project('EP-SECRET', 5000);
+        $project = $this->project('EP-SECRET', 5250);
         $this->invoice(5000, '2026-09-10', $project);
         $this->supplierInvoice(1000, 0, $project);
 
@@ -85,7 +85,7 @@ class TheManagementScreensOpenForTheRightPeopleTest extends ManagementTestCase
 
     public function test_the_project_screen_carries_performance_only_for_those_who_may_read_it(): void
     {
-        $project = $this->project('EP-P', 1000);
+        $project = $this->project('EP-P', 1050);
         $this->invoice(1000, '2026-09-10', $project);
 
         $this->actingAs($this->owner)->get(route('admin.projects.show', $project->id))->assertOk()

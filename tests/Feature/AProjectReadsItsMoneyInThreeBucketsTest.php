@@ -25,6 +25,7 @@ use App\Support\PurchaseOrders;
 use App\Support\Quotations;
 use App\Support\SupplierInvoices;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Tests\Concerns\SatisfiesThePathToClose;
 use Tests\TestCase;
 
 /**
@@ -40,6 +41,7 @@ use Tests\TestCase;
 class AProjectReadsItsMoneyInThreeBucketsTest extends TestCase
 {
     use RefreshDatabase;
+    use SatisfiesThePathToClose;
 
     private Business $business;
 
@@ -208,6 +210,10 @@ class AProjectReadsItsMoneyInThreeBucketsTest extends TestCase
         DeliveryPackages::addItem($package, ['kind' => 'item', 'project_item_id' => $this->project->items()->first()->id], null, $this->owner);
         $sent = DeliveryPackages::send(DeliveryPackages::ready($package->fresh(), $this->owner), $this->owner);
         DeliveryPackages::recordDecision($sent, DeliveryPackage::ACCEPTED, [], $this->owner);
+
+        /* ومسارُ المشروع قبل الإقفال: نطاقٌ موقَّع وتنفيذٌ مكتمل وقيمةٌ مفوتَرة */
+        $this->post(route('admin.projects.close', $this->project->id))->assertSessionHasErrors('project');
+        $this->satisfyThePathToClose($this->project, $this->owner);
 
         $this->post(route('admin.projects.close', $this->project->id))->assertSessionHasNoErrors();
 
