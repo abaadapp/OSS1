@@ -712,6 +712,8 @@ class Demo
             return [
                 'id' => $p->id,
                 'name' => $p->name,
+                /* صنفٌ أم خدمةٌ أم باقة — بندُ الشراء يقرؤه ليعرف هل يبلغ الرفّ */
+                'kind' => $p->kind ?? 'item',
                 'name_en' => $p->name_en,
                 'label' => self::ln($p->name, $p->name_en),
                 'cat' => $p->category?->name ?? '—',
@@ -1204,6 +1206,7 @@ class Demo
     public static function suppliers(): array
     {
         return Supplier::where('business_id', self::bid())
+            ->with('serviceCategories:id,name')
             ->withCount(['purchaseOrders', 'invoices'])->orderBy('name')->get()->map(fn ($s) => [
                 'id' => $s->id,
                 'name' => $s->name,
@@ -1211,9 +1214,14 @@ class Demo
                 // ما يُعرض — ويبقى `name` هو ما يُبحث به ويُطبع في أمر الشراء
                 'label' => self::ln($s->name, $s->name_en),
                 'phone' => $s->phone,
+                'whatsapp' => $s->whatsapp,
                 'email' => $s->email,
                 'contact' => $s->contact_person,
                 'notes' => $s->notes,
+                /* منتجاتٌ أم خدماتٌ أم كلاهما — وما يقدّمه من خدماتٍ يُرشَّح به */
+                'supplier_type' => $s->supplier_type ?: Supplier::PRODUCTS,
+                'status' => $s->status ?: 'active',
+                'services' => $s->serviceCategories->map(fn ($c) => ['id' => $c->id, 'name' => $c->name])->values()->all(),
                 'orders_count' => $s->purchase_orders_count,
                 /*
              * ومن اشتُري منه مرّةً لا يُحذف — والزرُّ لا يُرسم عليه.

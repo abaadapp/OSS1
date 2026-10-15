@@ -618,11 +618,15 @@ class PurchaseOrderController extends Controller
             'attachment' => ['nullable', 'file', 'max:10240', 'extensions:jpg,jpeg,png,pdf,webp,heic'],
             'items' => ['required', 'array', 'min:1'],
             'items.*.product_id' => ['nullable', 'integer'],
+            /* منتجٌ · خدمة · بندٌ مخصّص — والخادمُ يقرأ النوعَ من الصنف حين يكون (`lines`) */
+            'items.*.line_kind' => ['nullable', Rule::in(PurchaseOrderItem::LINE_KINDS)],
             'items.*.name' => ['required', 'string', 'max:255'],
             'items.*.purchase_unit' => ['nullable', 'string', 'max:40'],
             'items.*.units_per_purchase_unit' => ['nullable', 'numeric', 'min:0.001', 'max:100000'],
             'items.*.cost' => ['required', 'numeric', 'min:0'],
             'items.*.quantity' => ['required', 'integer', 'min:1'],
+            /* ومن جاء من تبويب «المشتريات» في المشروع يعود إليه */
+            'return_to_project' => ['nullable', 'boolean'],
         ], [
             'supplier_id.required' => __('اختر المورد'),
             'payment_method.required' => __('اختر طريقة الدفع المتّفق عليها مع المورّد'),
@@ -769,6 +773,26 @@ class PurchaseOrderController extends Controller
         Activity::log('created', 'أنشأ أمر شراء '.$po->number.' لفرع '.$branch->name
             .' بقيمة '.Money::format((float) $po->total, Money::of((int) $po->business_id)), ['subject_id' => $po->id]);
 
+        /*
+         * وأمرٌ على مشروعٍ يُقيَّد على المشروع أيضًا — من أين أُنشئ، ولمن.
+         *
+         * والأمرُ واحدٌ لا نسختان: هو نفسُه في قسم المشتريات وفي تبويب المشروع،
+         * والتبويبُ يقرؤه من `project_id` (`ProjectPurchases`).
+         */
+        $fromProject = $request->boolean('return_to_project') && $po->project_id !== null;
+        if ($po->project_id !== null && ($project = Project::where('business_id', $bid)->find($po->project_id)) !== null) {
+            Activity::log('created', ($fromProject ? 'أنشأ من داخل المشروع ' : 'ربط بالمشروع ').$project->code
+                .' أمر الشراء '.$po->number.' من '.$po->supplier_name, [
+                    'subject_id' => $project->id, 'subject_type' => 'project', 'icon' => 'shopping-cart',
+                ]);
+        }
+
+        if ($fromProject) {
+            return redirect()->route('admin.projects.show', ['id' => $po->project_id, 'tab' => 'purchases'])->with('toast', [
+                'msg' => __('أُنشئ أمر الشراء :number للمشروع', ['number' => $po->number]), 'type' => 'success',
+            ]);
+        }
+
         return redirect()->route('admin.purchases.orders', ['q' => $po->number])->with('toast', [
             'msg' => $po->status === PurchaseOrders::DRAFT
                 ? __('حُفظ أمر الشراء :number مسودّة', ['number' => $po->number])
@@ -809,7 +833,7 @@ class PurchaseOrderController extends Controller
     private function lines(int $bid, array $rows): array
     {
         $ids = collect($rows)->pluck('product_id')->filter()->unique()->all();
-        $owned = $ids === [] ? collect() : Product::where('business_id', $bid)->whereIn('id', $ids)->pluck('id', 'id');
+        $owned = $ids === [] ? collect() : Product::where('business_id', $bid)->whereIn('id', $ids)->get(['id', 'kind'])->keyBy('id');
 
         $out = [];
 
@@ -829,8 +853,23 @@ class PurchaseOrderController extends Controller
              */
             $per = (float) ($row['units_per_purchase_unit'] ?? 1);
 
+            /*
+             * ونوعُ البند من الصنف حين يكون — لا ممّا قالته الشاشة.
+             *
+             * صنفٌ مخزونٌ منتجٌ يبلغ الرفّ عند الاستلام، وصنفٌ غيرُ مخزونٍ (خدمةٌ أو
+             * باقة) خدمة. وبلا صنفٍ: خدمةٌ إن قيل ذلك، وإلّا بندٌ مخصّص. فلا يدخل
+             * المخزونَ ما ليس صنفًا مخزونًا — انظر `GoodsReceipts::approve`.
+             */
+            $product = isset($row['product_id']) ? ($owned[$row['product_id']] ?? null) : null;
+            $kind = match (true) {
+                $product !== null => $product->isStocked() ? PurchaseOrderItem::PRODUCT : PurchaseOrderItem::SERVICE,
+                ($row['line_kind'] ?? null) === PurchaseOrderItem::SERVICE => PurchaseOrderItem::SERVICE,
+                default => PurchaseOrderItem::CUSTOM,
+            };
+
             $out[] = [
-                'product_id' => isset($row['product_id']) ? ($owned[$row['product_id']] ?? null) : null,
+                'product_id' => $product?->id,
+                'line_kind' => $kind,
                 'name' => $row['name'],
                 // ‏والمسافاتُ مقلَّمةٌ سلفًا بـ`TrimStrings` — وقصُّها هنا فرعٌ لا يُقرأ
                 'purchase_unit' => ($row['purchase_unit'] ?? null) ?: null,

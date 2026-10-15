@@ -41,6 +41,8 @@ interface Line {
 interface Order {
     id: number;
     number: string;
+    project_id?: number | null;
+    project_code?: string | null;
     status: string;
     supplier: string;
     supplier_reference: string | null;
@@ -231,6 +233,16 @@ export default function PurchaseOrderShow() {
                     </>
                 }
             />
+
+            {/* والمشروعُ الذي اشتُري لأجله — الأمرُ نفسُه يظهر في تبويب «المشتريات» فيه (المرحلة 14) */}
+            {order.project_id && order.project_code && (
+                <p className="mb-4 rounded-lg bg-[#f5f3ff] px-4 py-2 text-[13px] text-[#4c1d95]">
+                    {t('المشروع')}:{' '}
+                    <SmartLink routeName="admin.projects.show" href={route('admin.projects.show', { id: order.project_id, tab: 'purchases' })} className="font-mono font-semibold underline">
+                        {order.project_code}
+                    </SmartLink>
+                </p>
+            )}
 
             {/*
                 ═══ عمودان: ما يقوله النظام عن الأمر، وما سيقرؤه المورّد ═══

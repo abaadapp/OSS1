@@ -17,6 +17,7 @@ use App\Models\ScopeOfWork;
 use App\Models\User;
 use App\Support\ChangeOrders;
 use App\Support\Communication\Templates;
+use App\Support\CustomerContacts;
 use App\Support\DeliveryPackages;
 use App\Support\DeliveryReadiness;
 use App\Support\Demo;
@@ -31,6 +32,7 @@ use App\Support\Pagination;
 use App\Support\Permissions;
 use App\Support\ProjectBilling;
 use App\Support\ProjectFinancials;
+use App\Support\ProjectPurchases;
 use App\Support\Projects;
 use App\Support\ProjectScope;
 use App\Support\ProjectWorkflow;
@@ -94,6 +96,8 @@ class ProjectController extends Controller
             'performance' => (bool) $user?->may(Permissions::ANALYTICS_PROJECTS),
             /* والفوترةُ من صفحة المشروع لمن يفتح فواتيرَ العملاء — والإصدارُ فعلٌ يُحرس في شاشتها */
             'invoice' => (bool) $user?->allows('orders'),
+            /* والمشترياتُ — المرحلة 14: من يفتح قسمَ المشتريات يرى تبويبَها في المشروع وينشئ منه */
+            'purchases' => (bool) $user?->allows('purchases'),
         ];
     }
 
@@ -314,6 +318,7 @@ class ProjectController extends Controller
                 'contact_person' => $project->contact_person,
                 'contact_phone' => $project->contact_phone,
                 'contact_email' => $project->contact_email,
+                'customer_contact_id' => $project->customer_contact_id,
                 'owner_id' => $project->owner_id,
                 'quoted_value' => $may['commercial'] ? (float) $project->quoted_value : null,
                 'notes' => $project->notes,
@@ -424,6 +429,10 @@ class ProjectController extends Controller
                 'scope_whatsapp_template' => Templates::whatsapp((int) $project->business_id, 'scope.link', 'ar') !== null,
             ],
             'users' => User::where('business_id', $this->bid())->orderBy('name')->get(['id', 'name'])->all(),
+            /* أشخاصُ اتصال الجهة — يُختار منهم في بيانات المشروع ونطاق عمله (المرحلة 14) */
+            'contacts' => $project->customer ? CustomerContacts::options($project->customer) : [],
+            /* والمشترياتُ — تبويبٌ مساند لا مرحلة: أوامرُ الشراء الحقيقيّة على المشروع لمن يفتح المشتريات */
+            'purchases' => $may['purchases'] ? ProjectPurchases::for($project, auth()->user()) : null,
             'may' => $may,
         ]);
     }
@@ -605,6 +614,7 @@ class ProjectController extends Controller
             'contact_person' => ['nullable', 'string', 'max:120'],
             'contact_phone' => ['nullable', 'string', 'max:40'],
             'contact_email' => ['nullable', 'email', 'max:120'],
+            'customer_contact_id' => ['nullable', 'integer'],
             'owner_id' => ['nullable', 'integer'],
             'notes' => ['nullable', 'string', 'max:20000'],
             'internal_notes' => ['nullable', 'string', 'max:20000'],

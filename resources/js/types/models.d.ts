@@ -97,6 +97,11 @@ export interface Supplier {
     orders_count: number;
     /** ما يقبله `SupplierController::destroy` — من اشتُري منه مرّةً يبقى */
     can_delete?: boolean;
+    /** المرحلة 14: منتجاتٌ أم خدماتٌ أم كلاهما، وما يقدّمه من خدمات */
+    supplier_type?: 'products' | 'services' | 'both';
+    status?: 'active' | 'inactive';
+    whatsapp?: string | null;
+    services?: { id: number; name: string }[];
 }
 
 export interface InventoryItem {

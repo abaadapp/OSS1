@@ -295,6 +295,17 @@ class Permissions
     public const CHECKLIST_MANAGE = 'checklist.manage';
 
     /*
+     * ═══ المنظّمون — المرحلة 14 ═══
+     *
+     * قسمُ «المنظّمون» يفتح السجلَّ للقراءة؛ وإضافةُ المنظّم وتعديلُه وحالُه
+     * وتصنيفاتُه فعلٌ بالاسم. وتعيينُه على الفعاليّة ومسؤولُ المنظّمين فيها
+     * من فعل الفريق نفسِه (`CREW_MANAGE`) — لا صلاحيةَ ثانيةً لمعنًى واحد.
+     */
+
+    /** إضافةُ المنظّمين وتعديلُهم وتغييرُ حالهم وإدارةُ تصنيفاتهم */
+    public const ORGANIZERS_MANAGE = 'organizers.manage';
+
+    /*
      * ═══ الذكاءُ الإداريّ — المرحلة 11 ═══
      *
      * قسمُ «الإدارة» يفتح الشاشات؛ والأرقامُ الماليّة لا تُرى بمجرّد فتح
@@ -470,6 +481,7 @@ class Permissions
         self::ASSETS_RETURN => 'ردّ المعدّات وتسجيل حالها',
         self::CREW_MANAGE => 'تعيين فريق الفعاليّة',
         self::CHECKLIST_MANAGE => 'قوالب قوائم التحقّق وإعفاء بندٍ إلزاميّ',
+        self::ORGANIZERS_MANAGE => 'إدارة المنظّمين وتصنيفاتهم',
         self::ANALYTICS_FINANCIAL => 'قراءة الأداء المالي والنقد والذمم',
         self::ANALYTICS_PROJECTS => 'قراءة ربحيّة المشاريع',
         self::ANALYTICS_CUSTOMERS => 'قراءة تحليلات العملاء والخدمات والقمع',
@@ -603,6 +615,7 @@ class Permissions
         self::ASSETS_RETURN => ['admin', 'manager', 'inventory'],
         self::CREW_MANAGE => ['admin', 'manager'],
         self::CHECKLIST_MANAGE => ['admin', 'manager'],
+        self::ORGANIZERS_MANAGE => ['admin', 'manager'],
         /*
          * والذكاءُ الإداريّ — المرحلة 11: القراءةُ للمالك والمدير، وللمحاسب
          * ما هو عملُه (المالُ والمشاريعُ والعملاءُ والموازنةُ والتوقّعُ قراءةً).
@@ -835,6 +848,8 @@ class Permissions
         'assets',
         // الذكاءُ الإداريّ — المرحلة 11: لوحةُ الأداء والموازنةُ والتوقّع. للمالك والمدير، ويُمنح بالاسم
         'management',
+        // المنظّمون الميدانيّون — المرحلة 14: السجلُّ وتصنيفاتُه. للمالك والمدير بـ`*`، ويُمنح بالاسم
+        'organizers',
     ];
 
     /**
@@ -941,6 +956,7 @@ class Permissions
         'operations' => 'admin.operations.index',
         'assets' => 'admin.assets.index',
         'management' => 'admin.management.index',
+        'organizers' => 'admin.organizers.index',
     ];
 
     /**
@@ -997,6 +1013,7 @@ class Permissions
             'operations' => 'العمليات',
             'assets' => 'المعدّات',
             'management' => 'الإدارة',
+            'organizers' => 'المنظّمون',
         ];
 
         return collect(self::SECTIONS)

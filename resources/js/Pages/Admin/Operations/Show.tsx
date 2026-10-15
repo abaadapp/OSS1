@@ -15,6 +15,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { money } from '@/lib/format';
 import { useTranslate } from '@/lib/i18n';
 import type { PageProps } from '@/types';
+import OrganizersTab, { type OperationOrganizerRow, type OrganizerOption } from './partials/OrganizersTab';
 import {
     CHECKLIST_STATUS_LABEL,
     RESERVATION_LABEL,
@@ -51,6 +52,7 @@ interface Operation {
     timezone: string;
     lead: string | null;
     operations_lead_id: number | null;
+    organizers_lead_user_id?: number | null;
     notes: string | null;
     readiness_override: { to: string; reason: string; by: string | null; at: string; blockers: string[] }[] | null;
     went_live_at: string | null;
@@ -219,6 +221,10 @@ interface Props {
     attendance: { expected: number; checked_in: number; checked_out: number; missing: number; no_show: number };
     checklists: Checklist[];
     incidents: Incident[];
+    /* المرحلة 14: المنظّمون على الفعاليّة ومن يُختار منه */
+    organizers?: OperationOrganizerRow[];
+    organizer_options?: OrganizerOption[];
+    organizer_categories?: { id: number; name: string }[];
     users: { id: number; name: string }[];
     project_members: { user_id: number; name: string | null; role: string | null }[];
     templates: { id: number; name: string; phase: string }[];
@@ -276,6 +282,7 @@ export default function OperationShow(p: Props) {
         { key: 'schedule', label: 'الجدول', count: p.schedule.length },
         { key: 'equipment', label: 'المعدّات', count: p.reservations.filter((r) => r.status !== 'cancelled').length, alert: criticalConflicts > 0 },
         { key: 'crew', label: 'الفريق', count: p.crew.filter((c) => c.status !== 'cancelled').length },
+        { key: 'organizers', label: 'المنظّمون', count: (p.organizers ?? []).filter((o) => o.status !== 'cancelled').length, alert: p.conflicts.some((c) => c.kind.startsWith('organizer_')) },
         { key: 'checklists', label: 'قوائم التحقّق', count: requiredPending, alert: requiredPending > 0 && o.active },
         { key: 'incidents', label: 'الحوادث', count: openIncidents, alert: openIncidents > 0 },
         { key: 'history', label: 'السجلّ' },
@@ -328,7 +335,7 @@ export default function OperationShow(p: Props) {
                 }
             />
 
-            {(['operation', 'schedule', 'requirement', 'reservation', 'consumable', 'crew', 'checklist', 'incident'] as const).map((k) => errors?.[k] && <Alert key={k} tone="danger">{errors[k]}</Alert>)}
+            {(['operation', 'schedule', 'requirement', 'reservation', 'consumable', 'crew', 'organizers', 'checklist', 'incident'] as const).map((k) => errors?.[k] && <Alert key={k} tone="danger">{errors[k]}</Alert>)}
             {o.readiness_override && o.readiness_override.length > 0 && (
                 <Alert tone="warning">
                     <ShieldAlert className="me-1 inline size-4" />
@@ -365,6 +372,21 @@ export default function OperationShow(p: Props) {
             {tab === 'schedule' && <ScheduleTab p={p} />}
             {tab === 'equipment' && <EquipmentTab p={p} />}
             {tab === 'crew' && <CrewTab p={p} />}
+            {tab === 'organizers' && (
+                <OrganizersTab
+                    operationId={o.id}
+                    active={o.active}
+                    leadId={o.organizers_lead_user_id ?? null}
+                    users={p.users}
+                    organizers={p.organizers ?? []}
+                    options={p.organizer_options ?? []}
+                    categories={p.organizer_categories ?? []}
+                    statusLabels={L.organizer_status ?? {}}
+                    genderLabels={L.gender ?? {}}
+                    conflicts={p.conflicts.filter((c) => c.kind.startsWith('organizer_'))}
+                    canManage={Boolean(p.may.crew)}
+                />
+            )}
             {tab === 'checklists' && <ChecklistsTab p={p} />}
             {tab === 'incidents' && <IncidentsTab p={p} />}
             {tab === 'history' && <HistoryTab p={p} />}

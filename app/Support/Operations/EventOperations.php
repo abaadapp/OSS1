@@ -344,6 +344,7 @@ final class EventOperations
             OperationCrewAssignment::where('event_operation_id', $locked->id)
                 ->whereIn('status', [OperationCrewAssignment::PLANNED, OperationCrewAssignment::CONFIRMED])
                 ->update(['status' => OperationCrewAssignment::CANCELLED]);
+            OperationOrganizers::cancelWith($locked);
 
             $locked->update(['status' => EventOperation::CANCELLED, 'cancelled_at' => now(), 'cancellation_reason' => mb_substr($reason, 0, 255)]);
 

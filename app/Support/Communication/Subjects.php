@@ -11,6 +11,7 @@ use App\Models\Project;
 use App\Models\Quotation;
 use App\Models\ScopeOfWork;
 use App\Support\ChangeOrders;
+use App\Support\CustomerContacts;
 use App\Support\DeliveryPackages;
 use App\Support\Money;
 use App\Support\PhoneNumber;
@@ -220,6 +221,20 @@ final class Subjects
         }
 
         if ($customer !== null) {
+            /*
+             * وأشخاصُ اتصال الجهة — النشطون، والأساسيُّ أوّلًا (المرحلة 14).
+             *
+             * بعد ما في المستند نفسِه لا قبله: الأتمتةُ تراسل أوّلَ عنوان، وما
+             * كُتب في العرض أقربُ إلى رسالته. ورقمُ واتساب الشخص خيارٌ مستقلّ
+             * حين يختلف عن هاتفه.
+             */
+            foreach (CustomerContacts::of($customer, true) as $c) {
+                $who = $c->name.($c->job_title ? ' — '.$c->job_title : '');
+                $email($c->email, $who);
+                $phone($c->phone, $who);
+                $phone($c->whatsapp, $who.' — '.__('واتساب'));
+            }
+
             $email($customer->contact_email ?? null, (string) ($customer->contact_person ?: $customer->name));
             $phone($customer->contact_phone ?? null, (string) ($customer->contact_person ?: $customer->name));
             $email($customer->email, (string) $customer->name);
@@ -248,7 +263,7 @@ final class Subjects
         $vars = match (true) {
             $subject instanceof Quotation => [
                 'customer_name' => (string) ($subject->customer?->name ?? $subject->customer_name ?? ''),
-                'contact_name' => (string) ($subject->attention_to ?: ($subject->customer?->contact_person ?? '')),
+                'contact_name' => (string) ($subject->attention_to ?: (CustomerContacts::primary($subject->customer)['name'] ?? '')),
                 'label' => Quotations::label($subject),
                 'title' => (string) $subject->title,
                 'total' => $money($subject->total),
@@ -276,7 +291,7 @@ final class Subjects
             ],
             $subject instanceof DeliveryPackage => [
                 'customer_name' => (string) ($subject->customer?->name ?? ''),
-                'contact_name' => (string) ($subject->project?->contact_person ?? $subject->customer?->contact_person ?? ''),
+                'contact_name' => (string) ($subject->project?->contact_person ?? CustomerContacts::primary($subject->customer)['name'] ?? ''),
                 'label' => DeliveryPackages::label($subject),
                 'title' => (string) $subject->title,
                 'project' => (string) ($subject->project?->name ?? ''),
@@ -284,7 +299,7 @@ final class Subjects
             ],
             $subject instanceof CustomerInvoice => [
                 'customer_name' => (string) ($subject->customer?->name ?? $subject->customer_name ?? ''),
-                'contact_name' => (string) ($subject->customer?->contact_person ?? ''),
+                'contact_name' => (string) ($subject->attention_to ?: (CustomerContacts::primary($subject->customer)['name'] ?? '')),
                 'number' => (string) ($subject->number ?: '#'.$subject->id),
                 'total' => $money($subject->total),
                 'outstanding' => $money($subject->outstanding()),
@@ -294,7 +309,7 @@ final class Subjects
             ],
             $subject instanceof Project => [
                 'customer_name' => (string) ($subject->customer?->name ?? ''),
-                'contact_name' => (string) ($subject->contact_person ?: ($subject->customer?->contact_person ?? '')),
+                'contact_name' => (string) ($subject->contact_person ?: (CustomerContacts::primary($subject->customer)['name'] ?? '')),
                 'code' => (string) $subject->code,
                 'name' => (string) $subject->name,
                 'starts_at' => $date($subject->starts_at),
@@ -304,7 +319,7 @@ final class Subjects
             ],
             $subject instanceof Customer => [
                 'customer_name' => (string) $subject->name,
-                'contact_name' => (string) ($subject->contact_person ?? ''),
+                'contact_name' => (string) (CustomerContacts::primary($subject)['name'] ?? ''),
             ],
             default => [],
         };

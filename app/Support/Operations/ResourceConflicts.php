@@ -103,13 +103,16 @@ final class ResourceConflicts
     }
 
     /**
-     * كلُّ التعارضات — المعدّاتُ والفريق.
+     * كلُّ التعارضات — المعدّاتُ والفريقُ والمنظّمون.
+     *
+     * والمنظّمون بسياسة الفريق نفسِها (`OperationOrganizers::conflicts`): التداخلُ
+     * مانعٌ والفجوةُ الضيّقة تحذير. ولا يدخلون الجاهزيّة — تلك تسأل الفريقَ والمعدّات.
      *
      * @return list<array<string, mixed>>
      */
     public static function all(EventOperation $operation): array
     {
-        return array_merge(self::equipment($operation), Crew::conflicts($operation));
+        return array_merge(self::equipment($operation), Crew::conflicts($operation), OperationOrganizers::conflicts($operation));
     }
 
     /**

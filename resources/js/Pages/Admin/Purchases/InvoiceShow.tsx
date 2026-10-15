@@ -20,6 +20,8 @@ import type { PageProps } from '@/types';
 interface Invoice {
     id: number;
     reference: string;
+    project_id?: number | null;
+    project_code?: string | null;
     supplier: string | null;
     supplier_id: number | null;
     issued_at: string | null;
@@ -160,6 +162,16 @@ export default function SupplierInvoiceShow() {
                     </>
                 }
             />
+
+            {/* والمشروعُ الذي اشتُري لأجله — الأمرُ نفسُه يظهر في تبويب «المشتريات» فيه (المرحلة 14) */}
+            {invoice.project_id && invoice.project_code && (
+                <p className="mb-4 rounded-lg bg-[#f5f3ff] px-4 py-2 text-[13px] text-[#4c1d95]">
+                    {t('المشروع')}:{' '}
+                    <SmartLink routeName="admin.projects.show" href={route('admin.projects.show', { id: invoice.project_id, tab: 'purchases' })} className="font-mono font-semibold underline">
+                        {invoice.project_code}
+                    </SmartLink>
+                </p>
+            )}
 
             <div className="grid grid-cols-1 gap-6 xl:grid-cols-5">
                 <div className="min-w-0 space-y-4 xl:col-span-3">

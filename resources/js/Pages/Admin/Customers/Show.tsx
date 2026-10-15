@@ -29,8 +29,12 @@ import {
 import { money, number } from '@/lib/format';
 import { useConfirm } from '@/Components/ConfirmDialog';
 import { useTranslate } from '@/lib/i18n';
+import type { CustomerContact } from '@/lib/contacts';
+import { PROJECT_STATUS_LABEL, projectTone } from '@/lib/projects';
+import { STATE_LABEL, stateTone } from '@/lib/quotations';
 import type { PageProps } from '@/types';
 import type { Customer, Order } from '@/types/models';
+import ContactsCard from './partials/ContactsCard';
 
 interface Address {
     id: number;
@@ -46,12 +50,19 @@ interface Props {
     branches?: { id: number; name: string }[];
     orders: Order[];
     addresses: Address[];
+    /* المرحلة 14: نوعُ الجهة وأشخاصُ اتصالها ومشاريعُها وعروضُها */
+    profile?: { customer_type: string; legal_name: string | null; organization: boolean };
+    contacts?: CustomerContact[];
+    projects?: { id: number; code: string; name: string; status: string; starts_at: string | null; value: number }[];
+    quotations?: { id: number; label: string; title: string | null; status: string; issued_at: string | null; total: number }[];
 }
+
+type CustomerTab = 'orders' | 'addresses' | 'projects' | 'quotations';
 
 const BLANK = { address_id: '', label: '', city: '', area: '', street: '' };
 
 export default function CustomerShow() {
-    const { customer, orders, addresses, context, branches = [] } = usePage<PageProps<Props>>().props;
+    const { customer, orders, addresses, context, branches = [], profile, contacts = [], projects = [], quotations = [] } = usePage<PageProps<Props>>().props;
     const t = useTranslate();
     // نافذةُ التأكيد من النظام لا من المتصفّح — انظر ConfirmDialog
     const [ask, confirmDialog] = useConfirm();
@@ -73,7 +84,7 @@ export default function CustomerShow() {
         email: customer.email ?? '',
         branch_id: customer.branch_id ? String(customer.branch_id) : '',
     });
-    const [tab, setTab] = useState<'orders' | 'addresses'>('orders');
+    const [tab, setTab] = useState<CustomerTab>('orders');
 
     const notes = useForm({ notes: customer.notes ?? '' });
 
@@ -189,6 +200,10 @@ export default function CustomerShow() {
                             <p className="text-[12px] text-[#9ca3af]">{customer.name}</p>
                         )}
                         <p className="mt-1 font-mono text-[12px] text-[#9ca3af]">#{customer.id}</p>
+                        {profile && <p className="mt-2"><Badge variant="neutral">{t(profile.customer_type)}</Badge></p>}
+                        {profile?.legal_name && profile.legal_name !== customer.name && (
+                            <p className="mt-1 text-[12px] text-[#6b7280]">{profile.legal_name}</p>
+                        )}
                     </Card>
 
                     <Card className="p-6">
@@ -202,6 +217,9 @@ export default function CustomerShow() {
                             ))}
                         </ul>
                     </Card>
+
+                    {/* أشخاصُ الاتصال — المرحلة 14: صفٌّ لكلّ شخص، وواحدٌ أساسيّ */}
+                    <ContactsCard customerId={customer.id} contacts={contacts} />
 
                     <Card className="p-6">
                         <h3 className="mb-3 text-sm font-bold text-[#111]">{t('ملاحظات')}</h3>
@@ -227,14 +245,64 @@ export default function CustomerShow() {
                     <Tabs
                         tabs={[
                             { key: 'orders', label: 'سجل الطلبات' },
+                            { key: 'projects', label: 'المشاريع', count: projects.length },
+                            { key: 'quotations', label: 'عروض الأسعار', count: quotations.length },
                             { key: 'addresses', label: 'العناوين', count: addresses.length },
                         ]}
                         current={tab}
-                        onChange={(k) => setTab(k as 'orders' | 'addresses')}
+                        onChange={(k) => setTab(k as CustomerTab)}
                         className="px-5"
                     />
 
-                    {tab === 'addresses' ? (
+                    {tab === 'projects' ? (
+                        <Table>
+                            <TableHeader>
+                                <TableRow className="hover:bg-transparent">
+                                    {['المشروع', 'الحالة', 'البداية', 'القيمة'].map((h) => <TableHead key={h}>{t(h)}</TableHead>)}
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {projects.length === 0 ? (
+                                    <TableEmpty colSpan={4}>{t('لا مشاريع لهذا العميل بعد')}</TableEmpty>
+                                ) : projects.map((p) => (
+                                    <TableRow key={p.id}>
+                                        <TableCell>
+                                            <SmartLink routeName="admin.projects.show" href={route('admin.projects.show', p.id)} className="font-medium text-[#111] hover:underline">
+                                                <span className="font-mono text-[12px] text-[#6b7280]">{p.code}</span> {p.name}
+                                            </SmartLink>
+                                        </TableCell>
+                                        <TableCell><span className={`rounded-full px-2 py-0.5 text-[11.5px] ${projectTone(p.status)}`}>{t(PROJECT_STATUS_LABEL[p.status] ?? p.status)}</span></TableCell>
+                                        <TableCell className="text-[#6b7280]">{p.starts_at ?? '—'}</TableCell>
+                                        <TableCell className="tabular-nums">{m(p.value)}</TableCell>
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
+                    ) : tab === 'quotations' ? (
+                        <Table>
+                            <TableHeader>
+                                <TableRow className="hover:bg-transparent">
+                                    {['العرض', 'الحالة', 'التاريخ', 'الإجمالي'].map((h) => <TableHead key={h}>{t(h)}</TableHead>)}
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {quotations.length === 0 ? (
+                                    <TableEmpty colSpan={4}>{t('لا عروض أسعار لهذا العميل بعد')}</TableEmpty>
+                                ) : quotations.map((q) => (
+                                    <TableRow key={q.id}>
+                                        <TableCell>
+                                            <SmartLink routeName="admin.quotations.show" href={route('admin.quotations.show', q.id)} className="font-medium text-[#111] hover:underline">
+                                                <span className="font-mono text-[12px] text-[#6b7280]">{q.label}</span> {q.title}
+                                            </SmartLink>
+                                        </TableCell>
+                                        <TableCell><span className={`rounded-full px-2 py-0.5 text-[11.5px] ${stateTone(q.status)}`}>{t(STATE_LABEL[q.status] ?? q.status)}</span></TableCell>
+                                        <TableCell className="text-[#6b7280]">{q.issued_at ?? '—'}</TableCell>
+                                        <TableCell className="tabular-nums">{m(q.total)}</TableCell>
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
+                    ) : tab === 'addresses' ? (
                         <div className="p-5">
                             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                                 {addresses.map((a) => (

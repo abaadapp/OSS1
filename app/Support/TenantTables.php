@@ -40,15 +40,21 @@ class TenantTables
         // أصولٌ لا أبَ لها
         'accounts', 'branches', 'users', 'categories', 'currencies', 'suppliers',
         'expense_types', 'job_titles', 'settings',
+        /* وكتالوجا الخدمات وتصنيفاتِ المنظّمين — لا أبَ لهما سوى الشركة */
+        'service_categories', 'organizer_categories',
         'import_batches', 'activity_logs', 'branch_stocks',
 
         // ما يتفرّع عنها
         'branch_user',
+        /* خدماتُ المورّد — صفٌّ لكلّ خدمةٍ يقدّمها، بعد المورّد والكتالوج */
+        'service_category_supplier',
         'custom_alerts', 'products', 'product_variants', 'product_images',
         'addons', 'product_addons', 'recipe_items',
         /* وبنودُ الباقة بعد المنتجات: الباقةُ وعضوُها كلاهما صفٌّ فيها */
         'package_items',
         'customers', 'customer_addresses',
+        /* وأشخاصُ اتصال الجهة بعدها — والعرضُ والمشروعُ بعدهم يشيران إلى من اختير */
+        'customer_contacts',
         /*
          * وسياساتُ الشركة بعد العملاء والمنتجات: نطاقُها يشير إليها بلا
          * مفتاحٍ خارجيّ، وترتيبُها هنا للقراءة لا للقيد. و`created_by`
@@ -133,8 +139,10 @@ class TenantTables
          * القطعة. وبنودُ القالب بلا `business_id` تُقرأ من خلاله.
          */
         'assets', 'operation_checklist_templates', 'operation_checklist_template_items',
+        /* والمنظّمون قبل الفعاليّة — وتعيينُهم عليها بعدها وبعد الفريق */
+        'organizers', 'organizer_category_organizer',
         'event_operations', 'operation_schedule_items', 'operation_equipment_requirements',
-        'asset_reservations', 'operation_crew_assignments',
+        'asset_reservations', 'operation_crew_assignments', 'operation_organizers',
         'operation_checklists', 'operation_checklist_items', 'operation_incidents',
         /*
          * والتخطيطُ الإداريّ — المرحلة 11: الموازنةُ تشير إلى الحسابات وإلى

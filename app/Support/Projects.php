@@ -74,7 +74,9 @@ final class Projects
                     'location' => $quotation->event_location,
                     'starts_at' => $quotation->event_starts_at?->toDateString(),
                     'ends_at' => $quotation->event_ends_at?->toDateString(),
-                    'contact_person' => $quotation->attention_to ?: $quotation->customer?->contact_person,
+                    /* ومن اختير في العرض من أشخاص اتصال الجهة يبقى مختارًا في مشروعه — والأسماءُ لقطة */
+                    'customer_contact_id' => $quotation->customer_contact_id,
+                    'contact_person' => $quotation->attention_to ?: (CustomerContacts::primary($quotation->customer)['name'] ?? null),
                     'contact_phone' => $quotation->contact_phone,
                     'contact_email' => $quotation->contact_email,
                     'quoted_value' => (float) $quotation->total,
@@ -179,7 +181,13 @@ final class Projects
             throw new RuntimeException(__('هذا الموظّف ليس من شركتك.'));
         }
 
+        /* شخصُ الاتصال المختار — من أشخاص جهة المشروع، وما لم يُرسَل يبقى كما كان */
+        $contactId = array_key_exists('customer_contact_id', $data)
+            ? CustomerContacts::pick($businessId, $project->customer_id, $data['customer_contact_id'], $project->customer_contact_id)?->id
+            : $project->customer_contact_id;
+
         $project->update([
+            'customer_contact_id' => $contactId,
             'name' => self::text($data['name'] ?? null, 255) ?? $project->name,
             'event_type' => self::text($data['event_type'] ?? null, 60),
             'location' => self::text($data['location'] ?? null, 255),

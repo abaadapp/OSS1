@@ -199,7 +199,8 @@ final class CustomerInvoices
             'external_reference' => $data['external_reference'] ?? null,
             'department' => $data['department'] ?? $customer?->department,
             'cost_center' => $data['cost_center'] ?? null,
-            'attention_to' => $data['attention_to'] ?? $customer?->contact_person,
+            /* وما لم يُكتب يُقرأ من شخص الجهة الأساسيّ — وأعمدتُها القديمة سندٌ (`CustomerContacts::primary`) */
+            'attention_to' => $data['attention_to'] ?? (CustomerContacts::primary($customer)['name'] ?? null),
             'notes' => $data['notes'] ?? null,
             // وما لا يُطبع: عمودٌ آخر لا يبلغ ورقةَ العميل
             'internal_notes' => $data['internal_notes'] ?? null,

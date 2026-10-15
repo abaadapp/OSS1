@@ -338,7 +338,14 @@ final class GoodsReceipts
     {
         $product = Product::where('business_id', $bid)->find($productId);
 
-        if (! $product) {
+        /*
+         * وما ليس صنفًا مخزونًا لا يبلغ الرفّ.
+         *
+         * خدمةٌ (تصويرٌ أو نقلٌ أو أمن) أو باقةٌ على أمر شراء تُستلم — يزيد
+         * `received_quantity` وتصلح المطابقةُ مع سندها — لكنّها لا تُضاف كميّةً
+         * إلى مخزونٍ لا تملكه. وكانت تُضاف لأنّ البندَ يحمل `product_id`.
+         */
+        if (! $product || ! $product->isStocked()) {
             return;
         }
 

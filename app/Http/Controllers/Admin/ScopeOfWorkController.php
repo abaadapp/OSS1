@@ -8,6 +8,7 @@ use App\Models\Communication;
 use App\Models\Project;
 use App\Models\ScopeOfWork;
 use App\Support\Communication\Templates;
+use App\Support\CustomerContacts;
 use App\Support\Demo;
 use App\Support\InvoiceBranding;
 use App\Support\Messaging\Notifiers;
@@ -100,6 +101,8 @@ class ScopeOfWorkController extends Controller
                     'en' => Templates::whatsapp((int) $project->business_id, 'scope.link', 'en') !== null,
                 ],
             ],
+            /* أشخاصُ اتصال الجهة — يُختار منهم من يوقّع، وأسماؤه لقطةٌ في النسخة (المرحلة 14) */
+            'contacts' => $project->customer ? CustomerContacts::options($project->customer) : [],
             'may' => [
                 'manage' => (bool) $user?->may(Permissions::PROJECT_MANAGE),
                 'send' => (bool) $user?->may(Permissions::MESSAGING_SEND),
