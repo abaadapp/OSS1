@@ -31,7 +31,7 @@ use App\Support\Money;
 use App\Support\Pagination;
 use App\Support\Paper;
 use App\Support\Permissions;
-use App\Support\ProjectScope;
+use App\Support\ProjectBilling;
 use App\Support\Receivables;
 use App\Support\Search;
 use App\Support\Vat;
@@ -1061,6 +1061,24 @@ class CustomerInvoiceController extends Controller
 
         try {
             $invoice = DB::transaction(function () use ($request, $customer, $data, $method, &$uploaded) {
+                /*
+                 * ═══ وفاتورةٌ على مشروعٍ لا تُكتب فوق ما بقي من قيمته ═══
+                 *
+                 * كانت تُكتب وتُصدَر ثمّ يُحذَّر منها — والتحذيرُ بعد القيد لا
+                 * يمنع شيئًا. والسقفُ الحاسم عند الإصدار (`CustomerInvoices::issue`)؛
+                 * وهنا يُسأل قبله، ومعه المسودّاتُ القائمة: ورقةٌ معلَّقةٌ مالٌ
+                 * موعودٌ من القيمة نفسِها. والخطأُ على حقل المشروع لا على البنود.
+                 */
+                if (! empty($data['project_id'])) {
+                    $project = Project::where('business_id', $this->bid())->lockForUpdate()->findOrFail($data['project_id']);
+
+                    try {
+                        ProjectBilling::assertWithinValue($project, (float) CustomerInvoices::compute($this->bid(), $data['items'])['total'], null, true);
+                    } catch (RuntimeException $e) {
+                        throw ValidationException::withMessages(['project_id' => $e->getMessage()]);
+                    }
+                }
+
                 $invoice = CustomerInvoices::create($this->bid(), $customer, $data, $data['items'], auth()->id());
 
                 /*
@@ -1102,24 +1120,16 @@ class CustomerInvoiceController extends Controller
         }
 
         /*
-         * وفاتورةٌ على مشروعٍ تُقاس بقيمته المعتمَدة **الحاليّة** — وتُحذَّر
-         * ولا تُمنع (§7): مشروعٌ زِيد نطاقُه يُفوتَر أكثر، وهذا مشروع. والإشعارُ
-         * الدائن — إن لزم — بيد المحاسب لا تلقائيًّا.
+         * وفاتورةٌ على مشروعٍ قِيست بقيمته **الحاليّة** قبل أن تُكتب وعند
+         * إصدارها — فلا «فوق المعتمَد» يُحذَّر منه هنا. وما زاد فعلًا من العمل
+         * يدخل القيمةَ بأمر تغييرٍ يقبله العميل، ثمّ يُفوتَر.
          */
-        $project = $invoice->project_id ? Project::where('business_id', $this->bid())->find($invoice->project_id) : null;
-        $over = $project !== null && $invoice->status === CustomerInvoice::ISSUED
-            && $project->invoicedTotal() > ProjectScope::currentValue($project) + 0.0005;
-
         return redirect()->route('admin.customerInvoices.show', $invoice->id)->with('toast', [
             // ومسودّةٌ لا رقمَ لها: لا يُقال «أُنشئت الفاتورة » وينتهي عند فراغ
-            'msg' => $over
-                ? __('أُنشئت الفاتورة :n — والمفوتَر على المشروع :code صار فوق قيمته المعتمَدة', [
-                    'n' => $invoice->number, 'code' => $project->code,
-                ])
-                : ($invoice->number
-                    ? __('أُنشئت الفاتورة :n', ['n' => $invoice->number])
-                    : __('حُفظت مسودّة الفاتورة')),
-            'type' => $over ? 'warning' : 'success',
+            'msg' => $invoice->number
+                ? __('أُنشئت الفاتورة :n', ['n' => $invoice->number])
+                : __('حُفظت مسودّة الفاتورة'),
+            'type' => 'success',
         ]);
     }
 

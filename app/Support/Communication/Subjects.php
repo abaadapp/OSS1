@@ -9,12 +9,14 @@ use App\Models\CustomerInvoice;
 use App\Models\DeliveryPackage;
 use App\Models\Project;
 use App\Models\Quotation;
+use App\Models\ScopeOfWork;
 use App\Support\ChangeOrders;
 use App\Support\DeliveryPackages;
 use App\Support\Money;
 use App\Support\PhoneNumber;
 use App\Support\PublicDocument;
 use App\Support\Quotations;
+use App\Support\ScopesOfWork;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
 use RuntimeException;
@@ -45,6 +47,8 @@ final class Subjects
         'delivery_package' => DeliveryPackage::class,
         'change_order' => ChangeOrder::class,
         'customer' => Customer::class,
+        /* نطاقُ العمل — رابطُ توقيعه يُرسَل بريدًا أو واتساب ويُقيَّد كغيره */
+        'scope_of_work' => ScopeOfWork::class,
     ];
 
     /** ما يُعرَض به النوعُ في الشاشة */
@@ -55,6 +59,7 @@ final class Subjects
         'delivery_package' => 'حزمة تسليم',
         'change_order' => 'أمر تغيير',
         'customer' => 'عميل',
+        'scope_of_work' => 'نطاق عمل',
     ];
 
     /** الصنفُ من مفتاحه — أو null لما لا يُعرف */
@@ -88,7 +93,7 @@ final class Subjects
     {
         return match (true) {
             $subject instanceof Customer => (int) $subject->id,
-            $subject instanceof ChangeOrder => self::customerIdOf($subject->project),
+            $subject instanceof ChangeOrder, $subject instanceof ScopeOfWork => self::customerIdOf($subject->project),
             $subject === null => null,
             default => filled($subject->customer_id ?? null) ? (int) $subject->customer_id : null,
         };
@@ -113,6 +118,7 @@ final class Subjects
             $subject instanceof CustomerInvoice => __('فاتورة :number', ['number' => $subject->number ?: '#'.$subject->id]),
             $subject instanceof DeliveryPackage => __('حزمة التسليم :label', ['label' => DeliveryPackages::label($subject)]),
             $subject instanceof ChangeOrder => __('أمر التغيير :label', ['label' => ChangeOrders::label($subject)]),
+            $subject instanceof ScopeOfWork => __('نطاق العمل :label', ['label' => ScopesOfWork::label($subject)]),
             $subject instanceof Customer => (string) $subject->name,
             default => null,
         };
@@ -127,6 +133,7 @@ final class Subjects
             $subject instanceof CustomerInvoice => route('admin.customerInvoices.show', $subject->id),
             $subject instanceof DeliveryPackage => route('admin.deliveries.show', $subject->id),
             $subject instanceof ChangeOrder => route('admin.changeOrders.show', $subject->id),
+            $subject instanceof ScopeOfWork => route('admin.projects.scope.show', $subject->project_id),
             $subject instanceof Customer => route('admin.customers.show', $subject->id),
             default => null,
         };
@@ -145,6 +152,9 @@ final class Subjects
                 ? __('انتهت صلاحية هذا العرض — نقّحه قبل أن تذكّر به.')
                 : __('لا يُرسَل إلا عرضٌ خرج وينتظر قرارًا.')),
             $subject instanceof ChangeOrder => $subject->isDecidable() ? null : __('لا يُرسَل إلا أمرٌ خرج وينتظر قرارًا.'),
+            /* ورابطُ نسخةٍ حلّت محلَّها أحدث لا يُرسَل — صفحتُه تقول «قديمة» ولا تقبل توقيعًا */
+            $subject instanceof ScopeOfWork => $subject->isDecidable() && ! ScopesOfWork::hasNewer($subject)
+                ? null : __('لا يُرسَل إلا نطاقُ عملٍ خرج وينتظر التوقيع.'),
             $subject instanceof DeliveryPackage => $subject->isDecidable() ? null : __('لا تُرسَل إلا حزمةٌ خرجت وتنتظر قرارًا.'),
             $subject instanceof CustomerInvoice => $subject->status !== CustomerInvoice::ISSUED
                 ? __('لا تُرسَل إلا فاتورةٌ صادرة.')
@@ -165,7 +175,7 @@ final class Subjects
      */
     public static function recipients(Model $subject): array
     {
-        $customer = $subject instanceof Customer ? $subject : ($subject instanceof ChangeOrder ? $subject->project?->customer : $subject->customer);
+        $customer = $subject instanceof Customer ? $subject : ($subject instanceof ChangeOrder || $subject instanceof ScopeOfWork ? $subject->project?->customer : $subject->customer);
         $emails = [];
         $phones = [];
 
@@ -188,11 +198,20 @@ final class Subjects
             $phone($subject->contact_phone, (string) ($subject->attention_to ?? $subject->contact_person ?? __('جهة الاتصال')));
         }
 
+        /* ونطاقُ العمل يحمل جهةَ اتّصاله كما كُتبت فيه — أقربُ ما يكون لمن يوقّع */
+        if ($subject instanceof ScopeOfWork) {
+            $who = (string) ($subject->contact_person ?: __('جهة الاتصال'));
+            $email($subject->contact_email, $who);
+            $phone($subject->contact_phone, $who);
+            $email($subject->project?->contact_email, (string) ($subject->project?->contact_person ?: __('جهة الاتصال')));
+            $phone($subject->project?->contact_phone, (string) ($subject->project?->contact_person ?: __('جهة الاتصال')));
+        }
+
         if (isset($subject->sent_to)) {
             $email($subject->sent_to, __('أُرسل إليه سابقًا'));
         }
 
-        if ($subject instanceof Quotation || $subject instanceof DeliveryPackage || $subject instanceof ChangeOrder) {
+        if ($subject instanceof Quotation || $subject instanceof DeliveryPackage || $subject instanceof ChangeOrder || $subject instanceof ScopeOfWork) {
             $approval = $subject->approval ?? null;
             if ($approval !== null) {
                 $email($approval->signer_email ?? null, (string) ($approval->signer_name ?? __('من قرّر')));
@@ -245,6 +264,15 @@ final class Subjects
                 'project' => (string) ($subject->project?->name ?? ''),
                 'total_delta' => $money($subject->total_delta),
                 'url' => $subject->number ? (string) PublicDocument::url($subject) : '',
+            ],
+            $subject instanceof ScopeOfWork => [
+                'customer_name' => (string) ($subject->customer_name ?: ($subject->project?->customer?->name ?? '')),
+                'contact_name' => (string) ($subject->contact_person ?: ($subject->project?->contact_person ?? '')),
+                'label' => ScopesOfWork::label($subject),
+                'project' => (string) ($subject->project_name ?: ($subject->project?->name ?? '')),
+                'revision' => (string) $subject->revision,
+                'event_date' => $date($subject->starts_at),
+                'url' => (string) (ScopesOfWork::url($subject) ?? ''),
             ],
             $subject instanceof DeliveryPackage => [
                 'customer_name' => (string) ($subject->customer?->name ?? ''),

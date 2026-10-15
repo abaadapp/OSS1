@@ -8,6 +8,7 @@ use App\Models\DeliveryPackage;
 use App\Models\DocumentLink;
 use App\Models\Order;
 use App\Models\Quotation;
+use App\Models\ScopeOfWork;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Str;
 
@@ -60,9 +61,15 @@ class PublicDocument
      * ولا يُبنى رمزُه قبل أن يخرج: `QuotationController` لا تطلبه لمسودّة،
      * ورمزٌ لمسودّةٍ يفتح للعميل ورقةً لم تُرسَل إليه.
      *
+     * ═══ ونطاقُ العمل ═══
+     *
+     * ورقةُ توقيعٍ كأمر التغيير: يُرسَل رابطُه فيقرؤه العميلُ ويوقّعه من
+     * هاتفه بلا حساب. ورمزُه يُبنى عند الإرسال وحدَه (`ScopesOfWork::send`)،
+     * ولكلّ نسخةٍ رمزُها — فرابطُ نسخةٍ قديمة لا يفتح الأحدث.
+     *
      * @var list<class-string>
      */
-    private const PUBLIC = [Order::class, CustomerInvoice::class, Quotation::class, ChangeOrder::class, DeliveryPackage::class];
+    private const PUBLIC = [Order::class, CustomerInvoice::class, Quotation::class, ChangeOrder::class, DeliveryPackage::class, ScopeOfWork::class];
 
     /** أيُمنح هذا النوعُ وجهًا عامًّا؟ */
     public static function allows(?Model $document): bool

@@ -6,6 +6,7 @@ use App\Models\Business;
 use App\Models\ChangeOrder;
 use App\Models\CustomerInvoice;
 use App\Models\DeliveryPackage;
+use App\Models\EventOperation;
 use App\Models\Project;
 use App\Models\ProjectItem;
 use App\Models\ProjectMember;
@@ -83,6 +84,8 @@ final class Projects
                     'notes' => $quotation->scope,
                     'internal_notes' => $quotation->internal_notes,
                     'created_by' => $actor?->id,
+                    /* العرضُ تمّ بقبوله — والمسارُ يبدأ من نطاق العمل (`ProjectWorkflow`) */
+                    'workflow_stage' => ProjectWorkflow::SCOPE,
                 ]);
 
                 foreach ($quotation->items as $item) {
@@ -529,10 +532,16 @@ final class Projects
      * الشاشةُ تعرضه قبل أن يُضغط الزرّ، و`close` يرمي أوّلَه: مصدرٌ واحدٌ
      * للموانع فلا تقول الصفحةُ «جاهز» ويرفض الإقفال.
      *
+     * - نطاقُ عملٍ لم يوقّعه العميل — مسارُ المشروع يبدأ منه (`ScopesOfWork`).
+     * - تنفيذٌ لم يكتمل: لا فعاليّةَ أُتمّت، أو فعاليّةٌ قائمةٌ لم تنتهِ.
      * - التزامٌ لم يصر تكلفةً (أمرُ شراءٍ مفتوح، فاتورةُ مورّدٍ معلَّقة…).
      * - فاتورةُ عميلٍ مسودّة.
      * - أمرُ تغييرٍ ينتظر قرارًا: قبولُه بعد الإقفال يغيّر نطاقًا جُمّدت أرقامُه.
      * - تسليمٌ لم يُقبل — المرحلة 5: حزمةٌ قَبِلها العميل هي ما يقول «انتهى العمل».
+     * - قيمةٌ لم تُفوتَر كلُّها: المفوتَرُ الصافي دون القيمة الحاليّة بعد أوامر التغيير.
+     *
+     * والمشروعُ المستورَد من التاريخ لا يُسأل عن نطاقٍ موقَّع ولا عن فعاليّة —
+     * جرى قبل هذا النظام.
      *
      * @param  array<string, mixed>|null  $summary  ملخّصُ المال إن حُسب قبلُ
      * @return list<string>
@@ -563,6 +572,27 @@ final class Projects
 
         if (! $delivery->ready) {
             $out[] = __('لا يُقفَل المشروع: :why', ['why' => implode(' · ', $delivery->blockers)]);
+        }
+
+        /* وموانعُ المسار — بعد موانع المال والتسليم القديمة، فلا يتبدّل أوّلُ ما يُقال عنها */
+        if (! ScopesOfWork::isSigned($project)) {
+            $out[] = __('لم يوقّع العميل نطاق العمل بعد — أرسله للتوقيع قبل الإقفال.');
+        }
+
+        $execution = ProjectWorkflow::execution(
+            EventOperation::where('business_id', $project->business_id)->where('project_id', $project->id)->get(['id', 'status', 'code']),
+            ScopesOfWork::required($project),
+        );
+        foreach ($execution['pending'] as $why) {
+            $out[] = $why;
+        }
+
+        $unbilled = round((float) $summary['current_value'] - (float) $summary['net_invoiced'], 3);
+
+        if ($unbilled > 0.0005) {
+            $out[] = __('لم تُفوتر قيمة المشروع كلّها — باقٍ :amount. أصدر الفاتورة النهائية قبل الإقفال.', [
+                'amount' => number_format($unbilled, 3),
+            ]);
         }
 
         return $out;
@@ -726,6 +756,9 @@ final class Projects
             'quantity' => 1,
             'unit_price' => $verdict->feeAmount,
         ]], $actor?->id);
+
+        /* والرسمُ ليس فوترةً لنطاق المشروع — فلا يُقاس بما بقي من قيمته (`ProjectBilling::capped`) */
+        $invoice->forceFill(['billing_role' => ProjectBilling::CANCELLATION_FEE])->save();
 
         $issued = CustomerInvoices::issue($invoice, $actor?->id);
 

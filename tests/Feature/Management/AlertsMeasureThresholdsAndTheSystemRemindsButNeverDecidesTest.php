@@ -129,7 +129,7 @@ class AlertsMeasureThresholdsAndTheSystemRemindsButNeverDecidesTest extends Mana
     public function test_a_project_below_the_margin_threshold_is_named_not_judged(): void
     {
         $bid = (int) $this->business->id;
-        $project = $this->project('EP-LOW', 1000);
+        $project = $this->project('EP-LOW', 1050);
         $this->invoice(1000, '2026-09-10', $project);
         $this->supplierInvoice(950, 0, $project);
 
@@ -220,7 +220,7 @@ class AlertsMeasureThresholdsAndTheSystemRemindsButNeverDecidesTest extends Mana
     public function test_the_eight_management_reports_build_from_the_same_numbers_and_export_through_the_public_door(): void
     {
         $bid = (int) $this->business->id;
-        $project = $this->project('EP-R', 1000);
+        $project = $this->project('EP-R', 1050);
         $invoice = $this->invoice(1000, '2026-09-10', $project);
         $this->pay($invoice, 500, '2026-09-12');
         $this->supplierInvoice(200, 0, $project);

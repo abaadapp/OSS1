@@ -36,6 +36,8 @@ class CustomerInvoice extends Model
         /* رصيدٌ افتتاحيٌّ يومَ التحويل لا مستندٌ — المرحلة 9 */
         'is_opening_balance' => 'boolean',
         'document_snapshot' => 'array',
+        /* دورُها في مسار المشروع وكيف حُسب مبلغُها — انظر `ProjectBilling` */
+        'billing_basis' => 'array',
         'issued_at' => 'date',
         'due_at' => 'date',
         'issued_by_at' => 'datetime',

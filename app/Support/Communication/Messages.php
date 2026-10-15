@@ -85,6 +85,7 @@ final class Messages
         return match ($subjectType) {
             'quotation' => __('فتح عرض السعر'),
             'change_order' => __('فتح أمر التغيير'),
+            'scope_of_work' => __('فتح نطاق العمل والتوقيع'),
             'delivery_package' => __('فتح حزمة التسليم'),
             'customer_invoice' => __('فتح الفاتورة'),
             default => __('فتح المستند'),

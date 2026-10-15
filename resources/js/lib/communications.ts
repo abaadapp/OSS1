@@ -28,6 +28,7 @@ export const TEMPLATE_STATUS_LABEL: Record<string, string> = {
 
 export const PURPOSE_LABEL: Record<string, string> = {
     quotation: 'عروض الأسعار',
+    scope: 'نطاق العمل',
     change_order: 'أوامر التغيير',
     delivery: 'التسليم',
     invoice: 'الفواتير',
@@ -43,6 +44,7 @@ export const SUBJECT_LABEL: Record<string, string> = {
     delivery_package: 'حزمة تسليم',
     change_order: 'أمر تغيير',
     customer: 'عميل',
+    scope_of_work: 'نطاق عمل',
 };
 
 export function statusTone(status: string): string {

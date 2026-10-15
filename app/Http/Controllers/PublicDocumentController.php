@@ -4,10 +4,12 @@ namespace App\Http\Controllers;
 
 use App\Http\Controllers\Admin\ChangeOrderController;
 use App\Http\Controllers\Admin\QuotationController;
+use App\Models\Business;
 use App\Models\ChangeOrder;
 use App\Models\CustomerInvoice;
 use App\Models\Order;
 use App\Models\Quotation;
+use App\Models\ScopeOfWork;
 use App\Support\ChangeOrders;
 use App\Support\Communication\Communications;
 use App\Support\Document\Branding;
@@ -17,6 +19,7 @@ use App\Support\Money;
 use App\Support\Paper;
 use App\Support\PublicDocument;
 use App\Support\Quotations;
+use App\Support\ScopesOfWork;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -131,6 +134,21 @@ class PublicDocumentController extends Controller
             ]));
         }
 
+        /*
+         * ونطاقُ العمل يمرّ من الباب نفسِه — صفحتُه للهاتف أوّلًا، يُقرأ كاملًا
+         * ويُوقَّع منها. والمسودّةُ والجاهزةُ لا تُفتحان ولو عُرف رمزُهما.
+         */
+        if ($document instanceof ScopeOfWork) {
+            abort_if(! $document->isPubliclyVisible(), 404);
+
+            ScopesOfWork::markViewed($document);
+            $document->refresh()->loadMissing('approval');
+
+            return InvoiceBranding::render($link->business_id, null, fn () => view('public.scope', self::scopeView($link->business, $document, [
+                'decideUrl' => route('paper.decide', $token),
+            ])));
+        }
+
         /* وأمرُ التغيير يمرّ من الباب نفسِه — ورقةٌ تُقرأ وتُقبل كالعرض */
         if ($document instanceof ChangeOrder) {
             abort_if($document->status === ChangeOrder::DRAFT
@@ -203,9 +221,13 @@ class PublicDocumentController extends Controller
 
         $document = $link->linkable;
 
-        /* عرضُ سعرٍ أو أمرُ تغيير — والحالتان المحجوبتان تحملان الاسمَين نفسَيهما */
-        abort_unless($document instanceof Quotation || $document instanceof ChangeOrder, 404);
-        abort_if($document->status === Quotation::DRAFT || $document->status === Quotation::PENDING_APPROVAL, 404);
+        /* عرضُ سعرٍ أو أمرُ تغييرٍ أو نطاقُ عمل — وما لم يخرج منها لا يُقرَّر فيه */
+        abort_unless($document instanceof Quotation || $document instanceof ChangeOrder || $document instanceof ScopeOfWork, 404);
+        abort_if($document instanceof ScopeOfWork
+            ? ! $document->isPubliclyVisible()
+            : $document->status === Quotation::DRAFT || $document->status === Quotation::PENDING_APPROVAL, 404);
+
+        $scope = $document instanceof ScopeOfWork;
 
         $data = $request->validate([
             'decision' => ['required', 'in:accepted,declined'],
@@ -216,10 +238,14 @@ class PublicDocumentController extends Controller
             'decline_reason' => ['nullable', 'string', 'max:500'],
             /* والإقرارُ شرطُ القبول لا الاعتذار: من يعتذر لا يُقرّ بشيء */
             'consent' => ['accepted_if:decision,accepted'],
+            /* وبصمةُ ما قرأه العميلُ في صفحته — النطاقُ لا يُوقَّع على غير ما رآه */
+            'hash' => [$scope ? 'required' : 'nullable', 'string', 'size:64'],
         ], [
-            'consent.accepted_if' => __('لا يُقبل العرض بلا الإقرار.'),
+            'consent.accepted_if' => $scope ? __('لا يُعتمد نطاق العمل بلا الإقرار.') : __('لا يُقبل العرض بلا الإقرار.'),
+            'hash.required' => __('حدّث الصفحة واقرأ المستند من جديد قبل التوقيع.'),
+            'hash.size' => __('حدّث الصفحة واقرأ المستند من جديد قبل التوقيع.'),
         ], [
-            'name' => __('الاسم'), 'email' => __('البريد الإلكتروني'), 'decline_reason' => __('سبب الاعتذار'),
+            'name' => __('الاسم'), 'email' => __('البريد الإلكتروني'), 'decline_reason' => $scope ? __('ما يحتاج تعديلًا') : __('سبب الاعتذار'),
         ]);
 
         $signer = [
@@ -228,14 +254,18 @@ class PublicDocumentController extends Controller
             'email' => $data['email'] ?? null,
             'phone' => $data['phone'] ?? null,
             'decline_reason' => $data['decline_reason'] ?? null,
-            'consent' => $data['decision'] === 'accepted' ? self::consent($link->business->name, $document) : null,
+            'consent' => $data['decision'] === 'accepted'
+                ? ($scope ? ScopesOfWork::consent((string) $link->business->name) : self::consent($link->business->name, $document))
+                : null,
         ];
         $meta = ['ip' => $request->ip(), 'user_agent' => (string) $request->userAgent()];
 
         try {
-            $decided = $document instanceof ChangeOrder
-                ? ChangeOrders::decide($document, $data['decision'], $signer, $meta)
-                : Quotations::decide($document, $data['decision'], $signer, $meta);
+            $decided = match (true) {
+                $document instanceof ScopeOfWork => ScopesOfWork::decide($document, $data['decision'], $signer, $meta, $data['hash'] ?? null),
+                $document instanceof ChangeOrder => ChangeOrders::decide($document, $data['decision'], $signer, $meta),
+                default => Quotations::decide($document, $data['decision'], $signer, $meta),
+            };
         } catch (RuntimeException $e) {
             throw ValidationException::withMessages(['decision' => $e->getMessage()]);
         }
@@ -243,11 +273,44 @@ class PublicDocumentController extends Controller
         RateLimiter::clear($key);
 
         /* والخبرُ إلى الشركة بعد أن ثبت القرار — وبأفضل جهد: بريدٌ يسقط لا يُسقطه */
-        Communications::about($decided, fn () => $decided instanceof ChangeOrder
-            ? ChangeOrders::notifyDecision($decided, $decided->approval)
-            : Quotations::notifyDecision($decided, $decided->approval));
+        Communications::about($decided, fn () => match (true) {
+            $decided instanceof ScopeOfWork => ScopesOfWork::notifyDecision($decided, $decided->approval),
+            $decided instanceof ChangeOrder => ChangeOrders::notifyDecision($decided, $decided->approval),
+            default => Quotations::notifyDecision($decided, $decided->approval),
+        });
 
         return redirect()->route('paper.show', $token)->with('decided', $data['decision']);
+    }
+
+    /**
+     * ما تحتاجه صفحةُ نطاق العمل — للعميل من رابطه، وللفريق معاينةً قبل الإرسال.
+     *
+     * صفحةٌ واحدة لكليهما: ما يُعاين هو ما يخرج، لا نسختان تفترقان.
+     *
+     * @param  array<string, mixed>  $extra
+     * @return array<string, mixed>
+     */
+    public static function scopeView(?Business $business, ScopeOfWork $scope, array $extra = []): array
+    {
+        $company = (string) ($business?->name ?? '');
+        $snap = (array) ($scope->scope_snapshot ?? []);
+
+        return $extra + [
+            'scope' => $scope,
+            'snap' => $snap,
+            'label' => ScopesOfWork::label($scope),
+            'company' => $company,
+            'brand' => Paper::brand($business, Paper::vatNumber((int) $scope->business_id)),
+            'primary' => Branding::tokens((int) $scope->business_id)['primary_ink'],
+            'currency' => Money::of((int) $scope->business_id),
+            'approval' => $scope->approval,
+            /* والتوقيعُ للنسخة الأحدث وحدَها وهي تنتظره — والقديمةُ تقول إنّها قديمة */
+            'decidable' => $scope->isDecidable() && ! ScopesOfWork::hasNewer($scope),
+            'superseded' => $scope->status === ScopeOfWork::SUPERSEDED || ScopesOfWork::hasNewer($scope),
+            'consent' => ScopesOfWork::consent($company),
+            'preview' => false,
+            'decideUrl' => null,
+        ];
     }
 
     /**

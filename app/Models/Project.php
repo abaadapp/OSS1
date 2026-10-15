@@ -53,6 +53,7 @@ class Project extends Model
         'cancelled_at' => 'datetime',
         'financials_frozen' => 'array',
         'cancellation_policy' => 'array',
+        'deposit_waived_at' => 'datetime',
     ];
 
     public function business(): BelongsTo
@@ -142,6 +143,12 @@ class Project extends Model
     public function deliveryPackages(): HasMany
     {
         return $this->hasMany(DeliveryPackage::class)->orderBy('id');
+    }
+
+    /** نسخُ نطاق العمل — الأحدثُ أخيرًا، وما وُقّع منها لا يُكتب فوقه */
+    public function sowRevisions(): HasMany
+    {
+        return $this->hasMany(ScopeOfWork::class)->orderBy('revision');
     }
 
     /** فاتورةُ رسم الإلغاء — واحدةٌ إن لزمت */

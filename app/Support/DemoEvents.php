@@ -4,6 +4,7 @@ namespace App\Support;
 
 use App\Models\Business;
 use App\Models\Customer;
+use App\Models\EventOperation;
 use App\Models\Product;
 use App\Models\Project;
 use App\Models\ProjectTask;
@@ -324,30 +325,28 @@ final class DemoEvents
             Incidents::report($op, ['title' => 'تعطّل طابعة بطاقات عند الافتتاح', 'category' => 'equipment', 'severity' => 'medium'], $this->owner);
         }
 
-        /* والفاتورةُ لما قُبل: كاملةً لما مضى، ودفعةً مقدّمة لما يأتي */
         /*
-         * والقيمةُ من بنود المشروع قبل الضريبة: الفاتورةُ تضيف ضريبتَها، فلو
-         * بُنيت على الإجماليّ لفُوتر المشروعُ فوق قيمته المعتمَدة.
+         * ونطاقُ العمل — مسارُ المشروع يبدأ منه: أكثرُها وقّعه العميل، وواحدٌ
+         * من كلّ أربعةٍ ما زال عنده ينتظر التوقيع. والدفعةُ المقدّمة (٥٠٪) بعد
+         * التوقيع وحدَه، من بابها (`ProjectBilling`) — فاتورةُ عميلٍ حقيقيّة.
          */
-        $total = round((float) $project->fresh()->items->sum(fn ($i) => (float) $i->quantity * (float) $i->unit_price), 3);
-        $total = $total > 0 ? $total : 1000;
-        $share = $past ? 1.0 : 0.5;
+        $signed = $i % 4 !== 3;
+        $this->scope($project, $client, $signed);
 
-        $invoice = CustomerInvoices::create($bid, $client, [
-            'project_id' => $project->id,
-            'issued_at' => now()->subDays($past ? 20 - $in % 5 : 10)->toDateString(),
-        ], [['description' => ($past ? 'قيمة ' : 'دفعة مقدّمة 50% — ').$title, 'quantity' => 1, 'unit_price' => round($total * $share, 3)]], $this->owner->id);
-        $invoice = CustomerInvoices::issue($invoice->fresh(), $this->owner->id);
+        if ($signed) {
+            $invoice = ProjectBilling::createDeposit($project->fresh(), ['method' => ProjectBilling::PERCENT, 'percent' => 50, 'issue' => true], $this->owner);
 
-        /* والتحصيلُ متفاوت: ما مضى سُدّد، ونصفُ القادم سدّد جزءًا، والباقي ينتظر */
-        $due = (float) $invoice->fresh()->total;
-        $paid = match (true) {
-            $past => $due,
-            $i % 2 === 0 => round($due * 0.4, 3),
-            default => 0.0,
-        };
-        if ($paid > 0) {
-            CustomerPayments::record($bid, $client, $paid, ['method' => 'تحويل بنكي', 'occurred_at' => now()->subDays(3)->toDateString()], [$invoice->id => $paid], $this->owner->id);
+            /* والتحصيلُ متفاوت: ما مضى سُدّد، ونصفُ القادم سدّد جزءًا، والباقي ينتظر */
+            $due = (float) $invoice->fresh()->total;
+            $paid = match (true) {
+                $past => $due,
+                $i % 2 === 0 => round($due * 0.4, 3),
+                default => 0.0,
+            };
+            if ($paid > 0) {
+                CustomerPayments::record($bid, $client, $paid, ['method' => 'تحويل بنكي', 'occurred_at' => now()->subDays(3)->toDateString()], [$invoice->id => $paid], $this->owner->id);
+            }
+            Project::whereKey($project->id)->update(['workflow_stage' => ProjectWorkflow::EXECUTION]);
         }
 
         if ($past) {
@@ -417,27 +416,21 @@ final class DemoEvents
         Quotations::recordDecision($quotation->fresh(), Quotation::ACCEPTED, ['decided_by_name' => $client->contact_person], $this->owner);
         $project = Project::where('business_id', $bid)->where('quotation_id', $quotation->id)->firstOrFail();
         $project->update(['name' => $title]);
-        Projects::baseline($project->fresh(), $this->owner);
 
-        $total = (float) $quotation->fresh()->total;
-        $invoice = CustomerInvoices::create($bid, $client, ['project_id' => $project->id, 'issued_at' => $day->copy()->addDays(2)->toDateString()],
-            [['description' => 'قيمة '.$title, 'quantity' => 1, 'unit_price' => round($total / 1.05, 3)]], $this->owner->id);
-        $invoice = CustomerInvoices::issue($invoice->fresh(), $this->owner->id);
-
-        /* والأحدثُ لم يُسدَّد كلُّه بعد — ذممٌ قائمة كما في كلّ شركة */
-        $due = (float) $invoice->fresh()->total;
-        $paid = $settled ? $due : round($due * 0.5, 3);
-        CustomerPayments::record($bid, $client, $paid, ['method' => 'تحويل بنكي', 'occurred_at' => $day->copy()->addDays(20)->min(now())->toDateString()], [$invoice->id => $paid], $this->owner->id);
-
-        if (! $settled) {
-            return;
-        }
+        /* المسارُ من أوّله: نطاقٌ يوقّعه العميل، فدفعةٌ مقدّمة ٥٠٪ تُصدَر وتُحصَّل */
+        $this->scope($project, $client, true);
+        $deposit = ProjectBilling::createDeposit($project->fresh(), ['method' => ProjectBilling::PERCENT, 'percent' => 50, 'issue' => true], $this->owner);
+        $deposit->forceFill(['issued_at' => $day->copy()->subDays(10)->toDateString()])->save();
+        $due = (float) $deposit->fresh()->total;
+        CustomerPayments::record($bid, $client, $due, ['method' => 'تحويل بنكي', 'occurred_at' => $day->copy()->subDays(5)->min(now())->toDateString()], [$deposit->id => $due], $this->owner->id);
 
         /*
-         * والإقفالُ بعد تسليمٍ قبله العميل — شرطُ `Projects::close` نفسُه.
-         * وما يمنعه (التزامٌ لم يُسوَّ مثلًا) يُبقي المشروعَ قائمًا كما يقع.
+         * ثمّ التنفيذُ فالتسليمُ فالفاتورةُ النهائيّة فالإقفال — شروطُ `Projects::close`
+         * نفسُها. وما يمنعه يُبقي المشروعَ قائمًا كما يقع.
          */
         try {
+            $this->completeOperation($project, $title, $day);
+
             $package = DeliveryPackages::create($bid, $client, ['project_id' => $project->id], $this->owner);
             foreach ($project->items()->get() as $item) {
                 DeliveryPackages::addItem($package, ['kind' => 'item', 'project_item_id' => $item->id, 'quantity' => (float) $item->quantity], null, $this->owner);
@@ -445,9 +438,63 @@ final class DemoEvents
             DeliveryPackages::ready($package->fresh(), $this->owner);
             DeliveryPackages::send($package->fresh(), $this->owner);
             DeliveryPackages::recordDecision($package->fresh(), 'accepted', ['decided_by_name' => $client->contact_person], $this->owner);
-            Projects::close($project->fresh(), $this->owner);
+
+            $final = ProjectBilling::createFinal($project->fresh(), ['issue' => true], $this->owner);
+            $final->forceFill(['issued_at' => $day->copy()->addDays(2)->toDateString()])->save();
+
+            /* والأحدثُ لم يُسدَّد كلُّه بعد — ذممٌ قائمة كما في كلّ شركة */
+            $rest = (float) $final->fresh()->total;
+            $paid = $settled ? $rest : round($rest * 0.5, 3);
+            CustomerPayments::record($bid, $client, $paid, ['method' => 'تحويل بنكي', 'occurred_at' => $day->copy()->addDays(20)->min(now())->toDateString()], [$final->id => $paid], $this->owner->id);
+
+            if ($settled) {
+                Projects::close($project->fresh(), $this->owner);
+            } else {
+                /* بلغ آخرَ المسار وينتظر الإقفال — والمؤشّرُ حيث يقف الفريق */
+                Project::whereKey($project->id)->update(['workflow_stage' => ProjectWorkflow::CLOSING]);
+            }
         } catch (\RuntimeException) {
-            // يبقى المشروعُ قائمًا بتسليمٍ لم يكتمل
+            // يبقى المشروعُ قائمًا بما لم يكتمل
+        }
+    }
+
+    /**
+     * نطاقُ العمل من بابه — يُكتب ويُجهَّز ويُرسَل، ويوقّعه العميل أو ينتظر.
+     */
+    private function scope(Project $project, Customer $client, bool $sign): void
+    {
+        $scope = ScopesOfWork::start($project->fresh(), $this->owner);
+        $scope = ScopesOfWork::update($scope, [
+            'inclusions' => "تجهيز الأجهزة والشبكة قبل الفعالية بيوم\nفريق تشغيل ودعم فنّي طوال الفعالية\nتقرير الحضور بعد الختام",
+            'exclusions' => 'الإنترنت والكهرباء في الموقع',
+            'company_responsibilities' => "توريد الأجهزة وتشغيلها\nطباعة البطاقات",
+            'client_responsibilities' => "قائمة المدعوين قبل أسبوع\nتأمين نقاط الكهرباء",
+        ], $this->owner);
+        $scope = ScopesOfWork::send(ScopesOfWork::markReady($scope, $this->owner), $this->owner);
+
+        if ($sign) {
+            ScopesOfWork::decide($scope, 'accepted', [
+                'name' => (string) $client->contact_person, 'title' => 'مدير الفعاليات',
+                'consent' => ScopesOfWork::consent((string) $this->business->name),
+            ], ['ip' => '10.0.0.1', 'user_agent' => 'demo'], $scope->content_hash);
+        }
+    }
+
+    /**
+     * فعاليّةٌ مضت تُتمّ من بابها — والجاهزيّةُ تُتجاوز باسم المالك وسببِه،
+     * كما يفعل من يُدخل فعاليّةً جرت قبل أن يُسجَّل فريقُها ومعدّاتُها.
+     */
+    private function completeOperation(Project $project, string $title, Carbon $day): void
+    {
+        $op = EventOperations::create($project->fresh(), [
+            'name' => $title, 'venue_name' => 'مركز عمان للمؤتمرات والمعارض',
+            'event_starts_at' => $day->copy()->setTime(9, 0)->format('Y-m-d H:i'),
+            'event_ends_at' => $day->copy()->setTime(17, 0)->format('Y-m-d H:i'),
+        ], $this->owner);
+
+        $why = 'فعاليّةٌ مضت — أُدخلت بعد وقوعها';
+        foreach ([EventOperation::PREPARING, EventOperation::READY, EventOperation::SETUP, EventOperation::LIVE, EventOperation::TEARDOWN, EventOperation::COMPLETED] as $to) {
+            EventOperations::transition($op->fresh(), $to, $this->owner, null, $why);
         }
     }
 

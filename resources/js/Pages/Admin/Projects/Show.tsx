@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { router, usePage } from '@inertiajs/react';
-import { AlertTriangle, CalendarCheck, Check, CheckCircle2, Lock, MoreHorizontal, PackageCheck, Pause, Play, Plus, ShieldCheck, Slash, Smartphone, Trash2, Unlock, Wallet } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, CalendarCheck, Check, CheckCircle2, FileText, Lock, MoreHorizontal, PackageCheck, Pause, Play, Plus, Receipt, ShieldCheck, Slash, Smartphone, Trash2, Unlock, Wallet } from 'lucide-react';
 import AdminLayout from '@/Layouts/AdminLayout';
 import BackLink from '@/Components/BackLink';
 import PageHeader from '@/Components/PageHeader';
@@ -26,9 +26,9 @@ import { operationTone } from '@/lib/operations';
 import CompletenessBadge from '@/Components/management/CompletenessBadge';
 import { marginTone, pct, type CompletenessInfo } from '@/lib/management';
 import CommunicationsTab from './partials/CommunicationsTab';
-import ProcessTab, { type ProcessData } from './partials/ProcessTab';
+import ProcessTab, { type Billing, type BillingInvoice, type QuotationInfo, type ScopeInfo } from './partials/ProcessTab';
 import ProjectStepper from '@/Components/ProjectStepper';
-import { projectStages, type StageKey } from '@/lib/projectStages';
+import { STAGE_LABEL, toStages, type StageKey, type Workflow } from '@/lib/projectStages';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/Components/ui/dropdown-menu';
 import type { PageProps } from '@/types';
 
@@ -179,11 +179,16 @@ interface Props {
     operations: OperationRow[] | null;
     /* الأداء — المرحلة 11: الربحيّةُ بصيغتها الواحدة واكتمالُها وخطُّ زمنِها؛ لمن يقرأ تحليلات المشاريع */
     performance: Performance | null;
-    billing: ProcessData['billing'];
-    invoices: ProcessData['invoices'];
+    billing: Billing;
+    invoices: BillingInvoice[] | null;
     close_blockers: string[];
+    /* المسار — من `ProjectWorkflow` في الخادم، ومعه ما تحتاجه مراحلُه */
+    workflow: Workflow;
+    quotation: QuotationInfo | null;
+    scope_of_work: ScopeInfo;
+    channels: { email: boolean; whatsapp: boolean; scope_whatsapp_template: boolean };
     users: { id: number; name: string }[];
-    may: { manage: boolean; budget: boolean; close: boolean; reopen: boolean; change_order: boolean; override_policy: boolean; delivery: boolean; operations: boolean; operations_manage: boolean; performance: boolean; invoice: boolean };
+    may: { manage: boolean; budget: boolean; close: boolean; reopen: boolean; change_order: boolean; override_policy: boolean; delivery: boolean; operations: boolean; operations_manage: boolean; performance: boolean; invoice: boolean; commercial: boolean };
 }
 
 interface Performance {
@@ -218,7 +223,7 @@ interface Performance {
  * المقبولة)، وما يجب على الفريق تنفيذَه الآن (الحاليّ). والقيمةُ الحاليّة
  * تُشتقّ في الخادم — انظر `ProjectScope`.
  */
-export default function ProjectShow({ project: p, scope, requirements, members, tasks, change_orders, financials, delivery, cancellation, operations, performance, billing, invoices, close_blockers, users, may }: Props) {
+export default function ProjectShow({ project: p, scope, requirements, members, tasks, change_orders, financials, delivery, cancellation, operations, performance, billing, invoices, close_blockers, workflow, quotation, scope_of_work, channels, users, may }: Props) {
     const t = useTranslate();
     const { context } = usePage<PageProps>().props;
     const { errors } = usePage().props as { errors?: Record<string, string> };
@@ -271,38 +276,32 @@ export default function ProjectShow({ project: p, scope, requirements, members, 
     const current = tabs.some((x) => x.key === tab) ? tab : 'process';
 
     /*
-     * والمراحلُ من مصدرها الواحد — كما على بطاقة القائمة. والفعاليّةُ
-     * المعتبَرة أوّلُ ما لم يُلغَ، والحزمةُ أبعدُ ما بلغ: مقبولةٌ ثمّ مرسلة.
+     * والمراحلُ من مصدرها الواحد في الخادم (`ProjectWorkflow`) — كما على بطاقة
+     * القائمة. الشاشةُ ترسمها ولا تحسبها.
      */
-    const liveOp = operations?.find((o) => o.status !== 'cancelled') ?? null;
-    const bestPkg =
-        delivery.packages.find((x) => x.status === 'accepted') ??
-        delivery.packages.find((x) => x.status === 'sent') ??
-        delivery.packages.find((x) => x.status !== 'cancelled' && x.status !== 'declined') ??
-        null;
-    const stages = projectStages({ status: p.status, operation: liveOp?.status ?? null, delivery: bestPkg?.status ?? null, billed: billing.billed });
-    const at = stages.find((x) => x.state === 'current')?.key ?? null;
+    const stages = toStages(workflow);
+    const at = workflow.focus;
+    const focusStage = workflow.stages.find((s) => s.key === at);
+    const liveOp = operations?.find((o) => !['completed', 'cancelled'].includes(o.status)) ?? null;
     const pick = (key: StageKey) => {
         setTab('process');
         setFocus(null);
         window.setTimeout(() => setFocus(key), 0);
     };
 
-    /* الخطوةُ التالية — زرٌّ واحدٌ في الرأس يقود إلى ما يُنتظر الآن */
-    const next: { label: string; icon: React.ReactNode; run?: () => void; href?: string; routeName?: string } | null = (() => {
-        if (at === 'planning') {
-            if (!p.baselined && may.manage) return { label: 'تثبيت المتطلّبات', icon: <Lock />, run: () => setBaselining(true) };
-            if (may.manage) return { label: p.status === 'on_hold' ? 'استئناف التنفيذ' : 'بدء التنفيذ', icon: <Play />, run: () => post('admin.projects.transition', { status: 'in_progress' }) };
+    /* الخطوةُ التالية — زرٌّ واحدٌ في الرأس: «تم — الانتقال» إن تمّت المرحلة، وإلّا ما تنتظره */
+    const next: { label: string; params?: Record<string, string>; icon: React.ReactNode; run?: () => void; href?: string; routeName?: string } | null = (() => {
+        if (!open) return null;
+        if (workflow.can_advance && workflow.next && may.manage) {
+            return { label: 'تم — الانتقال إلى :stage', params: { stage: t(STAGE_LABEL[workflow.next]) }, icon: <ArrowLeft className="ltr:rotate-180" />, run: () => post('admin.projects.workflow.advance') };
         }
+        if (focusStage?.done) return null;
+        if (at === 'scope') return { label: scope_of_work.latest ? 'متابعة نطاق العمل' : 'إعداد نطاق العمل', icon: <FileText />, routeName: 'admin.projects.scope.show', href: route('admin.projects.scope.show', p.id) };
+        if (at === 'deposit' || at === 'final') return { label: STAGE_LABEL[at], icon: at === 'deposit' ? <Wallet /> : <Receipt />, run: () => pick(at) };
         if (at === 'execution' && operations !== null) {
-            return liveOp ? { label: 'متابعة الفعاليّة', icon: <CalendarCheck />, href: liveOp.url } : { label: 'جدولة الفعاليّة', icon: <CalendarCheck />, run: () => setTab('operations') };
+            return liveOp ? { label: 'متابعة الفعاليّة', icon: <CalendarCheck />, href: liveOp.url } : { label: 'جدولة الفعاليّة', icon: <CalendarCheck />, run: () => pick('execution') };
         }
-        if (at === 'delivery' && may.delivery) {
-            return bestPkg
-                ? { label: 'متابعة التسليم', icon: <PackageCheck />, routeName: 'admin.deliveries.show', href: route('admin.deliveries.show', bestPkg.id) }
-                : { label: 'تجهيز التسليم', icon: <PackageCheck />, routeName: 'admin.deliveries.create', href: route('admin.deliveries.create', { project_id: p.id }) };
-        }
-        if (at === 'billing' && may.invoice) return { label: 'إصدار فاتورة', icon: <Wallet />, routeName: 'admin.customerInvoices.create', href: route('admin.customerInvoices.create', { project_id: p.id }) };
+        if (at === 'delivery' && may.delivery) return { label: 'تجهيز التسليم', icon: <PackageCheck />, run: () => pick('delivery') };
         if (at === 'closing' && may.close) return close_blockers.length === 0 ? { label: 'إقفال المشروع', icon: <Lock />, run: () => post('admin.projects.close') } : { label: 'ما يمنع الإقفال', icon: <AlertTriangle />, run: () => pick('closing') };
         return null;
     })();
@@ -321,13 +320,13 @@ export default function ProjectShow({ project: p, scope, requirements, members, 
                                 <Button asChild>
                                     <SmartLink routeName={next.routeName ?? 'admin.operations.show'} href={next.href}>
                                         {next.icon}
-                                        {t(next.label)}
+                                        {t(next.label, next.params)}
                                     </SmartLink>
                                 </Button>
                             ) : (
                                 <Button onClick={next.run}>
+                                    {t(next.label, next.params)}
                                     {next.icon}
-                                    {t(next.label)}
                                 </Button>
                             ))}
                         {/* وبقيّةُ الأفعال في قائمةٍ واحدة — لا صفَّ أزرارٍ يتنافس على العين */}
@@ -387,6 +386,9 @@ export default function ProjectShow({ project: p, scope, requirements, members, 
             />
 
             {errors?.project && <Alert tone="danger">{errors.project}</Alert>}
+            {errors?.workflow && <Alert tone="danger">{errors.workflow}</Alert>}
+            {errors?.billing && <Alert tone="danger">{errors.billing}</Alert>}
+            {errors?.scope && <Alert tone="danger">{errors.scope}</Alert>}
             {errors?.requirement && <Alert tone="danger">{errors.requirement}</Alert>}
             {errors?.task && <Alert tone="danger">{errors.task}</Alert>}
             {errors?.member && <Alert tone="danger">{errors.member}</Alert>}
@@ -396,8 +398,8 @@ export default function ProjectShow({ project: p, scope, requirements, members, 
                     {t('كميّةُ بندٍ لا توافق الأصلَ وأوامرَ التغيير المقبولة')}: {p.scope_broken.join(' · ')}
                 </Alert>
             )}
-            {open && !p.baselined && (
-                <Alert tone="warning">{t('المتطلّبات لم تُثبَّت بعد — تُكتب وتُعدَّل بحرّية، وبعد التثبيت لا تتغيّر إلّا بأمر تغيير يقبله العميل.')}</Alert>
+            {open && !p.baselined && at === 'scope' && (
+                <Alert tone="warning">{t('المتطلّبات لم تُثبَّت بعد — تُثبَّت حين يُرسَل نطاق العمل للتوقيع، وبعدها لا تتغيّر إلّا بأمر تغيير يقبله العميل.')}</Alert>
             )}
             {financials && financials.invoiced_above_approved === true && (
                 <Alert tone="danger">{t('المفوتَر على هذا المشروع فوق قيمته المعتمَدة الحاليّة — راجع الحاجة إلى إشعار دائن.')}</Alert>
@@ -427,7 +429,9 @@ export default function ProjectShow({ project: p, scope, requirements, members, 
                 <ProcessTab
                     p={p}
                     d={{
-                        quotation: scope.original.quotation,
+                        workflow,
+                        quotation,
+                        scope: scope_of_work,
                         requirements: { active: requirements.filter((r) => r.active).length },
                         members,
                         tasks,
@@ -437,6 +441,7 @@ export default function ProjectShow({ project: p, scope, requirements, members, 
                         billing,
                         invoices,
                         close_blockers,
+                        channels,
                         users,
                     }}
                     stages={stages}
@@ -444,8 +449,6 @@ export default function ProjectShow({ project: p, scope, requirements, members, 
                     m={m}
                     focus={focus}
                     onTab={setTab}
-                    onBaseline={() => setBaselining(true)}
-                    post={post}
                 />
             )}
 

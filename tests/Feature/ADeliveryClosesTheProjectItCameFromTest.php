@@ -29,6 +29,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use RuntimeException;
+use Tests\Concerns\SatisfiesThePathToClose;
 use Tests\TestCase;
 
 /**
@@ -42,6 +43,7 @@ use Tests\TestCase;
 class ADeliveryClosesTheProjectItCameFromTest extends TestCase
 {
     use RefreshDatabase;
+    use SatisfiesThePathToClose;
 
     private Business $business;
 
@@ -335,6 +337,10 @@ class ADeliveryClosesTheProjectItCameFromTest extends TestCase
             ['project_id' => $project->id], [['description' => 'x', 'quantity' => 1, 'unit_price' => 10]], $this->owner->id);
         $this->post(route('admin.projects.close', $project->id))->assertSessionHasErrors('project');
         \App\Support\CustomerInvoices::issue($draft, $this->owner->id);
+
+        /* والتسليمُ وحده لا يُقفل بعد مسار المشروع: نطاقٌ موقَّع وتنفيذٌ مكتمل وقيمةٌ مفوتَرة */
+        $this->post(route('admin.projects.close', $project->id))->assertSessionHasErrors('project');
+        $this->satisfyThePathToClose($project, $this->owner);
 
         $this->post(route('admin.projects.close', $project->id))->assertSessionHasNoErrors();
 
