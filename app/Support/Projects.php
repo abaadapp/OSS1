@@ -4,6 +4,7 @@ namespace App\Support;
 
 use App\Models\Business;
 use App\Models\ChangeOrder;
+use App\Models\CustomerContact;
 use App\Models\CustomerInvoice;
 use App\Models\DeliveryPackage;
 use App\Models\EventOperation;
@@ -62,8 +63,20 @@ final class Projects
 
         $quotation->loadMissing('items', 'customer');
 
+        /*
+         * ومن اختير في العرض يبقى مختارًا في مشروعه — ما لم يُعطَّل بعده.
+         *
+         * المشروعُ مستندٌ جديد، والمعطَّلُ لا يُوجَّه إليه مستندٌ جديد: يأخذ
+         * المشروعُ أساسيَّ الجهة الآن مرجعًا ولقطة. والعرضُ نفسُه لا يُمسّ.
+         */
+        $chosen = $quotation->customer_contact_id
+            ? CustomerContact::where('business_id', $quotation->business_id)->find($quotation->customer_contact_id)
+            : null;
+        $retired = $chosen !== null && ! $chosen->active;
+        $primary = $retired || blank($quotation->attention_to) ? CustomerContacts::primary($quotation->customer) : null;
+
         try {
-            return DB::transaction(function () use ($quotation, $actor) {
+            return DB::transaction(function () use ($quotation, $actor, $retired, $primary) {
                 $project = Project::create([
                     'business_id' => $quotation->business_id,
                     'customer_id' => $quotation->customer_id,
@@ -74,9 +87,11 @@ final class Projects
                     'location' => $quotation->event_location,
                     'starts_at' => $quotation->event_starts_at?->toDateString(),
                     'ends_at' => $quotation->event_ends_at?->toDateString(),
-                    'contact_person' => $quotation->attention_to ?: $quotation->customer?->contact_person,
-                    'contact_phone' => $quotation->contact_phone,
-                    'contact_email' => $quotation->contact_email,
+                    /* ومن اختير في العرض من أشخاص اتصال الجهة يبقى مختارًا في مشروعه — والأسماءُ لقطة */
+                    'customer_contact_id' => $retired ? ($primary['id'] ?? null) : $quotation->customer_contact_id,
+                    'contact_person' => $retired ? ($primary['name'] ?? null) : ($quotation->attention_to ?: ($primary['name'] ?? null)),
+                    'contact_phone' => $retired ? ($primary['phone'] ?? null) : $quotation->contact_phone,
+                    'contact_email' => $retired ? ($primary['email'] ?? null) : $quotation->contact_email,
                     'quoted_value' => (float) $quotation->total,
                     /* الأصلُ — لقطةٌ لا تُكتب بعدها */
                     'approved_value' => (float) $quotation->total,
@@ -179,7 +194,13 @@ final class Projects
             throw new RuntimeException(__('هذا الموظّف ليس من شركتك.'));
         }
 
+        /* شخصُ الاتصال المختار — من أشخاص جهة المشروع، وما لم يُرسَل يبقى كما كان */
+        $contactId = array_key_exists('customer_contact_id', $data)
+            ? CustomerContacts::pick($businessId, $project->customer_id, $data['customer_contact_id'], $project->customer_contact_id)?->id
+            : $project->customer_contact_id;
+
         $project->update([
+            'customer_contact_id' => $contactId,
             'name' => self::text($data['name'] ?? null, 255) ?? $project->name,
             'event_type' => self::text($data['event_type'] ?? null, 60),
             'location' => self::text($data['location'] ?? null, 255),

@@ -33,7 +33,11 @@ interface ReorderRow {
     cost: number;
 }
 
+/** منتجٌ يدخل المخزون · خدمةٌ تُستلم ولا تبلغ الرفّ · بندٌ مخصّص بنصٍّ حرّ (المرحلة 14) */
+type LineKind = 'product' | 'service' | 'custom';
+
 interface Line {
+    kind: LineKind;
     product_id: string;
     name: string;
     purchase_unit: string;
@@ -80,6 +84,8 @@ interface Props {
     mayBrand: boolean;
     /** المشاريعُ القائمة — شراءٌ لأجل مشروعٍ يُقرأ التزامًا عليه (§16) */
     projects: { id: number; code: string; name: string }[];
+    /** من جاء من تبويب «المشتريات» في المشروع — مشروعُه مختارٌ ويعود إليه بعد الحفظ */
+    presetProjectId?: number | null;
 }
 
 /**
@@ -90,6 +96,7 @@ interface Props {
  * أكثرَ ما يشتري — لا كلمةً مكتوبةً في الشاشة تُخالف عادتَه.
  */
 const blank = (unit: string): Line => ({
+    kind: 'product',
     product_id: '',
     name: '',
     purchase_unit: unit,
@@ -117,7 +124,7 @@ export default function PurchaseCreate() {
     const {
         suppliers, products, reorderSuggestions, branches, currentBranchId, fromReorder, today,
         taxRate, formToken, newSupplierId, units: knownUnits, context,
-        defaultSupplierId, methods, terms, documentLanguage, mayBrand, projects,
+        defaultSupplierId, methods, terms, documentLanguage, mayBrand, projects, presetProjectId,
     } = usePage<PageProps<Props>>().props;
     const t = useTranslate();
     const currency = context!.currency;
@@ -202,7 +209,7 @@ export default function PurchaseCreate() {
         /* وما لا يُطبع: عمودٌ آخر لا يبلغ ورقةَ المورّد */
         internal_notes: '',
         /* والمشروعُ بُعدٌ يُقرأ: أمرُ شراءٍ لأجل فعاليّةٍ التزامٌ عليها حتى يُفوتَر */
-        project_id: '',
+        project_id: presetProjectId ? String(presetProjectId) : '',
         /*
          * وطريقةُ السداد **نيّةٌ لا حدث**: تُحفظ على الورقة ولا تكتب قيدًا.
          * ورأسُ القائمة من الخادم لا قيمةٌ مكتوبةٌ هنا.
@@ -272,6 +279,7 @@ export default function PurchaseCreate() {
             lang,
             items: lines.map((l) => ({
                 product_id: l.product_id,
+                line_kind: l.kind,
                 name: l.name,
                 purchase_unit: l.purchase_unit,
                 units_per_purchase_unit: l.units_per_purchase_unit,
@@ -360,7 +368,8 @@ export default function PurchaseCreate() {
         const items = lines
             .filter((l) => (Number(l.qty) || 0) > 0 && (l.product_id || l.name.trim()))
             .map((l) => ({
-                product_id: l.product_id || null,
+                product_id: l.kind === 'custom' ? null : l.product_id || null,
+                line_kind: l.kind,
                 name: l.name,
                 purchase_unit: l.purchase_unit || null,
                 units_per_purchase_unit: Number(l.units_per_purchase_unit) || 1,
@@ -372,7 +381,9 @@ export default function PurchaseCreate() {
          * ولا تُرسل إجماليّات: الخادمُ يحسبها من البنود ومن إعدادات المتجر.
          * وما يُرسل منها يُهمل هناك على أيّ حال — فإرسالُه يوهم بأنّه يُقرأ.
          */
-        form.transform((data) => ({ ...data, draft, items }));
+        /* ومن جاء من المشروع ولم يبدّل مشروعَه يعود إلى تبويب «المشتريات» فيه */
+        const returnToProject = presetProjectId != null && form.data.project_id === String(presetProjectId);
+        form.transform((data) => ({ ...data, draft, items, return_to_project: returnToProject ? 1 : 0 }));
         form.post(route('admin.purchases.store'), { forceFormData: true });
     };
 
@@ -1128,6 +1139,12 @@ export function ItemRows({
     const t = useTranslate();
     const m = (v: number) => money(v, currency);
 
+    /* الأصنافُ بحسب نوع البند: المخزونةُ للمنتج، وغيرُ المخزونة (خدمةٌ أو باقة) للخدمة */
+    const kindOf = (p: Product) => (p as Product & { kind?: string }).kind ?? 'item';
+    const catalogFor = (kind: LineKind) =>
+        kind === 'custom' ? [] : products.filter((p) => (kind === 'service' ? kindOf(p) !== 'item' : kindOf(p) === 'item'));
+    const KIND_LABEL: Record<LineKind, string> = { product: 'منتج', service: 'خدمة', custom: 'بند مخصص' };
+
     /** اختيارُ منتجٍ يملأ اسمَه وتكلفتَه — والصنفُ غيرُ المسجّل يُكتب اسمُه */
     const pick = (i: number, id: string) => {
         const p = products.find((x) => String(x.id) === id);
@@ -1161,12 +1178,18 @@ export function ItemRows({
                         key={i}
                         className="grid grid-cols-1 gap-2 rounded-[12px] border border-[var(--ui-border,#e8e8e8)] p-3 sm:grid-cols-2 lg:grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr_auto] lg:items-center lg:border-0 lg:p-1"
                     >
-                        <div className="min-w-0">
+                        <div className="min-w-0 space-y-1">
                             <MobileLabel>{t('الصنف')}</MobileLabel>
+                            <Select
+                                value={line.kind}
+                                aria-label={t('نوع البند')}
+                                onChange={(e) => onChange(i, { kind: e.target.value as LineKind, product_id: '' })}
+                                options={(Object.keys(KIND_LABEL) as LineKind[]).map((k) => ({ value: k, label: KIND_LABEL[k] }))}
+                            />
                             <ProductPicker
-                                value={line.product_id}
+                                value={line.kind === 'custom' ? '' : line.product_id}
                                 name={line.name}
-                                products={products}
+                                products={catalogFor(line.kind)}
                                 onPick={(id) => pick(i, id)}
                                 onName={(name) => onChange(i, { name })}
                             />
@@ -1249,7 +1272,14 @@ export function ItemRows({
                             خمسُ ربطاتٍ في العشرين مئةُ حبّة — ومن لا يراها
                             مكتوبةً يكتشفها في الجرد.
                         */}
-                        {asBase && (
+                        {line.kind !== 'product' && (
+                            <p className="text-[11px] text-[#6b7280] sm:col-span-2 lg:col-span-7">
+                                {line.kind === 'service'
+                                    ? t('خدمة — يُؤكَّد تنفيذها ثمّ تُفوتَر، ولا تدخل المخزون.')
+                                    : t('بند مخصّص — يُستلم ويُفوتَر ولا يدخل المخزون.')}
+                            </p>
+                        )}
+                        {asBase && line.kind === 'product' && (
                             <p className="text-[11px] text-[#6b7280] sm:col-span-2 lg:col-span-7">
                                 {t('يدخل المخزون: :n :unit', {
                                     n: base,

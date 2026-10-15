@@ -114,11 +114,12 @@ final class PurchaseOrders
         $id = Setting::where('business_id', $businessId)
             ->where('key', self::DEFAULT_SUPPLIER)->value('value');
 
-        if (filled($id) && Supplier::where('business_id', $businessId)->whereKey($id)->exists()) {
+        /* والمتوقّفُ لا تُفتح عليه الشاشة ولو كان الافتراضيّ */
+        if (filled($id) && Supplier::where('business_id', $businessId)->active()->whereKey($id)->exists()) {
             return (int) $id;
         }
 
-        $only = Supplier::where('business_id', $businessId)->limit(2)->pluck('id');
+        $only = Supplier::where('business_id', $businessId)->active()->limit(2)->pluck('id');
 
         return $only->count() === 1 ? (int) $only->first() : null;
     }

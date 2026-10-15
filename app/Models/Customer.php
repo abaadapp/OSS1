@@ -58,4 +58,15 @@ class Customer extends Model
     {
         return $this->hasMany(CustomerAddress::class);
     }
+
+    /** أشخاصُ الاتصال — الأساسيُّ أوّلًا ثمّ بالأسماء */
+    public function contacts(): HasMany
+    {
+        return $this->hasMany(CustomerContact::class)->orderByDesc('is_primary')->orderBy('name');
+    }
+
+    public function projects(): HasMany
+    {
+        return $this->hasMany(Project::class);
+    }
 }

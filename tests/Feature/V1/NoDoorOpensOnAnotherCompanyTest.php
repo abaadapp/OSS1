@@ -179,6 +179,14 @@ class NoDoorOpensOnAnotherCompanyTest extends TestCase
         $checklistItem = $checklist->items()->firstOrFail();
         $consumable = Consumables::issue($op, $product, ['quantity' => 2, 'key' => 'k'], $owner);
 
+        /* المرحلة 14: شخصُ اتصالٍ للجهة، ومنظّمٌ بتصنيفه على الفعاليّة، وخدمةٌ في كتالوج المورّدين */
+        $contact = \App\Support\CustomerContacts::save($customer, ['name' => "شخص $m", 'email' => 'buyer@a.om', 'phone' => '99887700'], $owner);
+        $organizerCategory = \App\Support\Organizers::saveCategory($bid, "تصنيف $m");
+        $organizer = \App\Support\Organizers::create($bid, ['name' => "منظّم $m", 'gender' => 'female', 'category_ids' => [$organizerCategory->id]], $owner);
+        $organizerAssignment = \App\Support\Operations\OperationOrganizers::assign($op, ['organizer_id' => $organizer->id, 'organizer_category_id' => $organizerCategory->id], $owner);
+        $service = \App\Support\ServiceProviders::saveCategory($bid, "خدمة $m");
+        \App\Support\ServiceProviders::syncServices($supplier, [$service->id], $owner);
+
         $package = DeliveryPackages::create($bid, null, ['project_id' => $project->id], $owner);
         $packageItem = DeliveryPackages::addItem($package, ['kind' => 'item', 'project_item_id' => $project->items()->first()->id, 'quantity' => 1], null, $owner);
 
@@ -235,6 +243,8 @@ class NoDoorOpensOnAnotherCompanyTest extends TestCase
             'management.scenarios' => $scenario->id, 'management.reviews' => $review->id, 'did' => $decision->id, 'imports' => $dataset->id,
             'payroll' => $payroll->id, 'branches' => (int) Branch::where('business_id', $bid)->value('id'), 'settings.policies' => $policy->id,
             'customer' => $customer->id, 'finance.cheques' => $payment->id, 'inventory.receipts' => 0,
+            'contactId' => $contact->id, 'organizers' => $organizer->id, 'organizers.categories' => $organizerCategory->id,
+            'oid' => $organizerAssignment->id, 'suppliers.services' => $service->id,
         ];
     }
 
@@ -259,6 +269,8 @@ class NoDoorOpensOnAnotherCompanyTest extends TestCase
             $param === 'clid' => $this->ids['clid'],
             $param === 'note' => $this->ids['note'],
             $param === 'item' => $this->ids['item'],
+            $param === 'contactId' => $this->ids['contactId'],
+            $param === 'oid' => $this->ids['oid'],
             $param === 'attachment', $param === 'imageId', $param === 'addon', $param === 'variant', $param === 'run' => 1,
             $param === 'tid' && $second === 'operations' => $this->ids['operations.tid'],
             $param === 'tid' => $this->ids['tid'],

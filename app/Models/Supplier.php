@@ -2,12 +2,58 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
+/**
+ * المورّد — منتجاتٍ أو خدماتٍ أو كليهما.
+ *
+ * مقدّمُ الخدمة مورّدٌ لا عالمٌ ماليٌّ ثانٍ: أوامرُ شرائه وسنداتُه وذممُه
+ * هي نفسُها، ويزيد عليه كتالوجُ ما يقدّمه (`ServiceCategory`) يُبحث به.
+ */
 class Supplier extends Model
 {
+    public const PRODUCTS = 'products';
+
+    public const SERVICES = 'services';
+
+    public const BOTH = 'both';
+
+    /** @var list<string> */
+    public const TYPES = [self::PRODUCTS, self::SERVICES, self::BOTH];
+
+    public const ACTIVE = 'active';
+
+    /** متوقّف — يبقى في السجلّ ومستنداته القديمة، ولا يُنشأ عليه أمرُ شراءٍ جديد */
+    public const INACTIVE = 'inactive';
+
+    /** @var list<string> */
+    public const STATUSES = [self::ACTIVE, self::INACTIVE];
+
     protected $guarded = [];
+
+    public function serviceCategories(): BelongsToMany
+    {
+        return $this->belongsToMany(ServiceCategory::class, 'service_category_supplier')->withPivot('business_id')->orderBy('name');
+    }
+
+    /** من يُختار لأمر شراءٍ جديد — النشطُ وحده (`PurchaseOrderController::store`) */
+    public function scopeActive(Builder $query): Builder
+    {
+        return $query->where('status', self::ACTIVE);
+    }
+
+    public function isActive(): bool
+    {
+        return ($this->status ?: self::ACTIVE) === self::ACTIVE;
+    }
+
+    public function providesServices(): bool
+    {
+        return in_array($this->supplier_type, [self::SERVICES, self::BOTH], true);
+    }
 
     public function purchaseOrders(): HasMany { return $this->hasMany(PurchaseOrder::class); }
 

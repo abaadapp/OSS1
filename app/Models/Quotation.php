@@ -91,6 +91,12 @@ class Quotation extends Model
         return $this->belongsTo(Customer::class);
     }
 
+    /** من اختير من أشخاص اتصال الجهة — مرجعٌ، والأسماءُ لقطةٌ في المستند */
+    public function customerContact(): BelongsTo
+    {
+        return $this->belongsTo(CustomerContact::class);
+    }
+
     /**
      * بنودُه بترتيبها المكتوب.
      *

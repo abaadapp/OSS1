@@ -96,6 +96,17 @@ class EventOperation extends Model
         return $this->hasMany(AssetReservation::class)->orderBy('id');
     }
 
+    /** مسؤولُ المنظّمين — موظّفٌ من الشركة */
+    public function organizersLead(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'organizers_lead_user_id');
+    }
+
+    public function organizers(): HasMany
+    {
+        return $this->hasMany(OperationOrganizer::class);
+    }
+
     public function crew(): HasMany
     {
         return $this->hasMany(OperationCrewAssignment::class)->orderBy('id');

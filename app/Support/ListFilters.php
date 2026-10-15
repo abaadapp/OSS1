@@ -119,7 +119,10 @@ class ListFilters
             $q->where(fn ($w) => $w->where('name', $like, "%{$s}%")
                 ->orWhere('name_en', $like, "%{$s}%")
                 ->orWhere('phone', $like, "%{$s}%")
-                ->orWhere('email', $like, "%{$s}%"));
+                ->orWhere('email', $like, "%{$s}%")
+                /* وأشخاصُ اتصال الجهة: من يبحث عن «محمد أحمد» يجد شركتَه (المرحلة 14) */
+                ->orWhereHas('contacts', fn ($c) => $c->where(fn ($x) => $x->where('name', $like, "%{$s}%")
+                    ->orWhere('phone', $like, "%{$s}%")->orWhere('whatsapp', $like, "%{$s}%")->orWhere('email', $like, "%{$s}%"))));
         }
 
         return $q;

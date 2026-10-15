@@ -109,12 +109,13 @@ class SupplierExportTest extends TestCase
      *
      * لا صفحة لكلّ مورّد، ورابطٌ إلى صفحةٍ لا وجود لها أسوأ من غياب النتيجة.
      */
-    public function test_the_result_leads_to_the_list_filtered_by_his_name(): void
+    /** ولكلّ مورّدٍ صفحتُه منذ المرحلة 14 — فالنتيجةُ تقود إليها لا إلى قائمةٍ مُرشَّحة */
+    public function test_the_result_leads_to_the_suppliers_own_page(): void
     {
         $item = collect($this->search('النور'))->firstWhere('icon', 'truck')['items'][0];
+        $supplier = \App\Models\Supplier::where('name', 'مؤسسة النور')->firstOrFail();
 
-        $this->assertStringContainsString('/suppliers', $item['url']);
-        $this->assertStringContainsString(rawurlencode('مؤسسة النور'), $item['url']);
+        $this->assertSame(route('admin.suppliers.show', $supplier->id), $item['url']);
     }
 
     /** ولا يتجاوز البحثُ صلاحية صاحبه */

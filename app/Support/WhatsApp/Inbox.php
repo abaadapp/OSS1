@@ -5,6 +5,7 @@ namespace App\Support\WhatsApp;
 use App\Models\Business;
 use App\Models\Communication;
 use App\Models\Customer;
+use App\Models\CustomerContact;
 use App\Models\User;
 use App\Models\WhatsAppConversation;
 use App\Models\WhatsAppMessage;
@@ -406,9 +407,19 @@ final class Inbox
         $matches = Customer::where('business_id', $businessId)
             ->where(fn ($q) => $q->where('phone', 'like', $tail)->orWhere('contact_phone', 'like', $tail))
             ->limit(50)->get(['id', 'phone', 'contact_phone'])
-            ->filter(fn ($c) => PhoneNumber::normalize($c->phone) === $waId || PhoneNumber::normalize($c->contact_phone) === $waId);
+            ->filter(fn ($c) => PhoneNumber::normalize($c->phone) === $waId || PhoneNumber::normalize($c->contact_phone) === $waId)
+            ->pluck('id');
 
-        return $matches->count() === 1 ? (int) $matches->first()->id : null;
+        /* وأشخاصُ اتصال الجهات — هاتفُ الشخص أو رقمُ واتسابه (المرحلة 14) */
+        $viaContacts = CustomerContact::where('business_id', $businessId)
+            ->where(fn ($q) => $q->where('phone', 'like', $tail)->orWhere('whatsapp', 'like', $tail))
+            ->limit(50)->get(['customer_id', 'phone', 'whatsapp'])
+            ->filter(fn ($c) => PhoneNumber::normalize($c->phone) === $waId || PhoneNumber::normalize($c->whatsapp) === $waId)
+            ->pluck('customer_id');
+
+        $ids = $matches->merge($viaContacts)->unique()->values();
+
+        return $ids->count() === 1 ? (int) $ids->first() : null;
     }
 
     /** آخرُ ما في المحادثة — لقائمة المحادثات */

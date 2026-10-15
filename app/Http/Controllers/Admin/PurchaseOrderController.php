@@ -179,9 +179,12 @@ class PurchaseOrderController extends Controller
                 'receipt' => $po->receipt && $mayAttachment
                     ? route('admin.purchases.receiptFile', $po->id) : null,
                 'receipt_name' => $po->receipt_name,
+                /* بضاعةٌ أم خدماتٌ أم كلاهما — الخدمةُ «تُنفَّذ» ولا «تُستلم» (`GoodsReceipts::mode`) */
+                'receipt_mode' => GoodsReceipts::mode($po->items->pluck('line_kind')),
                 'items' => $po->items->map(fn ($i) => [
                     'id' => $i->id,
                     'name' => $i->name,
+                    'line_kind' => $i->line_kind ?: PurchaseOrderItem::PRODUCT,
                     // الكميّاتُ كلُّها بوحدة الشراء — والتحويل عند الرفّ وحده
                     'purchase_unit' => $i->purchase_unit,
                     'units_per_purchase_unit' => (float) $i->units_per_purchase_unit,
@@ -280,11 +283,17 @@ class PurchaseOrderController extends Controller
             'actor' => null,
         ];
 
+        /* الخدمةُ «تُنفَّذ» ولا «تدخل الرفّ» — نمطُ كلّ ورقةٍ من أنواع بنودها (`GoodsReceipts::mode`) */
+        $kinds = $po->items->pluck('line_kind', 'id');
+
         foreach ($notes as $note) {
+            $mode = GoodsReceipts::mode($note->items->pluck('purchase_order_item_id')->filter()->map(fn ($id) => $kinds[$id] ?? null));
             $events[] = [
                 'at' => $note->created_at,
                 'kind' => 'receipt',
-                'title' => __('سُجّل استلام :n — بانتظار الاعتماد', ['n' => $note->number]),
+                'title' => $mode === GoodsReceipts::SERVICES
+                    ? __('سُجّل تأكيد تنفيذ :n — بانتظار الاعتماد', ['n' => $note->number])
+                    : __('سُجّل استلام :n — بانتظار الاعتماد', ['n' => $note->number]),
                 'detail' => $note->receiver,
                 'actor' => $actors[$note->submitted_by] ?? null,
             ];
@@ -293,7 +302,11 @@ class PurchaseOrderController extends Controller
                 $events[] = [
                     'at' => $note->approved_at,
                     'kind' => 'approved',
-                    'title' => __('اعتُمد الاستلام :n — دخلت البضاعة الرفّ', ['n' => $note->number]),
+                    'title' => match ($mode) {
+                        GoodsReceipts::SERVICES => __('اعتُمد تنفيذ الخدمة :n — لا تدخل المخزون', ['n' => $note->number]),
+                        GoodsReceipts::MIXED => __('اعتُمد الاستلام :n — دخلت البضاعة الرفّ، والخدمات لا تدخل المخزون', ['n' => $note->number]),
+                        default => __('اعتُمد الاستلام :n — دخلت البضاعة الرفّ', ['n' => $note->number]),
+                    },
                     'detail' => null,
                     'actor' => $actors[$note->approved_by] ?? null,
                 ];
@@ -303,7 +316,9 @@ class PurchaseOrderController extends Controller
                 $events[] = [
                     'at' => $note->rejected_at,
                     'kind' => 'rejected',
-                    'title' => __('رُفض الاستلام :n', ['n' => $note->number]),
+                    'title' => $mode === GoodsReceipts::SERVICES
+                        ? __('رُفض تأكيد التنفيذ :n', ['n' => $note->number])
+                        : __('رُفض الاستلام :n', ['n' => $note->number]),
                     'detail' => $note->rejection_reason,
                     'actor' => $actors[$note->rejected_by] ?? null,
                 ];
@@ -443,8 +458,9 @@ class PurchaseOrderController extends Controller
          * بلا اسم — ولا يُردّ الطلبُ بـ٤٠٤ في شاشةٍ تكتب. ولا يُقرأ صفُّ
          * مورّدٍ ليس من المتجر بحال.
          */
+        /* والمورّدُ المتوقّف لا يُرسم على ورقةِ أمرٍ جديد — كما لا يُقبل عند الحفظ */
         $supplier = ! empty($data['supplier_id'])
-            ? Supplier::where('business_id', $bid)->whereKey($data['supplier_id'])->first()
+            ? Supplier::where('business_id', $bid)->active()->whereKey($data['supplier_id'])->first()
             : null;
 
         $lines = $this->lines($bid, array_map(
@@ -618,11 +634,15 @@ class PurchaseOrderController extends Controller
             'attachment' => ['nullable', 'file', 'max:10240', 'extensions:jpg,jpeg,png,pdf,webp,heic'],
             'items' => ['required', 'array', 'min:1'],
             'items.*.product_id' => ['nullable', 'integer'],
+            /* منتجٌ · خدمة · بندٌ مخصّص — والخادمُ يقرأ النوعَ من الصنف حين يكون (`lines`) */
+            'items.*.line_kind' => ['nullable', Rule::in(PurchaseOrderItem::LINE_KINDS)],
             'items.*.name' => ['required', 'string', 'max:255'],
             'items.*.purchase_unit' => ['nullable', 'string', 'max:40'],
             'items.*.units_per_purchase_unit' => ['nullable', 'numeric', 'min:0.001', 'max:100000'],
             'items.*.cost' => ['required', 'numeric', 'min:0'],
             'items.*.quantity' => ['required', 'integer', 'min:1'],
+            /* ومن جاء من تبويب «المشتريات» في المشروع يعود إليه */
+            'return_to_project' => ['nullable', 'boolean'],
         ], [
             'supplier_id.required' => __('اختر المورد'),
             'payment_method.required' => __('اختر طريقة الدفع المتّفق عليها مع المورّد'),
@@ -653,6 +673,16 @@ class PurchaseOrderController extends Controller
 
         if (! $supplier) {
             return back()->withInput()->withErrors(['supplier_id' => __('المورّد المحدد غير صالح.')]);
+        }
+
+        /*
+         * والمتوقّفُ لا يُنشأ عليه أمرٌ جديد — من الخادم لا من القائمة وحدها.
+         *
+         * القائمةُ لا تعرضه، لكنّ رقمَه يُكتب في الطلب يدويًّا. وأوامرُه القديمة
+         * وسنداتُها ومشاريعُها تبقى كما هي: الإيقافُ للقادم لا للتاريخ.
+         */
+        if (! $supplier->isActive()) {
+            return back()->withInput()->withErrors(['supplier_id' => __('المورّد :name متوقف — لا يُنشأ عليه أمر شراء جديد.', ['name' => $supplier->name])]);
         }
 
         $items = $this->lines($bid, $data['items']);
@@ -769,6 +799,26 @@ class PurchaseOrderController extends Controller
         Activity::log('created', 'أنشأ أمر شراء '.$po->number.' لفرع '.$branch->name
             .' بقيمة '.Money::format((float) $po->total, Money::of((int) $po->business_id)), ['subject_id' => $po->id]);
 
+        /*
+         * وأمرٌ على مشروعٍ يُقيَّد على المشروع أيضًا — من أين أُنشئ، ولمن.
+         *
+         * والأمرُ واحدٌ لا نسختان: هو نفسُه في قسم المشتريات وفي تبويب المشروع،
+         * والتبويبُ يقرؤه من `project_id` (`ProjectPurchases`).
+         */
+        $fromProject = $request->boolean('return_to_project') && $po->project_id !== null;
+        if ($po->project_id !== null && ($project = Project::where('business_id', $bid)->find($po->project_id)) !== null) {
+            Activity::log('created', ($fromProject ? 'أنشأ من داخل المشروع ' : 'ربط بالمشروع ').$project->code
+                .' أمر الشراء '.$po->number.' من '.$po->supplier_name, [
+                    'subject_id' => $project->id, 'subject_type' => 'project', 'icon' => 'shopping-cart',
+                ]);
+        }
+
+        if ($fromProject) {
+            return redirect()->route('admin.projects.show', ['id' => $po->project_id, 'tab' => 'purchases'])->with('toast', [
+                'msg' => __('أُنشئ أمر الشراء :number للمشروع', ['number' => $po->number]), 'type' => 'success',
+            ]);
+        }
+
         return redirect()->route('admin.purchases.orders', ['q' => $po->number])->with('toast', [
             'msg' => $po->status === PurchaseOrders::DRAFT
                 ? __('حُفظ أمر الشراء :number مسودّة', ['number' => $po->number])
@@ -809,7 +859,7 @@ class PurchaseOrderController extends Controller
     private function lines(int $bid, array $rows): array
     {
         $ids = collect($rows)->pluck('product_id')->filter()->unique()->all();
-        $owned = $ids === [] ? collect() : Product::where('business_id', $bid)->whereIn('id', $ids)->pluck('id', 'id');
+        $owned = $ids === [] ? collect() : Product::where('business_id', $bid)->whereIn('id', $ids)->get(['id', 'kind'])->keyBy('id');
 
         $out = [];
 
@@ -829,8 +879,23 @@ class PurchaseOrderController extends Controller
              */
             $per = (float) ($row['units_per_purchase_unit'] ?? 1);
 
+            /*
+             * ونوعُ البند من الصنف حين يكون — لا ممّا قالته الشاشة.
+             *
+             * صنفٌ مخزونٌ منتجٌ يبلغ الرفّ عند الاستلام، وصنفٌ غيرُ مخزونٍ (خدمةٌ أو
+             * باقة) خدمة. وبلا صنفٍ: خدمةٌ إن قيل ذلك، وإلّا بندٌ مخصّص. فلا يدخل
+             * المخزونَ ما ليس صنفًا مخزونًا — انظر `GoodsReceipts::approve`.
+             */
+            $product = isset($row['product_id']) ? ($owned[$row['product_id']] ?? null) : null;
+            $kind = match (true) {
+                $product !== null => $product->isStocked() ? PurchaseOrderItem::PRODUCT : PurchaseOrderItem::SERVICE,
+                ($row['line_kind'] ?? null) === PurchaseOrderItem::SERVICE => PurchaseOrderItem::SERVICE,
+                default => PurchaseOrderItem::CUSTOM,
+            };
+
             $out[] = [
-                'product_id' => isset($row['product_id']) ? ($owned[$row['product_id']] ?? null) : null,
+                'product_id' => $product?->id,
+                'line_kind' => $kind,
                 'name' => $row['name'],
                 // ‏والمسافاتُ مقلَّمةٌ سلفًا بـ`TrimStrings` — وقصُّها هنا فرعٌ لا يُقرأ
                 'purchase_unit' => ($row['purchase_unit'] ?? null) ?: null,

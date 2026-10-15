@@ -278,9 +278,22 @@ final class Quotations
      * @param  array<string, mixed>  $totals
      * @return array<string, mixed>
      */
-    private static function attributes(int $businessId, ?Customer $customer, array $data, array $totals): array
+    private static function attributes(int $businessId, ?Customer $customer, array $data, array $totals, ?int $keepContact = null): array
     {
         $issuedAt = isset($data['issued_at']) ? Carbon::parse($data['issued_at']) : now();
+
+        /*
+         * ═══ ومن يُوجَّه إليه العرض ═══
+         *
+         * شخصٌ مختارٌ من أشخاص اتصال الجهة (`customer_contact_id`) — مرجعٌ يبقى،
+         * وأسماؤه وأرقامُه لقطةٌ في الورقة. وما كُتب بيدٍ يعلو على الاختيار، وما
+         * لم يُكتب ولم يُختر يُقرأ من شخص الجهة الأساسيّ (أو أعمدتها القديمة) —
+         * انظر `CustomerContacts::primary`.
+         */
+        $contact = CustomerContacts::pick($businessId, $customer?->id, $data['customer_contact_id'] ?? null, $keepContact);
+        $fallback = $contact !== null
+            ? ['name' => $contact->name, 'email' => $contact->email, 'phone' => $contact->phone]
+            : CustomerContacts::primary($customer);
 
         return [
             'business_id' => $businessId,
@@ -314,9 +327,10 @@ final class Quotations
             'customer_address' => $customer?->billing_address ?: $customer?->address,
             'customer_reference' => self::text($data['customer_reference'] ?? null, 60),
             'department' => self::text($data['department'] ?? null, 120) ?? $customer?->department,
-            'attention_to' => self::text($data['attention_to'] ?? null, 120) ?? $customer?->contact_person,
-            'contact_email' => self::text($data['contact_email'] ?? null, 120) ?? $customer?->contact_email,
-            'contact_phone' => self::text($data['contact_phone'] ?? null, 40) ?? $customer?->contact_phone,
+            'customer_contact_id' => $contact?->id,
+            'attention_to' => self::text($data['attention_to'] ?? null, 120) ?? ($fallback['name'] ?? null),
+            'contact_email' => self::text($data['contact_email'] ?? null, 120) ?? ($fallback['email'] ?? null),
+            'contact_phone' => self::text($data['contact_phone'] ?? null, 40) ?? ($fallback['phone'] ?? null),
             'scope' => self::text($data['scope'] ?? null, 20000),
             'terms' => self::text($data['terms'] ?? null, 20000),
             'notes' => self::text($data['notes'] ?? null, 20000),
@@ -357,9 +371,9 @@ final class Quotations
      * @param  array<string, mixed>  $data
      * @param  array<string, mixed>  $totals
      */
-    private static function shape(int $businessId, ?Customer $customer, array $data, array $totals): Quotation
+    private static function shape(int $businessId, ?Customer $customer, array $data, array $totals, ?int $keepContact = null): Quotation
     {
-        $quotation = new Quotation(self::attributes($businessId, $customer, $data, $totals) + [
+        $quotation = new Quotation(self::attributes($businessId, $customer, $data, $totals, $keepContact) + [
             'number' => null,
             'status' => Quotation::DRAFT,
             'revision' => 1,
@@ -450,10 +464,10 @@ final class Quotations
 
         $priced = self::price($businessId, $lines, $actor);
         $totals = self::totals($businessId, $priced['lines']);
-        $settled = self::settle($businessId, self::shape($businessId, $customer, $data, $totals), $exceptions, $actor);
+        $settled = self::settle($businessId, self::shape($businessId, $customer, $data, $totals, $quotation->customer_contact_id), $exceptions, $actor);
 
         return DB::transaction(function () use ($quotation, $businessId, $customer, $data, $totals, $priced, $settled) {
-            $quotation->update(self::attributes($businessId, $customer, $data, $totals) + [
+            $quotation->update(self::attributes($businessId, $customer, $data, $totals, $quotation->customer_contact_id) + [
                 'status' => $priced['needsApproval'] || $settled['pending']
                     ? Quotation::PENDING_APPROVAL : Quotation::DRAFT,
                 /*

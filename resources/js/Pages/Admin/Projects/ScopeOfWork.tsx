@@ -18,6 +18,8 @@ import { useTranslate } from '@/lib/i18n';
 import { SCOPE_STATE_LABEL, scopeTone } from '@/lib/scopes';
 import { cn } from '@/lib/utils';
 import type { PageProps } from '@/types';
+import ContactPicker from '@/Components/ContactPicker';
+import type { CustomerContact } from '@/lib/contacts';
 
 interface SnapshotItem {
     description: string;
@@ -93,6 +95,8 @@ interface Props {
     current: Current | null;
     revisions: { id: number; number: string; revision: number; status: string; state: string; sent_at: string | null; decided_at: string | null; decided_by_name: string | null; superseded_at: string | null; url: string | null }[];
     channels: { email: boolean; whatsapp: boolean; whatsapp_template: { ar: boolean; en: boolean } };
+    /** أشخاصُ اتصال الجهة — يُختار منهم من يوقّع، وأسماؤه لقطةٌ في النسخة (المرحلة 14) */
+    contacts?: CustomerContact[];
     may: { manage: boolean; send: boolean; communications: boolean; templates: boolean; commercial: boolean };
 }
 
@@ -138,7 +142,7 @@ const formOf = (c: Current): Form => ({
  * مسودّة ← جاهز للإرسال ← أُرسل (يُبصَم ويُجمَّد ويُبنى رابطُه) ← فُتح ←
  * موقَّع. وما وُقّع لا يُعدَّل: التعديلُ نسخةٌ جديدة تُوقَّع من جديد.
  */
-export default function ScopeOfWork({ project, current, revisions, channels, may }: Props) {
+export default function ScopeOfWork({ project, current, revisions, channels, may, contacts = [] }: Props) {
     const t = useTranslate();
     const { context } = usePage<PageProps>().props;
     const { errors } = usePage().props as { errors?: Record<string, string> };
@@ -293,7 +297,7 @@ export default function ScopeOfWork({ project, current, revisions, channels, may
 
                         {/* ─── المستند ─── */}
                         {current.editable && may.manage && form ? (
-                            <Editor form={form} set={set} setForm={setForm} commercial={may.commercial} />
+                            <Editor form={form} set={set} setForm={setForm} commercial={may.commercial} contacts={contacts} />
                         ) : (
                             <ReadOnly c={current} />
                         )}
@@ -413,14 +417,27 @@ function Steps({ state }: { state: string }) {
     );
 }
 
-function Editor({ form, set, setForm, commercial }: { form: Form; set: (k: keyof Form) => (e: { target: { value: string } }) => void; setForm: (f: Form) => void; commercial: boolean }) {
+function Editor({ form, set, setForm, commercial, contacts = [] }: { form: Form; set: (k: keyof Form) => (e: { target: { value: string } }) => void; setForm: (f: Form) => void; commercial: boolean; contacts?: CustomerContact[] }) {
     const t = useTranslate();
+    const [picked, setPicked] = useState('');
 
     return (
         <Card className="space-y-5 p-4">
             <Section title="بيانات العميل">
                 <div className="grid gap-3 sm:grid-cols-2">
                     <Field label="العميل"><Input value={form.customer_name} onChange={set('customer_name')} /></Field>
+                    {contacts.length > 0 && (
+                        <Field label="من أشخاص اتصال الجهة" hint="يملأ جهة الاتصال وهاتفها وبريدها في هذه النسخة">
+                            <ContactPicker
+                                contacts={contacts}
+                                value={picked}
+                                onPick={(c) => {
+                                    setPicked(c ? String(c.id) : '');
+                                    if (c) setForm({ ...form, contact_person: c.name, contact_phone: c.phone ?? '', contact_email: c.email ?? '' });
+                                }}
+                            />
+                        </Field>
+                    )}
                     <Field label="جهة الاتصال"><Input value={form.contact_person} onChange={set('contact_person')} /></Field>
                     <Field label="الهاتف"><Input dir="ltr" value={form.contact_phone} onChange={set('contact_phone')} /></Field>
                     <Field label="البريد الإلكتروني"><Input dir="ltr" type="email" value={form.contact_email} onChange={set('contact_email')} /></Field>

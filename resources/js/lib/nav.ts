@@ -26,6 +26,7 @@ import {
     ShoppingCart,
     Truck,
     UserCog,
+    UsersRound,
     Wrench,
     Users,
     Wallet,
@@ -102,7 +103,8 @@ export const NAV: NavGroup[] = [
                 icon: Users,
                 route: 'admin.customers.index',
                 section: 'customers',
-                covers: covers(CUSTOMER_TABS),
+                /* وصفحةُ المورّد تحت تبويب «الموردين» هنا — المرحلة 14 */
+                covers: [...covers(CUSTOMER_TABS), 'admin.suppliers.show'],
             },
             /* وواتساب: صندوقُ وارد الشركة — ما يكتبه العملاءُ ويُجاب من هنا */
             { label: 'واتساب', icon: MessageCircle, route: 'admin.whatsapp.index', section: 'communications' },
@@ -147,6 +149,17 @@ export const NAV: NavGroup[] = [
                     'admin.deliveries.show',
                     'admin.deliveries.create',
                 ],
+            },
+            /*
+             * والمنظّمون الميدانيّون — المرحلة 14: سجلٌّ مستقلّ بتصنيفاته، يُعيَّنون
+             * منه على الفعاليّة. قسمٌ له بابُه، لا تبويبٌ في المشروع.
+             */
+            {
+                label: 'المنظّمون',
+                icon: UsersRound,
+                route: 'admin.organizers.index',
+                section: 'organizers',
+                covers: ['admin.organizers.show'],
             },
             /*
              * وعروضُ الأسعار وحزمُ التسليم خرجت من الشريط: هي مراحلُ المشروع لا

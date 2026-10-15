@@ -12,7 +12,9 @@ use App\Models\OperationChecklistTemplate;
 use App\Models\OperationCrewAssignment;
 use App\Models\OperationEquipmentRequirement;
 use App\Models\OperationIncident;
+use App\Models\OperationOrganizer;
 use App\Models\OperationScheduleItem;
+use App\Models\Organizer;
 use App\Models\Product;
 use App\Models\Project;
 use App\Models\User;
@@ -24,11 +26,13 @@ use App\Support\Operations\Consumables;
 use App\Support\Operations\Crew;
 use App\Support\Operations\EventOperations;
 use App\Support\Operations\Incidents;
+use App\Support\Operations\OperationOrganizers;
 use App\Support\Operations\OperationReadiness;
 use App\Support\Operations\Requirements;
 use App\Support\Operations\Reservations;
 use App\Support\Operations\ResourceConflicts;
 use App\Support\Operations\Schedule;
+use App\Support\Organizers;
 use App\Support\Pagination;
 use App\Support\Permissions;
 use App\Support\Search;
@@ -279,6 +283,13 @@ class EventOperationController extends Controller
             'attendance' => Crew::attendance($operation),
             'checklists' => $operation->checklists->map(fn (OperationChecklist $c) => $this->checklistRow($c))->all(),
             'incidents' => $operation->incidents->map(fn (OperationIncident $i) => $this->incidentRow($i))->all(),
+            /* المنظّمون — المرحلة 14: من على الفعاليّة، ومن يُختار منه، وتصنيفاتُهم */
+            'organizers' => OperationOrganizer::where('event_operation_id', $operation->id)->with(['organizer:id,name,phone,whatsapp,gender', 'organizer.categories:id,name', 'category:id,name'])
+                ->orderBy('starts_at')->orderBy('id')->get()->map(fn (OperationOrganizer $a) => $this->organizerRow($a))->all(),
+            'organizer_options' => Organizer::where('business_id', $bid)->where('status', Organizer::AVAILABLE)->with('categories:id,name')
+                ->orderBy('name')->limit(500)->get()
+                ->map(fn (Organizer $o) => ['id' => $o->id, 'name' => $o->name, 'gender' => $o->gender, 'phone' => $o->phone,
+                    'categories' => $o->categories->map(fn ($c) => ['id' => $c->id, 'name' => $c->name])->values()->all()])->all(),
             'users' => User::where('business_id', $bid)->where('status', 'نشط')->orderBy('name')->get(['id', 'name'])->all(),
             'project_members' => $operation->project?->members()->with('user:id,name')->get()->map(fn ($m) => ['user_id' => $m->user_id, 'name' => $m->user?->name, 'role' => $m->role_in_project])->all() ?? [],
             'templates' => OperationChecklistTemplate::where('business_id', $bid)->where('active', true)->orderBy('sort_order')->get(['id', 'name', 'phase'])->all(),
@@ -629,6 +640,50 @@ class EventOperationController extends Controller
         return $this->attempt(fn () => Crew::update($assignment, $data, auth()->user()), __('حُفظ التعيين'), 'crew');
     }
 
+    /* ─────────────────────────── المنظّمون ─────────────────────────── */
+
+    /** تعيينُ منظّمٍ على الفعاليّة — بفعل الفريق نفسِه، والتداخلُ يُردّ كما يُردّ للموظّف */
+    public function storeOrganizer(Request $request, int|string $id)
+    {
+        $this->gate(Permissions::CREW_MANAGE);
+        $operation = $this->find($id);
+        $data = $request->validate([
+            'organizer_id' => ['required', 'integer'],
+            'organizer_category_id' => ['nullable', 'integer'],
+            'starts_at' => ['nullable', 'date'],
+            'ends_at' => ['nullable', 'date'],
+            'notes' => ['nullable', 'string', 'max:2000'],
+        ]);
+
+        return $this->attempt(fn () => OperationOrganizers::assign($operation, $data, auth()->user()), __('عُيّن المنظّم على الفعاليّة'), 'organizers');
+    }
+
+    public function updateOrganizer(Request $request, int|string $id, int|string $oid)
+    {
+        $this->gate(Permissions::CREW_MANAGE);
+        $operation = $this->find($id);
+        $assignment = OperationOrganizer::where('business_id', $this->bid())->where('event_operation_id', $operation->id)->whereKey($oid)->firstOrFail();
+        $data = $request->validate([
+            'organizer_category_id' => ['sometimes', 'nullable', 'integer'],
+            'starts_at' => ['sometimes', 'nullable', 'date'],
+            'ends_at' => ['sometimes', 'nullable', 'date'],
+            'status' => ['sometimes', 'required', 'string', 'max:20'],
+            'notes' => ['sometimes', 'nullable', 'string', 'max:2000'],
+        ]);
+
+        return $this->attempt(fn () => OperationOrganizers::update($assignment, $data, auth()->user()), __('حُفظ تعيين المنظّم'), 'organizers');
+    }
+
+    /** مسؤولُ المنظّمين — موظّفٌ من الشركة، أو لا أحد */
+    public function organizersLead(Request $request, int|string $id)
+    {
+        $this->gate(Permissions::CREW_MANAGE);
+        $operation = $this->find($id);
+        $data = $request->validate(['user_id' => ['nullable', 'integer']]);
+
+        return $this->attempt(fn () => OperationOrganizers::setLead($operation, $data['user_id'] ?? null, auth()->user()), __('حُفظ مسؤول المنظّمين'), 'organizers');
+    }
+
     public function destroyCrew(int|string $id, int|string $cid)
     {
         $this->gate(Permissions::CREW_MANAGE);
@@ -882,6 +937,26 @@ class EventOperationController extends Controller
     /* ─────────────────────────── الصفوف ─────────────────────────── */
 
     /** @return array<string, mixed> */
+    private function organizerRow(OperationOrganizer $a): array
+    {
+        return [
+            'id' => $a->id,
+            'organizer_id' => $a->organizer_id,
+            'name' => $a->organizer?->name,
+            'phone' => $a->organizer?->whatsapp ?: $a->organizer?->phone,
+            'gender' => $a->organizer?->gender,
+            'category_id' => $a->organizer_category_id,
+            'category' => $a->category?->name,
+            /* ما يُختار منه تصنيفُ هذا التعيين — تصنيفاتُ المنظّم في ملفّه (`OperationOrganizers::categoryOf`) */
+            'categories' => $a->organizer?->categories->map(fn ($c) => ['id' => $c->id, 'name' => $c->name])->values()->all() ?? [],
+            'starts_at' => $a->starts_at?->format('Y-m-d H:i'),
+            'ends_at' => $a->ends_at?->format('Y-m-d H:i'),
+            'status' => $a->status,
+            'notes' => $a->notes,
+        ];
+    }
+
+    /** @return array<string, mixed> */
     private function detail(EventOperation $o): array
     {
         return $this->row($o) + [
@@ -892,6 +967,7 @@ class EventOperationController extends Controller
             'teardown_starts_at' => $o->teardown_starts_at?->format('Y-m-d H:i'),
             'teardown_ends_at' => $o->teardown_ends_at?->format('Y-m-d H:i'),
             'operations_lead_id' => $o->operations_lead_id,
+            'organizers_lead_user_id' => $o->organizers_lead_user_id,
             'notes' => $o->notes,
             'readiness_override' => $o->readiness_override,
             'went_live_at' => $o->went_live_at?->format('Y-m-d H:i'),
@@ -1011,6 +1087,8 @@ class EventOperationController extends Controller
             'incident_status' => $t(Incidents::STATUS_LABELS),
             'asset_status' => $t(Assets::STATUS_LABELS),
             'condition' => $t(Assets::CONDITION_LABELS),
+            'organizer_status' => $t(OperationOrganizers::STATUS_LABELS),
+            'gender' => $t(Organizers::GENDER_LABELS),
         ];
     }
 

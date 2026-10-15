@@ -8,6 +8,18 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class PurchaseOrderItem extends Model
 {
+    /** صنفٌ من الكتالوج يدخل المخزونَ عند اعتماد الاستلام */
+    public const PRODUCT = 'product';
+
+    /** خدمةٌ — تصويرٌ أو أمنٌ أو نقل: تُستلم ولا تبلغ الرفّ */
+    public const SERVICE = 'service';
+
+    /** بندٌ مخصّص بنصٍّ حرّ — لا صنفَ له */
+    public const CUSTOM = 'custom';
+
+    /** @var list<string> */
+    public const LINE_KINDS = [self::PRODUCT, self::SERVICE, self::CUSTOM];
+
     protected $guarded = [];
 
     protected $casts = [

@@ -15,6 +15,7 @@ use App\Http\Controllers\Admin\WhatsAppController;
 use App\Http\Controllers\Admin\CommunicationTemplateController;
 use App\Http\Controllers\Admin\CurrencyController;
 use App\Http\Controllers\Admin\CustomAlertController;
+use App\Http\Controllers\Admin\CustomerContactController;
 use App\Http\Controllers\Admin\CustomerController;
 use App\Http\Controllers\Admin\DeliveryPackageController;
 use App\Http\Controllers\Admin\CustomerImportExportController;
@@ -44,6 +45,7 @@ use App\Http\Controllers\Admin\ManagementReviewController;
 use App\Http\Controllers\Admin\OrderController;
 use App\Http\Controllers\Admin\OrderDetailController;
 use App\Http\Controllers\Admin\OrderEditController;
+use App\Http\Controllers\Admin\OrganizerController;
 use App\Http\Controllers\Admin\PageController;
 use App\Http\Controllers\Admin\Payroll\PayrollPaymentController;
 use App\Http\Controllers\Admin\Payroll\PayrollRunController;
@@ -371,6 +373,12 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'tenant', 'business'
     Route::post('/customers/{id}/addresses/{addressId}/default', [CustomerController::class, 'defaultAddress'])->name('customers.addresses.default');
     Route::delete('/customers/{id}/addresses/{addressId}', [CustomerController::class, 'deleteAddress'])->name('customers.addresses.delete');
     Route::get('/customers/{id}/statement', [PdfController::class, 'customerStatement'])->name('customers.statement');
+    /* أشخاصُ اتصال الجهة — صفٌّ لكلّ شخص وأساسيٌّ واحد (المرحلة 14) */
+    Route::post('/customers/{id}/contacts', [CustomerContactController::class, 'store'])->whereNumber('id')->name('customers.contacts.store');
+    Route::put('/customers/{id}/contacts/{contactId}', [CustomerContactController::class, 'update'])->whereNumber('id')->whereNumber('contactId')->name('customers.contacts.update');
+    Route::post('/customers/{id}/contacts/{contactId}/primary', [CustomerContactController::class, 'primary'])->whereNumber('id')->whereNumber('contactId')->name('customers.contacts.primary');
+    Route::post('/customers/{id}/contacts/{contactId}/active', [CustomerContactController::class, 'active'])->whereNumber('id')->whereNumber('contactId')->name('customers.contacts.active');
+    Route::delete('/customers/{id}/contacts/{contactId}', [CustomerContactController::class, 'destroy'])->whereNumber('id')->whereNumber('contactId')->name('customers.contacts.destroy');
     Route::get('/customers/{id}', [PageController::class, 'customersShow'])->name('customers.show');
 
     // الموظفون
@@ -464,8 +472,27 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'tenant', 'business'
     Route::post('/suppliers/import/confirm', [SupplierExportController::class, 'confirm'])->name('suppliers.import.confirm');
     Route::post('/suppliers/import/cancel', [SupplierExportController::class, 'cancel'])->name('suppliers.import.cancel');
     Route::post('/suppliers', [SupplierController::class, 'store'])->name('suppliers.store');
+    /* كتالوجُ خدمات الموردين — قبل {id} كالتصدير (المرحلة 14) */
+    Route::post('/suppliers/services', [SupplierController::class, 'storeService'])->name('suppliers.services.store');
+    Route::put('/suppliers/services/{id}', [SupplierController::class, 'updateService'])->whereNumber('id')->name('suppliers.services.update');
+    Route::delete('/suppliers/services/{id}', [SupplierController::class, 'destroyService'])->whereNumber('id')->name('suppliers.services.destroy');
+    Route::get('/suppliers/{id}', [SupplierController::class, 'show'])->whereNumber('id')->name('suppliers.show');
     Route::put('/suppliers/{id}', [SupplierController::class, 'update'])->name('suppliers.update');
     Route::delete('/suppliers/{id}', [SupplierController::class, 'destroy'])->name('suppliers.destroy');
+
+    /*
+     * المنظّمون الميدانيّون — المرحلة 14. القسمُ `organizers` يقرأ السجلّ،
+     * والكتابةُ بـ`organizers.manage`. والتصنيفاتُ قبل {id}.
+     */
+    Route::get('/organizers', [OrganizerController::class, 'index'])->name('organizers.index');
+    Route::post('/organizers', [OrganizerController::class, 'store'])->name('organizers.store');
+    Route::post('/organizers/categories', [OrganizerController::class, 'storeCategory'])->name('organizers.categories.store');
+    Route::put('/organizers/categories/{id}', [OrganizerController::class, 'updateCategory'])->whereNumber('id')->name('organizers.categories.update');
+    Route::delete('/organizers/categories/{id}', [OrganizerController::class, 'destroyCategory'])->whereNumber('id')->name('organizers.categories.destroy');
+    Route::get('/organizers/{id}', [OrganizerController::class, 'show'])->whereNumber('id')->name('organizers.show');
+    Route::put('/organizers/{id}', [OrganizerController::class, 'update'])->whereNumber('id')->name('organizers.update');
+    Route::post('/organizers/{id}/status', [OrganizerController::class, 'status'])->whereNumber('id')->name('organizers.status');
+    Route::delete('/organizers/{id}', [OrganizerController::class, 'destroy'])->whereNumber('id')->name('organizers.destroy');
 
     /*
      * المشتريات — ثلاث شاشات على بابين.
@@ -1066,6 +1093,10 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'tenant', 'business'
     Route::post('/operations/{id}/crew/{cid}/check-out', [EventOperationController::class, 'crewCheckOut'])->whereNumber('id')->whereNumber('cid')->name('operations.crew.checkOut');
     Route::post('/operations/{id}/crew/{cid}/notify', [EventOperationController::class, 'notifyCrew'])->whereNumber('id')->whereNumber('cid')->name('operations.crew.notify');
     Route::post('/operations/{id}/crew-alert', [EventOperationController::class, 'alertCrew'])->whereNumber('id')->name('operations.crew.alert');
+    /* المنظّمون على الفعاليّة ومسؤولُهم — بفعل الفريق نفسِه (المرحلة 14) */
+    Route::post('/operations/{id}/organizers', [EventOperationController::class, 'storeOrganizer'])->whereNumber('id')->name('operations.organizers.store');
+    Route::put('/operations/{id}/organizers/{oid}', [EventOperationController::class, 'updateOrganizer'])->whereNumber('id')->whereNumber('oid')->name('operations.organizers.update');
+    Route::post('/operations/{id}/organizers-lead', [EventOperationController::class, 'organizersLead'])->whereNumber('id')->name('operations.organizersLead');
     Route::post('/operations/{id}/checklists', [EventOperationController::class, 'attachChecklist'])->whereNumber('id')->name('operations.checklists.store');
     Route::post('/operations/{id}/checklists/{clid}/items', [EventOperationController::class, 'storeChecklistItem'])->whereNumber('id')->whereNumber('clid')->name('operations.checklists.items.store');
     Route::post('/operations/{id}/checklist-items/{iid}/complete', [EventOperationController::class, 'completeChecklistItem'])->whereNumber('id')->whereNumber('iid')->name('operations.checklistItems.complete');

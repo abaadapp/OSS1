@@ -26,6 +26,9 @@ import { operationTone } from '@/lib/operations';
 import CompletenessBadge from '@/Components/management/CompletenessBadge';
 import { marginTone, pct, type CompletenessInfo } from '@/lib/management';
 import CommunicationsTab from './partials/CommunicationsTab';
+import PurchasesTab, { type ProjectPurchases } from './partials/PurchasesTab';
+import ContactPicker from '@/Components/ContactPicker';
+import type { CustomerContact } from '@/lib/contacts';
 import ProcessTab, { type Billing, type BillingInvoice, type QuotationInfo, type ScopeInfo } from './partials/ProcessTab';
 import ProjectStepper from '@/Components/ProjectStepper';
 import { STAGE_LABEL, toStages, type StageKey, type Workflow } from '@/lib/projectStages';
@@ -52,6 +55,7 @@ interface Project {
     contact_person: string | null;
     contact_phone: string | null;
     contact_email: string | null;
+    customer_contact_id?: number | null;
     notes: string | null;
     internal_notes: string | null;
     requirements_baselined_at: string | null;
@@ -188,7 +192,10 @@ interface Props {
     scope_of_work: ScopeInfo;
     channels: { email: boolean; whatsapp: boolean; scope_whatsapp_template: boolean };
     users: { id: number; name: string }[];
-    may: { manage: boolean; budget: boolean; close: boolean; reopen: boolean; change_order: boolean; override_policy: boolean; delivery: boolean; operations: boolean; operations_manage: boolean; performance: boolean; invoice: boolean; commercial: boolean };
+    /* المرحلة 14: أشخاصُ اتصال الجهة، ومشترياتُ المشروع لمن يفتح المشتريات */
+    contacts?: CustomerContact[];
+    purchases?: ProjectPurchases | null;
+    may: { manage: boolean; budget: boolean; close: boolean; reopen: boolean; change_order: boolean; override_policy: boolean; delivery: boolean; operations: boolean; operations_manage: boolean; performance: boolean; invoice: boolean; commercial: boolean; purchases?: boolean };
 }
 
 interface Performance {
@@ -223,7 +230,7 @@ interface Performance {
  * المقبولة)، وما يجب على الفريق تنفيذَه الآن (الحاليّ). والقيمةُ الحاليّة
  * تُشتقّ في الخادم — انظر `ProjectScope`.
  */
-export default function ProjectShow({ project: p, scope, requirements, members, tasks, change_orders, financials, delivery, cancellation, operations, performance, billing, invoices, close_blockers, workflow, quotation, scope_of_work, channels, users, may }: Props) {
+export default function ProjectShow({ project: p, scope, requirements, members, tasks, change_orders, financials, delivery, cancellation, operations, performance, billing, invoices, close_blockers, workflow, quotation, scope_of_work, channels, users, may, contacts = [], purchases = null }: Props) {
     const t = useTranslate();
     const { context } = usePage<PageProps>().props;
     const { errors } = usePage().props as { errors?: Record<string, string> };
@@ -268,6 +275,8 @@ export default function ProjectShow({ project: p, scope, requirements, members, 
         { key: 'communications', label: 'المراسلات' },
         /* العمليات — المرحلة 10: التنفيذُ على الأرض؛ لمن يفتح القسم */
         ...(operations !== null ? [{ key: 'operations', label: 'العمليات', count: operations.filter((o) => !['completed', 'cancelled'].includes(o.status)).length, alert: operations.some((o) => !o.ready && !['completed', 'cancelled', 'ready', 'live', 'teardown'].includes(o.status)) }] : []),
+        /* المشتريات — المرحلة 14: تبويبٌ مساند لا مرحلة؛ أوامرُ الشراء الحقيقيّة على المشروع */
+        ...(purchases ? [{ key: 'purchases', label: 'المشتريات', count: purchases.summary.orders, alert: purchases.summary.pending > 0 }] : []),
         ...(may.budget ? [{ key: 'financials', label: 'المال' }] : []),
         /* الأداء — المرحلة 11 */
         ...(performance !== null ? [{ key: 'performance', label: 'الأداء', alert: performance.contribution < 0 }] : []),
@@ -452,7 +461,7 @@ export default function ProjectShow({ project: p, scope, requirements, members, 
                 />
             )}
 
-            {current === 'overview' && <Overview p={p} users={users} may={may} scope={scope} />}
+            {current === 'overview' && <Overview p={p} users={users} may={may} scope={scope} contacts={contacts} />}
             {current === 'scope' && <ScopeTab scope={scope} m={m} />}
             {current === 'requirements' && <RequirementsTab p={p} requirements={requirements} items={scope.current.items} may={may} open={open} />}
             {current === 'team' && <TeamTab p={p} members={members} users={users} may={may} open={open} />}
@@ -461,6 +470,7 @@ export default function ProjectShow({ project: p, scope, requirements, members, 
             {current === 'delivery' && <DeliveryTab p={p} delivery={delivery} may={may} open={open} />}
             {current === 'communications' && <CommunicationsTab projectId={p.id} open={open} />}
             {current === 'operations' && operations !== null && <OperationsTab p={p} rows={operations} may={may} open={open} />}
+            {current === 'purchases' && purchases && <PurchasesTab projectId={p.id} data={purchases} m={m} />}
             {current === 'financials' && financials && <FinancialsTab f={financials} m={m} frozen={p.financials_frozen} />}
             {current === 'performance' && performance !== null && <PerformanceTab perf={performance} m={m} />}
 
@@ -554,12 +564,13 @@ function Row({ label, value, ltr }: { label: string; value: string | null | unde
 
 /* ─────────────────────────── نظرة عامة ─────────────────────────── */
 
-function Overview({ p, users, may, scope }: { p: Project; users: { id: number; name: string }[]; may: Props['may']; scope: Scope }) {
+function Overview({ p, users, may, scope, contacts }: { p: Project; users: { id: number; name: string }[]; may: Props['may']; scope: Scope; contacts: CustomerContact[] }) {
     const t = useTranslate();
     const [editing, setEditing] = useState(false);
     const [form, setForm] = useState({
         name: p.name, event_type: p.event_type ?? '', location: p.location ?? '',
         contact_person: p.contact_person ?? '', contact_phone: p.contact_phone ?? '', contact_email: p.contact_email ?? '',
+        customer_contact_id: p.customer_contact_id ? String(p.customer_contact_id) : '',
         owner_id: p.owner_id ? String(p.owner_id) : '', notes: p.notes ?? '', internal_notes: p.internal_notes ?? '',
     });
     const set = (k: keyof typeof form) => (e: { target: { value: string } }) => setForm({ ...form, [k]: e.target.value });
@@ -598,6 +609,21 @@ function Overview({ p, users, may, scope }: { p: Project; users: { id: number; n
                         <Field label="المسؤول">
                             <Select placeholder="بلا مسؤول" value={form.owner_id} onChange={set('owner_id')} options={users.map((u) => ({ label: u.name, value: u.id }))} />
                         </Field>
+                        {contacts.length > 0 && (
+                            <Field label="من أشخاص اتصال الجهة" hint="يملأ الاسم والهاتف والبريد — وتبقى تُعدَّل بيد" className="sm:col-span-2">
+                                <ContactPicker
+                                    contacts={contacts}
+                                    value={form.customer_contact_id}
+                                    onPick={(c) => setForm({
+                                        ...form,
+                                        customer_contact_id: c ? String(c.id) : '',
+                                        contact_person: c ? c.name : form.contact_person,
+                                        contact_phone: c ? (c.phone ?? '') : form.contact_phone,
+                                        contact_email: c ? (c.email ?? '') : form.contact_email,
+                                    })}
+                                />
+                            </Field>
+                        )}
                         <Field label="جهة الاتصال"><Input value={form.contact_person} onChange={set('contact_person')} /></Field>
                         <Field label="الهاتف"><Input dir="ltr" value={form.contact_phone} onChange={set('contact_phone')} /></Field>
                         <Field label="البريد"><Input dir="ltr" type="email" value={form.contact_email} onChange={set('contact_email')} /></Field>

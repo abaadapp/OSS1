@@ -9,12 +9,16 @@ use App\Http\Controllers\PdfController;
 use App\Models\Branch;
 use App\Models\Business;
 use App\Models\CustomAlert;
+use App\Models\Customer;
 use App\Models\CustomerAddress;
 use App\Models\JobTitle;
 use App\Models\Order;
 use App\Models\Product;
 use App\Models\Project;
+use App\Models\Quotation;
+use App\Models\Supplier;
 use App\Models\User;
+use App\Support\CustomerContacts;
 use App\Support\Demo;
 use App\Support\DocumentTemplates;
 use App\Support\Emojis;
@@ -26,8 +30,10 @@ use App\Support\ProductImages;
 use App\Support\PurchaseOrders;
 use App\Support\PurchaseOrderTotals;
 use App\Support\PurchaseUnits;
+use App\Support\Quotations;
 use App\Support\Reports;
 use App\Support\Roles;
+use App\Support\ServiceProviders;
 use App\Support\ShopIdentity;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -338,7 +344,45 @@ class PageController extends Controller
                 ])->all(),
             // للتعديل: الفرع يُختار من فروع هذا النشاط لا من قائمةٍ مفتوحة
             'branches' => Demo::branches(),
+            ...self::customerRelations((int) $id),
         ]);
+    }
+
+    /**
+     * ما يتبع العميلَ في صفحته — أشخاصُ اتصاله ومشاريعُه وعروضُه.
+     *
+     * والجهةُ (شركةٌ أو جهةٌ حكوميّة) تُعرف بنوعها؛ والفردُ لا يحتاج أشخاصَ
+     * اتصالٍ لكنّه لا يُمنعهم.
+     *
+     * @return array<string, mixed>
+     */
+    private static function customerRelations(int $id): array
+    {
+        $customer = Customer::where('business_id', Demo::bid())->find($id);
+        if ($customer === null) {
+            return [];
+        }
+
+        return [
+            'profile' => [
+                'customer_type' => $customer->customer_type ?: 'فرد',
+                'legal_name' => $customer->legal_name,
+                'organization' => in_array($customer->customer_type, CustomerController::ORGANIZATIONS, true),
+            ],
+            'contacts' => CustomerContacts::of($customer)->map(fn ($c) => CustomerContacts::present($c))->values()->all(),
+            'projects' => Project::where('business_id', $customer->business_id)->where('customer_id', $customer->id)
+                ->orderByDesc('id')->limit(50)->get(['id', 'code', 'name', 'status', 'starts_at', 'approved_value'])
+                ->map(fn (Project $p) => [
+                    'id' => $p->id, 'code' => $p->code, 'name' => $p->name, 'status' => $p->status,
+                    'starts_at' => optional($p->starts_at)->format('Y-m-d'), 'value' => round((float) $p->approved_value, 3),
+                ])->all(),
+            'quotations' => Quotation::where('business_id', $customer->business_id)->where('customer_id', $customer->id)
+                ->orderByDesc('id')->limit(50)->get()
+                ->map(fn (Quotation $q) => [
+                    'id' => $q->id, 'label' => Quotations::label($q), 'title' => $q->title, 'status' => $q->status,
+                    'issued_at' => optional($q->issued_at)->format('Y-m-d'), 'total' => round((float) $q->total, 3),
+                ])->all(),
+        ];
     }
 
     /* ----------------------------- الموظفون ----------------------------- */
@@ -494,8 +538,15 @@ class PageController extends Controller
 
     public function suppliersIndex(): Response
     {
+        $bid = (int) (auth()->user()->business_id ?? Demo::bid());
+        ServiceProviders::ensureCategories($bid);
+
         return Inertia::render('Admin/Suppliers/Index', [
             'suppliers' => Demo::suppliers(),
+            /* كتالوجُ الخدمات — يُختار منه ويُرشَّح به: «مقدّم خدمة ← تصوير» */
+            'services' => ServiceProviders::catalog($bid),
+            'types' => collect(ServiceProviders::TYPE_LABELS)->map(fn ($l) => __($l))->all(),
+            'statuses' => collect(ServiceProviders::STATUS_LABELS)->map(fn ($l) => __($l))->all(),
         ]);
     }
 
@@ -517,11 +568,16 @@ class PageController extends Controller
     {
         $bid = auth()->user()->business_id ?? Demo::bid();
 
+        $projects = Project::where('business_id', $bid)->open()->orderByDesc('id')->get(['id', 'code', 'name']);
+        /* ومن جاء من تبويب «المشتريات» في المشروع يجد مشروعَه مختارًا — إن كان قائمًا من شركته */
+        $preset = $projects->firstWhere('id', $request->integer('project_id'))?->id;
+
         return Inertia::render('Admin/Purchases/Create', [
             /* والمشاريعُ القائمة — شراءٌ لأجل مشروعٍ يُقرأ التزامًا عليه (§16) */
-            'projects' => Project::where('business_id', $bid)->open()->orderByDesc('id')
-                ->get(['id', 'code', 'name'])->all(),
-            'suppliers' => Demo::suppliers(),
+            'projects' => $projects->all(),
+            'presetProjectId' => $preset,
+            /* والمورّدون النشطون وحدهم — المتوقّفُ لا يُختار لأمرٍ جديد (والخادمُ يردّه إن أُرسل) */
+            'suppliers' => array_values(array_filter(Demo::suppliers(), fn (array $s) => $s['status'] === Supplier::ACTIVE)),
             'products' => Demo::products(),
             'reorderSuggestions' => Demo::reorderSuggestions(),
             'branches' => Demo::branches(),

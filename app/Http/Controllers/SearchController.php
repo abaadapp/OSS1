@@ -78,7 +78,9 @@ class SearchController extends Controller
             ]) : collect();
 
         $customers = $user->allows('customers') ? Customer::where('business_id', $bid)
-            ->where(fn ($w) => $w->where('name', $op, $like)->orWhere('phone', $op, $like))
+            ->where(fn ($w) => $w->where('name', $op, $like)->orWhere('phone', $op, $like)
+                /* وباسم شخص الاتصال أو هاتفه — الجهةُ تُعرف بمن يكلّمنا منها (المرحلة 14) */
+                ->orWhereHas('contacts', fn ($c) => $c->where('name', $op, $like)->orWhere('phone', $op, $like)))
             ->limit(5)->get()->map(fn ($c) => [
                 'label' => $c->name, 'meta' => $c->phone ?: '—',
                 'url' => route('admin.customers.show', $c->id),
@@ -87,8 +89,8 @@ class SearchController extends Controller
         /*
          * والمورّدون كذلك: البحث كان يعرف من نبيع له ولا يعرف ممّن نشتري.
          *
-         * وقائمتهم لا تُفتح على صفحةٍ لكلّ مورّد — فالوجهة قائمتُهم مُرشَّحةً
-         * باسمه، لا رابطٌ يقود إلى صفحةٍ لا وجود لها.
+         * ولكلّ مورّدٍ صفحتُه منذ المرحلة 14 — بياناتُه وخدماتُه وأوامرُه
+         * وسنداتُه — فالوجهةُ صفحتُه.
          */
         $suppliers = $user->allows('suppliers') ? Supplier::where('business_id', $bid)
             ->where(fn ($w) => $w->where('name', $op, $like)
@@ -96,7 +98,7 @@ class SearchController extends Controller
                 ->orWhere('contact_person', $op, $like))
             ->limit(5)->get()->map(fn ($s) => [
                 'label' => $s->name, 'meta' => $s->phone ?: ($s->contact_person ?: '—'),
-                'url' => route('admin.suppliers.index', ['q' => $s->name]),
+                'url' => route('admin.suppliers.show', $s->id),
             ]) : collect();
 
         return response()->json(['groups' => array_values(array_filter([

@@ -14,6 +14,7 @@ use App\Models\Product;
 use App\Models\Project;
 use App\Models\Setting;
 use App\Support\Activity;
+use App\Support\CustomerContacts;
 use App\Support\CustomerInvoices;
 use App\Support\CustomerPayments;
 use App\Support\Customers;
@@ -415,12 +416,18 @@ class CustomerInvoiceController extends Controller
         $bid = $this->bid();
 
         return Inertia::render('Admin/CustomerInvoices/Create', [
-            'customers' => Customer::where('business_id', $bid)->orderBy('name')->get([
-                'id', 'name', 'customer_type', 'legal_name', 'tax_number',
-                'commercial_registration', 'phone', 'contact_phone', 'email', 'contact_email',
-                'address', 'billing_address', 'department', 'customer_reference',
-                'contact_person', 'payment_terms_days', 'allow_credit_sales',
-            ])->all(),
+            'customers' => Customer::where('business_id', $bid)->orderBy('name')
+                /* وأشخاصُ اتصال الجهة — يُختار منهم «عناية» على الورقة (المرحلة 14) */
+                ->with(['contacts' => fn ($q) => $q->where('active', true)])
+                ->get([
+                    'id', 'name', 'customer_type', 'legal_name', 'tax_number',
+                    'commercial_registration', 'phone', 'contact_phone', 'email', 'contact_email',
+                    'address', 'billing_address', 'department', 'customer_reference',
+                    'contact_person', 'payment_terms_days', 'allow_credit_sales',
+                ])
+                ->map(fn (Customer $c) => collect($c->getAttributes())->except(['contacts'])->all()
+                    + ['contacts' => $c->contacts->map(fn ($k) => CustomerContacts::present($k))->values()->all()])
+                ->all(),
             /*
              * والكتالوج للاختيار لا للإلزام: بندٌ مخصَّصٌ يُكتب بيده كذلك.
              * أكثرُ فواتير الجهات خدماتٌ لا أصنافَ رفٍّ — «تنسيق قاعة» ليس

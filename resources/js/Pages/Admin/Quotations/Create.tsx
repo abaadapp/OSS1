@@ -15,6 +15,8 @@ import { money } from '@/lib/format';
 import { useTranslate } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import type { Currency, PageProps } from '@/types';
+import ContactPicker from '@/Components/ContactPicker';
+import type { CustomerContact } from '@/lib/contacts';
 
 interface CustomerRow {
     id: number;
@@ -25,6 +27,8 @@ interface CustomerRow {
     contact_email: string | null;
     contact_phone: string | null;
     payment_terms_days: number | null;
+    /** أشخاصُ اتصال الجهة النشطون — الأساسيُّ أوّلًا (المرحلة 14) */
+    contacts?: CustomerContact[];
 }
 
 interface CatalogRow {
@@ -167,6 +171,7 @@ export default function QuotationCreate({ quotation, customers, catalog, may, va
         attention_to: editing ? String(quotation.attention_to ?? '') : '',
         contact_email: editing ? String(quotation.contact_email ?? '') : '',
         contact_phone: editing ? String(quotation.contact_phone ?? '') : '',
+        customer_contact_id: editing ? String(quotation.customer_contact_id ?? '') : '',
         scope: editing ? String(quotation.scope ?? '') : '',
         terms: editing ? String(quotation.terms ?? '') : '',
         notes: editing ? String(quotation.notes ?? '') : '',
@@ -389,19 +394,24 @@ export default function QuotationCreate({ quotation, customers, catalog, may, va
 
         if (!customer) return;
 
+        /* وشخصُ الجهة الأساسيّ قبل أعمدتها القديمة — وشخصُ عميلٍ سابقٍ لا يبقى مختارًا */
+        const primary = customer.contacts?.find((c) => c.is_primary) ?? null;
+
         form.setData((data: typeof form.data) => ({
             ...data,
             customer_id: id,
-            department: data.department || (customer.department ?? ''),
-            attention_to: data.attention_to || (customer.contact_person ?? ''),
-            contact_email: data.contact_email || (customer.contact_email ?? ''),
-            contact_phone: data.contact_phone || (customer.contact_phone ?? ''),
+            customer_contact_id: !data.attention_to && primary ? String(primary.id) : '',
+            department: data.department || (primary?.department ?? customer.department ?? ''),
+            attention_to: data.attention_to || (primary?.name ?? customer.contact_person ?? ''),
+            contact_email: data.contact_email || (primary?.email ?? customer.contact_email ?? ''),
+            contact_phone: data.contact_phone || (primary?.phone ?? customer.contact_phone ?? ''),
             payment_terms_days:
                 data.payment_terms_days ||
                 (customer.payment_terms_days === null ? '' : String(customer.payment_terms_days)),
         }));
     };
 
+    const selectedCustomer = customers.find((c) => String(c.id) === String(form.data.customer_id));
     const title = editing ? t('تعديل عرض السعر') : t('عرض سعر جديد');
 
     return (
@@ -524,10 +534,32 @@ export default function QuotationCreate({ quotation, customers, catalog, may, va
                                     onChange={(e) => form.setData('department', e.target.value)}
                                 />
                             </Field>
+                            {(selectedCustomer?.contacts ?? []).length > 0 && (
+                                <Field label="من أشخاص اتصال الجهة" hint="يملأ «موجه إلى» والبريد والهاتف — وتبقى تُعدَّل بيد" className="sm:col-span-2">
+                                    <ContactPicker
+                                        contacts={selectedCustomer?.contacts ?? []}
+                                        value={form.data.customer_contact_id}
+                                        onPick={(c) => form.setData((data: typeof form.data) => ({
+                                            ...data,
+                                            customer_contact_id: c ? String(c.id) : '',
+                                            attention_to: c ? c.name : data.attention_to,
+                                            contact_email: c ? (c.email ?? '') : data.contact_email,
+                                            contact_phone: c ? (c.phone ?? '') : data.contact_phone,
+                                        }))}
+                                    />
+                                </Field>
+                            )}
                             <Field label="موجه إلى / عناية">
                                 <Input
                                     value={form.data.attention_to}
                                     onChange={(e) => form.setData('attention_to', e.target.value)}
+                                />
+                            </Field>
+                            <Field label="هاتف المُرسَل إليه" error={form.errors.contact_phone}>
+                                <Input
+                                    dir="ltr"
+                                    value={form.data.contact_phone}
+                                    onChange={(e) => form.setData('contact_phone', e.target.value)}
                                 />
                             </Field>
                             <Field label="بريد المُرسَل إليه" error={form.errors.contact_email}>

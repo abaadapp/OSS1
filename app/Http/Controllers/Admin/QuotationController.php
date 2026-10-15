@@ -11,6 +11,7 @@ use App\Models\Project;
 use App\Models\Quotation;
 use App\Support\Communication\Communications;
 use App\Support\CompanyPolicies;
+use App\Support\CustomerContacts;
 use App\Support\Demo;
 use App\Support\Document\Branding;
 use App\Support\Document\PaperSize;
@@ -281,6 +282,7 @@ class QuotationController extends Controller
             'attention_to' => $q->attention_to,
             'contact_email' => $q->contact_email,
             'contact_phone' => $q->contact_phone,
+            'customer_contact_id' => $q->customer_contact_id,
             'payment_terms_days' => $q->payment_terms_days,
             'scope' => $q->scope,
             'terms' => $q->terms,
@@ -382,8 +384,13 @@ class QuotationController extends Controller
             'quotation' => $editing ? $this->detail($editing->load('items')) : null,
             'customers' => Customer::where('business_id', $bid)->orderBy('name')
                 ->limit(self::CATALOG_LIMIT)
+                /* وأشخاصُ اتصال كلّ جهةٍ — النشطون، والأساسيُّ أوّلًا — يُختار منهم «موجَّهٌ إلى» */
+                ->with(['contacts' => fn ($q) => $q->where('active', true)])
                 ->get(['id', 'name', 'legal_name', 'department', 'contact_person',
-                    'contact_email', 'contact_phone', 'payment_terms_days'])->all(),
+                    'contact_email', 'contact_phone', 'payment_terms_days'])
+                ->map(fn (Customer $c) => $c->only(['id', 'name', 'legal_name', 'department', 'contact_person', 'contact_email', 'contact_phone', 'payment_terms_days'])
+                    + ['contacts' => $c->contacts->map(fn ($k) => CustomerContacts::present($k))->values()->all()])
+                ->all(),
             'catalog' => $this->catalog($bid),
             'may' => $this->may(),
             'vat_rate' => Vat::rate($bid),
@@ -457,6 +464,7 @@ class QuotationController extends Controller
             'attention_to' => ['nullable', 'string', 'max:120'],
             'contact_email' => ['nullable', 'email', 'max:120'],
             'contact_phone' => ['nullable', 'string', 'max:40'],
+            'customer_contact_id' => ['nullable', 'integer'],
             'scope' => ['nullable', 'string', 'max:20000'],
             'terms' => ['nullable', 'string', 'max:20000'],
             'notes' => ['nullable', 'string', 'max:20000'],

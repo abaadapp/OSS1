@@ -23,6 +23,8 @@ import { fold } from '@/lib/pages';
 import { useTranslate } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import type { PageProps } from '@/types';
+import ContactPicker from '@/Components/ContactPicker';
+import type { CustomerContact } from '@/lib/contacts';
 
 interface CustomerRow {
     id: number;
@@ -42,6 +44,8 @@ interface CustomerRow {
     contact_person: string | null;
     payment_terms_days: number | null;
     allow_credit_sales: boolean;
+    /** أشخاصُ اتصال الجهة النشطون — يُختار منهم «عناية» (المرحلة 14) */
+    contacts?: CustomerContact[];
 }
 
 interface ProductRow {
@@ -858,6 +862,16 @@ export default function CustomerInvoiceCreate({
                                             .map((pr) => ({ label: `${pr.code} — ${pr.name}`, value: pr.id }))}
                                     />
                                 </Field>
+                                {(customer?.contacts ?? []).length > 0 && (
+                                    <div className="space-y-1.5">
+                                        <Label>{t('من أشخاص اتصال الجهة')}</Label>
+                                        <ContactPicker
+                                            contacts={customer?.contacts ?? []}
+                                            value=""
+                                            onPick={(c) => c && form.setData('attention_to', c.name)}
+                                        />
+                                    </div>
+                                )}
                                 {ORG_FIELDS.map(([key, label, placeholder]) => (
                                     <div key={key} className="space-y-1.5">
                                         <Label htmlFor={`org-${key}`}>{t(label)}</Label>
