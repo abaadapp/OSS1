@@ -1,0 +1,57 @@
+name: وسم تلقائي
+
+# كلُّ دمجٍ إلى main ينجح فحصُه يصير إصدارًا موسومًا: v1.2 ثمّ v1.3 …
+#
+# ولا يُوسَم إلّا ما نجح: الوسمُ يُنتظر حتى ينتهي CI على دفعة main نفسِها
+# بنجاح (`workflow_run`)، فلا يحمل رقمَ إصدارٍ بناءٌ أحمر. والرقمُ يُقرأ من
+# أعلى وسمٍ بصيغة vX.Y (أو vX.Y-اسم، كـv1.1-project-workflow) ويُزاد جزؤه
+# الثاني. ودفعةٌ موسومةٌ من قبل لا تُوسَم ثانيةً — إعادةُ التشغيل لا تُكرّر.
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: write
+
+concurrency:
+  # وسمان في لحظةٍ واحدة قد يأخذان الرقمَ نفسَه — فيُسلسَلان ولا يُلغى أحدهما
+  group: auto-tag
+  cancel-in-progress: false
+
+jobs:
+  tag:
+    name: وسم الإصدار التالي
+    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
+
+      - name: إنشاء الوسم ودفعه
+        env:
+          SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          git fetch --tags --force
+
+          if git tag --points-at "$SHA" | grep -Eq '^v[0-9]+\.[0-9]+'; then
+            echo "الدفعة موسومةٌ من قبل: $(git tag --points-at "$SHA" | tr '\n' ' ')"
+            exit 0
+          fi
+
+          latest=$(git tag --list 'v*' | sed -nE 's/^v([0-9]+)\.([0-9]+).*/\1 \2/p' | sort -n -k1,1 -k2,2 | tail -1)
+          if [ -z "$latest" ]; then major=1; minor=0; else read -r major minor <<<"$latest"; fi
+          minor=$((minor + 1))
+          while git rev-parse -q --verify "refs/tags/v${major}.${minor}" >/dev/null; do minor=$((minor + 1)); done
+          next="v${major}.${minor}"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$next" "$SHA" -m "$(git log -1 --format=%s "$SHA")"
+          git push origin "refs/tags/$next"
+
+          echo "### وُسم ${next} على $(git rev-parse --short "$SHA")" >> "$GITHUB_STEP_SUMMARY"
