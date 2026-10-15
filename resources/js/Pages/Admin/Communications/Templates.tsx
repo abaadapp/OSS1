@@ -29,6 +29,9 @@ interface Template {
     provider_language: string | null;
     variables: string[];
     allowed_variables: string[];
+    /** خاناتُ ترويسة قالب Meta وزرُّه ذو الرابط — لواتساب */
+    header_variables?: string[];
+    button_variable?: string | null;
     subject: string | null;
     body: string | null;
     default_body: string | null;
@@ -172,6 +175,8 @@ function Editor({ template: x, statuses, manage, onClose }: { template: Template
     const [providerTemplate, setProviderTemplate] = useState(x.provider_template ?? '');
     const [providerLanguage, setProviderLanguage] = useState(x.provider_language ?? (x.language === 'en' ? 'en_US' : 'ar'));
     const [variables, setVariables] = useState<string[]>(x.variables);
+    const [headerVariables, setHeaderVariables] = useState<string[]>(x.header_variables ?? []);
+    const [buttonVariable, setButtonVariable] = useState(x.button_variable ?? '');
     const [subject, setSubject] = useState(x.subject ?? '');
     const [body, setBody] = useState(x.body ?? '');
     const [preview, setPreview] = useState<Preview | null>(null);
@@ -220,6 +225,7 @@ function Editor({ template: x, statuses, manage, onClose }: { template: Template
                 provider_template: whatsapp ? providerTemplate : null,
                 provider_language: whatsapp ? providerLanguage : null,
                 variables,
+                ...(whatsapp ? { header_variables: headerVariables, button_variable: buttonVariable || null } : {}),
                 subject: subject || null,
                 body: body || null,
             },
@@ -260,6 +266,25 @@ function Editor({ template: x, statuses, manage, onClose }: { template: Template
                                 </Field>
                                 <Field label="رمز اللغة عند Meta" hint="ar · en · en_US">
                                     <Input dir="ltr" value={providerLanguage} onChange={(e) => setProviderLanguage(e.target.value)} disabled={!manage} />
+                                </Field>
+                                {/* وترويسةُ القالب وزرُّه ذو الرابط — بما اعتمدته Meta: بلا ترويسةٍ متغيّرة تُترك فارغة */}
+                                <Field label="خانات الترويسة" hint="إن كانت ترويسة القالب عند Meta فيها {{1}} — بترتيبها">
+                                    <div className="flex flex-wrap gap-1">
+                                        {x.allowed_variables.map((v) => {
+                                            const on = headerVariables.includes(v);
+                                            return (
+                                                <button key={v} type="button" disabled={!manage} dir="ltr"
+                                                    onClick={() => setHeaderVariables(on ? headerVariables.filter((z) => z !== v) : [...headerVariables, v])}
+                                                    className={`rounded-full border px-2 py-0.5 font-mono text-[11px] ${on ? 'border-[#111] bg-[#111] text-white' : 'border-dashed border-[#d1d5db] text-[#6b7280]'}`}>
+                                                    {v}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                </Field>
+                                <Field label="خانة زر الرابط" hint="لاحقة الرابط في زر Meta الديناميكي — مثل tasks_token لرابط ينتهي بـ /t/{{1}}">
+                                    <Select value={buttonVariable} onChange={(e) => setButtonVariable(e.target.value)} disabled={!manage} placeholder="بلا زر رابط"
+                                        options={x.allowed_variables.map((v) => ({ label: v, value: v }))} />
                                 </Field>
                             </>
                         )}

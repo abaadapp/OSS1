@@ -10,6 +10,9 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  *
  * تُكتب وتُعدَّل بحرّية في أيّ وقت: هي ما يفعله الفريق، لا ما وافق عليه
  * العميل. وما وافق عليه العميل في `ProjectItem` و`ProjectRequirement`.
+ *
+ * وقد تقف على فعاليّةٍ من فعاليّات المشروع (`event_operation_id`) — فتصل
+ * صاحبَها مع أخواتها في رسالةٍ واحدة. وهي مصدرُ الحقيقة: الرسالةُ إشعار.
  */
 class ProjectTask extends Model
 {
@@ -35,6 +38,11 @@ class ProjectTask extends Model
     public function assignee(): BelongsTo
     {
         return $this->belongsTo(User::class, 'assignee_id');
+    }
+
+    public function operation(): BelongsTo
+    {
+        return $this->belongsTo(EventOperation::class, 'event_operation_id');
     }
 
     public function isDone(): bool

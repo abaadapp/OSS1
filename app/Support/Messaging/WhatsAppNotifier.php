@@ -77,6 +77,19 @@ final class WhatsAppNotifier implements Notifier
         }
 
         $parameters = Templates::parameters($template, $intent->variables);
+        $header = Templates::headerParameters($template, $intent->variables);
+        $button = Templates::buttonParameter($template, $intent->variables);
+        $text = fn (array $values) => array_map(fn ($p) => ['type' => 'text', 'text' => $p], $values);
+
+        /*
+         * والمكوّناتُ بما ضُبط في القالب: ترويسةٌ متغيّرة إن كانت لها خانات، والمتنُ،
+         * وزرُّ رابطٍ ديناميكيّ تُرسَل لاحقتُه وحدها (الرابطُ الأساس عند Meta).
+         */
+        $components = array_values(array_filter([
+            $header === [] ? null : ['type' => 'header', 'parameters' => $text($header)],
+            $parameters === [] ? null : ['type' => 'body', 'parameters' => $text($parameters)],
+            $button === null ? null : ['type' => 'button', 'sub_type' => 'url', 'index' => '0', 'parameters' => [['type' => 'text', 'text' => $button]]],
+        ]));
 
         $body = [
             'messaging_product' => 'whatsapp',
@@ -86,10 +99,7 @@ final class WhatsAppNotifier implements Notifier
             'template' => [
                 'name' => $template->provider_template,
                 'language' => ['code' => $template->provider_language ?: ($intent->language === 'en' ? 'en' : 'ar')],
-                'components' => $parameters === [] ? [] : [[
-                    'type' => 'body',
-                    'parameters' => array_map(fn ($p) => ['type' => 'text', 'text' => $p], $parameters),
-                ]],
+                'components' => $components,
             ],
         ];
 
