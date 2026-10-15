@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use App\Support\Demo;
+use App\Support\DocumentRecords;
 use App\Support\Permissions;
 use App\Support\Reports;
 use App\Support\ShopIdentity;
@@ -122,6 +123,14 @@ class HandleInertiaRequests extends Middleware
                 'items' => Demo::notifications(),
                 'count' => Demo::notificationsCount(),
             ] : null,
+
+            /*
+             * عدّاداتُ القائمة الجانبيّة — ما يحتاج إجراءً وحده، باستعلامٍ واحدٍ رخيص لكلّ
+             * عدّاد، ولمن يفتح القسم. «المستندات»: ما انتهى أو قرُب انتهاؤه وليس مؤرشفًا.
+             */
+            'badges' => fn () => $user?->business_id ? array_filter([
+                'documents' => $user->allows('documents') ? DocumentRecords::needsAction((int) $user->business_id) : null,
+            ], fn ($v) => $v !== null) : [],
 
             // رسائل الجلسة — الواجهة تعرضها كـtoast
             'flash' => fn () => [

@@ -104,6 +104,8 @@ export interface SharedProps {
         items: Notification[];
         count: number;
     } | null;
+    /** عدّاداتُ القائمة الجانبيّة بمفتاح العنصر (`NavItem.badge`) — لمن يفتح القسم وحده */
+    badges?: Record<string, number>;
     flash: {
         toast: Toast | null;
         status: string | null;

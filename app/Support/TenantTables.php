@@ -152,6 +152,11 @@ class TenantTables
          */
         'budgets', 'budget_lines', 'financial_scenarios', 'financial_scenario_assumptions', 'financial_forecasts',
         'management_reviews', 'management_decisions', 'operation_consumable_issues',
+        /*
+         * ومستنداتُ الشركة الداخليّة: تصنيفُها، والمستندُ (يشير إلى المسؤول وإلى ما
+         * رُبط به بمفتاحٍ قصير لا بمفتاحٍ أجنبيّ)، ونسخُ ملفّه.
+         */
+        'document_categories', 'document_records', 'document_record_files',
     ];
 
     /**

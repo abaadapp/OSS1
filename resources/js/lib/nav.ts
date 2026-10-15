@@ -16,6 +16,7 @@ import {
     Database,
     Briefcase,
     FileText,
+    FolderOpen,
     LayoutDashboard,
     ListChecks,
     MessageCircle,
@@ -56,6 +57,12 @@ export interface NavItem {
      * من البحث ومن روابط المستندات — فتبقى معروفةً لقسمها لا يتيمة.
      */
     hidden?: boolean;
+    /**
+     * مفتاحُ عدّادٍ في `badges` المشتركة — رقمٌ صغير بجوار العنصر حين يزيد على صفر.
+     *
+     * «المستندات ٣»: ما يحتاج إجراءً وحده (انتهى أو قرُب انتهاؤه)، لا كلُّ ما في القسم.
+     */
+    badge?: string;
 }
 
 export interface NavGroup {
@@ -108,6 +115,8 @@ export const NAV: NavGroup[] = [
             },
             /* وواتساب: صندوقُ وارد الشركة — ما يكتبه العملاءُ ويُجاب من هنا */
             { label: 'واتساب', icon: MessageCircle, route: 'admin.whatsapp.index', section: 'communications' },
+            /* والمستنداتُ الداخليّة — وشارتُها ما انتهى أو قرُب انتهاؤه */
+            { label: 'المستندات', icon: FolderOpen, route: 'admin.documents.index', section: 'documents', covers: ['admin.documents.show'], badge: 'documents' },
             /*
              * والمراسلات خارجَ الشريط: سجلُّ ما أُرسل وقوالبُه يُفتحان من
              * البحث ومن روابط المستندات — المرحلة 6

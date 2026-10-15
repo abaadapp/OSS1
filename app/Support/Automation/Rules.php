@@ -129,6 +129,20 @@ final class Rules
             'steps' => [['offset' => 1, 'audience' => 'management'], ['offset' => 14, 'audience' => 'management']],
             'enabled' => true, 'mode' => 'observe', 'cooldown_hours' => 72, 'business_hours' => false,
         ],
+        /*
+         * وانتهاءُ مستندات الشركة — قبل ٩٠ و٦٠ و٣٠ و٧ أيّام ويومَ الانتهاء للمسؤول عنه،
+         * والإدارةُ من الثلاثين. داخليٌّ: لا بريدَ ولا واتساب حتى تُغيَّر قناةُ القاعدة.
+         */
+        'document.expiry' => [
+            'name' => 'انتهاء صلاحية مستند', 'trigger' => 'document_expiry', 'kind' => 'internal', 'channel' => 'internal',
+            'steps' => [
+                ['offset' => -90, 'audience' => 'assignee'], ['offset' => -60, 'audience' => 'assignee'],
+                ['offset' => -30, 'audience' => 'assignee'], ['offset' => -30, 'audience' => 'management'],
+                ['offset' => -7, 'audience' => 'assignee'], ['offset' => -7, 'audience' => 'management'],
+                ['offset' => 0, 'audience' => 'assignee'], ['offset' => 0, 'audience' => 'management'],
+            ],
+            'enabled' => true, 'mode' => 'live', 'cooldown_hours' => 20, 'business_hours' => false,
+        ],
         'forecast.stale' => [
             'name' => 'التوقّع النقدي يحتاج تحديثًا', 'trigger' => 'forecast_stale', 'kind' => 'internal', 'channel' => 'internal',
             'steps' => [['offset' => 30, 'audience' => 'management']],
@@ -146,7 +160,8 @@ final class Rules
 
     public const MAX_STEPS = 8;
 
-    public const MAX_OFFSET = 60;
+    /** تسعون يومًا — انتهاءُ مستندٍ يُسمع قبل ثلاثة أشهر (`document.expiry`) */
+    public const MAX_OFFSET = 90;
 
     /** إنشاءُ الناقص من القواعد الجاهزة — بلا مسّ ما كُتب */
     public static function ensure(int $businessId): void

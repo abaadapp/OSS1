@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Support\AlertMetrics;
 use App\Support\DashboardMetrics;
 use App\Support\Demo;
+use App\Support\DocumentRecords;
 use Inertia\Inertia;
 
 /**
@@ -64,6 +65,8 @@ class DashboardController extends Controller
              */
             'topEmployees' => collect(Demo::employees(Demo::currentBranchId()))
                 ->sortByDesc('achieved')->take(5)->values()->all(),
+            /* «مستنداتٌ تحتاج إجراء» — ما ينتهي خلال ثلاثين يومًا وما انتهى وأقربُ انتهاء؛ لمن يفتح المستندات */
+            'documents' => auth()->user()?->allows('documents') ? DocumentRecords::summary(Demo::bid()) : null,
         ]);
     }
 }

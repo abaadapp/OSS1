@@ -187,6 +187,11 @@ class NoDoorOpensOnAnotherCompanyTest extends TestCase
         $service = \App\Support\ServiceProviders::saveCategory($bid, "خدمة $m");
         \App\Support\ServiceProviders::syncServices($supplier, [$service->id], $owner);
 
+        /* ومستندٌ داخليّ بتصنيفه ونسخة ملفّه */
+        $documentCategory = \App\Support\DocumentRecords::saveCategory($bid, "تصنيف مستند $m");
+        $document = \App\Models\DocumentRecord::create(['business_id' => $bid, 'title' => "مستند $m", 'document_category_id' => $documentCategory->id, 'expires_at' => now()->addDays(10)->toDateString(), 'file_path' => "documents/$bid/x.pdf", 'file_name' => 'x.pdf']);
+        $documentFile = \App\Models\DocumentRecordFile::create(['business_id' => $bid, 'document_record_id' => $document->id, 'path' => "documents/$bid/x.pdf", 'name' => 'x.pdf']);
+
         $package = DeliveryPackages::create($bid, null, ['project_id' => $project->id], $owner);
         $packageItem = DeliveryPackages::addItem($package, ['kind' => 'item', 'project_item_id' => $project->items()->first()->id, 'quantity' => 1], null, $owner);
 
@@ -245,6 +250,7 @@ class NoDoorOpensOnAnotherCompanyTest extends TestCase
             'customer' => $customer->id, 'finance.cheques' => $payment->id, 'inventory.receipts' => 0,
             'contactId' => $contact->id, 'organizers' => $organizer->id, 'organizers.categories' => $organizerCategory->id,
             'oid' => $organizerAssignment->id, 'suppliers.services' => $service->id,
+            'documents' => $document->id, 'documents.categories' => $documentCategory->id, 'fid' => $documentFile->id,
         ];
     }
 
@@ -271,6 +277,7 @@ class NoDoorOpensOnAnotherCompanyTest extends TestCase
             $param === 'item' => $this->ids['item'],
             $param === 'contactId' => $this->ids['contactId'],
             $param === 'oid' => $this->ids['oid'],
+            $param === 'fid' => $this->ids['fid'],
             $param === 'attachment', $param === 'imageId', $param === 'addon', $param === 'variant', $param === 'run' => 1,
             $param === 'tid' && $second === 'operations' => $this->ids['operations.tid'],
             $param === 'tid' => $this->ids['tid'],
