@@ -12,6 +12,7 @@ import { money } from '@/lib/format';
 import { useTranslate } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import type { PageProps } from '@/types';
+import MonthlyExpensesCard, { type MonthlyExpenses } from './partials/MonthlyExpensesCard';
 
 interface Props {
     range: ReportRange;
@@ -32,6 +33,9 @@ interface Props {
     dues: { expenses: number; invoices: number; payroll: number; total: number; overdue: number };
     /** «ما لك» — ذمم العملاء، من `Receivables` نفسها التي تقرأ منها شاشة الذمم */
     receivables: { total: number; overdue: number; due_soon: number; credit: number; invoices: number; customers: number };
+    /** مصروفات الشهر — شهرٌ يُختار بنفسه، من الدفتر (`MonthlyExpenses`) */
+    monthly?: MonthlyExpenses;
+    monthly_links?: { expenses: boolean; supplier_invoices: boolean; payroll: boolean };
 }
 
 /**
@@ -42,7 +46,7 @@ interface Props {
  * هل يستطيع الدفع اليوم كان عليه أن يفتح خمس شاشات ويجمع بالعين.
  */
 export default function Summary() {
-    const { range, cash, bank, accounts, period, dues, receivables, context } = usePage<PageProps<Props>>().props;
+    const { range, cash, bank, accounts, period, dues, receivables, monthly, monthly_links, context } = usePage<PageProps<Props>>().props;
     const t = useTranslate();
     const m = (v: number) => money(v, context!.currency);
 
@@ -153,6 +157,11 @@ export default function Summary() {
                     </div>
                 </Card>
             </div>
+
+            {/* مصروفاتُ الشهر — شهرٌ يُختار بنفسه، فلا يُقرأ رقمُ المدّة تحته على أنّه رقمُ الشهر */}
+            {monthly && (
+                <MonthlyExpensesCard data={monthly} links={monthly_links ?? { expenses: false, supplier_invoices: false, payroll: false }} m={m} />
+            )}
 
             {/* ما جرى في المدة — والمبدّل فوقه وحده كي لا يُقرأ رقمُ فترةٍ على أنه رقمُ أخرى */}
             <h2 className="mb-3 text-[15px] font-bold text-[#111]">{t('ما جرى في المدة')}</h2>
