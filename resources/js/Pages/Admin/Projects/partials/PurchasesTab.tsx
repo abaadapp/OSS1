@@ -7,6 +7,7 @@ import { Button } from '@/Components/ui/button';
 import { Card } from '@/Components/ui/card';
 import { Input } from '@/Components/ui/input';
 import { useTranslate } from '@/lib/i18n';
+import { receiptMode } from '@/lib/receipts';
 
 export interface ProjectPurchases {
     summary: {
@@ -32,6 +33,8 @@ export interface ProjectPurchases {
 export const LINE_KIND_LABEL: Record<string, string> = { product: 'منتج', service: 'خدمة', custom: 'بند مخصص' };
 
 const RECEIPT_LABEL: Record<string, string> = { draft: 'مسودة', pending: 'بانتظار الاستلام', partial: 'مستلم جزئيًا', received: 'مستلم' };
+/* وأمرُ الخدمات وحدها يُنفَّذ ولا يُستلم — المستندُ نفسُه (`lib/receipts`) */
+const SERVICE_RECEIPT_LABEL: Record<string, string> = { draft: 'مسودة', pending: 'بانتظار تأكيد التنفيذ', partial: 'منفَّذ جزئيًا', received: 'منفَّذ' };
 const RECEIPT_TONE: Record<string, 'neutral' | 'warning' | 'info' | 'success'> = { draft: 'neutral', pending: 'warning', partial: 'info', received: 'success' };
 
 /**
@@ -132,7 +135,7 @@ export default function PurchasesTab({ projectId, data, m }: { projectId: number
                                         : (o.supplier ?? '—')}</td>
                                     <td className="px-4 py-2 text-[12px]">{o.kinds.map((k) => t(LINE_KIND_LABEL[k] ?? k)).join('، ') || '—'}</td>
                                     <td className="px-4 py-2 text-[#6b7280]">{o.ordered_at ?? '—'}{o.expected_delivery_at ? <span className="block text-[11px]">{t('التسليم المتوقع')}: {o.expected_delivery_at}</span> : null}</td>
-                                    <td className="px-4 py-2 text-center"><Badge variant={RECEIPT_TONE[o.receipt]}>{t(RECEIPT_LABEL[o.receipt])}</Badge>{o.closed && <span className="ms-1 text-[11px] text-[#9ca3af]">{t('مقفل')}</span>}</td>
+                                    <td className="px-4 py-2 text-center"><Badge variant={RECEIPT_TONE[o.receipt]}>{t((receiptMode(o.kinds) === 'services' ? SERVICE_RECEIPT_LABEL : RECEIPT_LABEL)[o.receipt])}</Badge>{o.closed && <span className="ms-1 text-[11px] text-[#9ca3af]">{t('مقفل')}</span>}</td>
                                     <td className="px-4 py-2 text-end tabular-nums">{m(o.total)}</td>
                                 </tr>
                             ))}

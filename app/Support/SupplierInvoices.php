@@ -5,6 +5,7 @@ namespace App\Support;
 use App\Models\GoodsReceiptNote;
 use App\Models\JournalEntry;
 use App\Models\PurchaseOrder;
+use App\Models\PurchaseOrderItem;
 use App\Models\SupplierInvoice;
 use App\Models\User;
 use Illuminate\Support\Carbon;
@@ -220,14 +221,33 @@ final class SupplierInvoices
          * والمعلَّقُ لا يُحسب واصلًا — وإلّا لصار كتابةُ استلامٍ بلا اعتماد
          * طريقًا إلى تمرير سند. وهو ما فُتح البابُ لإغلاقه.
          */
-        $ordered = (float) $po->items()->sum('quantity');
-        $received = (float) $po->items()->sum('received_quantity');
+        $items = $po->items()->get(['quantity', 'received_quantity', 'line_kind']);
+        $ordered = (float) $items->sum('quantity');
+        $received = (float) $items->sum('received_quantity');
+
+        /*
+         * والخدمةُ تُقال بلغتها: «تأكيدُ تنفيذ» لا «استلام».
+         *
+         * القاعدةُ واحدة على الأمر كلِّه — ما ثبت من بضاعةٍ وخدمةٍ معًا — وإنّما
+         * يُقال الناقصُ من كلٍّ باسمه، فيعرف من يعتمد أهي شحنةٌ لم تصل أم خدمةٌ
+         * لم يُؤكَّد تنفيذُها. انظر `GoodsReceipts` («والخدمةُ تُنفَّذ»).
+         */
+        $services = $items->where('line_kind', PurchaseOrderItem::SERVICE);
+        $goods = $items->reject(fn ($i) => $i->line_kind === PurchaseOrderItem::SERVICE);
+        $n = fn (float $v) => rtrim(rtrim(number_format($v, 3), '0'), '.');
 
         if ($ordered > 0 && $received + self::TOLERANCE < $ordered) {
-            $notes[] = __('تم استلام :got من :want وحدة فقط', [
-                'got' => rtrim(rtrim(number_format($received, 3), '0'), '.'),
-                'want' => rtrim(rtrim(number_format($ordered, 3), '0'), '.'),
-            ]);
+            $goodsOrdered = (float) $goods->sum('quantity');
+            $goodsReceived = (float) $goods->sum('received_quantity');
+            if ($goodsOrdered > 0 && $goodsReceived + self::TOLERANCE < $goodsOrdered) {
+                $notes[] = __('تم استلام :got من :want وحدة فقط', ['got' => $n($goodsReceived), 'want' => $n($goodsOrdered)]);
+            }
+
+            $servicesOrdered = (float) $services->sum('quantity');
+            $servicesDone = (float) $services->sum('received_quantity');
+            if ($servicesOrdered > 0 && $servicesDone + self::TOLERANCE < $servicesOrdered) {
+                $notes[] = __('تم تأكيد تنفيذ :got من :want من الخدمات فقط', ['got' => $n($servicesDone), 'want' => $n($servicesOrdered)]);
+            }
 
             /*
              * والسندُ الكاملُ على استلامٍ ناقص يُمنع: هو أشيعُ ما يُدفع بلا
@@ -241,7 +261,9 @@ final class SupplierInvoices
         }
 
         if ($ordered > 0 && $received <= 0) {
-            $notes[] = __('لم يُعتمد أيُّ استلامٍ على هذا الأمر بعد');
+            $notes[] = $goods->isEmpty()
+                ? __('لم يُعتمد تأكيد تنفيذ أيّ خدمة على هذا الأمر بعد')
+                : __('لم يُعتمد أيُّ استلامٍ على هذا الأمر بعد');
             $blocked = true;
         }
 

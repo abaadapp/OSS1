@@ -7,6 +7,7 @@ use App\Models\GoodsReceiptNote;
 use App\Models\InventoryMovement;
 use App\Models\Product;
 use App\Models\PurchaseOrder;
+use App\Models\PurchaseOrderItem;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
 
@@ -30,6 +31,15 @@ use Illuminate\Support\Facades\DB;
  *
  *  • `reject()` — تُوسم ولا تُمحى، ولا يتحرّك بها شيء.
  *
+ * ═══ والخدمةُ تُنفَّذ ولا تصل الرفّ ═══
+ *
+ * بندُ الخدمة على أمر الشراء (`line_kind = service`) يمرّ بالورقة نفسِها
+ * واعتمادِها — فهي إثباتُ أنّ الخدمة نُفّذت وقُبلت، وبها يزيد
+ * `received_quantity` فتصلح مطابقةُ سند المورّد بقواعدها نفسِها. لكنّها لا
+ * تبلغ الرفّ (`shelve` يسأل `isStocked`)، وتُسمّى في الشاشات والسجلّ «تأكيد
+ * تنفيذ» لا «استلامًا» (`mode`). والأمرُ المختلط ورقتُه واحدة: البضاعةُ تدخل
+ * الرفّ باعتمادها، والخدمةُ تُثبَت ولا تدخل. لا مستندَ ثانيًا ولا جدولًا موازيًا.
+ *
  * ═══ ولا ذمّةَ من هنا ═══
  *
  * الاستلامُ حركةُ بضاعة لا حدثٌ ماليّ: لا قيدَ له ولا ذمّةَ للمورّد. الذمّةُ
@@ -43,6 +53,32 @@ final class GoodsReceipts
     public const APPROVED = 'معتمد';
 
     public const REJECTED = 'مرفوض';
+
+    /** بضاعةٌ وحدها */
+    public const GOODS = 'goods';
+
+    /** خدماتٌ وحدها — «تأكيدُ تنفيذ» */
+    public const SERVICES = 'services';
+
+    /** بضاعةٌ وخدمات */
+    public const MIXED = 'mixed';
+
+    /**
+     * نمطُ الورقة أو الأمر من أنواع بنوده — ولغةُ الشاشات منه.
+     *
+     * @param  iterable<string|null>  $lineKinds
+     */
+    public static function mode(iterable $lineKinds): string
+    {
+        $kinds = collect($lineKinds)->map(fn ($k) => $k ?: PurchaseOrderItem::PRODUCT);
+        $services = $kinds->filter(fn ($k) => $k === PurchaseOrderItem::SERVICE)->count();
+
+        return match (true) {
+            $services === 0 => self::GOODS,
+            $services === $kinds->count() => self::SERVICES,
+            default => self::MIXED,
+        };
+    }
 
     /**
      * كتابةُ ما وصل — بلا أثرٍ على الرفّ.
@@ -144,7 +180,9 @@ final class GoodsReceipts
                 $note->items()->create($line);
             }
 
-            Activity::log('created', 'سجّل استلامًا بانتظار الاعتماد '.$note->number.' على '.$locked->number, [
+            $services = self::mode($items->whereIn('id', array_column($noteItems, 'purchase_order_item_id'))->pluck('line_kind')) === self::SERVICES;
+
+            Activity::log('created', ($services ? 'سجّل تأكيد تنفيذ خدمة بانتظار الاعتماد ' : 'سجّل استلامًا بانتظار الاعتماد ').$note->number.' على '.$locked->number, [
                 'subject_id' => $note->id, 'subject_type' => 'goods_receipt_note',
             ]);
 
@@ -276,7 +314,9 @@ final class GoodsReceipts
                 ]);
             }
 
-            Activity::log('updated', 'اعتمد الاستلام '.$locked->number, [
+            $services = self::mode($orderItems->whereIn('id', $locked->items()->pluck('purchase_order_item_id')->filter()->all())->pluck('line_kind')) === self::SERVICES;
+
+            Activity::log('updated', ($services ? 'اعتمد تنفيذ الخدمة ' : 'اعتمد الاستلام ').$locked->number, [
                 'subject_id' => $locked->id, 'subject_type' => 'goods_receipt_note',
             ]);
 

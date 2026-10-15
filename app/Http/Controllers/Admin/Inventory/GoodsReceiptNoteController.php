@@ -182,6 +182,11 @@ class GoodsReceiptNoteController extends Controller
                 'approved_by' => $actors[$note->approved_by] ?? null,
                 'rejected_by' => $actors[$note->rejected_by] ?? null,
                 'value' => round($note->items->sum(fn ($i) => (float) $i->quantity * (float) $i->cost), 3),
+                /* ورقةُ خدماتٍ وحدها «تأكيدُ تنفيذ» — لا تدخل بها كميّةٌ المخزون (`GoodsReceipts::mode`) */
+                'mode' => GoodsReceipts::mode($note->purchase_order_id
+                    ? PurchaseOrderItem::where('purchase_order_id', $note->purchase_order_id)
+                        ->whereIn('id', $note->items->pluck('purchase_order_item_id')->filter()->all())->pluck('line_kind')
+                    : []),
                 /*
                  * ووجودُ المرفق سؤالٌ غيرُ «هل تقرؤه؟».
                  *

@@ -43,6 +43,8 @@ interface Note {
     approved_by: string | null;
     rejected_by: string | null;
     value: number;
+    /** ورقةُ خدماتٍ وحدها «تأكيدُ تنفيذ» — لا تدخل بها كميّةٌ المخزون (`GoodsReceipts::mode`) */
+    mode?: 'goods' | 'services' | 'mixed';
     has_attachment: boolean;
     attachment: string | null;
     attachment_name: string | null;
@@ -75,6 +77,8 @@ export default function ReceiptShow() {
     const { note, order, can, paper, context } = usePage<PageProps<Props>>().props;
     const t = useTranslate();
     const m = (v: number) => money(v, context!.currency);
+    /* ورقةُ خدماتٍ وحدها تُقال «تأكيدَ تنفيذ» — المستندُ نفسُه، ولا رفَّ له */
+    const services = note.mode === 'services';
 
     const [previewing, setPreviewing] = useState(false);
     const [rejecting, setRejecting] = useState(false);
@@ -103,13 +107,13 @@ export default function ReceiptShow() {
 
             <PageHeader
                 title={note.number}
-                subtitle={`${t('سند استلام بضاعة')}${note.supplier ? ` — ${note.supplier}` : ''}`}
+                subtitle={`${services ? t('تأكيد تنفيذ خدمة') : t('سند استلام بضاعة')}${note.supplier ? ` — ${note.supplier}` : ''}`}
                 actions={
                     <>
                         {pending && can.approve && (
                             <Button variant="success" onClick={approve}>
                                 <Check />
-                                {t('اعتماد الاستلام')}
+                                {services ? t('اعتماد التنفيذ') : t('اعتماد الاستلام')}
                             </Button>
                         )}
                         {pending && can.reject && (
@@ -257,11 +261,13 @@ export default function ReceiptShow() {
                         */}
                         <dl className="mt-4 ms-auto max-w-xs border-t border-[var(--ui-border,#e8e8e8)] pt-4 text-[13px]">
                             <div className="flex items-center justify-between gap-3">
-                                <dt className="font-bold text-[#111]">{t('قيمة ما دخل')}</dt>
+                                <dt className="font-bold text-[#111]">{services ? t('قيمة ما نُفّذ') : t('قيمة ما دخل')}</dt>
                                 <dd className="font-bold tabular-nums text-[#111]">{m(note.value)}</dd>
                             </div>
                             <p className="mt-2 text-[12px] leading-relaxed text-[#9ca3af]">
-                                {t('هذه قيمةُ البضاعة الداخلة — ولا تنشأ بها ذمّةٌ للمورّد قبل اعتماد سنده.')}
+                                {services
+                                    ? t('هذه قيمةُ الخدمة المنفَّذة — لا تدخل المخزون، ولا تنشأ بها ذمّةٌ للمورّد قبل اعتماد سنده.')
+                                    : t('هذه قيمةُ البضاعة الداخلة — ولا تنشأ بها ذمّةٌ للمورّد قبل اعتماد سنده.')}
                             </p>
                         </dl>
                     </Card>
@@ -284,7 +290,7 @@ export default function ReceiptShow() {
                 <DialogContent>
                     <DialogHeader>
                         <DialogTitle>
-                            {t('رفض الاستلام')} — {note.number}
+                            {services ? t('رفض تأكيد التنفيذ') : t('رفض الاستلام')} — {note.number}
                         </DialogTitle>
                     </DialogHeader>
 

@@ -226,4 +226,58 @@ class OrganizersStandOnTheEventNotOnTheProjectTest extends OperationsTestCase
         $this->assertSame(0, OperationOrganizer::count());
         $this->assertSame('علي', $ali->fresh()->name);
     }
+
+    /* ─────────────────────────── تصنيفُ التعيين (مراجعة PR #3) ─────────────────────────── */
+
+    public function test_the_assignment_category_is_one_of_the_organizers_own(): void
+    {
+        $op = $this->operation();
+        $reception = $this->category('استقبال');
+        $vip = $this->category('VIP');
+        $photography = $this->category('تصوير');
+        $mohammed = $this->organizer('محمد', Organizer::MALE, [$reception, $vip]);
+        $store = fn (array $data) => $this->actingAs($this->owner)->post(route('admin.operations.organizers.store', $op->id), $data + ['organizer_id' => $mohammed->id]);
+
+        /* «تصوير» ليست من تصنيفاته — يُردّ ولا يُكتب */
+        $store(['organizer_category_id' => $photography->id])
+            ->assertSessionHasErrors(['organizers' => '«تصوير» ليس من تصنيفات المنظّم محمد — اختر من تصنيفاته، أو أضفه إلى ملفّه أوّلًا.']);
+        $this->assertSame(0, OperationOrganizer::count());
+
+        $store(['organizer_category_id' => $reception->id])->assertSessionHasNoErrors();
+        $a = OperationOrganizer::sole();
+        $this->assertSame($reception->id, $a->organizer_category_id);
+
+        /* والتعديلُ إلى غير تصنيفاته يُردّ، وإلى أحدها يمرّ */
+        $update = fn (array $data) => $this->actingAs($this->owner)->put(route('admin.operations.organizers.update', [$op->id, $a->id]), $data);
+        $update(['organizer_category_id' => $photography->id])->assertSessionHasErrors('organizers');
+        $this->assertSame($reception->id, $a->fresh()->organizer_category_id);
+        $update(['organizer_category_id' => $vip->id])->assertSessionHasNoErrors();
+        $this->assertSame($vip->id, $a->fresh()->organizer_category_id);
+
+        /* وتصنيفٌ نُزع من ملفّه بعد التعيين لا يكسر حفظَ حاله — التاريخُ باقٍ */
+        Organizers::update($mohammed->fresh(), ['name' => 'محمد', 'gender' => Organizer::MALE, 'category_ids' => [$reception->id]], $this->owner);
+        $update(['status' => 'confirmed', 'organizer_category_id' => $vip->id])->assertSessionHasNoErrors();
+        $this->assertSame([OperationOrganizer::CONFIRMED, $vip->id], [$a->fresh()->status, $a->fresh()->organizer_category_id]);
+
+        /* والشاشةُ لا تعرض للتعيين إلّا تصنيفاتِه */
+        $this->actingAs($this->owner)->get(route('admin.operations.show', $op->id))->assertOk()
+            ->assertInertia(fn (AssertableInertia $p) => $p->where('organizers.0.categories', [['id' => $reception->id, 'name' => 'استقبال']]));
+    }
+
+    public function test_a_category_of_another_company_is_refused_even_if_the_name_matches(): void
+    {
+        $op = $this->operation();
+        $reception = $this->category('استقبال');
+        $mohammed = $this->organizer('محمد', Organizer::MALE, [$reception]);
+        $theirs = Organizers::saveCategory((int) $this->other->id, 'استقبال');
+
+        $this->actingAs($this->owner)->post(route('admin.operations.organizers.store', $op->id), ['organizer_id' => $mohammed->id, 'organizer_category_id' => $theirs->id])
+            ->assertSessionHasErrors(['organizers' => 'هذا التصنيف ليس من تصنيفات شركتك.']);
+        $this->assertSame(0, OperationOrganizer::count());
+
+        $this->actingAs($this->owner)->post(route('admin.operations.organizers.store', $op->id), ['organizer_id' => $mohammed->id, 'organizer_category_id' => $reception->id]);
+        $a = OperationOrganizer::sole();
+        $this->actingAs($this->stranger)->put(route('admin.operations.organizers.update', [$op->id, $a->id]), ['organizer_category_id' => $theirs->id])->assertNotFound();
+        $this->assertSame($reception->id, $a->fresh()->organizer_category_id);
+    }
 }

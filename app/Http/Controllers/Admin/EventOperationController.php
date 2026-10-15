@@ -15,7 +15,6 @@ use App\Models\OperationIncident;
 use App\Models\OperationOrganizer;
 use App\Models\OperationScheduleItem;
 use App\Models\Organizer;
-use App\Models\OrganizerCategory;
 use App\Models\Product;
 use App\Models\Project;
 use App\Models\User;
@@ -285,13 +284,12 @@ class EventOperationController extends Controller
             'checklists' => $operation->checklists->map(fn (OperationChecklist $c) => $this->checklistRow($c))->all(),
             'incidents' => $operation->incidents->map(fn (OperationIncident $i) => $this->incidentRow($i))->all(),
             /* المنظّمون — المرحلة 14: من على الفعاليّة، ومن يُختار منه، وتصنيفاتُهم */
-            'organizers' => OperationOrganizer::where('event_operation_id', $operation->id)->with(['organizer:id,name,phone,whatsapp,gender', 'category:id,name'])
+            'organizers' => OperationOrganizer::where('event_operation_id', $operation->id)->with(['organizer:id,name,phone,whatsapp,gender', 'organizer.categories:id,name', 'category:id,name'])
                 ->orderBy('starts_at')->orderBy('id')->get()->map(fn (OperationOrganizer $a) => $this->organizerRow($a))->all(),
             'organizer_options' => Organizer::where('business_id', $bid)->where('status', Organizer::AVAILABLE)->with('categories:id,name')
                 ->orderBy('name')->limit(500)->get()
                 ->map(fn (Organizer $o) => ['id' => $o->id, 'name' => $o->name, 'gender' => $o->gender, 'phone' => $o->phone,
                     'categories' => $o->categories->map(fn ($c) => ['id' => $c->id, 'name' => $c->name])->values()->all()])->all(),
-            'organizer_categories' => OrganizerCategory::where('business_id', $bid)->where('active', true)->orderBy('sort_order')->orderBy('name')->get(['id', 'name'])->all(),
             'users' => User::where('business_id', $bid)->where('status', 'نشط')->orderBy('name')->get(['id', 'name'])->all(),
             'project_members' => $operation->project?->members()->with('user:id,name')->get()->map(fn ($m) => ['user_id' => $m->user_id, 'name' => $m->user?->name, 'role' => $m->role_in_project])->all() ?? [],
             'templates' => OperationChecklistTemplate::where('business_id', $bid)->where('active', true)->orderBy('sort_order')->get(['id', 'name', 'phase'])->all(),
@@ -949,6 +947,8 @@ class EventOperationController extends Controller
             'gender' => $a->organizer?->gender,
             'category_id' => $a->organizer_category_id,
             'category' => $a->category?->name,
+            /* ما يُختار منه تصنيفُ هذا التعيين — تصنيفاتُ المنظّم في ملفّه (`OperationOrganizers::categoryOf`) */
+            'categories' => $a->organizer?->categories->map(fn ($c) => ['id' => $c->id, 'name' => $c->name])->values()->all() ?? [],
             'starts_at' => $a->starts_at?->format('Y-m-d H:i'),
             'ends_at' => $a->ends_at?->format('Y-m-d H:i'),
             'status' => $a->status,

@@ -106,6 +106,92 @@ class ACompanyKeepsManyContactsAndOnePrimaryTest extends TestCase
         $this->quote(['customer_contact_id' => $a->id]);
     }
 
+    /**
+     * شركةٌ قديمة اسمُ شخصها في الأعمدة القديمة ← نُقل أساسيًّا ← أُضيف غيرُه ←
+     * عُطّل الأوّل: لا يعود من الأعمدة في سؤالٍ ولا مستندٍ ولا مراسلة، وما خرج
+     * باسمه قبلُ يبقى كما خرج.
+     */
+    public function test_a_deactivated_primary_hands_over_and_never_returns_through_the_old_columns(): void
+    {
+        $noor = Customer::create(['business_id' => $this->business->id, 'name' => 'شركة النور', 'customer_type' => 'شركة',
+            'contact_person' => 'أحمد', 'contact_phone' => '91110000', 'contact_email' => 'ahmed@noor.om']);
+        $migration = require base_path('database/migrations/2026_10_16_100000_companies_keep_their_people_organizers_take_the_field_and_the_project_buys_its_services.php');
+        $migration->backfill();
+
+        $ahmed = CustomerContact::where('customer_id', $noor->id)->sole();
+        $this->assertTrue($ahmed->is_primary, 'الهجرةُ جعلت أحمد أساسيًّا');
+
+        $quote = fn (array $data = []) => Quotations::create((int) $this->business->id, $noor->fresh(), $data + ['title' => 'حفل الافتتاح', 'issued_at' => now()->toDateString()],
+            [['description' => 'تنظيم', 'quantity' => 1, 'unit_price' => 500]], $this->owner);
+        $chosen = $quote(['customer_contact_id' => $ahmed->id]);
+        $unchosen = $quote();
+        $this->assertSame('أحمد', $unchosen->attention_to);
+
+        $mohammed = CustomerContacts::save($noor, ['name' => 'محمد', 'phone' => '92220000', 'email' => 'mohammed@noor.om'], $this->owner);
+        $this->assertFalse($mohammed->is_primary, 'أُضيف نشطًا — والأساسيُّ ما زال أحمد');
+
+        $this->actingAs($this->owner)->post(route('admin.customers.contacts.active', [$noor->id, $ahmed->id]), ['active' => 0])->assertSessionHasNoErrors();
+
+        /* سلّم الأساسيّةَ لأقدم النشطين في المعاملة نفسِها — أساسيٌّ واحد */
+        $this->assertFalse($ahmed->fresh()->is_primary);
+        $this->assertTrue($mohammed->fresh()->is_primary);
+        $this->assertSame(1, CustomerContact::where('customer_id', $noor->id)->where('is_primary', true)->count());
+        $this->assertTrue(ActivityLog::where('description', 'صار محمد شخص الاتصال الأساسي في شركة النور بدل أحمد')->exists());
+        $this->assertSame('محمد', CustomerContacts::primary($noor->fresh())['name'], 'لا يعود أحمد من الأعمدة القديمة');
+
+        /* والمستندُ الجديد لا يختاره: لا تلقائيًّا ولا يدويًّا */
+        $new = $quote();
+        $this->assertSame(['محمد', '92220000', 'mohammed@noor.om'], [$new->attention_to, $new->contact_phone, $new->contact_email]);
+        try {
+            $quote(['customer_contact_id' => $ahmed->id]);
+            $this->fail('المعطَّلُ اختير في مستندٍ جديد');
+        } catch (RuntimeException) {
+        }
+
+        /* ولا تعرضه نافذةُ المراسلة من أعمدة الجهة القديمة */
+        $this->assertNotContains('96891110000', array_column(Subjects::recipients($new->fresh())['phone'], 'value'));
+        $this->assertNotContains('ahmed@noor.om', array_column(Subjects::recipients($new->fresh())['email'], 'value'));
+
+        /* والمشروعُ من عرضٍ قديمٍ وُجّه إلى أحمد مستندٌ جديد — يأخذ الأساسيّ الآن */
+        Quotations::send($chosen, $this->owner);
+        Quotations::recordDecision($chosen->fresh(), Quotation::ACCEPTED, ['decided_by_name' => 'محمد'], $this->owner);
+        $project = Project::where('quotation_id', $chosen->id)->sole();
+        $this->assertSame([$mohammed->id, 'محمد', '92220000'], [$project->customer_contact_id, $project->contact_person, $project->contact_phone]);
+
+        /* وما خرج قبلُ باسم أحمد يبقى كما خرج — والأعمدةُ القديمة نفسُها لم تُمسّ */
+        $chosen->refresh();
+        $this->assertSame([$ahmed->id, 'أحمد', '91110000', 'ahmed@noor.om'], [$chosen->customer_contact_id, $chosen->attention_to, $chosen->contact_phone, $chosen->contact_email]);
+        $this->assertSame('أحمد', $unchosen->fresh()->attention_to);
+        $this->assertSame('أحمد', $noor->fresh()->contact_person);
+
+        /* ولو عُطّل الجميع: لا أساسيّ — ولا يُستعاد من الأعمدة */
+        CustomerContacts::setActive($mohammed->fresh(), false, $this->owner);
+        $this->assertNull(CustomerContacts::primary($noor->fresh()));
+        $this->assertNull($quote()->attention_to);
+    }
+
+    public function test_reactivating_or_deleting_keeps_exactly_one_active_primary(): void
+    {
+        $a = $this->contact('محمد');
+        $b = $this->contact('سارة');
+        $c = $this->contact('خالد');
+
+        /* حذفُ الأساسيّ غيرِ المستعمل يُسلّمها لأقدم النشطين */
+        CustomerContacts::delete($a, $this->owner);
+        $this->assertTrue($b->fresh()->is_primary);
+
+        CustomerContacts::setActive($b->fresh(), false, $this->owner);
+        CustomerContacts::setActive($c->fresh(), false, $this->owner);
+        $this->assertSame(0, CustomerContact::where('customer_id', $this->ministry->id)->where('is_primary', true)->count(), 'لا نشطَ فلا أساسيّ');
+
+        /* والعائدُ إلى جهةٍ بلا أساسيٍّ نشط يصيره */
+        CustomerContacts::setActive($c->fresh(), true, $this->owner);
+        $this->assertTrue($c->fresh()->is_primary);
+        CustomerContacts::setActive($b->fresh(), true, $this->owner);
+        $this->assertFalse($b->fresh()->is_primary, 'وفي الجهة أساسيٌّ نشط — فلا يُنتزع منه');
+        $this->assertSame(1, CustomerContact::where('customer_id', $this->ministry->id)->where('is_primary', true)->count());
+    }
+
     public function test_a_contact_chosen_on_a_document_is_deactivated_not_deleted(): void
     {
         $a = $this->contact('محمد');

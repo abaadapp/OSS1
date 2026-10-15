@@ -46,3 +46,20 @@ export const assignmentTone = (status: string): string =>
             : status === 'cancelled'
               ? 'bg-[#f4f4f5] text-[#71717a]'
               : 'bg-[#f5f3ff] text-[#6d28d9]';
+
+/**
+ * ما يُختار منه تصنيفُ تعيينٍ قائم — تصنيفاتُ المنظّم في ملفّه وحدها.
+ *
+ * والخادمُ يردّ غيرَها (`OperationOrganizers::categoryOf`). وتصنيفُ التعيين
+ * الحاليّ يبقى خيارًا ولو نُزع من ملفّه بعده: يُقرأ ولا يُعرض غيرُه.
+ */
+export function assignmentCategories(row: {
+    category_id: number | null;
+    category: string | null;
+    categories?: { id: number; name: string }[];
+}): { id: number; name: string }[] {
+    const his = row.categories ?? [];
+    return row.category_id && row.category && !his.some((c) => c.id === row.category_id)
+        ? [...his, { id: row.category_id, name: row.category }]
+        : his;
+}

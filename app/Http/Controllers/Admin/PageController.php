@@ -16,6 +16,7 @@ use App\Models\Order;
 use App\Models\Product;
 use App\Models\Project;
 use App\Models\Quotation;
+use App\Models\Supplier;
 use App\Models\User;
 use App\Support\CustomerContacts;
 use App\Support\Demo;
@@ -575,7 +576,8 @@ class PageController extends Controller
             /* والمشاريعُ القائمة — شراءٌ لأجل مشروعٍ يُقرأ التزامًا عليه (§16) */
             'projects' => $projects->all(),
             'presetProjectId' => $preset,
-            'suppliers' => Demo::suppliers(),
+            /* والمورّدون النشطون وحدهم — المتوقّفُ لا يُختار لأمرٍ جديد (والخادمُ يردّه إن أُرسل) */
+            'suppliers' => array_values(array_filter(Demo::suppliers(), fn (array $s) => $s['status'] === Supplier::ACTIVE)),
             'products' => Demo::products(),
             'reorderSuggestions' => Demo::reorderSuggestions(),
             'branches' => Demo::branches(),

@@ -27,6 +27,7 @@ use App\Models\OrderItemAddon;
 use App\Models\Product;
 use App\Models\ProductVariant;
 use App\Models\PurchaseOrder;
+use App\Models\PurchaseOrderItem;
 use App\Models\RecipeItem;
 use App\Models\Setting;
 use App\Models\Supplier;
@@ -1252,6 +1253,8 @@ class Demo
                 'items' => $p->status === 'مستلم' ? [] : $p->items->map(fn ($i) => [
                     'id' => $i->id,
                     'name' => $i->name,
+                    /* الخدمةُ تُؤكَّد ولا تُستلم — والنافذةُ تقولها بلغتها */
+                    'line_kind' => $i->line_kind ?: PurchaseOrderItem::PRODUCT,
                     'quantity' => (int) $i->quantity,
                     'received' => (int) $i->received_quantity,
                     'remaining' => $i->remaining,

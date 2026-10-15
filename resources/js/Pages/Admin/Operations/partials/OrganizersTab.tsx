@@ -7,7 +7,7 @@ import { Card } from '@/Components/ui/card';
 import { Input, Textarea } from '@/Components/ui/input';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/Components/ui/dialog';
 import { useTranslate } from '@/lib/i18n';
-import { assignmentTone } from '@/lib/organizers';
+import { assignmentCategories, assignmentTone } from '@/lib/organizers';
 
 export interface OperationOrganizerRow {
     id: number;
@@ -17,6 +17,8 @@ export interface OperationOrganizerRow {
     gender: string | null;
     category_id: number | null;
     category: string | null;
+    /** تصنيفاتُ المنظّم في ملفّه — ومنها وحدها يُختار تصنيفُ التعيين */
+    categories?: { id: number; name: string }[];
     starts_at: string | null;
     ends_at: string | null;
     status: string;
@@ -44,7 +46,6 @@ export default function OrganizersTab({
     users,
     organizers,
     options,
-    categories,
     statusLabels,
     genderLabels,
     conflicts,
@@ -56,7 +57,6 @@ export default function OrganizersTab({
     users: { id: number; name: string }[];
     organizers: OperationOrganizerRow[];
     options: OrganizerOption[];
-    categories: { id: number; name: string }[];
     statusLabels: Record<string, string>;
     genderLabels: Record<string, string>;
     conflicts: { severity: string; kind: string; message: string }[];
@@ -128,7 +128,7 @@ export default function OrganizersTab({
                                         {manage ? (
                                             <Select value={o.category_id ? String(o.category_id) : ''} placeholder="بلا تصنيف" aria-label={t('التصنيف في الفعاليّة')}
                                                 onChange={(e) => update(o, { organizer_category_id: e.target.value })}
-                                                options={categories.map((c) => ({ value: String(c.id), label: c.name }))} />
+                                                options={assignmentCategories(o).map((c) => ({ value: String(c.id), label: c.name }))} />
                                         ) : (o.category ?? '—')}
                                     </td>
                                     <td className="px-4 py-2 text-[12px] tabular-nums text-[#6b7280]" dir="ltr">{o.starts_at ?? '—'}{o.ends_at ? ` → ${o.ends_at}` : ''}</td>
@@ -160,7 +160,7 @@ export default function OrganizersTab({
                         </Field>
                         <Field label="التصنيف في الفعاليّة">
                             <Select value={form.organizer_category_id} placeholder="بلا تصنيف" onChange={(e) => setForm({ ...form, organizer_category_id: e.target.value })}
-                                options={(picked && picked.categories.length ? picked.categories : categories).map((c) => ({ value: String(c.id), label: c.name }))} />
+                                options={(picked?.categories ?? []).map((c) => ({ value: String(c.id), label: c.name }))} />
                         </Field>
                         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                             <Field label="من" hint="فارغًا = نافذة الفعاليّة">

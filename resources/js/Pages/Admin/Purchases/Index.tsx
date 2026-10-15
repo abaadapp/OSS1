@@ -27,6 +27,7 @@ import {
 import { money, number } from '@/lib/format';
 import { useTranslate } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
+import { receiptMode } from '@/lib/receipts';
 import type { PageProps } from '@/types';
 import { Input } from '@/Components/ui/input';
 import type { PurchaseOrder } from '@/types/models';
@@ -92,6 +93,9 @@ export default function PurchasesIndex() {
     };
 
     const takingTotal = confirm?.order.items.reduce((sum, i) => sum + (Number(taking[i.id]) || 0), 0) ?? 0;
+    /* الخدمةُ تُؤكَّد ولا تُستلم — والمستندُ واحد (`lib/receipts`) */
+    const modeOf = (o: PurchaseOrder) => receiptMode(o.items.map((i) => i.line_kind));
+    const confirmMode = confirm ? modeOf(confirm.order) : 'goods';
     const partial =
         confirm?.order.items.some((i) => (Number(taking[i.id]) || 0) < i.remaining) ?? false;
 
@@ -156,7 +160,7 @@ export default function PurchasesIndex() {
                             onClick={() => openReceive(o)}
                         >
                             <PackageCheck />
-                            {t('استلام')}
+                            {modeOf(o) === 'services' ? t('تأكيد التنفيذ') : t('استلام')}
                         </Button>
                     )}
                     {/* الأمر يخرج على ورق: مورّدٌ يقرأ ما طُلب منه لا مكالمةً تُنسى */}
@@ -303,7 +307,13 @@ export default function PurchasesIndex() {
                 <DialogContent className={cn(confirm?.kind === 'receive' ? 'sm:max-w-xl' : 'max-w-sm')}>
                     <DialogHeader>
                         <DialogTitle>
-                            {confirm?.kind === 'receive' ? t('تأكيد الاستلام') : t('تأكيد الحذف')}
+                            {confirm?.kind !== 'receive'
+                                ? t('تأكيد الحذف')
+                                : confirmMode === 'services'
+                                  ? t('تأكيد تنفيذ الخدمة')
+                                  : confirmMode === 'mixed'
+                                    ? t('تأكيد الاستلام والتنفيذ')
+                                    : t('تأكيد الاستلام')}
                         </DialogTitle>
                     </DialogHeader>
 
@@ -333,7 +343,14 @@ export default function PurchasesIndex() {
                                 <TableBody>
                                     {confirm.order.items.map((i) => (
                                         <TableRow key={i.id}>
-                                            <TableCell className="font-medium text-[#111]">{i.name}</TableCell>
+                                            <TableCell className="font-medium text-[#111]">
+                                                {i.name}
+                                                {i.line_kind === 'service' && (
+                                                    <span className="ms-2 rounded bg-[#eff6ff] px-1.5 py-0.5 text-[11px] text-[#2563eb]">
+                                                        {t('خدمة — لا تدخل المخزون')}
+                                                    </span>
+                                                )}
+                                            </TableCell>
                                             <TableCell className="text-end tabular-nums text-[#6b7280]">
                                                 {number(i.quantity)}
                                             </TableCell>
@@ -370,7 +387,7 @@ export default function PurchasesIndex() {
                                         {t('إلغاء')}
                                     </Button>
                                     <Button variant="success" onClick={act} disabled={takingTotal <= 0}>
-                                        {t('استلام')}
+                                        {confirmMode === 'services' ? t('تأكيد التنفيذ') : t('استلام')}
                                     </Button>
                                 </div>
                             </div>

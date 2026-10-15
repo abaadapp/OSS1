@@ -1274,7 +1274,9 @@ export function ItemRows({
                         */}
                         {line.kind !== 'product' && (
                             <p className="text-[11px] text-[#6b7280] sm:col-span-2 lg:col-span-7">
-                                {t('خدمةٌ أو بندٌ مخصّص — يُستلم ويُفوتَر ولا يدخل المخزون.')}
+                                {line.kind === 'service'
+                                    ? t('خدمة — يُؤكَّد تنفيذها ثمّ تُفوتَر، ولا تدخل المخزون.')
+                                    : t('بند مخصّص — يُستلم ويُفوتَر ولا يدخل المخزون.')}
                             </p>
                         )}
                         {asBase && line.kind === 'product' && (

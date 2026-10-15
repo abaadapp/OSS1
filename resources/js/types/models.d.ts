@@ -223,6 +223,8 @@ export interface PurchaseOrder {
 export interface PurchaseOrderLine {
     id: number;
     name: string;
+    /** منتجٌ أو خدمةٌ أو بندٌ مخصّص — الخدمةُ تُؤكَّد ولا تدخل المخزون */
+    line_kind?: string;
     quantity: number;
     received: number;
     remaining: number;

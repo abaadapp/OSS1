@@ -7,6 +7,8 @@ import ContactPicker from '@/Components/ContactPicker';
 import OrganizersTab, { type OperationOrganizerRow } from '@/Pages/Admin/Operations/partials/OrganizersTab';
 import PurchasesTab, { type ProjectPurchases } from '@/Pages/Admin/Projects/partials/PurchasesTab';
 import type { CustomerContact } from '@/lib/contacts';
+import { assignmentCategories } from '@/lib/organizers';
+import { receiptMode, RECEIPT_WORDS } from '@/lib/receipts';
 
 /**
  * شاشاتُ المرحلة 14 — تعرض ما يقوله الخادم وتطلب من أبوابه.
@@ -74,7 +76,7 @@ describe('OrganizersTab', () => {
     ];
     const base = {
         operationId: 4, active: true, leadId: null, users: [{ id: 1, name: 'المدير' }], organizers: rows,
-        options: [{ id: 7, name: 'منى', gender: 'female', phone: null, categories: [] }], categories: [{ id: 1, name: 'استقبال' }],
+        options: [{ id: 7, name: 'منى', gender: 'female', phone: null, categories: [{ id: 1, name: 'استقبال' }] }],
         statusLabels: { assigned: 'معيَّن', confirmed: 'أكّد' }, genderLabels: { female: 'أنثى', male: 'ذكر' },
     };
 
@@ -94,6 +96,24 @@ describe('OrganizersTab', () => {
 
         rerender(<OrganizersTab {...base} active={false} conflicts={[]} canManage />);
         expect(screen.queryByRole('button', { name: /تعيين منظّم/ })).not.toBeInTheDocument();
+    });
+
+    it('offers an assignment only the organizer’s own categories — and keeps a current one removed since', () => {
+        const own = [{ id: 1, name: 'استقبال' }, { id: 2, name: 'VIP' }];
+        expect(assignmentCategories({ category_id: 1, category: 'استقبال', categories: own })).toEqual(own);
+        expect(assignmentCategories({ category_id: 9, category: 'بروتوكول', categories: own }).map((c) => c.name)).toEqual(['استقبال', 'VIP', 'بروتوكول']);
+        expect(assignmentCategories({ category_id: null, category: null, categories: [] })).toEqual([]);
+    });
+});
+
+describe('receipts', () => {
+    it('calls a services-only order a completion, keeps goods as they were, and names a mixed one both', () => {
+        expect(receiptMode(['product', 'custom'])).toBe('goods');
+        expect(receiptMode([null, undefined])).toBe('goods');
+        expect(receiptMode(['service', 'service'])).toBe('services');
+        expect(receiptMode(['service', 'product'])).toBe('mixed');
+        expect(RECEIPT_WORDS.goods.action).toBe('تسجيل استلام');
+        expect(RECEIPT_WORDS.services.action).toBe('تأكيد تنفيذ الخدمة');
     });
 });
 
@@ -123,5 +143,12 @@ describe('PurchasesTab', () => {
 
         rerender(<PurchasesTab projectId={5} data={data(false)} m={(v) => String(v ?? '—')} />);
         expect(screen.queryByText('المدفوع')).not.toBeInTheDocument();
+    });
+
+    it('says a services-only order awaits completion, not receipt', () => {
+        const d = data(true);
+        d.orders = [{ ...d.orders[1], kinds: ['service'] }];
+        render(<PurchasesTab projectId={5} data={d} m={(v) => String(v ?? '—')} />);
+        expect(within(screen.getByText('PO-000012').closest('tr')!).getByText('بانتظار تأكيد التنفيذ')).toBeInTheDocument();
     });
 });

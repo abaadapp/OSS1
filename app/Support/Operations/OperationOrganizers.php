@@ -31,6 +31,13 @@ use RuntimeException;
  * يظهر مع تعارضات الفعاليّة (`ResourceConflicts::all`). وما تسرّب رغم ذلك
  * يُقال مانعًا.
  *
+ * ═══ وتصنيفُ التعيين من تصنيفات المنظّم ═══
+ *
+ * من سُجّل «استقبالًا وVIP» لا يُعيَّن «تصويرًا»: تصنيفُ التعيين واحدٌ من
+ * تصنيفاته في ملفّه (`organizer_category_organizer`) أو لا تصنيف. ومن أراد
+ * غيرَه يضيفه إلى ملفّه أوّلًا — رفضٌ بسيط لا تجاوزٌ بصلاحية. وتعيينٌ قائمٌ
+ * بتصنيفٍ نُزع من ملفّه بعده لا يُكسر بتعديل حاله: يُسأل التصنيفُ حين يتغيّر.
+ *
  * ═══ ومسؤولُ المنظّمين موظّف ═══
  *
  * `organizers_lead_user_id` موظّفٌ من الشركة يقود المنظّمين في الميدان —
@@ -63,7 +70,7 @@ final class OperationOrganizers
             ]));
         }
 
-        $category = self::categoryOf((int) $operation->business_id, $data['organizer_category_id'] ?? null);
+        $category = self::categoryOf((int) $operation->business_id, $data['organizer_category_id'] ?? null, $organizer);
         [$starts, $ends] = self::window($operation, $data);
 
         return DB::transaction(function () use ($operation, $organizer, $category, $starts, $ends, $data, $actor) {
@@ -112,7 +119,7 @@ final class OperationOrganizers
         }
 
         $category = array_key_exists('organizer_category_id', $data)
-            ? self::categoryOf((int) $operation->business_id, $data['organizer_category_id'])
+            ? self::categoryOf((int) $operation->business_id, $data['organizer_category_id'], $assignment->organizer()->firstOrFail(), $assignment->organizer_category_id)
             : $assignment->category;
         [$starts, $ends] = array_key_exists('starts_at', $data) || array_key_exists('ends_at', $data)
             ? self::window($operation, $data + ['starts_at' => $assignment->starts_at, 'ends_at' => $assignment->ends_at])
@@ -250,14 +257,34 @@ final class OperationOrganizers
         }
     }
 
-    private static function categoryOf(int $businessId, mixed $id): ?OrganizerCategory
+    /**
+     * تصنيفُ التعيين — من الشركة، ومن تصنيفات المنظّم في ملفّه.
+     *
+     * و`$current` تصنيفُ التعيين القائم: إبقاؤه كما هو لا يُردّ ولو نُزع من
+     * ملفّ المنظّم بعد التعيين — التاريخُ لا يُكسر بحفظ حالٍ أو ملاحظة.
+     */
+    private static function categoryOf(int $businessId, mixed $id, Organizer $organizer, ?int $current = null): ?OrganizerCategory
     {
         if ($id === null || $id === '') {
             return null;
         }
 
-        return OrganizerCategory::where('business_id', $businessId)->find((int) $id)
+        $category = OrganizerCategory::where('business_id', $businessId)->find((int) $id)
             ?? throw new RuntimeException(__('هذا التصنيف ليس من تصنيفات شركتك.'));
+
+        if ($current !== null && (int) $category->id === $current) {
+            return $category;
+        }
+
+        $his = $organizer->categories()->wherePivot('business_id', $businessId)->whereKey($category->id)->exists();
+
+        if (! $his) {
+            throw new RuntimeException(__('«:category» ليس من تصنيفات المنظّم :name — اختر من تصنيفاته، أو أضفه إلى ملفّه أوّلًا.', [
+                'category' => $category->name, 'name' => $organizer->name,
+            ]));
+        }
+
+        return $category;
     }
 
     /** @return array{0: ?Carbon, 1: ?Carbon} */

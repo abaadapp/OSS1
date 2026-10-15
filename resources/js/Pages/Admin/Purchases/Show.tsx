@@ -20,11 +20,14 @@ import {
 import { Input } from '@/Components/ui/input';
 import { money, number } from '@/lib/format';
 import { useTranslate } from '@/lib/i18n';
+import { RECEIPT_WORDS, receiptMode as modeOf, type ReceiptMode } from '@/lib/receipts';
 import type { PageProps } from '@/types';
 
 interface Line {
     id: number;
     name: string;
+    /** منتجٌ أو خدمةٌ أو بندٌ مخصّص — الخدمةُ تُؤكَّد ولا تدخل المخزون */
+    line_kind?: string;
     purchase_unit: string | null;
     units_per_purchase_unit: number;
     quantity: number;
@@ -65,6 +68,7 @@ interface Order {
     has_receipt: boolean;
     receipt: string | null;
     receipt_name: string | null;
+    receipt_mode?: ReceiptMode;
     items: Line[];
 }
 
@@ -110,6 +114,9 @@ interface Props {
     paper: { html: string; size: string };
 }
 
+/** وحالُ أمر الخدمات وحدها تُقال بلغتها — والمخزَّنُ في القاعدة كما هو (`مستلم`) */
+const SERVICE_STATUS: Record<string, string> = { مستلم: 'منفَّذ', 'مستلم جزئيًا': 'منفَّذ جزئيًا' };
+
 /** لونُ نقطة الحدث — الاعتمادُ أخضرُ والرفضُ أحمر، ولا يُقرأ الخطُّ بالنصّ وحده */
 const DOT: Record<string, string> = {
     draft: '#9ca3af',
@@ -146,6 +153,9 @@ export default function PurchaseOrderShow() {
      * حين تُعتمد الورقتان.
      */
     const available = (line: Line) => Math.max(0, line.remaining - line.pending);
+    /* البضاعةُ تُستلم والخدمةُ تُؤكَّد — المستندُ واحد واللغةُ لغةُ ما فيه */
+    const receiptMode = order.receipt_mode ?? modeOf(order.items.map((i) => i.line_kind));
+    const words = RECEIPT_WORDS[receiptMode];
     const openable = order.items.some((i) => available(i) > 0);
 
     const [taking, setTaking] = useState<Record<number, string>>({});
@@ -189,7 +199,7 @@ export default function PurchaseOrderShow() {
                         {can.receive && openable && (
                             <Button variant="success" onClick={openReceive}>
                                 <PackageCheck />
-                                {t('تسجيل استلام')}
+                                {t(words.action)}
                             </Button>
                         )}
 
@@ -270,7 +280,7 @@ export default function PurchaseOrderShow() {
                         cells={[
                             {
                                 label: 'الحالة',
-                                value: <Badge status={order.status}>{t(order.status)}</Badge>,
+                                value: <Badge status={order.status}>{t((receiptMode === 'services' && SERVICE_STATUS[order.status]) || order.status)}</Badge>,
                             },
                             { label: 'المورّد', value: order.supplier },
                             { label: 'الفرع', value: order.branch || '—' },
@@ -331,7 +341,7 @@ export default function PurchaseOrderShow() {
                                         <th className="p-2 text-start">{t('الصنف')}</th>
                                         <th className="p-2 text-start">{t('وحدة الشراء')}</th>
                                         <th className="p-2 text-end">{t('المطلوب')}</th>
-                                        <th className="p-2 text-end">{t('المستلَم')}</th>
+                                        <th className="p-2 text-end">{t(words.done)}</th>
                                         <th className="p-2 text-end">{t('قيد الاعتماد')}</th>
                                         <th className="p-2 text-end">{t('المتبقّي')}</th>
                                         <th className="p-2 text-end">{t('تكلفة الوحدة')}</th>
@@ -341,7 +351,10 @@ export default function PurchaseOrderShow() {
                                 <tbody>
                                     {order.items.map((i) => (
                                         <tr key={i.id} className="border-t border-[var(--ui-border,#e8e8e8)]">
-                                            <td className="p-2 font-medium text-[#111]">{i.name}</td>
+                                            <td className="p-2 font-medium text-[#111]">
+                                                {i.name}
+                                                {i.line_kind === 'service' && <Badge variant="info" className="ms-2">{t('خدمة')}</Badge>}
+                                            </td>
                                             <td className="p-2 text-[#6b7280]">
                                                 {i.purchase_unit || '—'}
                                                 {/*
@@ -392,9 +405,9 @@ export default function PurchaseOrderShow() {
                     </Card>
 
                     <Card className="p-4">
-                        <h2 className="mb-3 font-bold text-[#111]">{t('أوراق الاستلام')}</h2>
+                        <h2 className="mb-3 font-bold text-[#111]">{t(words.receipts)}</h2>
                         {receipts.length === 0 ? (
-                            <p className="text-[13px] text-[#9ca3af]">{t('لم يصل من هذا الأمر شيء بعد')}</p>
+                            <p className="text-[13px] text-[#9ca3af]">{t(words.empty)}</p>
                         ) : (
                             <ul className="space-y-2 text-[13px]">
                                 {receipts.map((r) => (
@@ -521,7 +534,7 @@ export default function PurchaseOrderShow() {
             <Dialog open={receiving} onOpenChange={(v) => !v && setReceiving(false)}>
                 <DialogContent>
                     <DialogHeader>
-                        <DialogTitle>{t('تسجيل استلام')} — {order.number}</DialogTitle>
+                        <DialogTitle>{t(words.action)} — {order.number}</DialogTitle>
                     </DialogHeader>
 
                     {/* والحشوُ على الجسم: `DialogContent` بلا حشو — انظر ui/dialog */}
@@ -529,7 +542,10 @@ export default function PurchaseOrderShow() {
                     <div className="space-y-2">
                         {order.items.map((i) => (
                             <div key={i.id} className="flex items-center gap-3 text-[13px]">
-                                <span className="min-w-0 flex-1 truncate">{i.name}</span>
+                                <span className="min-w-0 flex-1 truncate">
+                                    {i.name}
+                                    {i.line_kind === 'service' && <Badge variant="info" className="ms-2">{t('خدمة')}</Badge>}
+                                </span>
                                 <span className="text-[12px] text-[#9ca3af]">
                                     {t('المتاح')} {number(available(i))}
                                 </span>
@@ -545,14 +561,12 @@ export default function PurchaseOrderShow() {
                         ))}
                     </div>
 
-                    <p className="text-[12px] text-[#6b7280]">
-                        {t('الورقة تُسجَّل بانتظار الاعتماد — ولا تدخل البضاعة الرفّ إلّا باعتمادها')}
-                    </p>
+                    <p className="text-[12px] text-[#6b7280]">{t(words.hint)}</p>
                     </div>
 
                     <DialogFooter>
                         <Button variant="success" disabled={takingTotal <= 0} onClick={submitReceive}>
-                            {t('تسجيل الاستلام')}
+                            {t(words.submit)}
                         </Button>
                         <Button variant="outline" onClick={() => setReceiving(false)}>
                             {t('إلغاء')}

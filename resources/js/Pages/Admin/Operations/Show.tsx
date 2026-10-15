@@ -224,7 +224,6 @@ interface Props {
     /* المرحلة 14: المنظّمون على الفعاليّة ومن يُختار منه */
     organizers?: OperationOrganizerRow[];
     organizer_options?: OrganizerOption[];
-    organizer_categories?: { id: number; name: string }[];
     users: { id: number; name: string }[];
     project_members: { user_id: number; name: string | null; role: string | null }[];
     templates: { id: number; name: string; phase: string }[];
@@ -380,7 +379,6 @@ export default function OperationShow(p: Props) {
                     users={p.users}
                     organizers={p.organizers ?? []}
                     options={p.organizer_options ?? []}
-                    categories={p.organizer_categories ?? []}
                     statusLabels={L.organizer_status ?? {}}
                     genderLabels={L.gender ?? {}}
                     conflicts={p.conflicts.filter((c) => c.kind.startsWith('organizer_'))}

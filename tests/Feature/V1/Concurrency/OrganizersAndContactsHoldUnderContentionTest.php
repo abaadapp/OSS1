@@ -18,7 +18,8 @@ use Illuminate\Support\Facades\Auth;
  *
  * منظّمٌ يُطلب لفعاليّتين متداخلتين من نافذتين معًا فيُعيَّن في واحدة (قفلُ صفّ
  * الشركة كما للفريق) · ونافذتان تجعلان شخصين مختلفين أساسيَّين معًا فيبقى
- * أساسيٌّ واحد (قفلُ صفّ العميل والفهرسُ الجزئيّ الفريد).
+ * أساسيٌّ واحد (قفلُ صفّ العميل والفهرسُ الجزئيّ الفريد) · وتعطيلُ الأساسيّ
+ * ونافذةٌ تختار غيرَه معًا يتركان أساسيًّا واحدًا نشطًا.
  */
 class OrganizersAndContactsHoldUnderContentionTest extends RaceTestCase
 {
@@ -72,5 +73,38 @@ class OrganizersAndContactsHoldUnderContentionTest extends RaceTestCase
 
         $this->assertSame(1, CustomerContact::where('customer_id', $customer->id)->where('is_primary', true)->count(), json_encode($results, JSON_UNESCAPED_UNICODE));
         $this->assertGreaterThanOrEqual(1, $this->successes($results));
+    }
+
+    /** تعطيلُ الأساسيّ (فيُسلّمها لخليفته) ونافذةٌ تختار أساسيًّا آخر معًا — أساسيٌّ واحدٌ نشط */
+    public function test_deactivating_the_primary_while_another_window_picks_one_leaves_exactly_one(): void
+    {
+        $b = $this->company();
+        $owner = $this->user($b);
+        $customer = $this->customer($b);
+        $customer->update(['customer_type' => 'شركة']);
+        Auth::login($owner);
+        $first = CustomerContacts::save($customer, ['name' => 'أحمد'], $owner);
+        CustomerContacts::save($customer, ['name' => 'محمد'], $owner);
+        $third = CustomerContacts::save($customer, ['name' => 'سارة'], $owner);
+        Auth::logout();
+
+        $results = $this->race([
+            function () use ($first, $owner) {
+                Auth::login($owner);
+
+                return CustomerContacts::setActive(CustomerContact::findOrFail($first->id), false, $owner)->id;
+            },
+            function () use ($third, $owner) {
+                Auth::login($owner);
+
+                return CustomerContacts::setPrimary(CustomerContact::findOrFail($third->id), $owner)->id;
+            },
+        ]);
+
+        $this->assertSame(2, $this->successes($results), json_encode($results, JSON_UNESCAPED_UNICODE));
+        $primaries = CustomerContact::where('customer_id', $customer->id)->where('is_primary', true)->get();
+        $this->assertCount(1, $primaries);
+        $this->assertTrue((bool) $primaries->first()->active, 'الأساسيُّ نشطٌ دائمًا');
+        $this->assertFalse((bool) $first->fresh()->active);
     }
 }

@@ -99,8 +99,15 @@ class SupplierController extends Controller
         }
 
         DB::transaction(function () use ($supplier, $data, $services, $request) {
+            $before = $supplier->status ?: Supplier::ACTIVE;
             $supplier->update($data);
             Activity::log('updated', 'عدّل المورّد: '.$supplier->name, ['subject_id' => $supplier->id, 'subject_type' => 'supplier']);
+            /* والإيقافُ والإعادةُ يُقالان بأسمائهما — الإيقافُ يمنع أوامرَ الشراء الجديدة عليه */
+            if (isset($data['status']) && $data['status'] !== $before) {
+                Activity::log('status', ($data['status'] === Supplier::INACTIVE ? 'أوقف المورّد: ' : 'أعاد تفعيل المورّد: ').$supplier->name, [
+                    'subject_id' => $supplier->id, 'subject_type' => 'supplier',
+                ]);
+            }
             if ($request->has('service_ids')) {
                 ServiceProviders::syncServices($supplier, (array) $services, auth()->user());
             }

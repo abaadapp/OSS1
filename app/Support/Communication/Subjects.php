@@ -235,8 +235,11 @@ final class Subjects
                 $phone($c->whatsapp, $who.' — '.__('واتساب'));
             }
 
-            $email($customer->contact_email ?? null, (string) ($customer->contact_person ?: $customer->name));
-            $phone($customer->contact_phone ?? null, (string) ($customer->contact_person ?: $customer->name));
+            /* والأعمدةُ القديمة لجهةٍ لا أشخاصَ لها هنا وحدها — وإلّا عاد منها من عُطّل (`CustomerContacts::primary`) */
+            if (! CustomerContacts::hasAny($customer)) {
+                $email($customer->contact_email ?? null, (string) ($customer->contact_person ?: $customer->name));
+                $phone($customer->contact_phone ?? null, (string) ($customer->contact_person ?: $customer->name));
+            }
             $email($customer->email, (string) $customer->name);
             $phone($customer->phone, (string) $customer->name);
         }

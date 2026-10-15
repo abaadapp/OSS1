@@ -535,7 +535,7 @@ export default function QuotationCreate({ quotation, customers, catalog, may, va
                                 />
                             </Field>
                             {(selectedCustomer?.contacts ?? []).length > 0 && (
-                                <Field label="من أشخاص اتصال الجهة" hint="يملأ «موجه إلى» والبريد والهاتف — وتبقى تُعدَّل بيد">
+                                <Field label="من أشخاص اتصال الجهة" hint="يملأ «موجه إلى» والبريد والهاتف — وتبقى تُعدَّل بيد" className="sm:col-span-2">
                                     <ContactPicker
                                         contacts={selectedCustomer?.contacts ?? []}
                                         value={form.data.customer_contact_id}
