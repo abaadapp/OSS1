@@ -15,6 +15,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { money } from '@/lib/format';
 import { useTranslate } from '@/lib/i18n';
 import type { PageProps } from '@/types';
+import ProjectInventoryForecast, { type ProjectForecast } from '@/Components/InventoryForecast';
 import OrganizersTab, { type OperationOrganizerRow, type OrganizerOption } from './partials/OrganizersTab';
 import EventTasksTab, { type EventTasks } from './partials/EventTasksTab';
 import {
@@ -231,6 +232,8 @@ interface Props {
     templates: { id: number; name: string; phase: string }[];
     products: { id: number; name: string; kind: string; quantity: number }[];
     consumables: { rows: ConsumableIssue[]; issued_cost: number; consumed_cost: number; returned_cost: number; open: number };
+    /** توقّعُ مخزون مشروعها — قراءةٌ لا خصم، لمن يفتح المخزون */
+    inventory_forecast?: ProjectForecast | null;
     categories: { value: string; label: string }[];
     assets: AssetOption[];
     labels: Labels;
@@ -688,6 +691,16 @@ function EquipmentTab({ p }: { p: Props }) {
 
     return (
         <div className="space-y-4">
+            {/* توقّعُ المخزون لمشروع الفعاليّة — من متطلّباتها إن وُجدت، ومن نطاق المشروع مبدئيًّا */}
+            {p.inventory_forecast && p.inventory_forecast.in_window && p.inventory_forecast.lines.length > 0 && (
+                <Card className="p-4">
+                    <h3 className="mb-3 text-[14px] font-semibold">
+                        {t('توقّع المخزون')}
+                        {p.inventory_forecast.shortages > 0 && <span className="ms-2 rounded-full bg-[#fef2f2] px-2 py-0.5 text-[11.5px] font-medium text-[#b91c1c]">{t('نقص مخزون: :n بنود', { n: String(p.inventory_forecast.shortages) })}</span>}
+                    </h3>
+                    <ProjectInventoryForecast data={p.inventory_forecast} projectId={p.operation.project?.id ?? 0} />
+                </Card>
+            )}
             <Card className="p-4">
                 <div className="mb-3 flex items-center justify-between">
                     <h3 className="text-[14px] font-semibold">{t('المتطلّبات')} <span className="text-[11px] font-normal text-[#9ca3af]">— {t('ماذا نحتاج')}</span></h3>

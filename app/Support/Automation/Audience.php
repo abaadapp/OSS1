@@ -47,7 +47,10 @@ final class Audience
     /** قائدُ عمليات الفعاليّة — المرحلة 10 */
     public const LEAD = 'lead';
 
-    public const ALL = [self::CUSTOMER, self::ASSIGNEE, self::OWNER, self::CREATOR, self::INITIATOR, self::FINANCE, self::MANAGEMENT, self::CUSTOM, self::LEAD];
+    /** من يفتح قسم المخزون — نقصُ المخزون المتوقَّع يبلغه */
+    public const INVENTORY = 'inventory';
+
+    public const ALL = [self::CUSTOMER, self::ASSIGNEE, self::OWNER, self::CREATOR, self::INITIATOR, self::FINANCE, self::MANAGEMENT, self::CUSTOM, self::LEAD, self::INVENTORY];
 
     public const LABELS = [
         self::CUSTOMER => 'العميل',
@@ -59,6 +62,7 @@ final class Audience
         self::MANAGEMENT => 'الإدارة',
         self::CUSTOM => 'قائمة محدَّدة',
         self::LEAD => 'قائد عمليات الفعاليّة',
+        self::INVENTORY => 'المخزون',
     ];
 
     public static function isExternal(string $audience): bool
@@ -101,6 +105,7 @@ final class Audience
         return match ($audience) {
             self::MANAGEMENT => $active()->whereIn('role', ['admin', 'manager'])->get(),
             self::FINANCE => $active()->get()->filter(fn (User $u) => $u->allows('finance'))->values(),
+            self::INVENTORY => $active()->get()->filter(fn (User $u) => $u->allows('inventory'))->values(),
             default => collect(),
         };
     }

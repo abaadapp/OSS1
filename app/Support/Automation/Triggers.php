@@ -18,6 +18,7 @@ use App\Support\Automation\Triggers\MorningBrief;
 use App\Support\Automation\Triggers\OperationCloseout;
 use App\Support\Automation\Triggers\OperationStart;
 use App\Support\Automation\Triggers\ProjectClosable;
+use App\Support\Automation\Triggers\ProjectInventoryShortfall;
 use App\Support\Automation\Triggers\ProjectStart;
 use App\Support\Automation\Triggers\PurchaseOrderLate;
 use App\Support\Automation\Triggers\QuotationAwaiting;
@@ -43,6 +44,8 @@ final class Triggers
         'communication_failed' => CommunicationFailed::class,
         'project_closable' => ProjectClosable::class,
         'morning_brief' => MorningBrief::class,
+        /* ونقصُ مخزونٍ متوقَّع في مشروعٍ قادم — يُقال مرّةً حتى يتغيّر */
+        'project_inventory_shortfall' => ProjectInventoryShortfall::class,
         /* التشغيلُ — المرحلة 10: داخليٌّ كلُّه، ولا يبلغ العميل */
         'operation_start' => OperationStart::class,
         'crew_assignment' => CrewAssignment::class,
