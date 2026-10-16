@@ -160,19 +160,35 @@ class FinancialAttachmentController extends Controller
     }
 
     /**
-     * يُقدَّم للقراءة لا للتنزيل الإجباريّ.
+     * ما يُعرض داخل المتصفّح بأمان — وهو ما تقبله أبوابُ الرفع كلُّها: PDF وصورة.
+     */
+    private const INLINE = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif'];
+
+    /**
+     * يُقدَّم للقراءة لا للتنزيل الإجباريّ — إن كان ممّا يُقرأ.
      *
      * أكثرُ ما يُرفع صورةٌ أو PDF، ومن فتحه يريد أن يراه لا أن يجده في مجلّد
      * التنزيلات. و`download` على الرابط تكفي من أراد حفظه.
+     *
+     * ═══ والنوعُ ممّا في الملفّ لا من اسمه ═══
+     *
+     * فحصُ الرفع يقرأ امتدادَ الاسم الذي أرسله المتصفّح، والقرصُ يقرأ المحتوى.
+     * فصفحةُ HTML باسم «إيصال.pdf» كانت تُقدَّم `text/html` داخل الصفحة، فتجري
+     * نصوصُها على نطاق النظام بجلسة المحاسب الذي فتحها. فما ليس PDF أو صورةً
+     * معروفة يُنزَّل ملفًّا صامتًا — لا يُفتح في المتصفّح ولا يُنفَّذ.
      */
     private function stream(?string $path, ?string $name, string $fallback): StreamedResponse
     {
-        abort_if($path === null || ! Storage::disk('local')->exists($path), 404);
+        $disk = Storage::disk('local');
+        abort_if($path === null || ! $disk->exists($path), 404);
 
-        return Storage::disk('local')->response(
-            $path,
-            $name ?: ($fallback.'.'.pathinfo($path, PATHINFO_EXTENSION)),
-            ['Content-Disposition' => 'inline'],
-        );
+        $name = $name ?: ($fallback.'.'.pathinfo($path, PATHINFO_EXTENSION));
+        $type = $disk->mimeType($path);
+
+        if (! in_array($type, self::INLINE, true)) {
+            return $disk->download($path, $name, ['Content-Type' => 'application/octet-stream']);
+        }
+
+        return $disk->response($path, $name, ['Content-Type' => $type, 'Content-Disposition' => 'inline']);
     }
 }

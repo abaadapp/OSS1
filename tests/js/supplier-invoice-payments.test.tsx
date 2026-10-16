@@ -32,7 +32,10 @@ describe('SupplierPaymentDialog', () => {
 
         expect(screen.getByRole('heading', { name: /تسجيل دفعة — INV-1000/ })).toBeInTheDocument();
         expect(screen.getByText('إيصال السداد (اختياري)')).toBeInTheDocument();
-        expect(screen.getByText('المصدر')).toBeInTheDocument();
+        /* كلُّ حقلٍ بتسميته — لا «حقلُ نصّ» بلا اسم */
+        expect(screen.getByLabelText(/المبلغ/)).toHaveValue('100');
+        expect(screen.getByLabelText(/تاريخ السداد/)).toHaveValue('2026-10-16');
+        expect(screen.getByRole('combobox', { name: /المصدر/ })).toBeInTheDocument();
         const file = new File(['%PDF'], 'إيصال تحويل 1.pdf', { type: 'application/pdf' });
         await user.upload(screen.getByLabelText('إيصال السداد'), file);
         expect(screen.getByTestId('receipt-name')).toHaveTextContent('إيصال تحويل 1.pdf');

@@ -25,6 +25,13 @@ class SupplierInvoicePayment extends Model
     /** @var list<string> صيغُ الإيصال — سياسةُ المرفقات الماليّة نفسُها */
     public const EXTENSIONS = ['jpg', 'jpeg', 'png', 'pdf', 'webp', 'heic'];
 
+    /**
+     * @var list<string> وما يُقرأ من محتوى الملفّ — فالامتدادُ اسمٌ يكتبه المُرسِل.
+     *
+     * و`heif` أخو `heic`: الصورةُ نفسُها يُسمّيها كاشفُ المحتوى بأيٍّ منهما.
+     */
+    public const CONTENT = ['jpg', 'jpeg', 'png', 'pdf', 'webp', 'heic', 'heif'];
+
     public const MAX_KB = 10240;
 
     protected $guarded = [];

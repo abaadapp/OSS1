@@ -2,7 +2,9 @@
 
 namespace Tests\Feature;
 
+use App\Models\Account;
 use App\Models\ActivityLog;
+use App\Models\BankAccount;
 use App\Models\Branch;
 use App\Models\Business;
 use App\Models\JournalEntry;
@@ -79,6 +81,15 @@ class EachSupplierPaymentKeepsItsOwnReceiptTest extends TestCase
         return $this->actingAs($as ?? $this->owner)->post(route('admin.purchases.invoices.pay', $invoice->id), $data + [
             'paid_at' => '2026-10-16', 'from' => 'bank',
         ]);
+    }
+
+    /** ملفٌّ حقيقيّ يُقرأ محتواه — لا مزيّفُ الاختبار الذي يُصدِّق اسمَه */
+    private function real(string $name, string $content): UploadedFile
+    {
+        $path = tempnam(sys_get_temp_dir(), 'receipt');
+        file_put_contents($path, $content);
+
+        return new UploadedFile($path, $name, null, null, true);
     }
 
     private function showPayments(SupplierInvoice $invoice, ?User $as = null): array
@@ -338,6 +349,30 @@ class EachSupplierPaymentKeepsItsOwnReceiptTest extends TestCase
         $this->assertSame(1, SupplierInvoicePayment::count(), 'ولا يُملأ الجدولُ بالقديم');
     }
 
+    /**
+     * وسدادٌ قديم من «البنك» والحسابُ الرئيسيّ ثانٍ — ورقتُه بلا مفتاحٍ نظاميّ، وهو بنكٌ مع ذلك.
+     */
+    public function test_an_old_payment_from_a_second_bank_account_still_reads_as_bank(): void
+    {
+        $invoice = $this->invoice();
+        $main = Ledger::account($this->bid(), 'bank');
+        $leaf = Account::create(['business_id' => $this->bid(), 'parent_id' => $main->parent_id, 'code' => '19990',
+            'name' => 'البنك: حساب التشغيل', 'type' => 'أصل', 'normal_side' => 'debit']);
+        BankAccount::create(['business_id' => $this->bid(), 'bank_name' => 'بنك ظفار', 'label' => 'حساب التشغيل',
+            'active' => true, 'is_primary' => true, 'account_id' => $leaf->id]);
+
+        $entry = Ledger::post($this->bid(), 'سداد سند مورّد: INV-1000', [
+            ['account' => 'payable', 'debit' => 120], ['account' => 'bank', 'credit' => 120],
+        ], Carbon::parse('2026-10-03'), 'سداد مورّد', null, $this->owner->id, $invoice);
+        $invoice->update(['paid' => 120]);
+        $invoice->syncStatus();
+        $this->assertSame($leaf->id, (int) $entry->lines()->where('credit', '>', 0)->value('account_id'), 'الترحيلُ إلى ورقة الحساب الرئيسيّ');
+        $this->assertNull($leaf->fresh()->system_key);
+
+        $old = $this->showPayments($invoice)[0];
+        $this->assertSame(['bank', true, false], [$old['from'], $old['legacy'], $old['has_receipt']]);
+    }
+
     /* ─────────────────────────── الأبواب ─────────────────────────── */
 
     public function test_a_receipt_opens_only_for_its_company_its_bill_and_whoever_may_open_attachments(): void
@@ -376,5 +411,35 @@ class EachSupplierPaymentKeepsItsOwnReceiptTest extends TestCase
         $this->actingAs($stranger)->post(route('admin.purchases.invoices.pay', $invoice->id), ['amount' => 10, 'paid_at' => '2026-10-16', 'from' => 'cash'])->assertNotFound();
         $this->assertSame(2, SupplierInvoicePayment::count());
         $this->assertSame(350.0, (float) $invoice->fresh()->paid);
+    }
+
+    /**
+     * صفحةُ HTML باسم «إيصال.pdf» — تُردّ عند الرفع، وما خُزّن منها لا يُعرض صفحةً تجري نصوصُها.
+     *
+     * فحصُ الاسم وحده يقرأ ما كتبه المُرسِل، والقرصُ يقرأ المحتوى: كانت تُقدَّم `text/html`
+     * داخل النظام فتجري بجلسة المحاسب الذي فتح «عرض الإيصال».
+     */
+    public function test_a_web_page_named_like_a_receipt_is_refused_and_never_rendered_in_the_browser(): void
+    {
+        $invoice = $this->invoice();
+        $page = '<!DOCTYPE html><html><body><script>fetch("/x?c="+document.cookie)</script></body></html>';
+
+        $this->pay($invoice, ['amount' => 100, 'receipt' => $this->real('إيصال.pdf', $page)])
+            ->assertSessionHasErrors(['receipt' => 'صيغة الإيصال غير مدعومة — المقبول: PDF أو صورة (JPG، PNG، WEBP، HEIC).']);
+        $this->assertSame(0, SupplierInvoicePayment::count());
+        $this->assertSame([], Storage::disk('local')->allFiles());
+
+        /* وما وصل القرصَ قبل هذا الفحص يُنزَّل ملفًّا صامتًا — لا يُفتح في المتصفّح */
+        $stored = SupplierInvoices::settle($invoice, 100, 'bank', now(), $this->owner->id, $this->real('إيصال.pdf', $page))->getRelation('payment');
+        $response = $this->actingAs($this->owner)->get(route('admin.purchases.invoices.payments.receipt', [$invoice->id, $stored->id]))->assertOk();
+        $this->assertSame('application/octet-stream', $response->headers->get('Content-Type'));
+        $this->assertStringStartsWith('attachment;', (string) $response->headers->get('Content-Disposition'));
+
+        /* وإيصالُ PDF حقيقيّ يبقى يُعرض داخل الصفحة كما كان */
+        $pdf = SupplierInvoices::settle($invoice->fresh(), 100, 'bank', now(), $this->owner->id,
+            $this->real('تحويل.pdf', "%PDF-1.4\n1 0 obj\n<<>>\nendobj\ntrailer\n<<>>\n%%EOF\n"))->getRelation('payment');
+        $ok = $this->get(route('admin.purchases.invoices.payments.receipt', [$invoice->id, $pdf->id]))->assertOk();
+        $this->assertSame('application/pdf', $ok->headers->get('Content-Type'));
+        $this->assertSame('inline', $ok->headers->get('Content-Disposition'));
     }
 }
