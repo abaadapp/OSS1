@@ -16,6 +16,7 @@ import { money } from '@/lib/format';
 import { useTranslate } from '@/lib/i18n';
 import type { PageProps } from '@/types';
 import OrganizersTab, { type OperationOrganizerRow, type OrganizerOption } from './partials/OrganizersTab';
+import EventTasksTab, { type EventTasks } from './partials/EventTasksTab';
 import {
     CHECKLIST_STATUS_LABEL,
     RESERVATION_LABEL,
@@ -224,6 +225,7 @@ interface Props {
     /* المرحلة 14: المنظّمون على الفعاليّة ومن يُختار منه */
     organizers?: OperationOrganizerRow[];
     organizer_options?: OrganizerOption[];
+    event_tasks?: EventTasks;
     users: { id: number; name: string }[];
     project_members: { user_id: number; name: string | null; role: string | null }[];
     templates: { id: number; name: string; phase: string }[];
@@ -248,7 +250,8 @@ export default function OperationShow(p: Props) {
     const [ask, dialog] = useConfirm();
     const o = p.operation;
     const L = p.labels;
-    const [tab, setTab] = useState('overview');
+    /* والتبويبُ من الرابط إن ذُكر — رابطُ التنبيه «مهام الفعاليّة» يفتح تبويبَها */
+    const [tab, setTab] = useState(() => (typeof window === 'undefined' ? null : new URLSearchParams(window.location.search).get('tab')) ?? 'overview');
     const [overriding, setOverriding] = useState<string | null>(null);
     const [overrideReason, setOverrideReason] = useState('');
     const [cancelling, setCancelling] = useState(false);
@@ -282,6 +285,7 @@ export default function OperationShow(p: Props) {
         { key: 'equipment', label: 'المعدّات', count: p.reservations.filter((r) => r.status !== 'cancelled').length, alert: criticalConflicts > 0 },
         { key: 'crew', label: 'الفريق', count: p.crew.filter((c) => c.status !== 'cancelled').length },
         { key: 'organizers', label: 'المنظّمون', count: (p.organizers ?? []).filter((o) => o.status !== 'cancelled').length, alert: p.conflicts.some((c) => c.kind.startsWith('organizer_')) },
+        { key: 'tasks', label: 'المهام', count: (p.event_tasks?.people ?? []).reduce((n, x) => n + x.open, 0), alert: (p.event_tasks?.people ?? []).some((x) => x.last_dispatch?.status === 'failed') },
         { key: 'checklists', label: 'قوائم التحقّق', count: requiredPending, alert: requiredPending > 0 && o.active },
         { key: 'incidents', label: 'الحوادث', count: openIncidents, alert: openIncidents > 0 },
         { key: 'history', label: 'السجلّ' },
@@ -334,7 +338,7 @@ export default function OperationShow(p: Props) {
                 }
             />
 
-            {(['operation', 'schedule', 'requirement', 'reservation', 'consumable', 'crew', 'organizers', 'checklist', 'incident'] as const).map((k) => errors?.[k] && <Alert key={k} tone="danger">{errors[k]}</Alert>)}
+            {(['operation', 'schedule', 'requirement', 'reservation', 'consumable', 'crew', 'organizers', 'tasks', 'checklist', 'incident'] as const).map((k) => errors?.[k] && <Alert key={k} tone="danger">{errors[k]}</Alert>)}
             {o.readiness_override && o.readiness_override.length > 0 && (
                 <Alert tone="warning">
                     <ShieldAlert className="me-1 inline size-4" />
@@ -384,6 +388,9 @@ export default function OperationShow(p: Props) {
                     conflicts={p.conflicts.filter((c) => c.kind.startsWith('organizer_'))}
                     canManage={Boolean(p.may.crew)}
                 />
+            )}
+            {tab === 'tasks' && p.event_tasks && (
+                <EventTasksTab operationId={o.id} projectId={o.project?.id ?? null} active={o.active} data={p.event_tasks} canManage={Boolean(p.may.crew)} />
             )}
             {tab === 'checklists' && <ChecklistsTab p={p} />}
             {tab === 'incidents' && <IncidentsTab p={p} />}

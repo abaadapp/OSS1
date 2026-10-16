@@ -39,7 +39,10 @@ final class Templates
      * `internal`: خبرٌ إلى الشركة نفسِها (قبل العميل، رفض العميل) — يُسجَّل
      * كغيره ويُعلَّم في الشاشة، ولا يُعرض في نافذة «أرسل للعميل».
      *
-     * @var array<string, array{name: string, subject: string, purpose: string, channels: list<string>, variables: list<string>, internal?: bool, body?: string, title?: string}>
+     * `header` و`button`: خاناتُ ترويسة قالب Meta وزرِّه ذي الرابط الديناميكيّ —
+     * افتراضٌ يُعدَّل في «المراسلات ‹ القوالب» ليطابق القالبَ المعتمَد.
+     *
+     * @var array<string, array{name: string, subject: string, purpose: string, channels: list<string>, variables: list<string>, internal?: bool, body?: string, title?: string, header?: list<string>, button?: string}>
      */
     public const CATALOG = [
         'quotation.link' => [
@@ -175,6 +178,25 @@ final class Templates
             'name' => 'تنبيه تشغيلي (إلى الفريق)', 'subject' => 'project', 'purpose' => 'notice',
             'channels' => ['email'], 'variables' => [], 'internal' => true,
         ],
+        /*
+         * ومهامُّ الفعاليّة إلى الموظّف على واتساب — داخليّان لا يبلغان العميل.
+         * رسالةٌ واحدة لكلّ موظّف بمهامّه، وزرٌّ يفتح صفحتَها الحيّة (`tasks_token`
+         * خانةُ الزرّ إن كان رابطُه عند Meta ينتهي بـ`/t/{{1}}`).
+         */
+        'event.tasks_assigned' => [
+            'name' => 'مهام الموظف في الفعالية', 'subject' => 'project', 'purpose' => 'event',
+            'channels' => ['whatsapp'], 'internal' => true,
+            'variables' => ['employee_name', 'open_tasks_count', 'event_name', 'event_date', 'event_location', 'event_time', 'tasks_url', 'tasks_token', 'company'],
+            'header' => ['event_name'], 'button' => 'tasks_token',
+            'body' => "مرحبًا {{employee_name}}\nلديك {{open_tasks_count}} مهام في فعالية {{event_name}}\nالتاريخ: {{event_date}}\nالموقع: {{event_location}}",
+        ],
+        'event.tasks_reminder' => [
+            'name' => 'تذكير الموظف بمهامه المفتوحة', 'subject' => 'project', 'purpose' => 'event',
+            'channels' => ['whatsapp'], 'internal' => true,
+            'variables' => ['employee_name', 'open_tasks_count', 'event_name', 'event_date', 'event_time', 'event_location', 'tasks_url', 'tasks_token', 'company'],
+            'header' => ['event_name'], 'button' => 'tasks_token',
+            'body' => "تذكير يا {{employee_name}}\nبقي لديك {{open_tasks_count}} مهام مفتوحة في فعالية {{event_name}}\nالموعد: {{event_date}} {{event_time}}\nالموقع: {{event_location}}",
+        ],
     ];
 
     /** وصفُ قالبٍ من الكتالوج — أو استثناءٌ لمفتاحٍ لا يُعرف */
@@ -184,7 +206,7 @@ final class Templates
             throw new RuntimeException(__('لا قالب بهذا الاسم.'));
         }
 
-        return self::CATALOG[$key] + ['key' => $key, 'internal' => false, 'body' => null, 'title' => null];
+        return self::CATALOG[$key] + ['key' => $key, 'internal' => false, 'body' => null, 'title' => null, 'header' => [], 'button' => null];
     }
 
     public static function exists(string $key): bool
@@ -247,6 +269,8 @@ final class Templates
             'provider_template' => null,
             'provider_language' => null,
             'variables' => $catalog['variables'],
+            'header_variables' => $catalog['header'] ?: null,
+            'button_variable' => $catalog['button'],
             'subject' => null,
             'body' => null,
         ]);
@@ -298,6 +322,8 @@ final class Templates
                         'provider_language' => $resolved->provider_language,
                         'variables' => $resolved->variables ?: $t['variables'],
                         'allowed_variables' => $t['variables'],
+                        'header_variables' => $resolved->header_variables ?? [],
+                        'button_variable' => $resolved->button_variable,
                         'subject' => $resolved->subject,
                         'body' => $resolved->body,
                         'default_body' => isset($t['body']) ? __($t['body']) : null,
@@ -314,7 +340,7 @@ final class Templates
     /**
      * حفظُ قرار الشركة في قالب — ويُقيَّد في الأثر.
      *
-     * @param  array{name?: string, status?: string, provider_template?: ?string, provider_language?: ?string, variables?: ?list<string>, subject?: ?string, body?: ?string}  $data
+     * @param  array{name?: string, status?: string, provider_template?: ?string, provider_language?: ?string, variables?: ?list<string>, header_variables?: ?list<string>, button_variable?: ?string, subject?: ?string, body?: ?string}  $data
      */
     public static function save(int $businessId, string $key, string $channel, string $language, array $data, ?User $actor = null): CommunicationTemplate
     {
@@ -337,6 +363,16 @@ final class Templates
         $variables = array_values(array_filter((array) ($data['variables'] ?? $catalog['variables']),
             fn ($v) => in_array($v, $catalog['variables'], true)));
 
+        /* وخاناتُ الترويسة والزرّ كذلك — ممّا يعرفه الكتالوج، ولواتساب وحدَه */
+        $header = $channel === Communication::WHATSAPP
+            ? array_values(array_unique(array_filter((array) ($data['header_variables'] ?? $catalog['header']),
+                fn ($v) => in_array($v, $catalog['variables'], true))))
+            : [];
+        $button = $channel === Communication::WHATSAPP && array_key_exists('button_variable', $data) ? $data['button_variable'] : ($channel === Communication::WHATSAPP ? $catalog['button'] : null);
+        if ($button !== null && $button !== '' && ! in_array($button, $catalog['variables'], true)) {
+            throw new RuntimeException(__('خانةُ الزرّ ليست من متغيّرات هذا القالب.'));
+        }
+
         $template = CommunicationTemplate::updateOrCreate(
             ['business_id' => $businessId, 'key' => $key, 'channel' => $channel, 'language' => $language],
             [
@@ -346,6 +382,8 @@ final class Templates
                 'provider_template' => filled($data['provider_template'] ?? null) ? trim((string) $data['provider_template']) : null,
                 'provider_language' => filled($data['provider_language'] ?? null) ? trim((string) $data['provider_language']) : null,
                 'variables' => $variables ?: $catalog['variables'],
+                'header_variables' => $header ?: null,
+                'button_variable' => filled($button) ? (string) $button : null,
                 'subject' => filled($data['subject'] ?? null) ? trim((string) $data['subject']) : null,
                 'body' => filled($data['body'] ?? null) ? trim((string) $data['body']) : null,
                 'updated_by' => $actor?->id,
@@ -399,6 +437,29 @@ final class Templates
     }
 
     /**
+     * قيمُ خانات الترويسة بترتيبها — لقالب Meta ذي ترويسةٍ متغيّرة.
+     *
+     * @param  array<string, string>  $vars
+     * @return list<string>
+     */
+    public static function headerParameters(CommunicationTemplate $template, array $vars): array
+    {
+        return array_map(fn ($name) => ($vars[$name] ?? '') !== '' ? (string) $vars[$name] : '—', array_values((array) ($template->header_variables ?? [])));
+    }
+
+    /**
+     * قيمةُ خانة الزرّ ذي الرابط — لاحقةُ الرابط الذي اعتمدته Meta، أو null.
+     *
+     * @param  array<string, string>  $vars
+     */
+    public static function buttonParameter(CommunicationTemplate $template, array $vars): ?string
+    {
+        $name = $template->button_variable;
+
+        return filled($name) && filled($vars[$name] ?? null) ? (string) $vars[$name] : null;
+    }
+
+    /**
      * قيمٌ للمعاينة — ليرى من يضبط القالبَ شكلَه قبل أن يُرسَل به.
      *
      * @return array<string, string>
@@ -412,6 +473,9 @@ final class Templates
             'project' => __('مؤتمر الطاقة'), 'number' => 'INV-000034', 'outstanding' => '500.000', 'issued_at' => '2026-09-01',
             'due_at' => '2026-10-01', 'code' => 'PRJ-000007', 'name' => __('مؤتمر الطاقة'), 'starts_at' => '2026-11-02',
             'ends_at' => '2026-11-04', 'location' => __('مركز عُمان للمؤتمرات'), 'owner' => __('أحمد'), 'note' => __('نرجو تأكيد الحضور'),
+            'employee_name' => __('محمد'), 'event_name' => __('معرض التقنية'), 'event_time' => '09:00', 'event_location' => __('مركز عُمان للمؤتمرات'),
+            'open_tasks_count' => '5', 'tasks_url' => 'https://hadath.om/t/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',
+            'tasks_token' => 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx',
         ];
     }
 }

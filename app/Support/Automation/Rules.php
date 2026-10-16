@@ -118,6 +118,23 @@ final class Rules
             'steps' => [['offset' => 1, 'audience' => 'lead'], ['offset' => 3, 'audience' => 'management']],
             'enabled' => true, 'mode' => 'observe', 'cooldown_hours' => 48, 'business_hours' => false,
         ],
+        /*
+         * ومهامُّ الفعاليّة إلى أصحابها على واتساب — على «مراقبة» حتى يُضبط قالبُ Meta
+         * ويُشغَّل بيد. والفشلُ يُنبّه داخل النظام بالرابط، ولا يُسقط المهام.
+         */
+        'event.tasks_assigned' => [
+            'name' => 'إرسال مهام الفعاليّة لكلّ موظّف', 'trigger' => 'event_tasks_assigned', 'kind' => 'internal', 'channel' => 'whatsapp',
+            'template_key' => 'event.tasks_assigned',
+            'steps' => [['offset' => 0, 'audience' => 'assignee']],
+            'enabled' => true, 'mode' => 'observe', 'cooldown_hours' => 1, 'business_hours' => false,
+        ],
+        'event.tasks_reminder' => [
+            'name' => 'تذكير الموظّفين بمهامّهم قبل الفعاليّة', 'trigger' => 'event_tasks_reminder', 'kind' => 'internal', 'channel' => 'whatsapp',
+            'template_key' => 'event.tasks_reminder',
+            'steps' => [['offset' => -1, 'audience' => 'assignee'], ['offset' => 0, 'audience' => 'assignee']],
+            'send_time' => '08:00',
+            'enabled' => true, 'mode' => 'observe', 'cooldown_hours' => 12, 'business_hours' => false,
+        ],
         /* والإدارةُ — المرحلة 11: تذكيرٌ بالتقرير الشهريّ والمراجعة الربعيّة وتقادم التوقّع — على «مراقبة» */
         'management.report_ready' => [
             'name' => 'التقرير الإداري الشهري جاهز', 'trigger' => 'management_report_ready', 'kind' => 'internal', 'channel' => 'internal',

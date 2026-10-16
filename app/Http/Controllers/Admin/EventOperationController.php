@@ -5,7 +5,10 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Asset;
 use App\Models\AssetReservation;
+use App\Models\AutomationRule;
 use App\Models\EventOperation;
+use App\Models\EventTaskDispatch;
+use App\Models\EventTaskLink;
 use App\Models\OperationChecklist;
 use App\Models\OperationChecklistItem;
 use App\Models\OperationChecklistTemplate;
@@ -17,7 +20,10 @@ use App\Models\OperationScheduleItem;
 use App\Models\Organizer;
 use App\Models\Product;
 use App\Models\Project;
+use App\Models\ProjectTask;
 use App\Models\User;
+use App\Support\Automation\Rules;
+use App\Support\Automation\Settings as AutomationSettings;
 use App\Support\Demo;
 use App\Support\Operations\Assets;
 use App\Models\OperationConsumableIssue;
@@ -25,6 +31,7 @@ use App\Support\Operations\Checklists;
 use App\Support\Operations\Consumables;
 use App\Support\Operations\Crew;
 use App\Support\Operations\EventOperations;
+use App\Support\Operations\EventTasks;
 use App\Support\Operations\Incidents;
 use App\Support\Operations\OperationOrganizers;
 use App\Support\Operations\OperationReadiness;
@@ -291,6 +298,8 @@ class EventOperationController extends Controller
                 ->map(fn (Organizer $o) => ['id' => $o->id, 'name' => $o->name, 'gender' => $o->gender, 'phone' => $o->phone,
                     'categories' => $o->categories->map(fn ($c) => ['id' => $c->id, 'name' => $c->name])->values()->all()])->all(),
             'users' => User::where('business_id', $bid)->where('status', 'نشط')->orderBy('name')->get(['id', 'name'])->all(),
+            /* مهامُّ الفعاليّة لكلّ موظّف — `ProjectTask` نفسُها، وما أُرسل إلى كلٍّ منهم ورابطُه لمن يدير الفريق */
+            'event_tasks' => $this->eventTasks($operation, (bool) auth()->user()?->may(Permissions::CREW_MANAGE)),
             'project_members' => $operation->project?->members()->with('user:id,name')->get()->map(fn ($m) => ['user_id' => $m->user_id, 'name' => $m->user?->name, 'role' => $m->role_in_project])->all() ?? [],
             'templates' => OperationChecklistTemplate::where('business_id', $bid)->where('active', true)->orderBy('sort_order')->get(['id', 'name', 'phase'])->all(),
             'products' => Product::where('business_id', $bid)->orderBy('name')->limit(500)->get(['id', 'name', 'kind', 'quantity'])->all(),
@@ -674,6 +683,30 @@ class EventOperationController extends Controller
         return $this->attempt(fn () => OperationOrganizers::update($assignment, $data, auth()->user()), __('حُفظ تعيين المنظّم'), 'organizers');
     }
 
+    /**
+     * «نشر المهام على الفريق» — مرساةُ رسالة كلّ موظّف في الأتمتة.
+     *
+     * لا يُرسل من هنا: قاعدةُ «إرسال مهام الفعاليّة» تُرسل في دورتها القادمة
+     * بوضعها (مراقبة/تنفيذ) وقناتها. والروابطُ تُنشأ الآن فتُنسخ بيد.
+     */
+    public function publishTasks(int|string $id)
+    {
+        $this->gate(Permissions::CREW_MANAGE);
+        $operation = $this->find($id);
+
+        return $this->attempt(fn () => EventTasks::publish($operation, auth()->user()), __('نُشرت المهام — تُرسل لكلّ موظّف في دورة الأتمتة القادمة'), 'tasks');
+    }
+
+    /** تجديدُ رابط مهامّ موظّف — القديمُ لا يفتح بعده */
+    public function rotateTaskLink(int|string $id, int|string $userId)
+    {
+        $this->gate(Permissions::CREW_MANAGE);
+        $operation = $this->find($id);
+        $user = User::where('business_id', $this->bid())->whereKey($userId)->firstOrFail();
+
+        return $this->attempt(fn () => EventTasks::rotate($operation, $user, auth()->user()), __('جُدّد الرابط — الرابط القديم لم يعد يفتح'), 'tasks');
+    }
+
     /** مسؤولُ المنظّمين — موظّفٌ من الشركة، أو لا أحد */
     public function organizersLead(Request $request, int|string $id)
     {
@@ -937,6 +970,59 @@ class EventOperationController extends Controller
     /* ─────────────────────────── الصفوف ─────────────────────────── */
 
     /** @return array<string, mixed> */
+    /**
+     * مهامُّ الفعاليّة مجموعةً لكلّ موظّف — بحالها الآن، وآخرِ ما أُرسل إليه.
+     *
+     * والرابطُ لمن يدير الفريق وحدَه، ومن رابطٍ أُنشئ عند النشر: الشاشةُ لا
+     * تُنشئ روابطَ بمجرّد فتحها.
+     *
+     * @return array<string, mixed>
+     */
+    private function eventTasks(EventOperation $operation, bool $manager): array
+    {
+        $tasks = ProjectTask::where('business_id', $operation->business_id)->where('event_operation_id', $operation->id)
+            ->with('assignee:id,name,phone')->orderBy('status')->orderBy('due_at')->orderBy('id')->get();
+        $links = $manager
+            ? EventTaskLink::where('event_operation_id', $operation->id)->get()->keyBy('user_id')
+            : collect();
+        $dispatches = EventTaskDispatch::where('event_operation_id', $operation->id)->orderByDesc('id')->get()->groupBy('user_id');
+
+        $people = $tasks->groupBy(fn (ProjectTask $t) => (int) $t->assignee_id)->map(function ($group, $userId) use ($links, $dispatches) {
+            $user = $group->first()->assignee;
+            $last = $dispatches->get($userId)?->first();
+            $link = $links->get($userId);
+
+            return [
+                'user_id' => $userId ?: null,
+                'name' => $user?->name,
+                'has_phone' => filled($user?->phone),
+                'open' => $group->where('status', ProjectTask::OPEN)->count(),
+                'done' => $group->where('status', ProjectTask::DONE)->count(),
+                'tasks' => $group->map(fn (ProjectTask $t) => [
+                    'id' => $t->id, 'title' => $t->title, 'status' => $t->status, 'priority' => $t->priority,
+                    'due_at' => optional($t->due_at)->format('Y-m-d'), 'completed_at' => optional($t->completed_at)->format('Y-m-d H:i'),
+                ])->values()->all(),
+                'last_dispatch' => $last === null ? null : [
+                    'trigger' => $last->trigger, 'status' => $last->status, 'channel' => $last->channel,
+                    'open_count' => $last->open_count, 'failure' => $last->failure, 'at' => optional($last->sent_at ?? $last->created_at)->format('Y-m-d H:i'),
+                ],
+                'link' => $link !== null && $link->isUsable() ? route('event-tasks.show', (string) $link->token) : null,
+            ];
+        })->sortBy(fn ($row) => $row['user_id'] === null ? 1 : 0)->values()->all();
+
+        /* وقاعدتا الإرسال تُنشآن إن لم تكونا — ليقرأ التبويبُ وضعَهما الحقيقيّ */
+        Rules::ensure((int) $operation->business_id);
+
+        return [
+            'published_at' => optional($operation->tasks_published_at)->format('Y-m-d H:i'),
+            'people' => $people,
+            'rules' => AutomationRule::where('business_id', $operation->business_id)
+                ->whereIn('trigger', [EventTasks::ASSIGNED, EventTasks::REMINDER])->get(['trigger', 'enabled', 'mode', 'channel'])
+                ->map(fn (AutomationRule $r) => ['trigger' => $r->trigger, 'enabled' => (bool) $r->enabled, 'mode' => $r->mode, 'channel' => $r->channel])->values()->all(),
+            'automation_mode' => AutomationSettings::for((int) $operation->business_id)->mode,
+        ];
+    }
+
     private function organizerRow(OperationOrganizer $a): array
     {
         return [

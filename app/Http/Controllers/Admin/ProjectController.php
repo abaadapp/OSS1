@@ -360,6 +360,8 @@ class ProjectController extends Controller
             'tasks' => $project->tasks->map(fn (ProjectTask $t) => [
                 'id' => $t->id, 'title' => $t->title, 'description' => $t->description,
                 'assignee_id' => $t->assignee_id, 'assignee' => $t->assignee?->name,
+                /* والفعاليّةُ التي تقف عليها المهمّة — تصل صاحبَها مع أخواتها في رسالةٍ واحدة */
+                'event_operation_id' => $t->event_operation_id,
                 'due_at' => optional($t->due_at)->format('Y-m-d'), 'status' => $t->status, 'priority' => $t->priority,
                 'completed_at' => optional($t->completed_at)->format('Y-m-d H:i'),
             ])->all(),
@@ -395,6 +397,9 @@ class ProjectController extends Controller
                 ? Projects::cancellationVerdict($project)->toArray() : null,
             /* التشغيل — المرحلة 10: الفعاليّاتُ بجاهزيّتها وتعارضاتها؛ ولمن يفتح القسم */
             'operations' => $may['operations'] ? $this->operations($project) : null,
+            /* وفعاليّاتُ المشروع لنموذج المهمّة — اسمٌ ورمز لا أكثر (والملغاةُ لا تُختار) */
+            'task_operations' => $may['manage'] ? EventOperation::where('business_id', $project->business_id)->where('project_id', $project->id)
+                ->where('status', '!=', EventOperation::CANCELLED)->orderBy('event_starts_at')->get(['id', 'code', 'name'])->all() : [],
             /* الأداءُ الماليّ — المرحلة 11: الصيغةُ في `ProjectFinancials` والاكتمالُ في `ProjectProfitability` */
             'performance' => $may['performance'] ? ProjectProfitability::forProject($project) + ['timeline' => ProjectProfitability::timeline($project)] : null,
             /*
@@ -810,6 +815,7 @@ class ProjectController extends Controller
             'due_at' => ['nullable', 'date'],
             'priority' => ['nullable', Rule::in(ProjectTask::PRIORITIES)],
             'status' => ['nullable', Rule::in(ProjectTask::STATUSES)],
+            'event_operation_id' => ['nullable', 'integer'],
         ];
     }
 
