@@ -14,6 +14,7 @@ use App\Models\Supplier;
 use App\Models\SupplierInvoice;
 use App\Models\User;
 use App\Support\Activity;
+use App\Support\BranchAccess;
 use App\Support\Demo;
 use App\Support\Document\PaperSize;
 use App\Support\DocumentPaper;
@@ -113,7 +114,8 @@ class PurchaseOrderController extends Controller
         $user = auth()->user();
         $mayAttachment = (bool) $user?->may(Permissions::ATTACHMENT_VIEW);
 
-        $po = PurchaseOrder::where('business_id', $bid)
+        // ولمن قُيّد بفروعٍ: أمرُ فرعٍ ليس من فروعه لا يُفتح — انظر BranchAccess
+        $po = BranchAccess::limit(PurchaseOrder::where('business_id', $bid))
             ->with(['items' => fn ($q) => $q->orderBy('id')])
             ->findOrFail($id);
 
@@ -921,7 +923,8 @@ class PurchaseOrderController extends Controller
         }
 
         $bid = $this->bid();
-        $po = PurchaseOrder::where('business_id', $bid)->with('items')->findOrFail($id);
+        // ويُستلم في فرع الأمر: أمرُ فرعٍ ليس من فروع الموظّف لا يُستلم منه
+        $po = BranchAccess::limit(PurchaseOrder::where('business_id', $bid))->with('items')->findOrFail($id);
 
         $data = $request->validate([
             'items' => ['nullable', 'array'],
@@ -991,7 +994,8 @@ class PurchaseOrderController extends Controller
             abort(403);
         }
 
-        $note = GoodsReceiptNote::where('business_id', $this->bid())->findOrFail($id);
+        // وفرعُ السند من فروع عمله — الاعتمادُ يُدخل البضاعة رفَّ ذلك الفرع
+        $note = BranchAccess::limit(GoodsReceiptNote::where('business_id', $this->bid()))->findOrFail($id);
 
         try {
             GoodsReceipts::approve($note, auth()->user());
@@ -1023,7 +1027,7 @@ class PurchaseOrderController extends Controller
             'reason' => __('سبب الرفض'),
         ]);
 
-        $note = GoodsReceiptNote::where('business_id', $this->bid())->findOrFail($id);
+        $note = BranchAccess::limit(GoodsReceiptNote::where('business_id', $this->bid()))->findOrFail($id);
 
         try {
             GoodsReceipts::reject($note, $data['reason'], auth()->user());
@@ -1037,7 +1041,7 @@ class PurchaseOrderController extends Controller
     /** رفع/استبدال إيصال الدفع لأمر شراء قائم */
     public function uploadReceipt(Request $request, $id)
     {
-        $po = PurchaseOrder::where('business_id', $this->bid())->findOrFail($id);
+        $po = BranchAccess::limit(PurchaseOrder::where('business_id', $this->bid()))->findOrFail($id);
         $request->validate([
             'receipt' => ['required', 'file', 'max:10240', 'extensions:jpg,jpeg,png,pdf,webp,heic'],
         ], [
@@ -1075,7 +1079,7 @@ class PurchaseOrderController extends Controller
         abort_if(! auth()->user()?->may(Permissions::INVOICE_OVERRIDE), 403);
 
         $data = $request->validate(['note' => ['required', 'string', 'max:255']], [], ['note' => __('سبب الإقفال')]);
-        $po = PurchaseOrder::where('business_id', $this->bid())->findOrFail($id);
+        $po = BranchAccess::limit(PurchaseOrder::where('business_id', $this->bid()))->findOrFail($id);
 
         try {
             PurchaseOrders::close($po, $data['note'], auth()->user());
@@ -1088,7 +1092,7 @@ class PurchaseOrderController extends Controller
 
     public function destroy($id)
     {
-        $po = PurchaseOrder::where('business_id', $this->bid())->findOrFail($id);
+        $po = BranchAccess::limit(PurchaseOrder::where('business_id', $this->bid()))->findOrFail($id);
 
         if (GoodsReceiptNote::where('purchase_order_id', $po->id)->exists()) {
             return back()->with('toast', [

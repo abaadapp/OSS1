@@ -7,6 +7,7 @@ use App\Models\Branch;
 use App\Models\JobTitle;
 use App\Models\User;
 use App\Support\Activity;
+use App\Support\BranchAccess;
 use App\Support\Demo;
 use App\Support\EmployeeAccess;
 use App\Support\MerchantAccount;
@@ -51,7 +52,7 @@ class EmployeeController extends Controller
              *
              * كان `branch` نصًّا حرًّا لا يُقارن بشيء ولا يُفحص عند الدخول —
              * فكاشير الخوير يدخل على جهاز السيب ويبيع. وهذه القائمة هي مصدر
-             * الإذن الآن (انظر User::worksAt).
+             * الإذن الآن ويفرضه الخادم (انظر BranchAccess).
              */
             'branches' => ['nullable', 'array'],
             'branches.*' => ['integer'],
@@ -90,6 +91,7 @@ class EmployeeController extends Controller
             : null;
         $this->refuseManualPermissionsBeyondPlan($title, $manual);
         $this->refuseGrantingMoreThanIHave($title, $manual);
+        $this->refuseBranchesBeyondMine(null, $data['branches'] ?? []);
 
 
         // ولا يُكتب راتبٌ بيد من لا يقرؤه — يبقى صفرًا حتى يكتبه صاحبُه
@@ -459,7 +461,8 @@ class EmployeeController extends Controller
             // ومن لا يقرأ الرواتب لا تُرسم له حقولُها — انظر `readsPayroll`
             'may_read_payroll' => $this->readsPayroll(),
             'branches' => Demo::branches(),
-            'branchOptions' => Branch::where('business_id', Demo::bid())
+            // ولا يُعرض لمن قُيّد بفروعٍ فرعٌ لا يعمل فيه — ولا يمنحه (syncBranches)
+            'branchOptions' => BranchAccess::limit(Branch::where('business_id', Demo::bid()), null, 'id')
                 ->orderBy('id')->get(['id', 'name'])
                 ->map(fn ($b) => ['value' => $b->id, 'label' => $b->name])->values()->all(),
         ]);
@@ -488,7 +491,7 @@ class EmployeeController extends Controller
              *
              * كان `branch` نصًّا حرًّا لا يُقارن بشيء ولا يُفحص عند الدخول —
              * فكاشير الخوير يدخل على جهاز السيب ويبيع. وهذه القائمة هي مصدر
-             * الإذن الآن (انظر User::worksAt).
+             * الإذن الآن ويفرضه الخادم (انظر BranchAccess).
              */
             'branches' => ['nullable', 'array'],
             'branches.*' => ['integer'],
@@ -604,6 +607,7 @@ class EmployeeController extends Controller
          * ويفتح له المتجر كلّه بلا أن يطلب أحدٌ ذلك.
          */
         if ($request->has('branches')) {
+            $this->refuseBranchesBeyondMine($employee, $data['branches'] ?? []);
             $this->syncBranches($employee, $data['branches'] ?? []);
         }
         unset($data['branches']);
@@ -620,6 +624,46 @@ class EmployeeController extends Controller
      * المعرّفات تُقيَّد بفروع متجره: قائمةٌ من الواجهة لا يُوثق بها، وفرعٌ من
      * متجر الجار كان سيُكتب في جدول الإذن ويصير للموظف حقٌّ خارج متجره.
      */
+    /**
+     * ولا يمنح من قُيّد بفروعٍ فرعًا لا يعمل فيه — كما لا يمنح قسمًا لا يملكه.
+     *
+     * مديرُ فرعٍ محصورٌ في مسقط كان يستطيع إضافة موظّفٍ بلا فروع (= كلّ
+     * الفروع)، بكلمة مرورٍ يكتبها هو، فيدخل به صور ونزوى. فالفراغُ يُرفض منه،
+     * وما يضيفه من فروعٍ يكون من فروعه. وحفظٌ لا يغيّر فروعَ الموظّف لا يُسأل
+     * عنه: تعديلُ هاتف موظّفٍ في صور لا يمنح أحدًا شيئًا.
+     *
+     * @param  array<int, int|string>  $ids
+     */
+    private function refuseBranchesBeyondMine(?User $employee, array $ids): void
+    {
+        $actor = auth()->user();
+        if (! BranchAccess::restricts($actor)) {
+            return;
+        }
+
+        $new = Branch::where('business_id', $this->bid())->whereIn('id', $ids)
+            ->pluck('id')->map(fn ($id) => (int) $id)->sort()->values()->all();
+        $old = $employee
+            ? $employee->branches()->pluck('branches.id')->map(fn ($id) => (int) $id)->sort()->values()->all()
+            : null;
+
+        if ($old !== null && $new === $old) {
+            return;
+        }
+
+        if ($new === []) {
+            throw ValidationException::withMessages([
+                'branches' => __('أنت تعمل في فروعٍ محدّدة — اختر للموظف فروعًا منها، فترك الفروع فارغةً يفتح له كل الفروع.'),
+            ]);
+        }
+
+        if (array_diff(array_diff($new, $old ?? []), BranchAccess::allowedBranchIds($actor)) !== []) {
+            throw ValidationException::withMessages([
+                'branches' => __('لا تمنح فرعًا لا تعمل فيه.'),
+            ]);
+        }
+    }
+
     private function syncBranches(User $employee, array $ids): void
     {
         $valid = Branch::where('business_id', $this->bid())

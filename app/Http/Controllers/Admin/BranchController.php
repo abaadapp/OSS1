@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Branch;
 use App\Models\BranchStock;
 use App\Support\Activity;
+use App\Support\BranchAccess;
 use App\Support\Demo;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -34,6 +35,14 @@ class BranchController extends Controller
             ->exists();
 
         abort_unless($belongs, 404);
+
+        // وفرعٌ من النشاط نفسه ليس من فروع عمل الموظّف يُرفض هنا لا في الواجهة
+        // وحدها: الرابط يُكتب باليد كما يُنقر
+        abort_unless(
+            BranchAccess::canAccess($request->user(), (int) $branch),
+            403,
+            __('هذا الفرع ليس من فروع عملك.'),
+        );
 
         $request->session()->put('current_branch', (int) $branch);
 
@@ -85,7 +94,8 @@ class BranchController extends Controller
      */
     public function destroy($id)
     {
-        $branch = Branch::where('business_id', $this->bid())->findOrFail($id);
+        // ولا يحذف موظّفٌ مقيَّدٌ فرعًا ليس من فروعه
+        $branch = BranchAccess::limit(Branch::where('business_id', $this->bid()), null, 'id')->findOrFail($id);
 
         $left = (float) BranchStock::where('branch_id', $branch->id)
             ->where('quantity', '>', 0)->sum('quantity');

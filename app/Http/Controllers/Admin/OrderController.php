@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Order;
+use App\Support\BranchAccess;
 use App\Support\Demo;
 use App\Support\FlowerOrder;
 use Illuminate\Http\Request;
@@ -31,7 +32,7 @@ class OrderController extends Controller
     public function index(Request $request)
     {
         $q = Order::where('business_id', $this->bid())->withCount('items')
-            ->when(Demo::currentBranchId(), fn ($w) => $w->where('branch_id', Demo::currentBranchId()));
+            ->tap(fn ($w) => BranchAccess::scope($w));
 
         // القاعدة نفسها التي يقرأ بها الملفّ — انظر App\Support\ListFilters
         \App\Support\ListFilters::orders($q, $request);

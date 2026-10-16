@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Branch;
 use App\Models\Customer;
 use App\Support\Activity;
+use App\Support\BranchAccess;
 use App\Support\Demo;
 use Illuminate\Http\Request;
 use App\Support\Pdf;
@@ -130,8 +131,8 @@ class CustomerImportExportController extends Controller
             $defaultBranchId = null;
         }
 
-        // خريطة فروع النشاط بالاسم (لمطابقة عمود الفرع في الملف)
-        $branches = Branch::where('business_id', $bid)->get();
+        // خريطة فروع النشاط بالاسم (لمطابقة عمود الفرع في الملف) — ولمن قُيّد بفروعٍ فروعُه
+        $branches = BranchAccess::limit(Branch::where('business_id', $bid), null, 'id')->get();
         $branchByName = [];
         $branchName = [];
         foreach ($branches as $b) {

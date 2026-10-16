@@ -94,6 +94,8 @@ class StockLedger
         return InventoryMovement::where('business_id', $businessId)
             ->where('type', self::RECIPE)
             ->when($branchId, fn ($q) => $q->where('branch_id', $branchId))
+            // قراءةٌ لا حركة: ولمن قُيّد بفروعٍ استهلاكُ فروعه وحدها — انظر BranchAccess
+            ->tap(fn ($q) => BranchAccess::limit($q))
             ->whereBetween('created_at', [$from, $to])
             ->get(['product_id', 'quantity'])
             ->groupBy('product_id')

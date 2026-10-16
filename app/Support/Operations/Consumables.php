@@ -11,6 +11,7 @@ use App\Models\Product;
 use App\Models\StockAdjustment;
 use App\Models\User;
 use App\Support\Activity;
+use App\Support\BranchAccess;
 use App\Support\Contention;
 use App\Support\Ledger;
 use App\Support\StockLedger;
@@ -269,6 +270,7 @@ final class Consumables
             return $branch;
         }
 
-        return Branch::where('business_id', $bid)->orderBy('id')->first();
+        // وبلا فرعٍ مختار: أوّلُ فروع من قُيّد بفروعٍ، لا أوّلُ فروع الشركة
+        return BranchAccess::limit(Branch::where('business_id', $bid), null, 'id')->orderBy('id')->first();
     }
 }

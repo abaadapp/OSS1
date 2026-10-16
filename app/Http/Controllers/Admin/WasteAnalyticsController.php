@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Branch;
 use App\Models\Category;
 use App\Models\Product;
+use App\Support\BranchAccess;
 use App\Support\Demo;
 use App\Support\Waste;
 use App\Support\WasteInsights;
@@ -72,7 +73,7 @@ class WasteAnalyticsController extends Controller
             'suspicious' => Waste::suspiciousRows($bid),
             'filters' => $filters,
             'options' => [
-                'branches' => Branch::where('business_id', $bid)->orderBy('id')
+                'branches' => BranchAccess::limit(Branch::where('business_id', $bid), null, 'id')->orderBy('id')
                     ->get(['id', 'name'])->map(fn ($b) => ['value' => $b->id, 'label' => $b->name])->all(),
                 'categories' => Category::where('business_id', $bid)->orderBy('name')
                     ->get(['id', 'name'])->map(fn ($c) => ['value' => $c->id, 'label' => $c->name])->all(),

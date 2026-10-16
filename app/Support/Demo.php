@@ -281,10 +281,16 @@ class Demo
         return 0;
     }
 
-    /** الفرع الحالي المختار (من الجلسة) — null = كل الفروع */
+    /**
+     * الفرع الحالي المختار (من الجلسة) — null = كل الفروع.
+     *
+     * ولا يُقرأ من الجلسة كما هو: فرعٌ أُزيل من فروع عمل الموظّف يُمحى قبل
+     * أن يُعرض شيءٌ منه — انظر BranchAccess::current. و«كل الفروع» لمن قُيّد
+     * بفروعٍ فروعُه هو: من يرشّح بها يمرّ بـBranchAccess::scope.
+     */
     public static function currentBranchId(): ?int
     {
-        return session('current_branch') ? (int) session('current_branch') : null;
+        return BranchAccess::current();
     }
 
     /**
@@ -297,8 +303,13 @@ class Demo
      */
     public static function activeBranchId(): ?int
     {
+        // وأوّلُ فرعٍ لمن قُيّد أوّلُ فروعه هو — لا أوّلُ فروع النشاط
+        $user = auth()->user();
+
         return self::currentBranchId()
-            ?? Branch::where('business_id', self::bid())->orderBy('id')->value('id');
+            ?? (BranchAccess::restricts($user)
+                ? (BranchAccess::allowedBranchIds($user)[0] ?? null)
+                : Branch::where('business_id', self::bid())->orderBy('id')->value('id'));
     }
 
     /**
@@ -369,7 +380,8 @@ class Demo
      */
     public static function branches(): array
     {
-        return Branch::where('business_id', self::bid())
+        // ولمن قُيّد بفروعٍ فروعُه وحدها: مبدّلٌ يعرض فرعًا يردّ ٤٠٣ عند اختياره كذبة
+        return BranchAccess::limit(Branch::where('business_id', self::bid()), null, 'id')
             ->withCount([
                 'orders as orders_count' => fn ($q) => $q->sold(),
             ])
@@ -480,7 +492,8 @@ class Demo
         $mStart = now()->startOfMonth();
         $lmStart = now()->subMonthNoOverflow()->startOfMonth();
 
-        $branchNow = self::currentBranchId();
+        // الفرعُ المختار — و«كل الفروع» لمن قُيّد بفروعٍ فروعُه هو
+        $branchNow = BranchAccess::currentAllowedBranchIds();
         $today = now()->startOfDay();
 
         // المبيعات: اليوم/أمس، والشهر/الشهر السابق — من فواتير العملاء الصادرة
@@ -540,8 +553,8 @@ class Demo
          *
          * و«كل الفروع» يبقى على الإجماليّ — هو عرضُ الشركة لا موضعُ بيع.
          */
-        $lowStock = $branchNow
-            ? self::lowStockInBranch($bid, (int) $branchNow)
+        $lowStock = $branchNow !== null
+            ? self::lowStockInBranch($bid, $branchNow)
             : Product::where('business_id', $bid)->whereColumn('quantity', '<', 'alert_qty')->count();
 
         // المصروفات وصافي الأرباح: هذا الشهر مقابل السابق
@@ -605,18 +618,31 @@ class Demo
     }
 
     /**
-     * كم صنفًا تحت حدّ تنبيهه في فرعٍ بعينه.
+     * كم صنفًا تحت حدّ تنبيهه في فرعٍ بعينه — أو في فروع عمل الموظّف معًا.
      *
      * والقاعدةُ هي قاعدةُ `Product::statusFor` نفسُها — «أقلُّ من الحدّ» —
      * مطبَّقةً على رصيد الفرع. ولا تُعاد كتابتُها هنا استعلامًا ثالثًا.
+     *
+     * @param  list<int>  $branchIds
      */
-    private static function lowStockInBranch(int $businessId, int $branchId): int
+    private static function lowStockInBranch(int $businessId, array $branchIds): int
     {
         $books = BranchStock::books($businessId);
 
         return Product::where('business_id', $businessId)->get(['id', 'alert_qty'])
-            ->filter(fn ($p) => (int) ($books[$p->id][$branchId] ?? 0) < (int) $p->alert_qty)
+            ->filter(fn ($p) => self::qtyIn($books, $p->id, $branchIds) < (int) $p->alert_qty)
             ->count();
+    }
+
+    /**
+     * رصيدُ صنفٍ في فروعٍ بعينها من دفتر الفروع.
+     *
+     * @param  array<int, array<int, float|int>>  $books
+     * @param  list<int>  $branchIds
+     */
+    private static function qtyIn(array $books, int $productId, array $branchIds): int
+    {
+        return (int) array_sum(array_map(fn ($b) => (int) ($books[$productId][$b] ?? 0), $branchIds));
     }
 
     /**
@@ -790,7 +816,7 @@ class Demo
     public static function orders(?Request $filter = null, ?int $limit = null): array
     {
         $query = Order::where('business_id', self::bid())
-            ->when(self::currentBranchId(), fn ($q) => $q->where('branch_id', self::currentBranchId()))
+            ->tap(fn ($q) => BranchAccess::scope($q))
             ->withCount('items')->orderByDesc('ordered_at');
 
         if ($filter) {
@@ -843,7 +869,7 @@ class Demo
     {
         return CustomerInvoice::where('business_id', self::bid())->withMoney()
             ->where('status', '!=', CustomerInvoice::DRAFT)
-            ->when(self::currentBranchId(), fn ($q) => $q->where('branch_id', self::currentBranchId()))
+            ->tap(fn ($q) => BranchAccess::scope($q))
             ->orderByDesc('issued_at')->orderByDesc('id')
             ->limit($limit)->get()
             ->map(fn ($i) => [
@@ -1060,9 +1086,9 @@ class Demo
     }
 
     /**
-     * @param  int|null  $branchId  فرعٌ تُحصر فيه مبيعاتُهم — و`null` للمتجر كلِّه
+     * @param  int|list<int>|null  $branchId  فرعٌ (أو فروعٌ) تُحصر فيه مبيعاتُهم — و`null` للمتجر كلِّه
      */
-    public static function employees(?int $branchId = null): array
+    public static function employees(int|array|null $branchId = null): array
     {
         $bid = self::bid();
 
@@ -1080,7 +1106,7 @@ class Demo
          * فصار الحدُّ يُمرَّر: اللوحةُ تُمرّره كما تُمرّره لأفضل المنتجات،
          * وقسمُ الموظفين لا يُمرّره — وكلٌّ منهما متّسقٌ مع جيرانه.
          */
-        $scope = fn ($q) => $branchId ? $q->where('branch_id', $branchId) : $q;
+        $scope = fn ($q) => BranchAccess::filter($q, $branchId);
 
         // مبيعات كل موظف خلال الشهر الحالي — من فواتير العملاء التي أنشأها
         $monthly = $scope(Revenue::query($bid, now()->startOfMonth(), now()->startOfMonth()->addMonthNoOverflow())
@@ -1263,7 +1289,8 @@ class Demo
          * استلامه لا يُفتح فيها أبدًا. وإرسال بنود الأوامر كلّها يضاعف
          * الحمولة بعدد أصناف كلّ أمرٍ أُغلق منذ سنة.
          */
-        return PurchaseOrder::where('business_id', self::bid())->withCount('items')
+        // أوامرُ الشراء لا تتبع الشريط — ولمن قُيّد بفروعٍ أوامرُ فروعه وحدها
+        return BranchAccess::limit(PurchaseOrder::where('business_id', self::bid()))->withCount('items')
             ->with(['items' => fn ($q) => $q->orderBy('id')])
             ->orderByDesc('id')->get()->map(fn ($p) => [
                 'id' => $p->id,
@@ -1301,7 +1328,7 @@ class Demo
     public static function purchaseOrderStats(): array
     {
         $bid = self::bid();
-        $base = PurchaseOrder::where('business_id', $bid);
+        $base = BranchAccess::limit(PurchaseOrder::where('business_id', $bid));
 
         return [
             'total' => (clone $base)->count(),
@@ -1486,7 +1513,7 @@ class Demo
      *
      * والبابُ واحدٌ الآن، وتقديرُه مشروحٌ في `Revenue::cogs`.
      */
-    public static function cogsFor(int $bid, ?\Illuminate\Support\Carbon $start, ?\Illuminate\Support\Carbon $end = null, ?int $branchId = null): float
+    public static function cogsFor(int $bid, ?\Illuminate\Support\Carbon $start, ?\Illuminate\Support\Carbon $end = null, int|array|null $branchId = null): float
     {
         return Revenue::cogs($bid, $start, $end, $branchId);
     }
@@ -1562,18 +1589,28 @@ class Demo
         $branchNames = Branch::where('business_id', self::bid())->pluck('name', 'id');
         $stocks = BranchStock::where('business_id', self::bid())->get()->groupBy('product_id');
         $books = BranchStock::books(self::bid());
-        $here = self::currentBranchId();
+        // الفرعُ المختار — و«كل الفروع» لمن قُيّد بفروعٍ فروعُه هو
+        $here = BranchAccess::currentAllowedBranchIds();
+        /*
+         * وما وراء العرض: إجماليُّ الشركة وتوزيعُها على الفروع.
+         *
+         * يبقى لمن يرى الفروع كلَّها: من يرى فرعه صفرًا يحتاج أن يعرف أن في
+         * غيره بضاعة. ومن قُيّد بفروعٍ لا يرى أرصدةَ غيرها — لا مفرّقةً ولا
+         * مجموعةً في رقمٍ واحد.
+         */
+        $visible = BranchAccess::restricts(auth()->user()) ? BranchAccess::allowedBranchIds(auth()->user()) : null;
+        $qty = fn ($p, ?array $ids) => $ids === null ? (int) $p->quantity : self::qtyIn($books, $p->id, $ids);
 
         return Product::where('business_id', self::bid())->orderBy('id')->get()->map(fn ($p) => [
             'id' => $p->id,
             'name' => $p->name,
             'sku' => $p->sku,
-            'qty' => $here ? (int) ($books[$p->id][$here] ?? 0) : $p->quantity,
+            'qty' => $here !== null ? $qty($p, $here) : $p->quantity,
             // الإجمالي يبقى معروضًا: من يرى فرعه صفرًا يحتاج أن يعرف أن في غيره بضاعة
-            'totalQty' => (int) $p->quantity,
+            'totalQty' => $qty($p, $visible),
             'min' => $p->alert_qty,
-            'status' => $here
-                ? Product::statusFor((int) ($books[$p->id][$here] ?? 0), (int) $p->alert_qty)
+            'status' => $here !== null
+                ? Product::statusFor($qty($p, $here), (int) $p->alert_qty)
                 : $p->stock_status,
             'cost' => (float) $p->cost,
             /*
@@ -1584,11 +1621,12 @@ class Demo
              * (cost × qty) فتقرأ الصواب، والملفّ يأخذ ما أُرسل — فيختلف
              * الرقم بين ما رآه التاجر وما أرسله إلى محاسبه.
              */
-            'value' => round((float) $p->cost * ($here ? (int) ($books[$p->id][$here] ?? 0) : (int) $p->quantity), 3),
+            'value' => round((float) $p->cost * ($here !== null ? $qty($p, $here) : (int) $p->quantity), 3),
             // وقيمة الشركة تبقى معروضةً باسمها لا تحت اسم الفرع
-            'totalValue' => round((float) $p->cost * (int) $p->quantity, 3),
+            'totalValue' => round((float) $p->cost * $qty($p, $visible), 3),
             'updated' => optional($p->updated_at)->format('Y-m-d') ?? '—',
             'branches' => ($stocks[$p->id] ?? collect())
+                ->filter(fn ($s) => $visible === null || in_array((int) $s->branch_id, $visible, true))
                 ->map(fn ($s) => ['name' => $branchNames[$s->branch_id] ?? '—', 'qty' => (int) $s->quantity])
                 ->filter(fn ($b) => $b['qty'] > 0)->values()->all(),
         ])->all();
@@ -1598,20 +1636,22 @@ class Demo
     {
         $branches = Branch::where('business_id', self::bid())->pluck('name', 'id');
 
-        return InventoryMovement::where('business_id', self::bid())->orderByDesc('id')->get()->map(fn ($m) => [
-            // المفتاح الحقيقي: الواجهة كانت تركّب مفتاحًا من (الصنف+التاريخ+الكمية)
-            // وهو يتكرّر بمجرّد بيع قطعة من الصنف نفسه مرّتين في اليوم
-            'id' => $m->id,
-            'product' => $m->product_name,
-            'sku' => $m->sku,
-            'type' => $m->type,
-            'qty' => $m->quantity,
-            'branch' => $branches[$m->branch_id] ?? '—',
-            // مسار التحويل («مسقط ← صلالة») — بلا هذا تُقرأ الحركتان تلفًا ومكسبًا
-            'note' => $m->note,
-            'employee' => $m->employee_name,
-            'date' => optional($m->created_at)->format('Y-m-d') ?? '—',
-        ])->all();
+        // سجلُّ الحركة لا يتبع الشريط — ولمن قُيّد بفروعٍ حركاتُ فروعه وحدها
+        return BranchAccess::limit(InventoryMovement::where('business_id', self::bid()))
+            ->orderByDesc('id')->get()->map(fn ($m) => [
+                // المفتاح الحقيقي: الواجهة كانت تركّب مفتاحًا من (الصنف+التاريخ+الكمية)
+                // وهو يتكرّر بمجرّد بيع قطعة من الصنف نفسه مرّتين في اليوم
+                'id' => $m->id,
+                'product' => $m->product_name,
+                'sku' => $m->sku,
+                'type' => $m->type,
+                'qty' => $m->quantity,
+                'branch' => $branches[$m->branch_id] ?? '—',
+                // مسار التحويل («مسقط ← صلالة») — بلا هذا تُقرأ الحركتان تلفًا ومكسبًا
+                'note' => $m->note,
+                'employee' => $m->employee_name,
+                'date' => optional($m->created_at)->format('Y-m-d') ?? '—',
+            ])->all();
     }
 
     /**
@@ -2271,7 +2311,7 @@ class Demo
      * والتساوي يُفصَل بالاسم: صنفان بالإيراد نفسه كانا يتبادلان الموضع بين
      * فتحةٍ وأخرى بلا سبب، فتُقرأ الصدارةُ تبدّلًا وهي لم تتبدّل.
      */
-    public static function topSellingProducts(int $limit = 5, string $range = 'month', ?int $branchId = null): array
+    public static function topSellingProducts(int $limit = 5, string $range = 'month', int|array|null $branchId = null): array
     {
         $bid = self::bid();
         $start = self::rangeStart(self::range($range));

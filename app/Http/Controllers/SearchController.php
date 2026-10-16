@@ -15,6 +15,7 @@ use App\Models\Supplier;
 use App\Models\SupplierInvoice;
 use App\Models\Transaction;
 use App\Models\User;
+use App\Support\BranchAccess;
 use App\Support\Demo;
 use App\Support\Search;
 use Illuminate\Http\Request;
@@ -70,7 +71,8 @@ class SearchController extends Controller
          */
         $seesOrders = $user->allows('orders');
 
-        $orders = $seesOrders ? Order::where('business_id', $bid)
+        // ومستنداتُ الفروع لمن قُيّد بفروعٍ من فروعه وحدها — انظر BranchAccess
+        $orders = $seesOrders ? BranchAccess::limit(Order::where('business_id', $bid))
             ->where(fn ($w) => $w->where('number', $op, $like)->orWhere('customer_name', $op, $like))
             ->orderByDesc('id')->limit(5)->get()->map(fn ($o) => [
                 'label' => $o->number, 'meta' => $o->customer_name ?? __('عميل نقدي'),
@@ -146,7 +148,7 @@ class SearchController extends Controller
          * منسدلة — ومن كتب رمزًا كاملًا يريد صفًّا واحدًا لا خمسةً وثلاثين.
          */
         $rows = $rows->concat($user->allows('purchases')
-            ? PurchaseOrder::where('business_id', $bid)->where('number', $op, $like)
+            ? BranchAccess::limit(PurchaseOrder::where('business_id', $bid))->where('number', $op, $like)
                 ->orderByDesc('id')->limit(3)->get()->map(fn ($p) => [
                     'label' => $p->number,
                     'meta' => __('أمر شراء'),
@@ -164,7 +166,7 @@ class SearchController extends Controller
             : []);
 
         $rows = $rows->concat($user->allows('inventory')
-            ? GoodsReceiptNote::where('business_id', $bid)->where('number', $op, $like)
+            ? BranchAccess::limit(GoodsReceiptNote::where('business_id', $bid))->where('number', $op, $like)
                 ->orderByDesc('id')->limit(3)->get()->map(fn ($g) => [
                     'label' => $g->number,
                     'meta' => __('إشعار استلام'),
@@ -173,7 +175,7 @@ class SearchController extends Controller
             : []);
 
         $rows = $rows->concat($user->allows('inventory')
-            ? StockAdjustment::where('business_id', $bid)->where('number', $op, $like)
+            ? BranchAccess::limit(StockAdjustment::where('business_id', $bid))->where('number', $op, $like)
                 ->orderByDesc('id')->limit(3)->get()->map(fn ($a) => [
                     'label' => $a->number,
                     'meta' => __('تسوية مخزون'),

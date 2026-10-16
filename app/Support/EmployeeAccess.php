@@ -153,8 +153,9 @@ final class EmployeeAccess
      * وتقترح القسم — ولا يُفرض في الخادم: بعضُ الأفعال تُستعمل من أكثر من قسم،
      * والقائمةُ هنا من تتبّع مساراتها فعلًا.
      *
-     * وما يُكتب هنا القسمُ الذي **يُفحص** فيه الفعل، لا الذي يُرسم فيه زرُّه:
-     * «اعتماد الاستلام» زرُّه في شاشة المخزون ومسارُه تحت المشتريات، فقسمُه
+     * وما يُكتب هنا القسمُ الذي **يُفحص** فيه الفعل — وهو الشاشة التي يُستعمل
+     * منها: «اعتماد الاستلام» زرُّه في شاشة المخزون ومسارُه يُنسب إليها
+     * (`Permissions::ROUTE_SECTIONS`)، و«تسجيل الاستلام» من أمر الشراء فقسمُه
      * المشتريات. والأوّلُ في القائمة هو الأصل.
      *
      * @var array<string, list<string>>
@@ -164,8 +165,8 @@ final class EmployeeAccess
         'credit.override' => ['finance'],
         Permissions::RECEIPT_VIEW => ['inventory'],
         Permissions::RECEIPT_CREATE => ['purchases'],
-        Permissions::RECEIPT_APPROVE => ['purchases'],
-        Permissions::RECEIPT_REJECT => ['purchases'],
+        Permissions::RECEIPT_APPROVE => ['inventory'],
+        Permissions::RECEIPT_REJECT => ['inventory'],
         Permissions::INVOICE_VIEW => ['purchases', 'suppliers', 'projects'],
         Permissions::INVOICE_CREATE => ['purchases'],
         Permissions::INVOICE_APPROVE => ['purchases'],

@@ -9,6 +9,7 @@ use App\Models\GoodsReceiptNote;
 use App\Models\PurchaseOrder;
 use App\Models\SupplierInvoice;
 use App\Models\SupplierInvoicePayment;
+use App\Support\BranchAccess;
 use App\Support\Demo;
 use App\Support\Permissions;
 use Illuminate\Support\Facades\Storage;
@@ -55,7 +56,7 @@ class FinancialAttachmentController extends Controller
     {
         $this->mustBeAllowed();
 
-        $note = GoodsReceiptNote::where('business_id', $this->bid())->findOrFail($id);
+        $note = BranchAccess::limit(GoodsReceiptNote::where('business_id', $this->bid()))->findOrFail($id);
 
         return $this->stream($note->attachment, $note->attachment_name, $note->number);
     }
@@ -86,7 +87,7 @@ class FinancialAttachmentController extends Controller
     {
         $this->mustBeAllowed();
 
-        $po = PurchaseOrder::where('business_id', $this->bid())->findOrFail($id);
+        $po = BranchAccess::limit(PurchaseOrder::where('business_id', $this->bid()))->findOrFail($id);
 
         return $this->stream($po->attachment, $po->attachment_name, $po->number);
     }
@@ -104,7 +105,7 @@ class FinancialAttachmentController extends Controller
     {
         $this->mustBeAllowed();
 
-        $po = PurchaseOrder::where('business_id', $this->bid())->findOrFail($id);
+        $po = BranchAccess::limit(PurchaseOrder::where('business_id', $this->bid()))->findOrFail($id);
 
         return $this->stream($po->receipt, $po->receipt_name, $po->number);
     }

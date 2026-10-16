@@ -3,6 +3,7 @@
 use App\Http\Middleware\CheckAbility;
 use App\Http\Middleware\CheckRole;
 use App\Http\Middleware\CheckTenantStatus;
+use App\Http\Middleware\EnforceBranchAccess;
 use App\Http\Middleware\EntersPanel;
 use App\Http\Middleware\HandleInertiaRequests;
 use App\Http\Middleware\NormalizeNumbers;
@@ -31,6 +32,8 @@ return Application::configure(basePath: dirname(__DIR__))
             'panel' => EntersPanel::class,
             'business' => RequiresBusiness::class,
             'tenant' => CheckTenantStatus::class,
+            // وفرعٌ يُرسَل في الطلب من فروع عمل الموظّف — انظر EnforceBranchAccess
+            'branch' => EnforceBranchAccess::class,
         ]);
         $middleware->web(append: [
             SecurityHeaders::class,

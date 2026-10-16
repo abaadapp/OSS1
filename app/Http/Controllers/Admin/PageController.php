@@ -18,6 +18,7 @@ use App\Models\Project;
 use App\Models\Quotation;
 use App\Models\Supplier;
 use App\Models\User;
+use App\Support\BranchAccess;
 use App\Support\CustomerContacts;
 use App\Support\Demo;
 use App\Support\DocumentTemplates;
@@ -173,6 +174,9 @@ class PageController extends Controller
         $order = Demo::orderDetails($number);
         abort_if(empty($order), 404);
 
+        // تُفتح لطلبات المتجر كلِّها — إلّا لمن قُيّد بفروعٍ: طلبُ غيرها ليس له
+        abort_unless(BranchAccess::limit(Order::where('business_id', Demo::bid())->where('number', $number))->exists(), 404);
+
         return Inertia::render('Admin/Orders/Show', [
             'order' => $order,
             /*
@@ -289,7 +293,7 @@ class PageController extends Controller
          * هو الفرع، وتقوله لافتةُ الصفحة كلِّها لا هذا الزرّ وحده.
          */
         $order = Order::where('business_id', Demo::bid())
-            ->when(Demo::currentBranchId(), fn ($w) => $w->where('branch_id', Demo::currentBranchId()))
+            ->tap(fn ($w) => BranchAccess::scope($w))
             ->where('number', $number)->first();
 
         $soldOn = $order?->ordered_at ?? $order?->created_at;
@@ -429,7 +433,7 @@ class PageController extends Controller
     {
         return Inertia::render('Admin/Employees/Create', [
             'branches' => Demo::branches(),
-            'branchOptions' => Branch::where('business_id', Demo::bid())
+            'branchOptions' => BranchAccess::limit(Branch::where('business_id', Demo::bid()), null, 'id')
                 ->orderBy('id')->get(['id', 'name'])
                 ->map(fn ($b) => ['value' => $b->id, 'label' => $b->name])->values()->all(),
             'currentBranchName' => Demo::currentBranchName(),

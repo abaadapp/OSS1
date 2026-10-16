@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\BranchAccess;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -96,20 +97,13 @@ class User extends Authenticatable
      *
      * والفحص مقيَّد بالمتجر أيضًا: فرعٌ من متجر الجار مرفوض ولو ورد في الصفوف
      * (وهو ما لا يقع إلا بعبثٍ مباشر في القاعدة — والفحص أرخص من الثقة).
+     *
+     * والقاعدةُ في BranchAccess وحدها — وهي التي يفرضها تبديلُ الفرع وما يُكتب
+     * فيه. فلا تُكتب هنا نسخةٌ ثانيةٌ تفترق عنها.
      */
     public function worksAt(?int $branchId): bool
     {
-        if (! $branchId) {
-            return false;
-        }
-
-        if (! Branch::where('id', $branchId)->where('business_id', $this->business_id)->exists()) {
-            return false;
-        }
-
-        $allowed = $this->branches()->pluck('branches.id');
-
-        return $allowed->isEmpty() || $allowed->contains($branchId);
+        return BranchAccess::canAccess($this, $branchId);
     }
 
     /**

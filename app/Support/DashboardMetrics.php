@@ -23,7 +23,8 @@ class DashboardMetrics
     public static function salesYear(): array
     {
         $bid = Demo::bid();
-        $branch = Demo::currentBranchId();
+        // الفرعُ المختار — و«كل الفروع» لمن قُيّد بفروعٍ فروعُه هو
+        $branch = BranchAccess::currentAllowedBranchIds();
         $start = now()->startOfYear();
         $end = now()->endOfYear();
         $cutoff = now()->copy();
@@ -63,7 +64,7 @@ class DashboardMetrics
      */
     public static function paymentDistribution(): array
     {
-        $rows = Revenue::byMethod(Demo::bid(), now()->startOfMonth(), null, Demo::currentBranchId());
+        $rows = Revenue::byMethod(Demo::bid(), now()->startOfMonth(), null, BranchAccess::currentAllowedBranchIds());
 
         return [
             'labels' => $rows->map(fn ($r) => Demo::methodLabel($r['key']))->all(),

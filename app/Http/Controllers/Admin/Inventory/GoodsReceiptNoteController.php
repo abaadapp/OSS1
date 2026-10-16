@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\GoodsReceiptNote;
 use App\Models\PurchaseOrderItem;
 use App\Models\User;
+use App\Support\BranchAccess;
 use App\Support\Demo;
 use App\Support\Document\PaperSize;
 use App\Support\DocumentPaper;
@@ -57,7 +58,8 @@ class GoodsReceiptNoteController extends Controller
 
         $bid = $this->bid();
 
-        $q = GoodsReceiptNote::where('business_id', $bid)
+        // سنداتُ الاستلام لا تتبع الشريط — ولمن قُيّد بفروعٍ سنداتُ فروعه وحدها
+        $q = BranchAccess::limit(GoodsReceiptNote::where('business_id', $bid))
             ->with(['supplier', 'branch', 'purchaseOrder', 'items']);
 
         // ترشيحٌ بالحال — و«بانتظار الاعتماد» أوّلُ ما يُفتح عليه
@@ -120,7 +122,7 @@ class GoodsReceiptNoteController extends Controller
             'pagination' => Pagination::meta($notes),
             'filters' => $request->only('q', 'status') + Sort::params($request, self::SORTS),
             'sorts' => Sort::keys(self::SORTS),
-            'pendingCount' => GoodsReceiptNote::where('business_id', $bid)
+            'pendingCount' => BranchAccess::limit(GoodsReceiptNote::where('business_id', $bid))
                 ->where('status', GoodsReceipts::PENDING)->count(),
             // من يرى الزرّ هو من يملك الفعل — وبابٌ يُعرض ولا يُفتح أسوأ من غيابه
             'canApprove' => (bool) auth()->user()?->may(Permissions::RECEIPT_APPROVE),
@@ -152,7 +154,7 @@ class GoodsReceiptNoteController extends Controller
 
         $bid = $this->bid();
 
-        $note = GoodsReceiptNote::where('business_id', $bid)
+        $note = BranchAccess::limit(GoodsReceiptNote::where('business_id', $bid))
             ->with(['supplier', 'branch', 'purchaseOrder', 'items' => fn ($q) => $q->orderBy('id')])
             ->findOrFail($id);
 

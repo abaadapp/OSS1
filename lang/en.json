@@ -1186,7 +1186,7 @@
     "سيتغيّر ملف الصلاحيات الأساسي من «:from» إلى «:to» عند الحفظ.": "The base permission profile will change from “:from” to “:to” on save.",
     "الفرع الأساسي للعرض": "Primary branch (display)",
     "يظهر في القوائم والتقارير — لا يمنح ولا يمنع شيئًا": "Shown in lists and reports — it neither grants nor blocks anything",
-    "بلا تحديد = كل الفروع. تُسجَّل في ملفه — ولا يمنع النظام بعدُ تبديله إلى فرعٍ آخر.": "None selected = all branches. Recorded on their profile — the system does not yet stop them switching to another branch.",
+    "بلا تحديد = كل الفروع. ومن حُدّدت له فروعٌ لا يرى غيرها ولا يعمل فيها.": "None selected = all branches. Someone given specific branches sees and works in those only.",
     "ما يفتحه هذا الموظف — ويُفرض على الخادم": "What this employee can open — enforced on the server",
     "مثال: مشرف الفعالية": "e.g. Event supervisor",
     "يتبع الوظيفة": "Follows job title",
@@ -6639,5 +6639,8 @@
     "سُجّل تأكيد تنفيذ :n — بانتظار الاعتماد": "Completion confirmation :n recorded — pending approval",
     "اعتُمد تنفيذ الخدمة :n — لا تدخل المخزون": "Service completion :n approved — not added to stock",
     "اعتُمد الاستلام :n — دخلت البضاعة الرفّ، والخدمات لا تدخل المخزون": "Receipt :n approved — goods shelved, services not added to stock",
-    "رُفض تأكيد التنفيذ :n": "Completion confirmation :n rejected"
+    "رُفض تأكيد التنفيذ :n": "Completion confirmation :n rejected",
+    "هذا الفرع ليس من فروع عملك.": "This branch is not one of your working branches.",
+    "أنت تعمل في فروعٍ محدّدة — اختر للموظف فروعًا منها، فترك الفروع فارغةً يفتح له كل الفروع.": "You work in specific branches — pick branches for this employee from yours; leaving them empty opens every branch.",
+    "لا تمنح فرعًا لا تعمل فيه.": "You cannot grant a branch you do not work in."
 }

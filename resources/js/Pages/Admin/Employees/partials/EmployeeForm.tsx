@@ -370,15 +370,15 @@ export default function EmployeeForm({
                     </Field>
 
                     {/*
-                        فروع العمل — تُحفظ في جدولها (`branch_user`) ويقرؤها
-                        `User::worksAt`. لكنّ تبديل الفرع لا يسألها بعد، فلا
-                        تُوصف إذنًا لا يُفرض: يُقال ما تفعله فعلًا.
+                        فروع العمل — تُحفظ في جدولها (`branch_user`) ويفرضها
+                        الخادم (`BranchAccess`): مبدّلُ الفروع وما يُكتب في
+                        فرعٍ و«كل الفروع» نفسُها. والتلميح يقول ذلك كما هو.
                     */}
                     {branchOptions.length > 0 && (
                         <Field
                             label="فروع العمل"
                             className="md:col-span-2"
-                            hint="بلا تحديد = كل الفروع. تُسجَّل في ملفه — ولا يمنع النظام بعدُ تبديله إلى فرعٍ آخر."
+                            hint="بلا تحديد = كل الفروع. ومن حُدّدت له فروعٌ لا يرى غيرها ولا يعمل فيها."
                             error={form.errors.branches}
                         >
                             <div className="flex flex-wrap gap-2" role="group" aria-label={t('فروع العمل')}>
