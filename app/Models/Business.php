@@ -84,5 +84,6 @@ class Business extends Model
     public function customers(): HasMany { return $this->hasMany(Customer::class); }
     public function orders(): HasMany { return $this->hasMany(Order::class); }
     public function expenses(): HasMany { return $this->hasMany(Expense::class); }
+    public function supplierInvoicePayments(): HasMany { return $this->hasMany(SupplierInvoicePayment::class); }
     public function transactions(): HasMany { return $this->hasMany(Transaction::class); }
 }

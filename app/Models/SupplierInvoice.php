@@ -6,6 +6,7 @@ use App\Support\SupplierInvoices;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
  * سند مورّد — فاتورته كما وصلت.
@@ -35,6 +36,12 @@ class SupplierInvoice extends Model
     public function supplier(): BelongsTo { return $this->belongsTo(Supplier::class); }
 
     public function purchaseOrder(): BelongsTo { return $this->belongsTo(PurchaseOrder::class); }
+
+    /** دفعاتُه — لكلٍّ قيدُها وإيصالُها (`SupplierInvoices::settle`) */
+    public function payments(): HasMany
+    {
+        return $this->hasMany(SupplierInvoicePayment::class)->orderBy('paid_at')->orderBy('id');
+    }
 
     /**
      * السنداتُ التي صارت دَينًا فعلًا — المعتمَدةُ وحدها.

@@ -6,6 +6,7 @@ use App\Support\Numbering;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use RuntimeException;
 
 /**
@@ -33,6 +34,9 @@ class JournalEntry extends Model
     public function branch(): BelongsTo { return $this->belongsTo(Branch::class); }
 
     public function lines(): HasMany { return $this->hasMany(JournalLine::class)->orderBy('id'); }
+
+    /** دفعةُ سند المورّد التي كُتب هذا القيدُ لها — إن كان قيدَ سدادٍ بعد جدول الدفعات */
+    public function supplierInvoicePayment(): HasOne { return $this->hasOne(SupplierInvoicePayment::class); }
 
     public function creator(): BelongsTo { return $this->belongsTo(User::class, 'created_by'); }
 

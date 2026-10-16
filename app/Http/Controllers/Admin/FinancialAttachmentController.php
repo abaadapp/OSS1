@@ -8,6 +8,7 @@ use App\Models\Expense;
 use App\Models\GoodsReceiptNote;
 use App\Models\PurchaseOrder;
 use App\Models\SupplierInvoice;
+use App\Models\SupplierInvoicePayment;
 use App\Support\Demo;
 use App\Support\Permissions;
 use Illuminate\Support\Facades\Storage;
@@ -27,9 +28,9 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
  * فالكلُّ على القرص الخاصّ الآن، ولا يُقرأ إلّا من هنا: البابُ يسأل عن
  * المتجر أوّلًا، فمرفقُ الجار لا يُفتح برقمٍ يُكتب في العنوان.
  *
- * وخمسةُ مستنداتٍ على بابٍ واحد: سندُ المورّد، وورقةُ الشحنة، وفاتورةُ
- * المصروف، وإيصالُ دفعٍ قديمٌ على أمر شراء، ومرفقُ أمر الشراء نفسِه (عرضُ
- * سعرٍ أو مستندُ طلب). وبابٌ لكلٍّ كان يعني خمسةَ حرّاسٍ يفترق أحدُهم يومًا.
+ * وستّةُ مستنداتٍ على بابٍ واحد: سندُ المورّد، وإيصالُ كلِّ دفعةٍ عليه، وورقةُ
+ * الشحنة، وفاتورةُ المصروف، وإيصالُ دفعٍ قديمٌ على أمر شراء، ومرفقُ أمر الشراء
+ * نفسِه (عرضُ سعرٍ أو مستندُ طلب). وبابٌ لكلٍّ كان يعني ستّةَ حرّاسٍ يفترق أحدُهم يومًا.
  *
  * والاسمُ المخزَّن عشوائيّ والمعروضُ هو ما سمّاه صاحبه: اسمٌ يُبنى من
  * الأصل يُخمَّن، واسمٌ عشوائيٌّ بلا حفظِ الأصل يُنزَّل إلى المحاسب بلا معنى.
@@ -133,6 +134,23 @@ class FinancialAttachmentController extends Controller
         $invoice = SupplierInvoice::where('business_id', $this->bid())->findOrFail($id);
 
         return $this->stream($invoice->attachment, $invoice->attachment_name, $invoice->supplier_ref);
+    }
+
+    /**
+     * إيصالُ دفعةٍ على سند مورّد — لكلّ دفعةٍ إيصالُها.
+     *
+     * والدفعةُ تُسأل عن سندها كما تُسأل عن شركتها: رقمُ دفعةٍ من سندٍ آخر لا يُفتح
+     * من عنوان هذا، ورقمُ دفعةٍ من شركةٍ أخرى لا يُفتح أصلًا. فالشرطان في الاستعلام.
+     */
+    public function supplierInvoicePayment(int|string $id, int|string $payment): StreamedResponse
+    {
+        $this->mustBeAllowed();
+
+        $row = SupplierInvoicePayment::where('business_id', $this->bid())
+            ->where('supplier_invoice_id', $id)
+            ->findOrFail($payment);
+
+        return $this->stream($row->receipt, $row->receipt_name, 'payment-receipt-'.$row->id);
     }
 
     /** فتحُ المرفقات فعلٌ يُمنح باسمه — لا قسمٌ يُفتح */

@@ -7,10 +7,14 @@ use App\Models\JournalEntry;
 use App\Models\PurchaseOrder;
 use App\Models\PurchaseOrderItem;
 use App\Models\SupplierInvoice;
+use App\Models\SupplierInvoicePayment;
 use App\Models\User;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use RuntimeException;
+use Throwable;
 
 /**
  * سنداتُ المورّدين — كتابةً، ومطابقةً، ثمّ اعتمادًا.
@@ -282,57 +286,149 @@ final class SupplierInvoices
      * @throws RuntimeException
      */
     /**
-     * سدادُ سندٍ معتمَد — القيدُ والمسدَّدُ في معاملةٍ واحدة تحت قفل.
+     * سدادُ سندٍ معتمَد — القيدُ والدفعةُ والمسدَّدُ في معاملةٍ واحدة تحت قفل.
      *
      * كان في متحكّم السندات؛ خرج إلى هنا لمّا صار الاستيرادُ التاريخيُّ
      * (المرحلة 9) يكتب سدادًا قديمًا — فبابٌ واحد يقيّد «ذمم الموردين» مدينةً
      * والصندوقَ أو البنكَ دائنًا، لا نسختان.
      *
+     * ═══ ولكلّ دفعةٍ صفُّها وإيصالُها ═══
+     *
+     * القيدُ يبقى مصدرَ الحقيقة، ومعه صفٌّ في `supplier_invoice_payments` يشير إليه
+     * (`journal_entry_id` فريد) ويحفظ مصدرَ الدفعة ومن سجّلها وإيصالَها. والاثنان في
+     * المعاملة نفسِها: لا دفعةَ بلا قيد، ولا قيدَ سدادٍ بلا دفعة، ولا مرّتين.
+     *
+     * والإيصالُ يُكتب على القرص الخاصّ قبل المعاملة ويُمحى إن سقطت — كما في سند
+     * المورّد والمصروف — فلا يبقى ملفٌّ بلا دفعة، ولا دفعةٌ تشير إلى ملفٍّ لم يُكتب.
+     *
+     * ═══ والطلبُ المكرَّر لا يدفع مرّتين ═══
+     *
+     * `$requestKey` مفتاحُ نموذج السداد: ضغطةٌ ثانية أو إعادةُ إرسالٍ بالمفتاح نفسِه
+     * تعود بالدفعة الأولى ولا تكتب شيئًا (يُسأل عنه قبل الرفع، ثمّ تحت القفل — فلا
+     * يُترك للفهرس الفريد أن يصطدم ويُجهض المعاملة على PostgreSQL). وتجاوزُ المستحقّ
+     * تحت التزامن يمنعه قفلُ صفّ السند: الثاني ينتظر الأوّل ثمّ يقرأ ما بقي.
+     *
+     * والدفعةُ تُعاد على السند الراجع علاقةً (`payment`)، و`wasRecentlyCreated` عليها
+     * يقول أهي جديدةٌ أم تكرارُ طلبٍ سبق.
+     *
      * @param  'cash'|'bank'  $from
      */
-    public static function settle(SupplierInvoice $invoice, float $amount, string $from, Carbon $paidAt, ?int $userId = null): SupplierInvoice
-    {
+    public static function settle(
+        SupplierInvoice $invoice,
+        float $amount,
+        string $from,
+        Carbon $paidAt,
+        ?int $userId = null,
+        ?UploadedFile $receipt = null,
+        ?string $requestKey = null,
+    ): SupplierInvoice {
         $amount = round($amount, 3);
 
         if ($amount <= 0) {
             throw new RuntimeException(__('مبلغُ السداد يجب أن يكون أكبر من صفر.'));
         }
-        if (! in_array($from, ['cash', 'bank'], true)) {
+        if (! in_array($from, SupplierInvoicePayment::SOURCES, true)) {
             throw new RuntimeException(__('مصدرُ السداد الصندوقُ أو البنك.'));
         }
 
-        return DB::transaction(function () use ($invoice, $amount, $from, $paidAt, $userId) {
-            $locked = SupplierInvoice::where('business_id', $invoice->business_id)
-                ->lockForUpdate()->findOrFail($invoice->id);
+        $bid = (int) $invoice->business_id;
+        $key = self::requestKey($requestKey);
 
-            if ($locked->approval_status !== self::APPROVED) {
-                throw new RuntimeException(__('لا يُسدَّد سندٌ لم يُعتمد — اعتمده أوّلًا.'));
+        /* إعادةُ الطلب نفسِه — قبل أن يُرفع ملفٌّ لا حاجة إليه */
+        if ($key !== null && ($existing = self::paymentByKey($bid, $key, $invoice)) !== null) {
+            return $invoice->fresh()->setRelation('payment', $existing);
+        }
+
+        $stored = $receipt?->store("supplier-invoice-payments/{$bid}", 'local') ?: null;
+        if ($receipt !== null && $stored === null) {
+            /* إيصالٌ أُرفق ولم يُكتب — لا تُسجَّل دفعةٌ يظنّ صاحبُها أنّ إيصالَها معها */
+            throw new RuntimeException(__('تعذّر حفظ الإيصال — لم تُسجَّل الدفعة، أعد المحاولة.'));
+        }
+
+        try {
+            [$fresh, $payment] = DB::transaction(function () use ($invoice, $amount, $from, $paidAt, $userId, $receipt, $stored, $key, $bid) {
+                $locked = SupplierInvoice::where('business_id', $bid)->lockForUpdate()->findOrFail($invoice->id);
+
+                /* والمفتاحُ ثانيةً تحت القفل — طلبان بالمفتاح نفسِه وصلا معًا */
+                if ($key !== null && ($existing = self::paymentByKey($bid, $key, $locked)) !== null) {
+                    return [$locked, $existing];
+                }
+
+                if ($locked->approval_status !== self::APPROVED) {
+                    throw new RuntimeException(__('لا يُسدَّد سندٌ لم يُعتمد — اعتمده أوّلًا.'));
+                }
+                if ($amount - $locked->outstanding() > 0.0005) {
+                    throw new RuntimeException(__('المستحقّ على هذا السند :v فقط', [
+                        'v' => number_format($locked->outstanding(), 3),
+                    ]));
+                }
+
+                $entry = Ledger::post(
+                    $bid,
+                    __('سداد سند مورّد: ').$locked->supplier_ref,
+                    [
+                        ['account' => 'payable', 'debit' => $amount, 'memo' => $locked->supplier?->name],
+                        ['account' => $from, 'credit' => $amount],
+                    ],
+                    $paidAt,
+                    'سداد مورّد',
+                    null,
+                    $userId,
+                    $locked,
+                );
+
+                $payment = SupplierInvoicePayment::create([
+                    'business_id' => $bid,
+                    'supplier_invoice_id' => $locked->id,
+                    'journal_entry_id' => $entry->id,
+                    'amount' => $amount,
+                    'paid_at' => $paidAt->toDateString(),
+                    'paid_from' => $from,
+                    'receipt' => $stored,
+                    'receipt_name' => $stored ? mb_substr($receipt->getClientOriginalName(), 0, 255) : null,
+                    'idempotency_key' => $key,
+                    'created_by' => $userId,
+                ]);
+
+                $locked->update(['paid' => round((float) $locked->paid + $amount, 3)]);
+                $locked->syncStatus();
+
+                return [$locked->fresh(), $payment];
+            });
+        } catch (Throwable $e) {
+            if ($stored) {
+                Storage::disk('local')->delete($stored);
             }
-            if ($amount - $locked->outstanding() > 0.0005) {
-                throw new RuntimeException(__('المستحقّ على هذا السند :v فقط', [
-                    'v' => number_format($locked->outstanding(), 3),
-                ]));
-            }
 
-            Ledger::post(
-                (int) $locked->business_id,
-                __('سداد سند مورّد: ').$locked->supplier_ref,
-                [
-                    ['account' => 'payable', 'debit' => $amount, 'memo' => $locked->supplier?->name],
-                    ['account' => $from, 'credit' => $amount],
-                ],
-                $paidAt,
-                'سداد مورّد',
-                null,
-                $userId,
-                $locked,
-            );
+            throw $e;
+        }
 
-            $locked->update(['paid' => round((float) $locked->paid + $amount, 3)]);
-            $locked->syncStatus();
+        /* تكرارٌ وُجد تحت القفل: الدفعةُ الأولى بإيصالها، وملفُّ هذا الطلب لا يُستعمل */
+        if ($stored && ! $payment->wasRecentlyCreated) {
+            Storage::disk('local')->delete($stored);
+        }
 
-            return $locked->fresh();
-        });
+        return $fresh->setRelation('payment', $payment);
+    }
+
+    /** مفتاحُ الطلب — حروفٌ وأرقامٌ وشرطاتٌ حتى 64، أو لا مفتاح */
+    private static function requestKey(?string $key): ?string
+    {
+        $key = $key === null ? '' : (string) preg_replace('/[^A-Za-z0-9_-]/', '', $key);
+
+        return $key === '' ? null : mb_substr($key, 0, 64);
+    }
+
+    /** دفعةٌ سبقت بهذا المفتاح — ولا يصلح مفتاحُ دفعةٍ على سندٍ آخر */
+    private static function paymentByKey(int $businessId, string $key, SupplierInvoice $invoice): ?SupplierInvoicePayment
+    {
+        $payment = SupplierInvoicePayment::where('business_id', $businessId)->where('idempotency_key', $key)->first();
+
+        if ($payment !== null && (int) $payment->supplier_invoice_id !== (int) $invoice->id) {
+            throw new RuntimeException(__('مفتاحُ هذا الطلب لدفعةٍ على سندٍ آخر — أعد فتح نموذج السداد.'));
+        }
+
+        return $payment;
     }
 
     public static function approve(SupplierInvoice $invoice, ?User $by = null, ?string $overrideReason = null): SupplierInvoice

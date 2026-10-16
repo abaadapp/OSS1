@@ -86,6 +86,8 @@ class TenantTables
         'transactions', 'expenses',
         'fixed_assets', 'inventory_movements', 'stock_adjustments',
         'purchase_orders', 'purchase_order_items', 'supplier_invoices',
+        /* ودفعاتُ السند بعده وبعد قيودها — كلُّ دفعةٍ تشير إلى سندها وقيدها */
+        'supplier_invoice_payments',
         'goods_receipt_notes', 'goods_receipt_note_items',
         'orders', 'order_items', 'order_item_addons', 'order_edits',
         /*

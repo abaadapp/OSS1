@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { router, useForm, usePage } from '@inertiajs/react';
+import { router, usePage } from '@inertiajs/react';
 import { Check, FileText, Paperclip, Wallet, X } from 'lucide-react';
 
 import AdminLayout from '@/Layouts/AdminLayout';
@@ -16,6 +16,7 @@ import { Input } from '@/Components/ui/input';
 import { money } from '@/lib/format';
 import { useTranslate } from '@/lib/i18n';
 import type { PageProps } from '@/types';
+import { SupplierInvoicePaymentsCard, SupplierPaymentDialog, type SupplierPayment } from './partials/SupplierInvoicePayments';
 
 interface Invoice {
     id: number;
@@ -49,15 +50,9 @@ interface Invoice {
     attachment_name: string | null;
 }
 
-interface Payment {
-    number: string;
-    at: string | null;
-    amount: number;
-}
-
 interface Props {
     invoice: Invoice;
-    payments: Payment[];
+    payments: SupplierPayment[];
     order: { id: number; number: string; total: number; received_value: number | null } | null;
     paper: { html: string; size: string; url: string };
     can: { approve: boolean; reject: boolean; pay: boolean };
@@ -94,8 +89,6 @@ export default function SupplierInvoiceShow() {
     const [rejecting, setRejecting] = useState(false);
     const [reason, setReason] = useState('');
     const [paying, setPaying] = useState(false);
-
-    const pay = useForm({ amount: '', paid_at: today, from: 'cash' });
 
     const pending = invoice.approval_status === PENDING;
     const approved = invoice.approval_status === APPROVED;
@@ -343,36 +336,11 @@ export default function SupplierInvoiceShow() {
                     </Card>
 
                     {/*
-                        وكشفُ السداد من الدفتر لا من عمودٍ واحد.
-
-                        «سُدّد ٣٠ من ١٠٠» لا يكفي في مراجعة: متى، وبأيّ قيد،
-                        ومن أيّ صندوق. وهذه الأسطرُ هي القيودُ نفسُها.
+                        و«الدفعات» من الدفتر لا من عمودٍ واحد — كلُّ دفعةٍ بقيدها ومصدرها ومن
+                        سجّلها وإيصالها. «سُدّد ٣٠ من ١٠٠» لا يكفي في مراجعة: متى، وبأيّ قيد،
+                        ومن أيّ صندوق، وأين ورقةُ التحويل.
                     */}
-                    {payments.length > 0 && (
-                        <Card className="p-4 sm:p-5">
-                            <h2 className="mb-3 font-bold text-[#111]">{t('السدادات')}</h2>
-                            <table className="w-full text-[13px]">
-                                <thead className="text-[12px] text-[#71717a]">
-                                    <tr>
-                                        <th className="p-2 text-start">{t('التاريخ')}</th>
-                                        <th className="p-2 text-start">{t('رقم القيد')}</th>
-                                        <th className="p-2 text-end">{t('المبلغ')}</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {payments.map((p, i) => (
-                                        <tr key={i} className="border-t border-[var(--ui-border,#e8e8e8)]">
-                                            <td className="p-2" dir="ltr">
-                                                {p.at ?? '—'}
-                                            </td>
-                                            <td className="p-2 font-mono text-[12px] text-[#6b7280]">{p.number}</td>
-                                            <td className="p-2 text-end font-semibold tabular-nums">{m(p.amount)}</td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </Card>
-                    )}
+                    <SupplierInvoicePaymentsCard payments={payments} total={invoice.total} paid={invoice.paid} outstanding={invoice.outstanding} m={m} />
                 </div>
 
                 {/*
@@ -426,76 +394,8 @@ export default function SupplierInvoiceShow() {
                 </DialogContent>
             </Dialog>
 
-            <Dialog open={paying} onOpenChange={(v) => !v && setPaying(false)}>
-                <DialogContent>
-                    <DialogHeader>
-                        <DialogTitle>
-                            {t('سداد')} — {invoice.reference}
-                        </DialogTitle>
-                    </DialogHeader>
-                    {/* والحشوُ على الجسم كأختها */}
-                    <form
-                        className="space-y-3 px-5 pb-2"
-                        onSubmit={(e) => {
-                            e.preventDefault();
-                            pay.post(route('admin.purchases.invoices.pay', invoice.id), {
-                                preserveScroll: true,
-                                onSuccess: () => {
-                                    pay.reset();
-                                    setPaying(false);
-                                },
-                            });
-                        }}
-                    >
-                        <label className="block text-[13px]">
-                            <span className="text-[#6b7280]">
-                                {t('المبلغ')} — {t('المتبقّي')} {m(invoice.outstanding)}
-                            </span>
-                            <Input
-                                type="number"
-                                step="0.001"
-                                min="0.001"
-                                max={invoice.outstanding}
-                                value={pay.data.amount}
-                                onChange={(e) => pay.setData('amount', e.target.value)}
-                                required
-                            />
-                        </label>
-                        {pay.errors.amount && <p className="text-[12px] text-[#b91c1c]">{pay.errors.amount}</p>}
-
-                        <label className="block text-[13px]">
-                            <span className="text-[#6b7280]">{t('تاريخ السداد')}</span>
-                            <Input
-                                type="date"
-                                value={pay.data.paid_at}
-                                onChange={(e) => pay.setData('paid_at', e.target.value)}
-                                required
-                            />
-                        </label>
-
-                        <label className="block text-[13px]">
-                            <span className="text-[#6b7280]">{t('من')}</span>
-                            <select
-                                className="mt-1 h-9 w-full rounded-md border border-[var(--ui-border,#e8e8e8)] px-2 text-[13px]"
-                                value={pay.data.from}
-                                onChange={(e) => pay.setData('from', e.target.value)}
-                            >
-                                <option value="cash">{t('الصندوق')}</option>
-                                <option value="bank">{t('البنك')}</option>
-                            </select>
-                        </label>
-
-                        <DialogFooter>
-                            <Button type="button" variant="ghost" onClick={() => setPaying(false)}>
-                                {t('إلغاء')}
-                            </Button>
-                            <Button type="submit" disabled={pay.processing}>
-                                {t('تسجيل السداد')}
-                            </Button>
-                        </DialogFooter>
-                    </form>
-                </DialogContent>
-            </Dialog>
+            <SupplierPaymentDialog open={paying} onClose={() => setPaying(false)} today={today} m={m}
+                invoice={{ id: invoice.id, reference: invoice.reference, paid: invoice.paid, outstanding: invoice.outstanding }} />
         </AdminLayout>
     );
 }

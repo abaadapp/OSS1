@@ -527,6 +527,9 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'tenant', 'business'
      * والسدادُ بعدهما: مالٌ يخرج مقابل دَينٍ نشأ، لا مقابل ورقةٍ وصلت.
      */
     Route::get('/purchases/invoices/{id}/attachment', [FinancialAttachmentController::class, 'supplierInvoice'])->name('purchases.invoices.attachment');
+    // وإيصالُ كلِّ دفعةٍ على السند — غيرُ مرفقه، والدفعةُ تُسأل عن سندها وشركتها معًا
+    Route::get('/purchases/invoices/{id}/payments/{payment}/receipt', [FinancialAttachmentController::class, 'supplierInvoicePayment'])
+        ->whereNumber('id')->whereNumber('payment')->name('purchases.invoices.payments.receipt');
     // وورقةُ السند نفسِه — غيرُ مرفق المورّد: ذاك ما وصل، وهذه ما سجّلناه
     Route::get('/purchases/invoices/{id}/pdf', [DocumentPrintController::class, 'supplierInvoice'])->name('purchases.invoices.pdf');
     Route::post('/purchases/invoices/{id}/approve', [SupplierInvoiceController::class, 'approve'])->name('purchases.invoices.approve');
