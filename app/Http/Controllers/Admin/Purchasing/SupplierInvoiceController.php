@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin\Purchasing;
 
 use App\Http\Controllers\Controller;
+use App\Models\BankAccount;
 use App\Models\JournalEntry;
 use App\Models\Project;
 use App\Models\PurchaseOrder;
@@ -249,6 +250,10 @@ class SupplierInvoiceController extends Controller
          * القيدُ يبقى مصدرَ التاريخ والمبلغ، وصفُّ الدفعة (`supplier_invoice_payments`)
          * يضيف إيصالَها. وما سُدّد قبل جدول الدفعات قيدٌ بلا صفّ: يُقرأ كما كان، ومصدرُه
          * من سطره الدائن ومسجِّلُه من القيد نفسِه — ممّا في الدفتر فعلًا، ولا إيصالَ يُخترع له.
+         *
+         * والبنكُ في السطر الدائن قد لا يحمل المفتاحَ النظاميّ: الحسابُ البنكيّ الثاني ورقةٌ
+         * بلا مفتاح (`BankAccountController::leafFor`)، والسدادُ من «البنك» يذهب إلى الرئيسيّ
+         * منها (`Bank::leaf`). فأوراقُ الحسابات البنكيّة كلُّها «بنك».
          */
         $entries = JournalEntry::where('business_id', $bid)
             ->where('sourceable_type', SupplierInvoice::class)
@@ -261,11 +266,19 @@ class SupplierInvoiceController extends Controller
         $entryUsers = User::where('business_id', $bid)
             ->whereIn('id', $entries->pluck('created_by')->filter()->unique()->all())->pluck('name', 'id');
 
-        $payments = $entries->map(function (JournalEntry $e) use ($invoice, $mayAttachment, $entryUsers) {
+        $bankLeaves = $entries->contains(fn (JournalEntry $e) => $e->supplierInvoicePayment === null)
+            ? BankAccount::where('business_id', $bid)->whereNotNull('account_id')->pluck('account_id')->map(fn ($id) => (int) $id)->all()
+            : [];
+
+        $payments = $entries->map(function (JournalEntry $e) use ($invoice, $mayAttachment, $entryUsers, $bankLeaves) {
             $payment = $e->supplierInvoicePayment;
             $credit = $e->lines->first(fn ($l) => (float) $l->credit > 0);
-            $side = $payment?->paid_from
-                ?? (in_array($credit?->account?->system_key, SupplierInvoicePayment::SOURCES, true) ? $credit->account->system_key : null);
+            $key = $credit?->account?->system_key;
+            $side = $payment?->paid_from ?? match (true) {
+                $key === SupplierInvoicePayment::CASH => SupplierInvoicePayment::CASH,
+                $key === SupplierInvoicePayment::BANK, in_array((int) $credit?->account_id, $bankLeaves, true) => SupplierInvoicePayment::BANK,
+                default => null,
+            };
 
             return [
                 'id' => $payment?->id,
@@ -544,12 +557,17 @@ class SupplierInvoiceController extends Controller
             'amount' => ['required', 'numeric', 'min:0.001'],
             'paid_at' => ['required', 'date'],
             'from' => ['required', Rule::in(SupplierInvoicePayment::SOURCES)],
-            /* إيصالُ هذه الدفعة — لا مرفقُ السند، فذاك فاتورةُ المورّد نفسُها */
-            'receipt' => ['nullable', 'file', 'max:'.SupplierInvoicePayment::MAX_KB, 'extensions:'.implode(',', SupplierInvoicePayment::EXTENSIONS)],
+            /*
+             * إيصالُ هذه الدفعة — لا مرفقُ السند، فذاك فاتورةُ المورّد نفسُها.
+             * والامتدادُ ثمّ المحتوى: صفحةُ HTML باسم «إيصال.pdf» تُردّ هنا لا تُخزَّن.
+             */
+            'receipt' => ['bail', 'nullable', 'file', 'max:'.SupplierInvoicePayment::MAX_KB,
+                'extensions:'.implode(',', SupplierInvoicePayment::EXTENSIONS), 'mimes:'.implode(',', SupplierInvoicePayment::CONTENT)],
             /* مفتاحُ النموذج — ضغطةٌ ثانية أو إعادةُ إرسالٍ لا تدفع مرّتين */
             'request_key' => ['nullable', 'string', 'max:64'],
         ], [
             'receipt.extensions' => __('صيغة الإيصال غير مدعومة — المقبول: PDF أو صورة (JPG، PNG، WEBP، HEIC).'),
+            'receipt.mimes' => __('صيغة الإيصال غير مدعومة — المقبول: PDF أو صورة (JPG، PNG، WEBP، HEIC).'),
             'receipt.max' => __('حجم الإيصال أكبر من 10 ميجابايت.'),
             'receipt.uploaded' => __('تعذّر رفع الإيصال — تأكّد أن حجمه دون 10 ميجابايت.'),
             'receipt.file' => __('الإيصال يجب أن يكون ملفًّا.'),

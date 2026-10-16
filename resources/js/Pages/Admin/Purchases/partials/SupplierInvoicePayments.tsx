@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { router } from '@inertiajs/react';
 import { Paperclip, Wallet } from 'lucide-react';
 import Field, { Select } from '@/Components/Field';
@@ -140,6 +140,10 @@ export function SupplierPaymentDialog({ open, onClose, invoice, today, m, defaul
     const [receipt, setReceipt] = useState<File | null>(null);
     const [key, setKey] = useState(newKey);
     const [errors, setErrors] = useState<Record<string, string>>({});
+    /* كلُّ حقلٍ بتسميته — قارئُ الشاشة ينطق «المبلغ» لا «حقلُ نصّ» */
+    const amountId = useId();
+    const dateId = useId();
+    const fromId = useId();
     const [busy, setBusy] = useState(false);
 
     useEffect(() => {
@@ -192,17 +196,17 @@ export function SupplierPaymentDialog({ open, onClose, invoice, today, m, defaul
                         )}
                     </div>
 
-                    <Field label="المبلغ" required error={errors.amount}>
-                        <Input type="number" step="0.001" min="0.001" max={invoice?.outstanding} dir="ltr" required
+                    <Field label="المبلغ" required error={errors.amount} htmlFor={amountId}>
+                        <Input id={amountId} type="number" step="0.001" min="0.001" max={invoice?.outstanding} dir="ltr" required
                             value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} />
                     </Field>
 
                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                        <Field label="تاريخ السداد" required error={errors.paid_at}>
-                            <Input type="date" dir="ltr" required value={form.paid_at} onChange={(e) => setForm({ ...form, paid_at: e.target.value })} />
+                        <Field label="تاريخ السداد" required error={errors.paid_at} htmlFor={dateId}>
+                            <Input id={dateId} type="date" dir="ltr" required value={form.paid_at} onChange={(e) => setForm({ ...form, paid_at: e.target.value })} />
                         </Field>
-                        <Field label="المصدر" required error={errors.from}>
-                            <Select value={form.from} onChange={(e) => setForm({ ...form, from: e.target.value })}
+                        <Field label="المصدر" required error={errors.from} htmlFor={fromId}>
+                            <Select id={fromId} value={form.from} onChange={(e) => setForm({ ...form, from: e.target.value })}
                                 options={[{ value: 'bank', label: 'بنك' }, { value: 'cash', label: 'نقد' }]} />
                         </Field>
                     </div>
