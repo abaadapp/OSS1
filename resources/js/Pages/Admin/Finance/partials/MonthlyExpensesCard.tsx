@@ -49,8 +49,8 @@ export default function MonthlyExpensesCard({ data, links, m }: {
         <Card className="mb-6 p-5">
             <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
-                    <h2 className="flex items-center gap-2 text-[15px] font-bold text-[#111]"><CalendarDays className="size-4" />{t('مصروفات الشهر')}</h2>
-                    <p className="mt-0.5 text-[12px] text-[#9ca3af]">{t('شهرية — مستقلة عن تبويبات المدة أدناه، ومن دفتر القيود')}</p>
+                    <h2 className="flex items-center gap-2 text-[15px] font-bold text-[#111]"><CalendarDays className="size-4" />{t('مصروفات الشهر من الدفتر')}</h2>
+                    <p className="mt-0.5 text-[12px] text-[#9ca3af]">{t('كامل مصروفات الشهر في دفتر القيود، بما فيها الرواتب وسندات الموردين والتكلفة — مستقلة عن تبويبات المدة أدناه')}</p>
                 </div>
                 <Field label="الشهر" className="w-[190px]">
                     <Select value={data.month} onChange={(e) => choose(e.target.value)} options={data.months.map((x) => ({ value: x.value, label: x.label }))} />
@@ -135,7 +135,7 @@ export default function MonthlyExpensesCard({ data, links, m }: {
                         </Button>
                         {links.expenses && (
                             <Button variant="ghost" size="sm" asChild>
-                                <SmartLink routeName="admin.expenses.index" href={route('admin.expenses.index', { month: data.month })}>{t('مصروفات الشهر')}</SmartLink>
+                                <SmartLink routeName="admin.expenses.index" href={route('admin.expenses.index', { month: data.month })}>{t('سجل مصروفات الشهر')}</SmartLink>
                             </Button>
                         )}
                         {links.supplier_invoices && (

@@ -53,6 +53,8 @@ export interface Stat {
     color: string;
     trend?: string;
     up?: boolean;
+    /** سطرٌ قصير تحت الرقم يقول من أين جاء — حين يشبه رقمًا آخر في الشاشة نفسِها */
+    hint?: string;
 }
 
 const TONE: Record<string, string> = {
@@ -137,6 +139,7 @@ export default function StatCard({ stat, index = 0 }: { stat: Stat; index?: numb
                         <p className="mt-1.5 text-[20px] font-bold tracking-tight text-[#111]">
                             {stat.value}
                         </p>
+                        {stat.hint && <p className="mt-0.5 text-[11.5px] leading-snug text-[#9ca3af]">{t(stat.hint)}</p>}
                     </div>
                     <span
                         className={cn(

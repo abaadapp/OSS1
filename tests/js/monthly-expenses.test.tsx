@@ -1,7 +1,13 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import Summary from '@/Pages/Admin/Finance/Summary';
 import MonthlyExpensesCard, { type MonthlyExpenses } from '@/Pages/Admin/Finance/partials/MonthlyExpensesCard';
+import { pageProps } from './setup';
+
+vi.mock('@/Layouts/AdminLayout', () => ({ default: ({ children }: { children: React.ReactNode }) => <div>{children}</div> }));
+vi.mock('@/Components/SectionTabs', () => ({ default: () => null, FINANCE_TABS: [] }));
+vi.mock('@/Components/RangeTabs', () => ({ default: () => null }));
 
 /**
  * «مصروفات الشهر» — بطاقةٌ شهريّة تعرض ما يقوله الدفتر ولا تحسب شيئًا.
@@ -32,7 +38,8 @@ describe('MonthlyExpensesCard', () => {
     it('reads the month total, its groups, the comparison and the obligations', () => {
         render(<MonthlyExpensesCard data={data()} links={{ expenses: true, supplier_invoices: true, payroll: true }} m={m} />);
 
-        expect(screen.getByText('مصروفات الشهر')).toBeInTheDocument();
+        expect(screen.getByText('مصروفات الشهر من الدفتر')).toBeInTheDocument();
+        expect(screen.getByText(/بما فيها الرواتب وسندات الموردين والتكلفة/)).toBeInTheDocument();
         expect(screen.getByText('1200.000 ر.ع')).toBeInTheDocument();
         expect(screen.getByText('رواتب ومستحقات موظفين')).toBeInTheDocument();
         expect(screen.getByText(/50٪ عن سبتمبر 2026/)).toBeInTheDocument();
@@ -49,12 +56,30 @@ describe('MonthlyExpensesCard', () => {
         await user.click(screen.getByRole('button', { name: /عرض تفاصيل المصروفات/ }));
         expect(screen.getByText('5150')).toBeInTheDocument();
         expect(screen.getByRole('link', { name: 'قيود الشهر في اليومية' })).toHaveAttribute('href', expect.stringContaining('admin.finance.journal'));
-        expect(screen.getAllByRole('link', { name: 'مصروفات الشهر' })).toHaveLength(1);
+        expect(screen.getAllByRole('link', { name: 'سجل مصروفات الشهر' })).toHaveLength(1);
         expect(screen.queryByRole('link', { name: 'سندات الموردين' })).not.toBeInTheDocument();
         expect(screen.queryByRole('link', { name: 'مسيرات الرواتب' })).not.toBeInTheDocument();
 
         rerender(<MonthlyExpensesCard data={data({ groups: [], total: 0, change: { amount: 0, percent: null } })} links={{ expenses: false, supplier_invoices: false, payroll: false }} m={m} />);
         expect(screen.getByText('لا مصروفات مقيّدة في هذا الشهر')).toBeInTheDocument();
         expect(screen.getByText(/لا مصروفات في سبتمبر 2026 للمقارنة/)).toBeInTheDocument();
+    });
+});
+
+describe('Finance summary', () => {
+    it('names the two expense figures apart — paid in the period, and the whole month from the books', () => {
+        Object.assign(pageProps, {
+            range: 'month', cash: 100, bank: 200, accounts: [],
+            period: { sales: 900, expenses: 70, profit: 500, tax: 10, in: 900, out: 70, transfers: 0 },
+            dues: { expenses: 0, invoices: 0, payroll: 0, total: 0, overdue: 0 },
+            receivables: { total: 0, overdue: 0, due_soon: 0, credit: 0, invoices: 0, customers: 0 },
+            monthly: data(), monthly_links: { expenses: true, supplier_invoices: true, payroll: true },
+        });
+        render(<Summary />);
+
+        expect(screen.getByText('المصروفات المدفوعة في المدة')).toBeInTheDocument();
+        expect(screen.getByText('المسدَّدة من سجل المصروفات فقط')).toBeInTheDocument();
+        expect(screen.getByText('مصروفات الشهر من الدفتر')).toBeInTheDocument();
+        expect(screen.queryByText('المصروفات')).not.toBeInTheDocument();
     });
 });
