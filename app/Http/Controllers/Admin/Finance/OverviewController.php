@@ -11,6 +11,8 @@ use App\Models\Transaction;
 use App\Support\Bank;
 use App\Support\Demo;
 use App\Support\Ledger;
+use App\Support\MonthlyExpenses;
+use App\Support\Permissions;
 use App\Support\Receivables;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -99,6 +101,19 @@ class OverviewController extends Controller
              * العميل: ثلاث شاشاتٍ برقمٍ واحد.
              */
             'receivables' => Receivables::totals($bid),
+            /*
+             * ومصروفاتُ الشهر — شهرٌ تقويميٌّ يُختار بنفسه، لا يتبع المدّة أعلاه.
+             *
+             * الإجماليُّ من الدفتر (صافي حسابات المصروف في قيود الشهر) فيطابق
+             * اليوميّة، والمدفوعُ والمستحقُّ من مستندات الشهر — انظر `MonthlyExpenses`.
+             * والروابطُ إلى مصادرها لمن يفتح أقسامَها وحدهم.
+             */
+            'monthly' => MonthlyExpenses::for($bid, is_string($request->query('expense_month')) ? $request->query('expense_month') : null),
+            'monthly_links' => [
+                'expenses' => (bool) auth()->user()?->allows('expenses'),
+                'supplier_invoices' => (bool) (auth()->user()?->allows('purchases') && auth()->user()?->may(Permissions::INVOICE_VIEW)),
+                'payroll' => (bool) (auth()->user()?->allows('employees') && auth()->user()?->may(Permissions::PAYROLL_VIEW)),
+            ],
         ]);
     }
 

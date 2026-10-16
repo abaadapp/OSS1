@@ -59,6 +59,7 @@ class EventOperation extends Model
         'completed_at' => 'datetime',
         'cancelled_at' => 'datetime',
         'readiness_override' => 'array',
+        'tasks_published_at' => 'datetime',
     ];
 
     public function business(): BelongsTo
@@ -110,6 +111,12 @@ class EventOperation extends Model
     public function crew(): HasMany
     {
         return $this->hasMany(OperationCrewAssignment::class)->orderBy('id');
+    }
+
+    /** مهامُّ المشروع التي تقف على هذه الفعاليّة — `ProjectTask` نفسُها لا نسخةٌ عنها */
+    public function tasks(): HasMany
+    {
+        return $this->hasMany(ProjectTask::class);
     }
 
     public function checklists(): HasMany

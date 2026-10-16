@@ -14,6 +14,7 @@ use App\Models\Project;
 use App\Models\ProjectTask;
 use App\Models\Quotation;
 use App\Models\User;
+use App\Support\Operations\EventTasks;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Collection;
 
@@ -83,6 +84,8 @@ final class Audience
                 $target instanceof ProjectTask => [$target->assignee_id],
                 $target instanceof OperationCrewAssignment => [$target->user_id],
                 $target instanceof OperationIncident => [$target->assigned_to],
+                /* ومن له مهامٌّ مفتوحة على الفعاليّة — جمهورُ رسائل مهامّها */
+                $target instanceof EventOperation => EventTasks::assigneeIds($target),
                 default => [],
             },
             self::LEAD => [self::operationOf($target)?->operations_lead_id],

@@ -81,6 +81,7 @@ use App\Http\Controllers\Auth\PasswordResetController;
 use App\Http\Controllers\Auth\RegisterController;
 use App\Http\Controllers\BackupController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\EventTaskLinkController;
 use App\Http\Controllers\ExportController;
 use App\Http\Controllers\HealthController;
 use App\Http\Controllers\NotificationController;
@@ -1097,6 +1098,9 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'tenant', 'business'
     Route::post('/operations/{id}/organizers', [EventOperationController::class, 'storeOrganizer'])->whereNumber('id')->name('operations.organizers.store');
     Route::put('/operations/{id}/organizers/{oid}', [EventOperationController::class, 'updateOrganizer'])->whereNumber('id')->whereNumber('oid')->name('operations.organizers.update');
     Route::post('/operations/{id}/organizers-lead', [EventOperationController::class, 'organizersLead'])->whereNumber('id')->name('operations.organizersLead');
+    /* مهامُّ الفعاليّة إلى أصحابها — النشرُ مرساةُ رسالة كلّ موظّف، وتجديدُ رابطه بيد */
+    Route::post('/operations/{id}/tasks/publish', [EventOperationController::class, 'publishTasks'])->whereNumber('id')->name('operations.tasks.publish');
+    Route::post('/operations/{id}/tasks/links/{userId}', [EventOperationController::class, 'rotateTaskLink'])->whereNumber('id')->whereNumber('userId')->name('operations.tasks.rotate');
     Route::post('/operations/{id}/checklists', [EventOperationController::class, 'attachChecklist'])->whereNumber('id')->name('operations.checklists.store');
     Route::post('/operations/{id}/checklists/{clid}/items', [EventOperationController::class, 'storeChecklistItem'])->whereNumber('id')->whereNumber('clid')->name('operations.checklists.items.store');
     Route::post('/operations/{id}/checklist-items/{iid}/complete', [EventOperationController::class, 'completeChecklistItem'])->whereNumber('id')->whereNumber('iid')->name('operations.checklistItems.complete');
@@ -1233,6 +1237,22 @@ Route::get('/i/{token}', [PublicDocumentController::class, 'show'])
 Route::post('/i/{token}/decision', [PublicDocumentController::class, 'decide'])
     ->where('token', '[A-Za-z0-9]{22}')
     ->name('paper.decide');
+
+/*
+ * «مهامي في الفعاليّة» — ما يفتحه زرُّ رسالة واتساب إلى الموظّف.
+ *
+ * بلا حساب: الرمزُ (٤٠ حرفًا، يُبحث ببصمته، وله انتهاء) يفتح مهامَّ صاحبه في
+ * فعاليّته وحدها، و«تمّت» لا تقبل إلّا مهمّةً له فيها — انظر EventTaskLinkController.
+ */
+Route::get('/t/{token}', [EventTaskLinkController::class, 'show'])
+    ->where('token', '[A-Za-z0-9]{40}')
+    ->name('event-tasks.show');
+Route::post('/t/{token}/tasks/{task}/done', [EventTaskLinkController::class, 'done'])
+    ->where(['token' => '[A-Za-z0-9]{40}', 'task' => '[0-9]+'])->middleware('throttle:60,10')
+    ->name('event-tasks.done');
+Route::post('/t/{token}/tasks/{task}/reopen', [EventTaskLinkController::class, 'reopen'])
+    ->where(['token' => '[A-Za-z0-9]{40}', 'task' => '[0-9]+'])->middleware('throttle:60,10')
+    ->name('event-tasks.reopen');
 
 /*
  * حزمةُ التسليم من رابط العميل — تُقرأ ويُقرَّر منها وتُفتح ملفّاتُها.

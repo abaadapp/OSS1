@@ -154,6 +154,11 @@ class TenantTables
         'management_reviews', 'management_decisions', 'operation_consumable_issues',
         /* وآخرُ نقصِ مخزونٍ نُبّه عنه لكلّ مشروع — بعد المشروع، ولا يشير إليه شيء */
         'inventory_shortfall_states',
+        /*
+         * ومهامُّ الفعاليّة على واتساب: رابطُ كلّ موظّفٍ إلى مهامّه فيها، وقيدُ ما
+         * أُرسل إليه — بعد الفعاليّة والمراسلات وتشغيلات الأتمتة التي يشيران إليها.
+         */
+        'event_task_links', 'event_task_dispatches',
     ];
 
     /**
@@ -176,6 +181,8 @@ class TenantTables
         'projects' => ['cancellation_fee_invoice_id'],
         /* والمجموعةُ تشير إلى تنفيذها وهو يشير إليها — تُكتب بعده (المرحلة 9) */
         'import_datasets' => ['dry_run_id', 'import_run_id'],
+        /* والمهمّةُ قد تقف على فعاليّة تُكتب بعدها — والفعاليّةُ تتبع المشروع الذي تتبعه المهمّة */
+        'project_tasks' => ['event_operation_id'],
     ];
 
     /**

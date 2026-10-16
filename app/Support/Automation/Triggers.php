@@ -7,6 +7,8 @@ use App\Support\Automation\Triggers\CrewAssignment;
 use App\Support\Automation\Triggers\DeliveryAwaiting;
 use App\Support\Automation\Triggers\EquipmentCheckout;
 use App\Support\Automation\Triggers\EquipmentUnreturned;
+use App\Support\Automation\Triggers\EventTasksAssigned;
+use App\Support\Automation\Triggers\EventTasksReminder;
 use App\Support\Automation\Triggers\ExpenseUnpaid;
 use App\Support\Automation\Triggers\ForecastStale;
 use App\Support\Automation\Triggers\InvoiceDue;
@@ -50,6 +52,9 @@ final class Triggers
         'equipment_checkout' => EquipmentCheckout::class,
         'equipment_unreturned' => EquipmentUnreturned::class,
         'operation_closeout' => OperationCloseout::class,
+        /* ومهامُّ الفعاليّة إلى أصحابها — رسالةٌ لكلّ موظّفٍ بمهامّه (واتساب أو تنبيه) */
+        'event_tasks_assigned' => EventTasksAssigned::class,
+        'event_tasks_reminder' => EventTasksReminder::class,
         /* الإدارةُ — المرحلة 11: تذكيرٌ بالتقرير والمراجعة والتوقّع — ولا قرارَ يُتّخذ */
         'management_report_ready' => ManagementReportReady::class,
         'management_review_due' => ManagementReviewDue::class,

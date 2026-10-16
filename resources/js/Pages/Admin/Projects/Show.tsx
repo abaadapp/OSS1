@@ -168,7 +168,8 @@ interface OperationRow {
 }
 
 interface Member { id: number; user_id: number; name: string | null; role: string | null }
-interface Task { id: number; title: string; description: string | null; assignee_id: number | null; assignee: string | null; due_at: string | null; status: string; priority: string; completed_at: string | null }
+interface Task { id: number; title: string; description: string | null; assignee_id: number | null; assignee: string | null; event_operation_id?: number | null; due_at: string | null; status: string; priority: string; completed_at: string | null }
+interface TaskOperation { id: number; code: string; name: string }
 interface ChangeOrderRow { id: number; label: string; sequence: number; title: string; status: string; state: string; total_delta: number | null; new_starts_at: string | null; requested_by_party: string; sent_at: string | null; decided_at: string | null }
 
 interface Props {
@@ -184,6 +185,8 @@ interface Props {
     operations: OperationRow[] | null;
     /** توقّعُ المخزون — قراءةٌ لا خصم، لمن يفتح المخزون (`InventoryForecast`) */
     inventory_forecast?: ProjectForecast | null;
+    /** فعاليّاتُ المشروع لنموذج المهمّة — تقف المهمّةُ على إحداها فتصل صاحبَها مع أخواتها */
+    task_operations?: TaskOperation[];
     /* الأداء — المرحلة 11: الربحيّةُ بصيغتها الواحدة واكتمالُها وخطُّ زمنِها؛ لمن يقرأ تحليلات المشاريع */
     performance: Performance | null;
     billing: Billing;
@@ -233,7 +236,7 @@ interface Performance {
  * المقبولة)، وما يجب على الفريق تنفيذَه الآن (الحاليّ). والقيمةُ الحاليّة
  * تُشتقّ في الخادم — انظر `ProjectScope`.
  */
-export default function ProjectShow({ project: p, scope, requirements, members, tasks, change_orders, financials, delivery, cancellation, operations, performance, billing, invoices, close_blockers, workflow, quotation, scope_of_work, channels, users, may, contacts = [], purchases = null, inventory_forecast = null }: Props) {
+export default function ProjectShow({ project: p, scope, requirements, members, tasks, change_orders, financials, delivery, cancellation, operations, performance, billing, invoices, close_blockers, workflow, quotation, scope_of_work, channels, users, may, contacts = [], purchases = null, inventory_forecast = null, task_operations = [] }: Props) {
     const t = useTranslate();
     const { context } = usePage<PageProps>().props;
     const { errors } = usePage().props as { errors?: Record<string, string> };
@@ -476,7 +479,7 @@ export default function ProjectShow({ project: p, scope, requirements, members, 
             {current === 'scope' && <ScopeTab scope={scope} m={m} />}
             {current === 'requirements' && <RequirementsTab p={p} requirements={requirements} items={scope.current.items} may={may} open={open} />}
             {current === 'team' && <TeamTab p={p} members={members} users={users} may={may} open={open} />}
-            {current === 'tasks' && <TasksTab p={p} tasks={tasks} users={users} may={may} />}
+            {current === 'tasks' && <TasksTab p={p} tasks={tasks} users={users} may={may} events={task_operations} />}
             {current === 'change_orders' && <ChangeOrdersTab p={p} rows={change_orders} m={m} may={may} open={open} />}
             {current === 'delivery' && <DeliveryTab p={p} delivery={delivery} may={may} open={open} />}
             {current === 'communications' && <CommunicationsTab projectId={p.id} open={open} />}
@@ -919,9 +922,11 @@ function TeamTab({ p, members, users, may, open }: { p: Project; members: Member
 
 /* ─────────────────────────── المهامّ ─────────────────────────── */
 
-function TasksTab({ p, tasks, users, may }: { p: Project; tasks: Task[]; users: { id: number; name: string }[]; may: Props['may'] }) {
+function TasksTab({ p, tasks, users, may, events }: { p: Project; tasks: Task[]; users: { id: number; name: string }[]; may: Props['may']; events: TaskOperation[] }) {
     const t = useTranslate();
-    const [form, setForm] = useState({ title: '', description: '', assignee_id: '', due_at: '', priority: 'normal' });
+    const blank = { title: '', description: '', assignee_id: '', due_at: '', priority: 'normal', event_operation_id: '' };
+    const [form, setForm] = useState(blank);
+    const eventOf = (id: number | null | undefined) => events.find((e) => e.id === id);
 
     return (
         <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
@@ -934,7 +939,10 @@ function TasksTab({ p, tasks, users, may }: { p: Project; tasks: Task[]; users: 
                             <li key={task.id} className="flex items-start justify-between gap-3 py-2">
                                 <div className={task.status === 'done' ? 'text-[#9ca3af] line-through' : ''}>
                                     <div className="font-medium">{task.title}{task.priority === 'high' && <span className="ms-2 rounded-full bg-[#fef2f2] px-2 py-0.5 text-[11px] text-[#b91c1c] no-underline">{t('عاجل')}</span>}</div>
-                                    <div className="text-[12px] text-[#6b7280]">{task.assignee ?? t('بلا منفّذ')}{task.due_at && <span dir="ltr"> · {task.due_at}</span>}</div>
+                                    <div className="text-[12px] text-[#6b7280]">
+                                        {task.assignee ?? t('بلا منفّذ')}{task.due_at && <span dir="ltr"> · {task.due_at}</span>}
+                                        {eventOf(task.event_operation_id) && <span className="ms-2 rounded-full bg-[#f5f3ff] px-2 py-0.5 text-[11px] text-[#6d28d9] no-underline">{t('فعالية')}: {eventOf(task.event_operation_id)!.code}</span>}
+                                    </div>
                                     {task.description && <div className="mt-0.5 text-[12px] text-[#6b7280]">{task.description}</div>}
                                 </div>
                                 {may.manage && (
@@ -959,7 +967,13 @@ function TasksTab({ p, tasks, users, may }: { p: Project; tasks: Task[]; users: 
                         <Field label="المنفّذ"><Select placeholder="بلا منفّذ" value={form.assignee_id} onChange={(e) => setForm({ ...form, assignee_id: e.target.value })} options={users.map((u) => ({ label: u.name, value: u.id }))} /></Field>
                         <Field label="الموعد"><Input type="date" dir="ltr" value={form.due_at} onChange={(e) => setForm({ ...form, due_at: e.target.value })} /></Field>
                         <Field label="الأولوية"><Select value={form.priority} onChange={(e) => setForm({ ...form, priority: e.target.value })} options={[{ label: 'منخفضة', value: 'low' }, { label: 'عادية', value: 'normal' }, { label: 'عاجلة', value: 'high' }]} /></Field>
-                        <Button disabled={form.title.trim() === ''} onClick={() => router.post(route('admin.projects.tasks.store', p.id), form, { preserveScroll: true, onSuccess: () => setForm({ title: '', description: '', assignee_id: '', due_at: '', priority: 'normal' }) })}><Plus />{t('إضافة')}</Button>
+                        {events.length > 0 && (
+                            <Field label="الفعالية" hint="اختياري — مهام الموظف في الفعالية تصله في رسالة واحدة">
+                                <Select placeholder="مهمة عامة للمشروع" value={form.event_operation_id} onChange={(e) => setForm({ ...form, event_operation_id: e.target.value })}
+                                    options={events.map((e) => ({ label: `${e.code} — ${e.name}`, value: e.id }))} />
+                            </Field>
+                        )}
+                        <Button disabled={form.title.trim() === ''} onClick={() => router.post(route('admin.projects.tasks.store', p.id), form, { preserveScroll: true, onSuccess: () => setForm(blank) })}><Plus />{t('إضافة')}</Button>
                     </div>
                 </Card>
             )}

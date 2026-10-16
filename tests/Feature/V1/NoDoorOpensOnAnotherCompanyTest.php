@@ -271,6 +271,8 @@ class NoDoorOpensOnAnotherCompanyTest extends TestCase
             $param === 'item' => $this->ids['item'],
             $param === 'contactId' => $this->ids['contactId'],
             $param === 'oid' => $this->ids['oid'],
+            /* موظّفُ «أ» — رابطُ مهامّه في فعاليّتها لا يُجدَّد من «ب» */
+            $param === 'userId' => (int) $this->ownerA->id,
             $param === 'attachment', $param === 'imageId', $param === 'addon', $param === 'variant', $param === 'run' => 1,
             $param === 'tid' && $second === 'operations' => $this->ids['operations.tid'],
             $param === 'tid' => $this->ids['tid'],
