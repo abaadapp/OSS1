@@ -22,6 +22,7 @@ use App\Support\CustomerContacts;
 use App\Support\Demo;
 use App\Support\DocumentTemplates;
 use App\Support\Emojis;
+use App\Support\InventoryForecast;
 use App\Support\InvoiceBranding;
 use App\Support\Mailer;
 use App\Support\OrderStatus;
@@ -526,11 +527,24 @@ class PageController extends Controller
         $stock = request('stock');
         $allowed = ['متوفر', 'منخفض', 'نفد المخزون'];
 
+        $bid = auth()->user()->business_id ?? Demo::bid();
+        $forecast = InventoryForecast::for($bid);
+
         return Inertia::render('Admin/Inventory/Index', [
             'inventory' => Demo::inventory(),
             'branches' => Demo::branches(),
             'currentBranchId' => Demo::currentBranchId(),
             'stockFilter' => in_array($stock, $allowed, true) ? $stock : null,
+            /*
+             * توقّعُ المخزون للمشاريع القادمة — قراءةٌ لا خصم: المنتجاتُ التي يحتاجها
+             * مشروعٌ في النافذة، بخطّها الزمنيّ، والناقصُ أوّلًا. ومن يملك الإعدادات
+             * يغيّر النافذة من «الإعدادات».
+             */
+            'forecast' => [
+                'days' => $forecast['days'], 'from' => $forecast['from'], 'to' => $forecast['to'],
+                'products' => array_values($forecast['products']),
+                'may_settings' => (bool) auth()->user()?->allows('settings'),
+            ],
         ]);
     }
 

@@ -76,6 +76,9 @@ class SettingController extends Controller
          */
         'quotation_discount_percent' => ['sometimes', 'nullable', 'numeric', 'min:0', 'max:100'],
 
+        /* نافذةُ توقّع المخزون للمشاريع القادمة بالأيّام — انظر `InventoryForecast::days` */
+        'inventory_forecast_days' => ['sometimes', 'nullable', 'integer', 'min:1', 'max:60'],
+
         // العملة وعرضها
         'currency' => ['sometimes', 'nullable', 'string', 'size:3', 'alpha'],
         'decimals' => ['sometimes', 'nullable', 'integer', 'min:0', 'max:4'],
@@ -152,6 +155,7 @@ class SettingController extends Controller
             'shop_name' => __('اسم الشركة'),
             'vat_rate' => __('نسبة الضريبة'),
             'quotation_discount_percent' => __('أعلى نسبة خصم بلا اعتماد'),
+            'inventory_forecast_days' => __('أيام توقّع المخزون'),
             'vat_filed_through' => __('آخر إقرار قُدِّم'),
         ]);
 

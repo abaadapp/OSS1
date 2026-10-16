@@ -15,6 +15,7 @@ use App\Models\Project;
 use App\Models\ProjectTask;
 use App\Models\Quotation;
 use App\Models\User;
+use App\Support\Operations\EventTasks;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Collection;
 
@@ -47,7 +48,10 @@ final class Audience
     /** قائدُ عمليات الفعاليّة — المرحلة 10 */
     public const LEAD = 'lead';
 
-    public const ALL = [self::CUSTOMER, self::ASSIGNEE, self::OWNER, self::CREATOR, self::INITIATOR, self::FINANCE, self::MANAGEMENT, self::CUSTOM, self::LEAD];
+    /** من يفتح قسم المخزون — نقصُ المخزون المتوقَّع يبلغه */
+    public const INVENTORY = 'inventory';
+
+    public const ALL = [self::CUSTOMER, self::ASSIGNEE, self::OWNER, self::CREATOR, self::INITIATOR, self::FINANCE, self::MANAGEMENT, self::CUSTOM, self::LEAD, self::INVENTORY];
 
     public const LABELS = [
         self::CUSTOMER => 'العميل',
@@ -59,6 +63,7 @@ final class Audience
         self::MANAGEMENT => 'الإدارة',
         self::CUSTOM => 'قائمة محدَّدة',
         self::LEAD => 'قائد عمليات الفعاليّة',
+        self::INVENTORY => 'المخزون',
     ];
 
     public static function isExternal(string $audience): bool
@@ -82,6 +87,8 @@ final class Audience
                 $target instanceof OperationIncident => [$target->assigned_to],
                 /* والمسؤولُ عن مستند الشركة — وإلّا من أضافه، فلا ينتهي مستندٌ بلا أحدٍ يسمع */
                 $target instanceof DocumentRecord => [$target->responsible_user_id ?: $target->created_by],
+                /* ومن له مهامٌّ مفتوحة على الفعاليّة — جمهورُ رسائل مهامّها */
+                $target instanceof EventOperation => EventTasks::assigneeIds($target),
                 default => [],
             },
             self::LEAD => [self::operationOf($target)?->operations_lead_id],
@@ -101,6 +108,7 @@ final class Audience
         return match ($audience) {
             self::MANAGEMENT => $active()->whereIn('role', ['admin', 'manager'])->get(),
             self::FINANCE => $active()->get()->filter(fn (User $u) => $u->allows('finance'))->values(),
+            self::INVENTORY => $active()->get()->filter(fn (User $u) => $u->allows('inventory'))->values(),
             default => collect(),
         };
     }

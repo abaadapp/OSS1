@@ -39,6 +39,7 @@ class CommunicationTemplate extends Model
 
     protected $casts = [
         'variables' => 'array',
+        'header_variables' => 'array',
     ];
 
     public function business(): BelongsTo

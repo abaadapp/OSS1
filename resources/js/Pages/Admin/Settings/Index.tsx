@@ -302,6 +302,7 @@ export default function SettingsIndex() {
         vat_number: get('vat_number'),
         vat_filed_through: get('vat_filed_through'),
         quotation_discount_percent: get('quotation_discount_percent', '0'),
+        inventory_forecast_days: get('inventory_forecast_days', '14'),
         tax_mode: get('tax_mode', 'exclusive'),
 
         currency: get('currency', 'OMR'),
@@ -855,6 +856,25 @@ export default function SettingsIndex() {
                                     تخرج، ويُضبطان في الجلسة نفسِها عند تجهيز
                                     الشركة.
                                 */}
+                                {/* ونافذةُ توقّع المخزون — رقمٌ يحكم ما يُقرأ «قادمًا» في المشاريع والمخزون */}
+                                <SettingsGroup title="توقّع المخزون">
+                                    <Field
+                                        label="أيام توقّع المخزون"
+                                        hint="المشاريع التي تبدأ خلالها تُحسب في توقّع المخزون ونقصه — قراءة لا خصم."
+                                        error={form.errors.inventory_forecast_days}
+                                    >
+                                        <Input
+                                            type="number"
+                                            step="1"
+                                            min="1"
+                                            max="60"
+                                            dir="ltr"
+                                            value={form.data.inventory_forecast_days}
+                                            onChange={(e) => form.setData('inventory_forecast_days', e.target.value)}
+                                        />
+                                    </Field>
+                                </SettingsGroup>
+
                                 <SettingsGroup title="عروض الأسعار">
                                     <Field
                                         label="أعلى نسبة خصم بلا اعتماد"

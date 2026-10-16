@@ -16,6 +16,7 @@ use App\Models\ProjectTask;
 use App\Models\Quotation;
 use App\Models\QuotationItem;
 use App\Models\User;
+use App\Support\Operations\EventTasks;
 use App\Support\Policy\Registry;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Carbon;
@@ -420,6 +421,7 @@ final class Projects
         return ProjectTask::create([
             'business_id' => $project->business_id,
             'project_id' => $project->id,
+            'event_operation_id' => self::operationIdOf($project, $data['event_operation_id'] ?? null),
             'title' => self::text($data['title'] ?? null, 255) ?? '',
             'description' => self::text($data['description'] ?? null, 5000),
             'assignee_id' => self::userIdOf($project, $data['assignee_id'] ?? null),
@@ -439,13 +441,87 @@ final class Projects
             'title' => self::text($data['title'] ?? null, 255) ?? $task->title,
             'description' => array_key_exists('description', $data) ? self::text($data['description'], 5000) : $task->description,
             'assignee_id' => array_key_exists('assignee_id', $data) ? self::userIdOf($task->project, $data['assignee_id']) : $task->assignee_id,
+            'event_operation_id' => array_key_exists('event_operation_id', $data)
+                ? self::operationIdOf($task->project, $data['event_operation_id'], $task->event_operation_id) : $task->event_operation_id,
             'due_at' => array_key_exists('due_at', $data) ? self::date($data['due_at']) : $task->due_at,
             'priority' => in_array($data['priority'] ?? null, ProjectTask::PRIORITIES, true) ? $data['priority'] : $task->priority,
-            'status' => $status,
-            'completed_at' => $status === ProjectTask::DONE ? ($task->completed_at ?? now()) : null,
         ]);
 
+        /* والحالُ من بابها الواحد — هو نفسُه الذي يمرّ به رابطُ الموظّف */
+        if ($status !== $task->status) {
+            self::setTaskStatus($task, $status, $actor);
+        }
+
         return $task->fresh();
+    }
+
+    /**
+     * إنهاءُ المهمّة أو إعادةُ فتحها — البابُ الواحد.
+     *
+     * تمرّ به شاشةُ المشروع ورابطُ الموظّف (`/t/{token}`) معًا: لا يكتب واتساب
+     * ولا React الحالَ بطريقٍ آخر. «تمّت» تكتب `completed_at` الآن، و«إعادة
+     * فتح» تمحوه — ويُقيَّد كلاهما في الأثر. وإنهاءُ آخر مهام الموظّف في فعاليّةٍ
+     * يُنبّه قائدَ عمليّاتها (`EventTasks::afterDone`).
+     *
+     * @param  string|null  $via  كيف — «من رابط المهام» مثلًا، يُكتب في الأثر
+     */
+    public static function setTaskStatus(ProjectTask $task, string $status, ?User $actor = null, ?string $via = null): ProjectTask
+    {
+        if (! in_array($status, ProjectTask::STATUSES, true)) {
+            throw new RuntimeException(__('حالةٌ غير معروفة.'));
+        }
+
+        $changed = DB::transaction(function () use ($task, $status) {
+            $locked = ProjectTask::where('business_id', $task->business_id)->lockForUpdate()->findOrFail($task->id);
+
+            if ($locked->status === $status) {
+                return null;
+            }
+
+            $locked->update(['status' => $status, 'completed_at' => $status === ProjectTask::DONE ? now() : null]);
+
+            return $locked;
+        });
+
+        if ($changed === null) {
+            return $task->fresh();
+        }
+
+        $project = Project::where('business_id', $changed->business_id)->find($changed->project_id);
+        Activity::log('status', ($status === ProjectTask::DONE ? 'أنهى المهمّة «' : 'أعاد فتح المهمّة «').$changed->title.'» في المشروع '.($project?->code ?? '')
+            .($via !== null ? ' — '.$via : ''), [
+                'business_id' => (int) $changed->business_id, 'subject_id' => $changed->project_id, 'subject_type' => 'project',
+                'icon' => $status === ProjectTask::DONE ? 'check-circle' : 'rotate-ccw',
+            ]);
+
+        if ($status === ProjectTask::DONE) {
+            EventTasks::afterDone($changed);
+        }
+
+        return $changed->fresh();
+    }
+
+    /**
+     * فعاليّةُ المهمّة — من فعاليّات المشروع نفسِه، أو لا شيء.
+     *
+     * والملغاةُ لا تُختار لمهمّةٍ جديدة؛ ومهمّةٌ قائمةٌ عليها تبقى كما هي (`$keep`).
+     */
+    private static function operationIdOf(Project $project, mixed $id, ?int $keep = null): ?int
+    {
+        if ($id === null || $id === '') {
+            return null;
+        }
+
+        $operation = EventOperation::where('business_id', $project->business_id)->where('project_id', $project->id)->find((int) $id);
+
+        if ($operation === null) {
+            throw new RuntimeException(__('هذه الفعاليّة ليست من فعاليّات هذا المشروع.'));
+        }
+        if ($operation->status === EventOperation::CANCELLED && (int) $operation->id !== (int) $keep) {
+            throw new RuntimeException(__('الفعاليّة ملغاة — اختر غيرها.'));
+        }
+
+        return (int) $operation->id;
     }
 
     private static function userIdOf(Project $project, mixed $id): ?int

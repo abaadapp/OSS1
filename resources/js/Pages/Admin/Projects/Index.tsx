@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { router, usePage } from '@inertiajs/react';
-import { ArrowLeft, CalendarDays, ListChecks, MapPin, MoreHorizontal, Plus, UserRound } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, CalendarDays, ListChecks, MapPin, MoreHorizontal, Plus, UserRound } from 'lucide-react';
 import AdminLayout from '@/Layouts/AdminLayout';
 import PageHeader from '@/Components/PageHeader';
 import SmartLink from '@/Components/SmartLink';
@@ -41,6 +41,8 @@ interface Row {
     delivery: { id: number; status: string } | null;
     /** المسارُ من الخادم — `ProjectWorkflow`، المصدرُ نفسُه الذي تقرؤه صفحةُ المشروع */
     workflow: Workflow;
+    /** منتجاتٌ مخزّنة ينقصها المشروعُ القادم في التوقّع — لمن يفتح المخزون (`InventoryForecast`) */
+    inventory_shortages?: number;
 }
 
 interface QuoteRow {
@@ -420,6 +422,12 @@ function ProjectCard({ p, mine, money: m, manage }: { p: Row; mine: boolean; mon
                         <span className="inline-flex items-center gap-1 rounded-full bg-[#fef2f2] px-2 py-0.5 text-[11.5px] font-medium text-[#b91c1c]">
                             <ListChecks className="size-3" />
                             {t(':n متأخّرة', { n: String(p.late_tasks) })}
+                        </span>
+                    )}
+                    {(p.inventory_shortages ?? 0) > 0 && (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-[#fef2f2] px-2 py-0.5 text-[11.5px] font-medium text-[#b91c1c]">
+                            <AlertTriangle className="size-3" />
+                            {t('نقص مخزون: :n بنود', { n: String(p.inventory_shortages) })}
                         </span>
                     )}
                 </>

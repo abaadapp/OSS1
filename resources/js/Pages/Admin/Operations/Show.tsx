@@ -15,7 +15,9 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { money } from '@/lib/format';
 import { useTranslate } from '@/lib/i18n';
 import type { PageProps } from '@/types';
+import ProjectInventoryForecast, { type ProjectForecast } from '@/Components/InventoryForecast';
 import OrganizersTab, { type OperationOrganizerRow, type OrganizerOption } from './partials/OrganizersTab';
+import EventTasksTab, { type EventTasks } from './partials/EventTasksTab';
 import {
     CHECKLIST_STATUS_LABEL,
     RESERVATION_LABEL,
@@ -224,11 +226,14 @@ interface Props {
     /* المرحلة 14: المنظّمون على الفعاليّة ومن يُختار منه */
     organizers?: OperationOrganizerRow[];
     organizer_options?: OrganizerOption[];
+    event_tasks?: EventTasks;
     users: { id: number; name: string }[];
     project_members: { user_id: number; name: string | null; role: string | null }[];
     templates: { id: number; name: string; phase: string }[];
     products: { id: number; name: string; kind: string; quantity: number }[];
     consumables: { rows: ConsumableIssue[]; issued_cost: number; consumed_cost: number; returned_cost: number; open: number };
+    /** توقّعُ مخزون مشروعها — قراءةٌ لا خصم، لمن يفتح المخزون */
+    inventory_forecast?: ProjectForecast | null;
     categories: { value: string; label: string }[];
     assets: AssetOption[];
     labels: Labels;
@@ -248,7 +253,8 @@ export default function OperationShow(p: Props) {
     const [ask, dialog] = useConfirm();
     const o = p.operation;
     const L = p.labels;
-    const [tab, setTab] = useState('overview');
+    /* والتبويبُ من الرابط إن ذُكر — رابطُ التنبيه «مهام الفعاليّة» يفتح تبويبَها */
+    const [tab, setTab] = useState(() => (typeof window === 'undefined' ? null : new URLSearchParams(window.location.search).get('tab')) ?? 'overview');
     const [overriding, setOverriding] = useState<string | null>(null);
     const [overrideReason, setOverrideReason] = useState('');
     const [cancelling, setCancelling] = useState(false);
@@ -282,6 +288,7 @@ export default function OperationShow(p: Props) {
         { key: 'equipment', label: 'المعدّات', count: p.reservations.filter((r) => r.status !== 'cancelled').length, alert: criticalConflicts > 0 },
         { key: 'crew', label: 'الفريق', count: p.crew.filter((c) => c.status !== 'cancelled').length },
         { key: 'organizers', label: 'المنظّمون', count: (p.organizers ?? []).filter((o) => o.status !== 'cancelled').length, alert: p.conflicts.some((c) => c.kind.startsWith('organizer_')) },
+        { key: 'tasks', label: 'المهام', count: (p.event_tasks?.people ?? []).reduce((n, x) => n + x.open, 0), alert: (p.event_tasks?.people ?? []).some((x) => x.last_dispatch?.status === 'failed') },
         { key: 'checklists', label: 'قوائم التحقّق', count: requiredPending, alert: requiredPending > 0 && o.active },
         { key: 'incidents', label: 'الحوادث', count: openIncidents, alert: openIncidents > 0 },
         { key: 'history', label: 'السجلّ' },
@@ -334,7 +341,7 @@ export default function OperationShow(p: Props) {
                 }
             />
 
-            {(['operation', 'schedule', 'requirement', 'reservation', 'consumable', 'crew', 'organizers', 'checklist', 'incident'] as const).map((k) => errors?.[k] && <Alert key={k} tone="danger">{errors[k]}</Alert>)}
+            {(['operation', 'schedule', 'requirement', 'reservation', 'consumable', 'crew', 'organizers', 'tasks', 'checklist', 'incident'] as const).map((k) => errors?.[k] && <Alert key={k} tone="danger">{errors[k]}</Alert>)}
             {o.readiness_override && o.readiness_override.length > 0 && (
                 <Alert tone="warning">
                     <ShieldAlert className="me-1 inline size-4" />
@@ -384,6 +391,9 @@ export default function OperationShow(p: Props) {
                     conflicts={p.conflicts.filter((c) => c.kind.startsWith('organizer_'))}
                     canManage={Boolean(p.may.crew)}
                 />
+            )}
+            {tab === 'tasks' && p.event_tasks && (
+                <EventTasksTab operationId={o.id} projectId={o.project?.id ?? null} active={o.active} data={p.event_tasks} canManage={Boolean(p.may.crew)} />
             )}
             {tab === 'checklists' && <ChecklistsTab p={p} />}
             {tab === 'incidents' && <IncidentsTab p={p} />}
@@ -681,6 +691,16 @@ function EquipmentTab({ p }: { p: Props }) {
 
     return (
         <div className="space-y-4">
+            {/* توقّعُ المخزون لمشروع الفعاليّة — من متطلّباتها إن وُجدت، ومن نطاق المشروع مبدئيًّا */}
+            {p.inventory_forecast && p.inventory_forecast.in_window && p.inventory_forecast.lines.length > 0 && (
+                <Card className="p-4">
+                    <h3 className="mb-3 text-[14px] font-semibold">
+                        {t('توقّع المخزون')}
+                        {p.inventory_forecast.shortages > 0 && <span className="ms-2 rounded-full bg-[#fef2f2] px-2 py-0.5 text-[11.5px] font-medium text-[#b91c1c]">{t('نقص مخزون: :n بنود', { n: String(p.inventory_forecast.shortages) })}</span>}
+                    </h3>
+                    <ProjectInventoryForecast data={p.inventory_forecast} projectId={p.operation.project?.id ?? 0} />
+                </Card>
+            )}
             <Card className="p-4">
                 <div className="mb-3 flex items-center justify-between">
                     <h3 className="text-[14px] font-semibold">{t('المتطلّبات')} <span className="text-[11px] font-normal text-[#9ca3af]">— {t('ماذا نحتاج')}</span></h3>

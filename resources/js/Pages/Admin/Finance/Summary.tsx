@@ -12,6 +12,7 @@ import { money } from '@/lib/format';
 import { useTranslate } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import type { PageProps } from '@/types';
+import MonthlyExpensesCard, { type MonthlyExpenses } from './partials/MonthlyExpensesCard';
 
 interface Props {
     range: ReportRange;
@@ -32,6 +33,9 @@ interface Props {
     dues: { expenses: number; invoices: number; payroll: number; total: number; overdue: number };
     /** «ما لك» — ذمم العملاء، من `Receivables` نفسها التي تقرأ منها شاشة الذمم */
     receivables: { total: number; overdue: number; due_soon: number; credit: number; invoices: number; customers: number };
+    /** مصروفات الشهر — شهرٌ يُختار بنفسه، من الدفتر (`MonthlyExpenses`) */
+    monthly?: MonthlyExpenses;
+    monthly_links?: { expenses: boolean; supplier_invoices: boolean; payroll: boolean };
 }
 
 /**
@@ -42,7 +46,7 @@ interface Props {
  * هل يستطيع الدفع اليوم كان عليه أن يفتح خمس شاشات ويجمع بالعين.
  */
 export default function Summary() {
-    const { range, cash, bank, accounts, period, dues, receivables, context } = usePage<PageProps<Props>>().props;
+    const { range, cash, bank, accounts, period, dues, receivables, monthly, monthly_links, context } = usePage<PageProps<Props>>().props;
     const t = useTranslate();
     const m = (v: number) => money(v, context!.currency);
 
@@ -154,13 +158,19 @@ export default function Summary() {
                 </Card>
             </div>
 
+            {/* مصروفاتُ الشهر — شهرٌ يُختار بنفسه، فلا يُقرأ رقمُ المدّة تحته على أنّه رقمُ الشهر */}
+            {monthly && (
+                <MonthlyExpensesCard data={monthly} links={monthly_links ?? { expenses: false, supplier_invoices: false, payroll: false }} m={m} />
+            )}
+
             {/* ما جرى في المدة — والمبدّل فوقه وحده كي لا يُقرأ رقمُ فترةٍ على أنه رقمُ أخرى */}
             <h2 className="mb-3 text-[15px] font-bold text-[#111]">{t('ما جرى في المدة')}</h2>
             <RangeTabs current={range} />
 
             <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 <StatCard stat={{ label: t('المبيعات'), value: m(period.sales), icon: 'shopping-cart', color: 'primary' }} index={0} />
-                <StatCard stat={{ label: t('المصروفات'), value: m(period.expenses), icon: 'arrow-down-circle', color: 'danger' }} index={1} />
+                {/* المسدَّدُ من سجلّ المصروفات وحده — لا الرواتبُ ولا السنداتُ ولا التكلفة؛ وكاملُ الشهر من الدفتر في البطاقة أعلاه */}
+                <StatCard stat={{ label: t('المصروفات المدفوعة في المدة'), value: m(period.expenses), icon: 'arrow-down-circle', color: 'danger', hint: t('المسدَّدة من سجل المصروفات فقط') }} index={1} />
                 <StatCard stat={{ label: t('صافي الربح'), value: m(period.profit), icon: 'trending-up', color: 'success' }} index={2} />
                 <StatCard stat={{ label: t('ضريبة محصّلة'), value: m(period.tax), icon: 'receipt', color: 'warning' }} index={3} />
             </div>

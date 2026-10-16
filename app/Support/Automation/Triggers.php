@@ -8,6 +8,8 @@ use App\Support\Automation\Triggers\DeliveryAwaiting;
 use App\Support\Automation\Triggers\DocumentExpiry;
 use App\Support\Automation\Triggers\EquipmentCheckout;
 use App\Support\Automation\Triggers\EquipmentUnreturned;
+use App\Support\Automation\Triggers\EventTasksAssigned;
+use App\Support\Automation\Triggers\EventTasksReminder;
 use App\Support\Automation\Triggers\ExpenseUnpaid;
 use App\Support\Automation\Triggers\ForecastStale;
 use App\Support\Automation\Triggers\InvoiceDue;
@@ -17,6 +19,7 @@ use App\Support\Automation\Triggers\MorningBrief;
 use App\Support\Automation\Triggers\OperationCloseout;
 use App\Support\Automation\Triggers\OperationStart;
 use App\Support\Automation\Triggers\ProjectClosable;
+use App\Support\Automation\Triggers\ProjectInventoryShortfall;
 use App\Support\Automation\Triggers\ProjectStart;
 use App\Support\Automation\Triggers\PurchaseOrderLate;
 use App\Support\Automation\Triggers\QuotationAwaiting;
@@ -42,12 +45,17 @@ final class Triggers
         'communication_failed' => CommunicationFailed::class,
         'project_closable' => ProjectClosable::class,
         'morning_brief' => MorningBrief::class,
+        /* ونقصُ مخزونٍ متوقَّع في مشروعٍ قادم — يُقال مرّةً حتى يتغيّر */
+        'project_inventory_shortfall' => ProjectInventoryShortfall::class,
         /* التشغيلُ — المرحلة 10: داخليٌّ كلُّه، ولا يبلغ العميل */
         'operation_start' => OperationStart::class,
         'crew_assignment' => CrewAssignment::class,
         'equipment_checkout' => EquipmentCheckout::class,
         'equipment_unreturned' => EquipmentUnreturned::class,
         'operation_closeout' => OperationCloseout::class,
+        /* ومهامُّ الفعاليّة إلى أصحابها — رسالةٌ لكلّ موظّفٍ بمهامّه (واتساب أو تنبيه) */
+        'event_tasks_assigned' => EventTasksAssigned::class,
+        'event_tasks_reminder' => EventTasksReminder::class,
         /* الإدارةُ — المرحلة 11: تذكيرٌ بالتقرير والمراجعة والتوقّع — ولا قرارَ يُتّخذ */
         'management_report_ready' => ManagementReportReady::class,
         'management_review_due' => ManagementReviewDue::class,

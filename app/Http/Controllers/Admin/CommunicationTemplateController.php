@@ -58,6 +58,9 @@ class CommunicationTemplateController extends Controller
             'provider_language' => ['nullable', 'string', 'max:10', 'regex:/^[a-zA-Z_]+$/'],
             'variables' => ['nullable', 'array', 'max:20'],
             'variables.*' => ['string', 'max:40'],
+            'header_variables' => ['nullable', 'array', 'max:5'],
+            'header_variables.*' => ['string', 'max:40'],
+            'button_variable' => ['nullable', 'string', 'max:60'],
             'subject' => ['nullable', 'string', 'max:255'],
             'body' => ['nullable', 'string', 'max:4000'],
         ], [
