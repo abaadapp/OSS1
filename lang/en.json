@@ -4656,7 +4656,7 @@
     "قاعدة الإرسال": "Sending rule",
     "إدارة المهام في المشروع": "Manage tasks in the project",
     "إعادة النشر": "Publish again",
-    "إعادة النشر لا تُرسل لمن وصلته رسالته، وتصل من أُضيف في يوم تالٍ — ومن أُضيف اليوم انسخ رابطه أو يصله التذكير.": "Publishing again does not resend to those already messaged; it reaches people added on a later day — for someone added today, copy their link or let the reminder reach them.",
+    "إعادة النشر تصل من أُضيف بعد النشر، ولا تُرسل لمن وصلته رسالته — والتذكير يحمل عدد مهامه المفتوحة الآن.": "Publishing again reaches whoever was added since, and never resends to those already messaged — the reminder carries their current open-task count.",
     "نشر المهام على الفريق": "Publish tasks to the team",
     "لا مهام معيّنة لموظفين على هذه الفعالية — أضفها من تبويب المهام في المشروع واختر الفعالية.": "No tasks are assigned to employees on this event — add them from the project's Tasks tab and pick the event.",
     ":open مفتوحة · :done منجزة": ":open open · :done done",

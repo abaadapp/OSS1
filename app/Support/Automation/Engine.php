@@ -351,11 +351,16 @@ final class Engine
         return $settings->at($anchor, (int) $step['offset'], $rule->send_time);
     }
 
-    /** مفتاحُ التكرار — قاعدةٌ + هدفٌ + مرساةٌ + خطوةٌ + جمهور */
+    /**
+     * مفتاحُ التكرار — قاعدةٌ + هدفٌ + مرّةٌ + خطوةٌ + جمهور.
+     *
+     * والمرّةُ كما يقولها المُطلِق (`Trigger::occurrence`): يومُ المرساة، إلّا لمُطلِقٍ
+     * يحرسه مفتاحٌ أدقّ لكلّ مستلم.
+     */
     public static function idempotencyKey(AutomationRule $rule, ?Model $target, string $occurrence, array $step): string
     {
         return implode('|', [
-            $rule->id, $target?->getMorphClass() ?? '-', $target?->getKey() ?? '-', substr($occurrence, 0, 10), (int) $step['offset'], $step['audience'],
+            $rule->id, $target?->getMorphClass() ?? '-', $target?->getKey() ?? '-', $occurrence, (int) $step['offset'], $step['audience'],
         ]);
     }
 
@@ -367,7 +372,7 @@ final class Engine
      */
     private static function open(AutomationRule $rule, Trigger $trigger, Model $target, array $step, string $anchor, Carbon $scheduled): ?AutomationRun
     {
-        $key = self::idempotencyKey($rule, $target, $anchor, $step);
+        $key = self::idempotencyKey($rule, $target, $trigger->occurrence($anchor), $step);
 
         return Contention::attempt(fn () => AutomationRun::create([
             'business_id' => (int) $rule->business_id,
@@ -435,7 +440,7 @@ final class Engine
         $target = $fresh;
 
         $anchor = $trigger->anchor($target);
-        if ($anchor === null || substr($anchor, 0, 10) !== substr((string) $run->occurrence, 0, 10)) {
+        if ($anchor === null || $trigger->occurrence($anchor) !== $trigger->occurrence((string) $run->occurrence)) {
             return self::skip($run, self::ANCHOR_CHANGED);
         }
 
@@ -469,8 +474,8 @@ final class Engine
             }
         }
 
-        /* الهدوء: مثلُه إلى الجمهور نفسِه عن الهدف نفسِه قريبًا */
-        if (self::inCooldown($run, $rule)) {
+        /* الهدوء: مثلُه إلى الجمهور نفسِه عن الهدف نفسِه قريبًا — لمن لا يحرسه مفتاحٌ لكلّ مستلم */
+        if ($trigger->cooldown() && self::inCooldown($run, $rule)) {
             return self::skip($run, self::COOLDOWN);
         }
 

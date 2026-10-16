@@ -16,6 +16,7 @@ use App\Support\Automation\Engine;
 use App\Support\Automation\Rules;
 use App\Support\Automation\Settings;
 use App\Support\Communication\Templates;
+use App\Support\Operations\EventOperations;
 use App\Support\Operations\EventTasks;
 use App\Support\PhoneNumber;
 use App\Support\Projects;
@@ -144,21 +145,154 @@ class EachEmployeeGetsOneMessageWithOnlyTheirEventTasksTest extends OperationsTe
         $rule = AutomationRule::where('business_id', $this->business->id)->where('trigger', EventTasks::ASSIGNED)->sole();
         $this->assertNull(EventTasks::dispatch($this->op, $this->field, EventTasks::ASSIGNED, 'assigned', $rule));
 
-        /* موظّفٌ جديد ثمّ إعادةُ نشرٍ في اليوم نفسِه — مفتاحُ تشغيل الأتمتة يوميّ: لا تشغيلَ ثانٍ */
+        /* موظّفٌ جديد ثمّ إعادةُ نشرٍ في اليوم نفسِه — يصل الجديدَ وحده، ولا يُعاد لمن وصله */
         Projects::addTask($this->project, ['title' => 'توزيع البطاقات', 'assignee_id' => $this->seller->id, 'event_operation_id' => $this->op->id], $this->owner);
         Carbon::setTestNow(now()->addHours(2));
-        $this->publish();
-        Engine::tick((int) $this->business->id);
-        $this->assertCount(2, $this->sent(), 'إعادةُ النشر في اليوم نفسِه لا تفتح تشغيلًا ثانيًا');
-
-        /* وفي يومٍ تالٍ — يصل الجديدَ وحده، ولا يُعاد لمن وصله */
-        Carbon::setTestNow(now()->addDay());
         $this->publish();
         Engine::tick((int) $this->business->id);
 
         $this->assertCount(3, $this->sent());
         $this->assertSame(PhoneNumber::normalize($this->seller->phone), $this->sent()[2]['to']);
         $this->assertSame(3, EventTaskDispatch::where('trigger', EventTasks::ASSIGNED)->count());
+
+        /* وفي يومٍ تالٍ بلا جديد — لا رسالة */
+        Carbon::setTestNow(now()->addDay());
+        $this->publish();
+        Engine::tick((int) $this->business->id);
+        $this->assertCount(3, $this->sent());
+    }
+
+    /* ─────────────────────────── إعادةُ النشر في اليوم نفسِه ─────────────────────────── */
+
+    /** @return array<string, int> رسائلُ التعيين لكلّ رقم */
+    private function assignedTo(): array
+    {
+        return collect($this->sent())->filter(fn ($m) => $m['template']['name'] === 'event_tasks_assigned')->countBy('to')->all();
+    }
+
+    public function test_a_same_day_republish_reaches_only_whoever_was_added_since_and_never_twice(): void
+    {
+        $a = PhoneNumber::normalize($this->field->phone);
+        $b = PhoneNumber::normalize($this->seller->phone);
+        $tick = fn () => Engine::tick((int) $this->business->id);
+
+        /* ١) نشرٌ أوّل — يصل «أ» مرّةً */
+        $this->publish();
+        $tick();
+        $this->assertSame(1, $this->assignedTo()[$a]);
+
+        /* ٢) إعادةُ نشرٍ في اليوم نفسِه بلا جديد — لا يصل «أ» ثانيةً، والتشغيلُ يقول «لا جديد» */
+        Carbon::setTestNow(now()->addMinutes(20));
+        $this->publish();
+        $tick();
+        $this->assertSame(1, $this->assignedTo()[$a]);
+        $this->assertSame(2, array_sum($this->assignedTo()));
+        $runs = AutomationRun::where('trigger', EventTasks::ASSIGNED)->orderBy('id')->get();
+        $this->assertCount(2, $runs, 'كلُّ نشرٍ تشغيل — ولو في اليوم نفسِه');
+        $this->assertSame([AutomationRun::EXECUTED, AutomationRun::SKIPPED], $runs->pluck('status')->all());
+        $this->assertSame(Engine::RESOLVED, $runs[1]->skipped_reason);
+
+        /* ٣) موظّفٌ جديد «ب» ومهمّةٌ له */
+        Projects::addTask($this->project, ['title' => 'توزيع البطاقات', 'assignee_id' => $this->seller->id, 'event_operation_id' => $this->op->id], $this->owner);
+
+        /* ٤) إعادةُ نشرٍ في اليوم نفسِه — يصل «ب»، ولا يصل «أ» */
+        Carbon::setTestNow(now()->addMinutes(20));
+        $this->publish();
+        $tick();
+        $this->assertSame(1, $this->assignedTo()[$b]);
+        $this->assertSame(1, $this->assignedTo()[$a]);
+        $this->assertSame(3, array_sum($this->assignedTo()));
+
+        /* ٥) دورةٌ ثالثة، ثمّ نشرٌ ثالث — لا رسالةَ مكرّرة لأحد */
+        $tick();
+        Carbon::setTestNow(now()->addMinutes(5));
+        $this->publish();
+        $tick();
+        $this->assertSame(3, array_sum($this->assignedTo()));
+        $this->assertSame(3, EventTaskDispatch::where('trigger', EventTasks::ASSIGNED)->count());
+
+        /* ومهمّةٌ جديدة لـ«أ» بعد رسالته — لا تُعاد رسالةُ التعيين، والتذكيرُ يحمل العددَ المحدَّث */
+        Projects::addTask($this->project, ['title' => 'تشغيل الإضاءة', 'assignee_id' => $this->field->id, 'event_operation_id' => $this->op->id], $this->owner);
+        Carbon::setTestNow(now()->addMinutes(5));
+        $this->publish();
+        $tick();
+        $this->assertSame(1, $this->assignedTo()[$a]);
+        $this->assertSame(3, EventTaskDispatch::where('trigger', EventTasks::ASSIGNED)->where('user_id', $this->field->id)->value('open_count'), 'الرسالةُ الأولى كما خرجت');
+
+        Carbon::setTestNow(Carbon::parse('2026-09-30 08:30:00', 'Asia/Muscat'));
+        $tick();
+        $reminder = collect($this->sent())->first(fn ($m) => $m['template']['name'] === 'event_tasks_reminder' && $m['to'] === $a);
+        $this->assertSame('4', $this->params($reminder, 'body')[1], 'التذكيرُ يقرأ المفتوحَ الآن');
+    }
+
+    public function test_a_whatsapp_failure_for_the_newcomer_resends_nothing_to_who_already_has_it(): void
+    {
+        $a = PhoneNumber::normalize($this->field->phone);
+        /* القناةُ تُطفأ وتُشعل بإعدادها وحده — فيبقى سجلُّ ما خرج كما هو */
+        $channel = fn (bool $on) => config(['services.whatsapp.token' => $on ? 'SECRET_WA' : null, 'services.whatsapp.phone_number_id' => $on ? '1050' : null]);
+        $this->publish();
+        Engine::tick((int) $this->business->id);
+        $this->assertSame(1, $this->assignedTo()[$a]);
+
+        /* «ب» يُضاف وواتساب مطفأ — تفشل رسالتُه وحدها */
+        $channel(false);
+        Projects::addTask($this->project, ['title' => 'توزيع البطاقات', 'assignee_id' => $this->seller->id, 'event_operation_id' => $this->op->id], $this->owner);
+        Carbon::setTestNow(now()->addMinutes(30));
+        $this->publish();
+        Engine::tick((int) $this->business->id);
+
+        $this->assertSame(EventTaskDispatch::FAILED, EventTaskDispatch::where('trigger', EventTasks::ASSIGNED)->where('user_id', $this->seller->id)->value('status'));
+        $this->assertTrue(InternalNotification::where('user_id', $this->seller->id)->where('kind', EventTasks::ASSIGNED)->exists(), 'ويصله رابطُه داخل النظام');
+        $this->assertSame(1, $this->assignedTo()[$a], 'فشلُ «ب» لا يُعيد إلى «أ» شيئًا');
+        $this->assertSame(1, EventTaskDispatch::where('trigger', EventTasks::ASSIGNED)->where('user_id', $this->field->id)->count());
+
+        /* وعاد واتساب ونُشر ثانيةً — لا يُعاد لـ«أ»، ولا يُكرَّر لـ«ب» (مرّةً على الأكثر — والقائدُ نُبّه ليرسل رابطه) */
+        $channel(true);
+        Carbon::setTestNow(now()->addMinutes(30));
+        $this->publish();
+        Engine::tick((int) $this->business->id);
+        $this->assertSame([$a => 1, PhoneNumber::normalize($this->storekeeper->phone) => 1], $this->assignedTo());
+        $this->assertTrue(InternalNotification::where('user_id', $this->manager->id)->where('kind', 'event_tasks_failed')->where('title', 'like', '%البائع%')->exists());
+    }
+
+    public function test_a_same_day_republish_in_one_company_neither_resends_nor_reaches_into_another(): void
+    {
+        /* «ب»: شركةٌ أخرى بفعاليّتها وموظّفها وأتمتتها الحيّة */
+        $other = (int) $this->other->id;
+        $this->stranger->update(['phone' => '96891234567']);
+        Settings::save($other, ['mode' => Settings::LIVE], $this->stranger);
+        Rules::ensure($other);
+        AutomationRule::where('business_id', $other)->where('trigger', '!=', EventTasks::ASSIGNED)->update(['enabled' => false]);
+        AutomationRule::where('business_id', $other)->where('trigger', EventTasks::ASSIGNED)->update(['mode' => AutomationRule::LIVE]);
+        Templates::save($other, EventTasks::TEMPLATES[EventTasks::ASSIGNED], 'whatsapp', 'ar', ['provider_template' => 'event_tasks_assigned', 'provider_language' => 'ar'], $this->stranger);
+        $theirProject = $this->project('EP-OTHER', $other, null);
+        $theirs = EventOperations::create($theirProject, ['name' => 'فعاليتهم', 'venue_name' => 'قاعتهم',
+            'event_starts_at' => '2026-10-01 09:00', 'event_ends_at' => '2026-10-01 17:00', 'operations_lead_id' => $this->stranger->id], $this->stranger);
+        Projects::addTask($theirProject, ['title' => 'مهمّتهم', 'assignee_id' => $this->stranger->id, 'event_operation_id' => $theirs->id], $this->stranger);
+
+        $ticks = function () use ($other) {
+            Engine::tick((int) $this->business->id);
+            Engine::tick($other);
+        };
+
+        $this->publish();
+        EventTasks::publish($theirs, $this->stranger);
+        $ticks();
+        $this->assertSame(3, array_sum($this->assignedTo()));
+
+        /* إعادةُ نشرٍ في الشركتين في اليوم نفسِه — لا شيء جديد في أيٍّ منهما */
+        Carbon::setTestNow(now()->addMinutes(15));
+        $this->publish();
+        EventTasks::publish($theirs->fresh(), $this->stranger);
+        $ticks();
+        $this->assertSame(3, array_sum($this->assignedTo()));
+        $this->assertSame(1, $this->assignedTo()[PhoneNumber::normalize($this->stranger->phone)]);
+
+        /* ولكلّ شركةٍ صفوفُها: لا صفَّ لموظّف «ب» على فعاليّة «أ» ولا العكس */
+        $this->assertSame([(int) $this->field->id, (int) $this->storekeeper->id], EventTaskDispatch::where('business_id', $this->business->id)->orderBy('user_id')->pluck('user_id')->map(fn ($id) => (int) $id)->all());
+        $this->assertSame([(int) $this->stranger->id], EventTaskDispatch::where('business_id', $other)->pluck('user_id')->map(fn ($id) => (int) $id)->all());
+        $this->assertSame(0, EventTaskDispatch::where('business_id', $other)->where('event_operation_id', $this->op->id)->count());
+        $this->assertSame(0, AutomationRun::where('business_id', $other)->where('target_id', $this->op->id)->count());
     }
 
     public function test_the_reminder_counts_only_open_tasks_and_skips_whoever_finished(): void

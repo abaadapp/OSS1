@@ -18,8 +18,15 @@ use Illuminate\Support\Collection;
  *
  * المرساةُ لحظةُ النشر (`tasks_published_at`)، فالخطوةُ فوريّة: تخرج في دورة
  * الأتمتة التالية لا في ساعة الإرسال. والجمعُ والإرسالُ ومنعُ التكرار لكلّ
- * موظّفٍ في `EventTasks::dispatchAll` — ومن أُرسل إليه مرّةً لا يُرسل إليه
- * ثانيةً إن أُعيد النشر؛ يصل الجديدُ إلى من لم يصله.
+ * موظّفٍ في `EventTasks::dispatchAll`.
+ *
+ * ═══ كلُّ نشرٍ مرّة — ولو تكرّر في اليوم نفسِه ═══
+ *
+ * مفتاحُ تشغيل الأتمتة يوميٌّ لغيره من المُطلِقات؛ وهنا المرّةُ لحظةُ النشر كاملةً
+ * (`occurrence`)، ولا تُسأل فترةُ الهدوء (`cooldown`): فإعادةُ النشر بعد إضافة موظّفٍ
+ * تصله في ساعتها. والحارسُ الأدقّ باقٍ — صفٌّ فريد لكلّ (فعاليّة · موظّف · مُطلِق ·
+ * خطوة) في `event_task_dispatches`: من وصلته رسالةُ التعيين لا تصله ثانيةً، ولو
+ * أُضيفت له مهمّة؛ والتذكيرُ يحمل عددَ مفتوحه المحدَّث.
  */
 final class EventTasksAssigned extends Trigger
 {
@@ -48,6 +55,16 @@ final class EventTasksAssigned extends Trigger
         return true;
     }
 
+    public function occurrence(string $anchor): string
+    {
+        return $anchor;
+    }
+
+    public function cooldown(): bool
+    {
+        return false;
+    }
+
     public function candidates(int $businessId, string $from, string $to, AutomationRule $rule): iterable
     {
         return EventOperation::where('business_id', $businessId)->active()->whereNotNull('tasks_published_at')
@@ -68,7 +85,8 @@ final class EventTasksAssigned extends Trigger
             return Engine::NOT_ELIGIBLE;
         }
 
-        return EventTasks::assigneeIds($target) === [] ? Engine::RESOLVED : null;
+        /* لا مفتوحَ معيَّن، أو وصلت رسالتُه كلَّ من له مفتوح — إعادةُ نشرٍ لا جديدَ فيها */
+        return EventTasks::awaiting($target) === [] ? Engine::RESOLVED : null;
     }
 
     public function describe(Model $target, array $step): string

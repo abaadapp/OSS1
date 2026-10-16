@@ -81,6 +81,15 @@ final class EventTasks
             ->distinct()->orderBy('assignee_id')->pluck('assignee_id')->map(fn ($id) => (int) $id)->all();
     }
 
+    /** @return list<int> من له مفتوحٌ في الفعاليّة ولم تُكتب له رسالةُ التعيين بعد — نجحت أو فشلت */
+    public static function awaiting(EventOperation $operation): array
+    {
+        $done = EventTaskDispatch::where('business_id', $operation->business_id)->where('event_operation_id', $operation->id)
+            ->where('trigger', self::ASSIGNED)->pluck('user_id')->map(fn ($id) => (int) $id)->all();
+
+        return array_values(array_diff(self::assigneeIds($operation), $done));
+    }
+
     /* ─────────────────────────── النشر ─────────────────────────── */
 
     /**
@@ -89,9 +98,8 @@ final class EventTasks
      * لا يُرسل من هنا: الأتمتةُ (`event_tasks_assigned`) تُرسل في دورتها القادمة
      * بقاعدتها ووضعها. ويُنشأ رابطُ كلّ موظّفٍ الآن — فيُنسخ ولو لم تُرسَل رسالة.
      *
-     * وإعادةُ النشر لا تُعيد رسالةً لمن وصلته (مفتاحُ الموظّف)، ومفتاحُ تشغيل
-     * الأتمتة يوميّ: إعادةُ نشرٍ في اليوم نفسِه لا تفتح تشغيلًا ثانيًا — من أُضيف
-     * بعد نشر اليوم يُنسخ رابطُه أو يصله التذكير، وإعادةُ النشر في يومٍ تالٍ تصله.
+     * وإعادةُ النشر — ولو في اليوم نفسِه — تفتح تشغيلًا جديدًا (`EventTasksAssigned::occurrence`)
+     * يصل من لم تُكتب له رسالةٌ بعد، ولا يُعيد رسالةً لمن وصلته (مفتاحُ الموظّف).
      */
     public static function publish(EventOperation $operation, ?User $actor = null): EventOperation
     {

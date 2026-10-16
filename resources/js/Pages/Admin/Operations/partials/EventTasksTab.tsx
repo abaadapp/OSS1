@@ -55,7 +55,7 @@ export default function EventTasksTab({ operationId, projectId, active, data, ca
                         {assigned && <> · {t('قاعدة الإرسال')}: {t(MODE_LABEL[assigned.mode] ?? assigned.mode)}{!assigned.enabled && ` (${t('موقوفة')})`}</>}
                     </div>
                     {data.published_at && (
-                        <div className="mt-1 text-[11.5px] text-[#9ca3af]">{t('إعادة النشر لا تُرسل لمن وصلته رسالته، وتصل من أُضيف في يوم تالٍ — ومن أُضيف اليوم انسخ رابطه أو يصله التذكير.')}</div>
+                        <div className="mt-1 text-[11.5px] text-[#9ca3af]">{t('إعادة النشر تصل من أُضيف بعد النشر، ولا تُرسل لمن وصلته رسالته — والتذكير يحمل عدد مهامه المفتوحة الآن.')}</div>
                     )}
                 </div>
                 <div className="flex flex-wrap gap-2">
