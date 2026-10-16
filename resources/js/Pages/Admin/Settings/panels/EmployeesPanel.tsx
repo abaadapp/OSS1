@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { router, useForm, usePage } from '@inertiajs/react';
-import { AlertTriangle, Briefcase, Lock, LockOpen, Pencil, Plus } from 'lucide-react';
+import { AlertTriangle, Briefcase, Crown, Lock, LockOpen, Pencil, Plus } from 'lucide-react';
 import SmartLink from '@/Components/SmartLink';
 import Tabs from '@/Components/Tabs';
 import DataTable, { type Column, type Filter } from '@/Components/DataTable';
@@ -16,14 +16,29 @@ import { initials, money, number } from '@/lib/format';
 import { useTranslate } from '@/lib/i18n';
 import type { PageProps } from '@/types';
 import type { Employee } from '@/types/models';
+import AccessProfileField, { type RoleOption } from '../../Employees/partials/AccessProfileField';
 
 export interface JobTitle {
     id: number;
     name: string;
     role: string;
     roleLabel: string;
+    /** وظيفةُ صاحب النشاط (`admin`) — تحمل كلَّ شيء، ولا يُعدَّل ملفُّها من هنا */
+    is_owner_role?: boolean;
     description: string | null;
     usage: number;
+}
+
+/**
+ * حالُ صلاحيات الموظّف في سطر: «يتبع الوظيفة» أو «مخصّصة · ٧ أقسام · ٣ أفعال حساسة».
+ *
+ * القائمةُ لا تعرض الصلاحيات نفسَها — بطاقةُ الموظّف تعرضها مرتّبة.
+ */
+export function permissionStatus(e: Pick<Employee, 'permissions_mode' | 'permissions_summary'>, t: (s: string, r?: Record<string, string | number>) => string): string {
+    if (e.permissions_mode !== 'custom' || !e.permissions_summary) return t('يتبع الوظيفة');
+    const parts = [t('صلاحيات مخصصة'), t(':n أقسام', { n: number(e.permissions_summary.sections) })];
+    if (e.permissions_summary.sensitive > 0) parts.push(t(':n أفعال حساسة', { n: number(e.permissions_summary.sensitive) }));
+    return parts.join(' · ');
 }
 
 /**
@@ -49,7 +64,16 @@ type TabKey = (typeof TABS)[number]['key'];
  * ترويسة له، فيلزم أن يحمل أدواته معه. وهو زرّان في الحقيقة — واحدٌ للموظف
  * وآخرٌ للوظيفة — يتبدّلان بتبدّل التبويب الداخلي.
  */
-export default function EmployeesPanel({ employees, jobTitles }: { employees: Employee[]; jobTitles: JobTitle[] }) {
+export default function EmployeesPanel({
+    employees,
+    jobTitles,
+    roleOptions = [],
+}: {
+    employees: Employee[];
+    jobTitles: JobTitle[];
+    /** ملفّاتُ الصلاحيات الخمسة — `EmployeeAccess::roleOptions` */
+    roleOptions?: RoleOption[];
+}) {
     const { context } = usePage<PageProps>().props;
     const t = useTranslate();
     const currency = context!.currency;
@@ -62,12 +86,24 @@ export default function EmployeesPanel({ employees, jobTitles }: { employees: Em
     const [titleDialog, setTitleDialog] = useState<JobTitle | Record<string, never> | null>(null);
     const editingTitle = titleDialog && 'id' in titleDialog ? (titleDialog as JobTitle) : null;
 
-    const titleForm = useForm({ name: '', description: '' });
+    const titleForm = useForm({ name: '', role: '', description: '' });
+
+    /*
+     * ═══ وصاحبُ النشاط وحده — لا يُعدّ بين الموظفين ═══
+     *
+     * `User::isEmployee` تقول إنّ `admin` صاحبُ العمل لا موظّفٌ فيه. وكانت القائمةُ
+     * تضعه بينهم بلا وسم ويدخل في عددهم. فيُعرض في بطاقةٍ فوقهم بوسمه، ويبقى
+     * في مسيرة الرواتب إن سجّل لنفسه راتبًا — فذلك من المسيرة لا من هنا.
+     */
+    const owners = employees.filter((e) => e.is_owner);
+    const staff = employees.filter((e) => !e.is_owner);
 
     const openTitle = (x?: JobTitle) => {
         titleForm.clearErrors();
         titleForm.setData({
             name: x?.name ?? '',
+            // ملفُّ وظيفةٍ قائمة يُعرض كما هو، ووظيفةٌ جديدة تبدأ بلا ملفّ — يُختار ولا يُفترض
+            role: x && !x.is_owner_role ? x.role : '',
             description: x?.description ?? '',
         });
         setTitleDialog(x ?? {});
@@ -82,12 +118,37 @@ export default function EmployeesPanel({ employees, jobTitles }: { employees: Em
     const submitTitle = (e: React.FormEvent) => {
         e.preventDefault();
         const opts = { preserveScroll: true, onSuccess: closeTitle };
+        // وظيفةُ صاحب النشاط لا تُرسل ملفًّا — يبقى في الخادم على حاله
+        titleForm.transform(({ role, ...rest }) => (editingTitle?.is_owner_role ? rest : { ...rest, role }));
         if (editingTitle) titleForm.put(route('admin.jobTitles.update', editingTitle.id), opts);
         else titleForm.post(route('admin.jobTitles.store'), opts);
     };
 
+    // ملفُّ وظيفةٍ يحملها موظّفون لا يتغيّر — يتبعه دورُ كلٍّ منهم عند حفظ ملفّه
+    const roleLocked = !!editingTitle && (editingTitle.is_owner_role || editingTitle.usage > 0);
+    const roleNote = editingTitle?.is_owner_role
+        ? 'وظيفة صاحب النشاط — تحمل كل الصلاحيات، ولا يتغيّر ملفها.'
+        : editingTitle && editingTitle.usage > 0
+          ? 'يحمل هذه الوظيفة موظفون — لا يتغيّر ملف صلاحياتها. أنشئ وظيفة جديدة وانقل إليها من تريد.'
+          : null;
+
     const titleColumns: Column<JobTitle>[] = [
-        { key: 'name', header: 'الوظيفة', sortable: true, value: (x) => x.name },
+        { key: 'name', header: 'المسمى الوظيفي', sortable: true, value: (x) => x.name },
+        {
+            key: 'role',
+            header: 'ملف الصلاحيات الأساسي',
+            sortable: true,
+            value: (x) => x.roleLabel,
+            cell: (x) =>
+                x.is_owner_role ? (
+                    <span className="inline-flex items-center gap-1 text-[#b45309]">
+                        <Crown className="size-3.5" />
+                        {t('صاحب النشاط — كل الصلاحيات')}
+                    </span>
+                ) : (
+                    x.roleLabel
+                ),
+        },
         { key: 'description', header: 'الوصف', cell: (x) => x.description || '—' },
         {
             key: 'usage',
@@ -146,9 +207,36 @@ export default function EmployeesPanel({ employees, jobTitles }: { employees: Em
                 </div>
             ),
         },
-        { key: 'role', header: 'الدور', sortable: true, value: (e) => e.role },
-        { key: 'branch', header: 'الفرع', cell: (e) => e.branch || '—' },
-        { key: 'phone', header: 'الهاتف', cell: (e) => e.phone || '—' },
+        {
+            key: 'role',
+            header: 'المسمى الوظيفي',
+            sortable: true,
+            value: (e) => e.role,
+            cell: (e) => (
+                <span className="block min-w-0">
+                    <span className="block truncate">{e.job_title || e.role}</span>
+                    {e.access_role_label && (
+                        <span className="block text-[11px] text-[#9ca3af]">
+                            {t('ملف: :profile', { profile: e.access_role_label })}
+                        </span>
+                    )}
+                </span>
+            ),
+        },
+        {
+            key: 'branches',
+            header: 'الفروع',
+            cell: (e) => (e.work_branches && e.work_branches.length > 0 ? e.work_branches.join('، ') : t('كل الفروع')),
+        },
+        {
+            key: 'permissions',
+            header: 'الصلاحيات',
+            cell: (e) => (
+                <span className={e.permissions_mode === 'custom' ? 'text-[#b45309]' : 'text-[#6b7280]'}>
+                    {permissionStatus(e, t)}
+                </span>
+            ),
+        },
         {
             key: 'sales',
             header: 'المبيعات',
@@ -240,16 +328,17 @@ export default function EmployeesPanel({ employees, jobTitles }: { employees: Em
 
     const filters: Filter<Employee>[] = [
         {
-            label: 'كل الأدوار',
-            options: [...new Set(employees.map((e) => e.role))].map((r) => ({ label: r, value: r })),
+            label: 'كل المسميات',
+            options: [...new Set(staff.map((e) => e.role))].map((r) => ({ label: r, value: r })),
             match: (e, value) => e.role === value,
         },
         {
             label: 'كل الحالات',
             asTabs: true,
+            // «معطل» ما يكتبه الخادم (`EmployeeController::toggleStatus`) — «متوقف» لم يطابق أحدًا
             options: [
                 { label: 'نشط', value: 'نشط' },
-                { label: 'متوقف', value: 'متوقف' },
+                { label: 'معطل', value: 'معطل' },
             ],
             match: (e, value) => e.status === value,
         },
@@ -280,9 +369,43 @@ export default function EmployeesPanel({ employees, jobTitles }: { employees: Em
             />
 
             {tab === 'employees' ? (
+                <div className="space-y-4">
+                {owners.length > 0 && (
+                    <Card className="p-4" data-testid="owner-accounts">
+                        <p className="mb-3 text-[12px] font-semibold text-[#6b7280]">
+                            {t('صاحب النشاط — لا يُحسب ضمن عدد الموظفين')}
+                        </p>
+                        <ul className="space-y-2">
+                            {owners.map((o) => (
+                                <li key={o.id} className="flex flex-wrap items-center justify-between gap-3">
+                                    <span className="flex min-w-0 items-center gap-3">
+                                        <Avatar className="size-9">
+                                            {o.avatar && <AvatarImage src={o.avatar} alt="" />}
+                                            <AvatarFallback>{initials(o.name)}</AvatarFallback>
+                                        </Avatar>
+                                        <span className="min-w-0">
+                                            <SmartLink
+                                                routeName="admin.employees.show"
+                                                href={route('admin.employees.show', o.id)}
+                                                className="block truncate font-medium hover:underline"
+                                            >
+                                                {o.name}
+                                            </SmartLink>
+                                            <span className="block truncate text-[11px] text-[#9ca3af]" dir="ltr">{o.email}</span>
+                                        </span>
+                                    </span>
+                                    <span className="inline-flex items-center gap-1 rounded-full bg-[#fffbeb] px-2.5 py-1 text-[12px] font-medium text-[#b45309]">
+                                        <Crown className="size-3.5" />
+                                        {t('صاحب النشاط')}
+                                    </span>
+                                </li>
+                            ))}
+                        </ul>
+                    </Card>
+                )}
                 <Card className="overflow-hidden">
                     <DataTable
-                        rows={employees}
+                        rows={staff}
                         columns={columns}
                         rowKey={(e) => e.id}
                         searchPlaceholder="ابحث بالاسم أو البريد أو الهاتف…"
@@ -291,6 +414,7 @@ export default function EmployeesPanel({ employees, jobTitles }: { employees: Em
                         empty="لا يوجد موظفون بعد"
                     />
                 </Card>
+                </div>
             ) : (
                 <Card className="overflow-hidden">
                     <DataTable
@@ -312,18 +436,32 @@ export default function EmployeesPanel({ employees, jobTitles }: { employees: Em
 
                     <form onSubmit={submitTitle} className="space-y-4 px-5 pb-5">
                         <Field
-                            label="اسم الوظيفة"
-                            hint="اسمٌ حرّ يظهر في بطاقة الموظف — «مهندس شبكات»، «منسّق مشاريع»."
+                            label="المسمى الوظيفي"
+                            hint="اسمٌ حرّ يظهر في بطاقة الموظف — «مشرف فعالية»، «محاسب أول»."
                             required
                             error={titleForm.errors.name}
                         >
                             <Input
                                 value={titleForm.data.name}
                                 onChange={(e) => titleForm.setData('name', e.target.value)}
-                                placeholder={t('مثال: منسّق زهور')}
+                                placeholder={t('مثال: مشرف الفعالية')}
+                                aria-label={t('المسمى الوظيفي')}
                                 required
                             />
                         </Field>
+
+                        {editingTitle?.is_owner_role ? (
+                            <p className="rounded-[12px] bg-[#fffbeb] px-3 py-2.5 text-[12px] text-[#b45309]">{t(roleNote ?? '')}</p>
+                        ) : (
+                            <AccessProfileField
+                                value={titleForm.data.role}
+                                onChange={(role) => titleForm.setData('role', role)}
+                                options={roleOptions}
+                                error={titleForm.errors.role}
+                                disabled={roleLocked}
+                                note={roleNote}
+                            />
+                        )}
 
                         <Field label="الوصف" error={titleForm.errors.description}>
                             <Input
@@ -348,7 +486,11 @@ export default function EmployeesPanel({ employees, jobTitles }: { employees: Em
                             <Button type="button" variant="ghost" onClick={closeTitle}>
                                 {t('إلغاء')}
                             </Button>
-                            <Button type="submit" loading={titleForm.processing}>
+                            <Button
+                                type="submit"
+                                loading={titleForm.processing}
+                                disabled={!editingTitle && titleForm.data.role === ''}
+                            >
                                 <Briefcase />
                                 {t(editingTitle ? 'حفظ التغييرات' : 'إضافة')}
                             </Button>

@@ -8,6 +8,7 @@ use App\Models\JobTitle;
 use App\Models\User;
 use App\Support\Activity;
 use App\Support\Demo;
+use App\Support\EmployeeAccess;
 use App\Support\MerchantAccount;
 use App\Support\Permissions;
 use Illuminate\Http\Request;
@@ -63,16 +64,9 @@ class EmployeeController extends Controller
              */
             'basic_salary' => ['nullable', 'numeric', 'min:0'],
             'allowances' => ['nullable', 'numeric', 'min:0'],
-            /*
-             * الصلاحيات إلزامية: قسمٌ واحد على الأقل. موظفٌ بلا صلاحية حسابٌ
-             * يدخل ولا يجد شيئًا — يُحفظ بنجاح ثمّ يُكتشف عطله عند أوّل دخول.
-             */
-            'permissions' => ['required_with:manual_permissions', 'array', 'min:1'],
-            // والأفعالُ تُمنح من القائمة نفسها — انظر Permissions::ACTIONS
-            'permissions.*' => ['string', Rule::in([...Permissions::sections(), ...Permissions::actions()])],
+            ...$this->permissionRules($request),
         ], [
-            'permissions.required_with' => __('حدّد صلاحيات الموظف — قسمٌ واحد على الأقل.'),
-            'permissions.min' => __('حدّد صلاحيات الموظف — قسمٌ واحد على الأقل.'),
+            ...$this->permissionMessages(),
             'login_username.required' => __('اسم المستخدم مطلوب — وبه يدخل الموظف إلى النظام.'),
         ] + MerchantAccount::messages());
 
@@ -138,6 +132,38 @@ class EmployeeController extends Controller
         Activity::log('created', 'أضاف موظفًا: '.$data['name']);
 
         return redirect()->route('admin.employees.index')->with('toast', ['msg' => __('تم إضافة الموظف بنجاح'), 'type' => 'success']);
+    }
+
+    /**
+     * القائمةُ المخصّصة تُطلب حين يُختار التخصيص — لا حين يُختار «صلاحيات الوظيفة».
+     *
+     * كانت `required_with:manual_permissions`، و`required_with` يسأل عن **وجود**
+     * العلم لا عن قيمته: `manual_permissions=0` حاضرٌ، فكان الرجوعُ إلى صلاحيات
+     * الوظيفة يُردّ ما لم تُرسل معه قائمةٌ يتجاهلها الخادم بعد ذلك. فصارت القائمةُ
+     * تُستبعد حين يكون العلم مطفأً، وتُلزم حين يكون مضاءً — قسمٌ واحد على الأقل.
+     *
+     * @return array<string, mixed>
+     */
+    private function permissionRules(Request $request): array
+    {
+        return [
+            /*
+             * الصلاحيات إلزامية: قسمٌ واحد على الأقل. موظفٌ بلا صلاحية حسابٌ
+             * يدخل ولا يجد شيئًا — يُحفظ بنجاح ثمّ يُكتشف عطله عند أوّل دخول.
+             */
+            'permissions' => [Rule::excludeIf(! $request->boolean('manual_permissions')), 'required', 'array', 'min:1'],
+            // والأفعالُ تُمنح من القائمة نفسها — انظر Permissions::ACTIONS
+            'permissions.*' => ['string', Rule::in([...Permissions::sections(), ...Permissions::actions()])],
+        ];
+    }
+
+    /** @return array<string, string> */
+    private function permissionMessages(): array
+    {
+        return [
+            'permissions.required' => __('حدّد صلاحيات الموظف — قسمٌ واحد على الأقل.'),
+            'permissions.min' => __('حدّد صلاحيات الموظف — قسمٌ واحد على الأقل.'),
+        ];
     }
 
     /**
@@ -424,26 +450,18 @@ class EmployeeController extends Controller
                  */
                 'basic_salary' => $this->readsPayroll() ? $employee->basic_salary : null,
                 'allowances' => $this->readsPayroll() ? $employee->allowances : null,
-                // null تعني «اتبع الدور»؛ مصفوفة تعني قائمة يدوية
+                // null تعني «يتبع الوظيفة»؛ مصفوفة تعني قائمة مخصّصة — والعمودُ كما هو
                 'permissions' => $employee->permissions,
-                'role_permissions' => collect(Permissions::sections())
-                    ->filter(fn ($s) => Permissions::allows($employee->role, $s))
-                    ->values()->all(),
+                // ودورُه الآن: الشاشةُ تقول إن كان المسمّى المختار سيغيّره
+                'role' => $employee->role,
             ],
-            'sections' => Permissions::sectionLabels(),
-            'actions' => Permissions::actionLabels(),
-            // وما يملك الفاعلُ منحَه — سواه يُعطَّل بسببه مكتوبًا لا يُرفع
-            'grantable' => Permissions::grantable(auth()->user()),
-            'blockedTitles' => JobTitle::where('business_id', Demo::bid())->orderBy('name')->get()
-                ->reject(fn ($t) => Permissions::mayAssignRole(auth()->user(), $t->role))
-                ->pluck('name')->values()->all(),
+            ...EmployeeAccess::formOptions(Demo::bid(), auth()->user()),
             // ومن لا يقرأ الرواتب لا تُرسم له حقولُها — انظر `readsPayroll`
             'may_read_payroll' => $this->readsPayroll(),
             'branches' => Demo::branches(),
             'branchOptions' => Branch::where('business_id', Demo::bid())
                 ->orderBy('id')->get(['id', 'name'])
                 ->map(fn ($b) => ['value' => $b->id, 'label' => $b->name])->values()->all(),
-            'jobTitles' => JobTitle::where('business_id', Demo::bid())->orderBy('name')->pluck('name')->all(),
         ]);
     }
 
@@ -495,17 +513,8 @@ class EmployeeController extends Controller
              */
             'basic_salary' => ['nullable', 'numeric', 'min:0'],
             'allowances' => ['nullable', 'numeric', 'min:0'],
-            /*
-             * الصلاحيات إلزامية: قسمٌ واحد على الأقل. موظفٌ بلا صلاحية حسابٌ
-             * يدخل ولا يجد شيئًا — يُحفظ بنجاح ثمّ يُكتشف عطله عند أوّل دخول.
-             */
-            'permissions' => ['required_with:manual_permissions', 'array', 'min:1'],
-            // والأفعالُ تُمنح من القائمة نفسها — انظر Permissions::ACTIONS
-            'permissions.*' => ['string', Rule::in([...Permissions::sections(), ...Permissions::actions()])],
-        ], [
-            'permissions.required_with' => __('حدّد صلاحيات الموظف — قسمٌ واحد على الأقل.'),
-            'permissions.min' => __('حدّد صلاحيات الموظف — قسمٌ واحد على الأقل.'),
-        ] + MerchantAccount::messages());
+            ...$this->permissionRules($request),
+        ], $this->permissionMessages() + MerchantAccount::messages());
 
         if (filled($data['login_username'] ?? null)) {
             if (MerchantAccount::taken($data['login_username'], $employee->id)) {

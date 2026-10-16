@@ -1105,7 +1105,7 @@ class Demo
         $lifetime = $scope(Revenue::query($bid)->whereNotNull('created_by'))
             ->selectRaw('created_by, SUM(total) as s')->groupBy('created_by')->pluck('s', 'created_by');
 
-        return User::where('business_id', $bid)->orderBy('id')->get()->map(function ($u) use ($monthly, $lifetime) {
+        return User::where('business_id', $bid)->with('branches:id,name')->orderBy('id')->get()->map(function ($u) use ($monthly, $lifetime) {
             $achieved = (float) ($monthly[$u->id] ?? 0);
             $target = (float) $u->monthly_target;
 
@@ -1115,6 +1115,24 @@ class Demo
                 // ما رُفع وحده — انظر `EmployeeController::store`
                 'avatar' => $u->avatar,
                 'role' => $u->job_title ?: $u->roleLabel(),
+                /*
+                 * ═══ وصاحبُ النشاط ليس موظّفًا يُعدّ ═══
+                 *
+                 * `User::isEmployee` تقولها: `admin` صاحبُ العمل لا موظّفٌ فيه. وقائمةُ
+                 * الموظفين كانت تعدّه معهم وتضعه بينهم بلا وسم. فيُعلَّم هنا، وتعرضه
+                 * الشاشةُ وحده ولا تعدّه — ويبقى في المسيرة إن سجّل لنفسه راتبًا،
+                 * لأنّ `PayrollRunController::payableEmployees` لا ترشّح بالدور.
+                 */
+                'is_owner' => ! $u->isEmployee(),
+                'job_title' => $u->job_title,
+                // ملفُّ الصلاحيات الأساسيّ — الدورُ الذي تُسنده الوظيفة، باسمه
+                'access_role' => $u->role,
+                'access_role_label' => $u->roleLabel(),
+                // «يتبع الوظيفة» أو «مخصّصة» — ومع المخصّصة عددُ أقسامها وأفعالها الحسّاسة
+                'permissions_mode' => $u->hasManualPermissions() ? 'custom' : 'inherited',
+                'permissions_summary' => $u->hasManualPermissions() ? EmployeeAccess::summary($u->permissions) : null,
+                // فروعُ العمل — مصدرُ الإذن. والفارغةُ «كل الفروع»
+                'work_branches' => $u->branches->pluck('name')->values()->all(),
                 'branch' => $u->branch ?? __('الفرع الرئيسي'),
                 'phone' => $u->phone,
                 'email' => $u->email,

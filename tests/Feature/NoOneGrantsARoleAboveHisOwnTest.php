@@ -216,7 +216,18 @@ class NoOneGrantsARoleAboveHisOwnTest extends TestCase
         $this->assertNotContains(Permissions::PAYROLL_PAY, $grantable);
 
         // ولا مربّعَ يُعرض قابلًا وهو يُردّ — الأقسامُ كلُّها معروضة والحكمُ منفصل
-        $this->assertArrayHasKey('products', $props['sections']);
+        $this->assertContains('products', collect($props['permissionCatalog'])->flatMap(fn ($g) => array_column($g['items'], 'key'))->all());
+    }
+
+    /**
+     * أسماءُ الوظائف المعطّلة في النموذج — المسمّياتُ تصله بملفّاتها وحكمِ كلٍّ منها.
+     *
+     * @param  array<string, mixed>  $props
+     * @return list<string>
+     */
+    private function blockedTitles(array $props): array
+    {
+        return collect($props['jobTitles'])->where('blocked', true)->pluck('name')->values()->all();
     }
 
     /** والوظيفةُ التي لا تُسند تُقال قبل الاختيار لا بعد الحفظ */
@@ -225,11 +236,11 @@ class NoOneGrantsARoleAboveHisOwnTest extends TestCase
         $props = $this->actingAs($this->accountant)
             ->get(route('admin.employees.create'))->viewData('page')['props'];
 
-        $this->assertContains('صاحب النشاط', $props['blockedTitles']);
-        $this->assertContains('مدير فرع', $props['blockedTitles']);
+        $this->assertContains('صاحب النشاط', $this->blockedTitles($props));
+        $this->assertContains('مدير فرع', $this->blockedTitles($props));
         // «بائع» يفتح المنتجات ولوحة التجهيز — ولا يملكهما المحاسب
-        $this->assertContains('بائع', $props['blockedTitles']);
-        $this->assertNotContains('كاشير', $props['blockedTitles']);
+        $this->assertContains('بائع', $this->blockedTitles($props));
+        $this->assertNotContains('كاشير', $this->blockedTitles($props));
     }
 
     /** والمالكُ لا يُمنع من وظيفة */
@@ -238,14 +249,14 @@ class NoOneGrantsARoleAboveHisOwnTest extends TestCase
         $props = $this->actingAs($this->owner)
             ->get(route('admin.employees.create'))->viewData('page')['props'];
 
-        $this->assertSame([], $props['blockedTitles']);
+        $this->assertSame([], $this->blockedTitles($props));
         $this->assertContains('products', $props['grantable']);
     }
 
     /**
      * وما تقوله الشاشةُ هو ما يفعله الخادم — على كلّ وظيفةٍ في المتجر.
      *
-     * وهذا هو الحارسُ الذي يمنع افتراقَ القائمتين: `blockedTitles` تُحسب
+     * وهذا هو الحارسُ الذي يمنع افتراقَ القائمتين: `jobTitles[].blocked` تُحسب
      * بـ`mayAssignRole`، والحارسُ يقيس بـ`grantable` — فتُجرَّب الوظائفُ
      * كلُّها واحدةً واحدة ويُقارن الجوابان.
      */
@@ -254,7 +265,7 @@ class NoOneGrantsARoleAboveHisOwnTest extends TestCase
         $this->actingAs($this->accountant);
 
         $props = $this->get(route('admin.employees.create'))->viewData('page')['props'];
-        $blocked = $props['blockedTitles'];
+        $blocked = $this->blockedTitles($props);
 
         foreach (JobTitle::where('business_id', $this->shop->id)->pluck('name') as $i => $title) {
             $res = $this->post(route('admin.employees.store'), $this->form([

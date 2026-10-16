@@ -2,7 +2,9 @@ import { usePage } from '@inertiajs/react';
 import AdminLayout from '@/Layouts/AdminLayout';
 import BackLink from '@/Components/BackLink';
 import PageHeader from '@/Components/PageHeader';
-import EmployeeForm from './partials/EmployeeForm';
+import EmployeeForm, { type JobTitleOption } from './partials/EmployeeForm';
+import type { RoleOption } from './partials/AccessProfileField';
+import type { PermissionGroup, RoleProfile } from './partials/EmployeePermissions';
 import { useTranslate } from '@/lib/i18n';
 import type { PageProps } from '@/types';
 import type { Branch } from '@/types/models';
@@ -10,16 +12,18 @@ import type { Branch } from '@/types/models';
 interface Props {
     branches: Branch[];
     branchOptions: { value: number; label: string }[];
-    jobTitles: string[];
+    jobTitles: JobTitleOption[];
     currentBranchName: string | null;
-    sections: Record<string, string>;
-    actions: Record<string, string>;
+    permissionCatalog: PermissionGroup[];
+    roleProfiles: Record<string, RoleProfile>;
+    roleOptions: RoleOption[];
+    grantable: string[];
     /** ومن لا يقرأ الرواتب لا تُرسم له حقولُها — انظر EmployeeController */
     may_read_payroll: boolean;
 }
 
 export default function EmployeeCreate() {
-    const { branches, branchOptions, jobTitles, currentBranchName, sections, actions, may_read_payroll } =
+    const { branches, branchOptions, jobTitles, currentBranchName, permissionCatalog, roleProfiles, roleOptions, grantable, may_read_payroll } =
         usePage<PageProps<Props>>().props;
     const t = useTranslate();
 
@@ -32,7 +36,7 @@ export default function EmployeeCreate() {
             />
             <PageHeader
                 title="إضافة موظف"
-                subtitle={t('أضف موظفًا جديدًا وحدّد دوره وفرعه')}
+                subtitle={t('أضف موظفًا جديدًا وحدّد مسماه الوظيفي وصلاحياته')}
             />
             <EmployeeForm
                 mayReadPayroll={may_read_payroll}
@@ -40,8 +44,10 @@ export default function EmployeeCreate() {
                 branchOptions={branchOptions}
                 jobTitles={jobTitles}
                 defaultBranch={currentBranchName}
-                sections={sections}
-                actions={actions}
+                permissionCatalog={permissionCatalog}
+                roleProfiles={roleProfiles}
+                roleOptions={roleOptions}
+                grantable={grantable}
             />
         </AdminLayout>
     );

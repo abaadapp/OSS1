@@ -22,6 +22,7 @@ use App\Support\CustomerContacts;
 use App\Support\Demo;
 use App\Support\DocumentTemplates;
 use App\Support\Emojis;
+use App\Support\EmployeeAccess;
 use App\Support\InventoryForecast;
 use App\Support\InvoiceBranding;
 use App\Support\Mailer;
@@ -414,9 +415,13 @@ class PageController extends Controller
                     'name' => $t->name,
                     'role' => $t->role,
                     'roleLabel' => Roles::label($t->role),
+                    // وظيفةُ صاحب النشاط تحمل كلَّ شيء — تُقال ولا يُعدَّل ملفُّها من هنا
+                    'is_owner_role' => ! in_array($t->role, Roles::STAFF, true),
                     'description' => $t->description,
                     'usage' => (int) ($usage[$t->name] ?? 0),
                 ])->all(),
+            // ملفّاتُ الصلاحيات الخمسة لنافذة الوظيفة — وما لا يُسنده القارئُ معطّلٌ بسببه
+            'roleOptions' => EmployeeAccess::roleOptions(auth()->user()),
         ];
     }
 
@@ -427,40 +432,17 @@ class PageController extends Controller
             'branchOptions' => Branch::where('business_id', Demo::bid())
                 ->orderBy('id')->get(['id', 'name'])
                 ->map(fn ($b) => ['value' => $b->id, 'label' => $b->name])->values()->all(),
-            'jobTitles' => self::jobTitles(),
             'currentBranchName' => Demo::currentBranchName(),
-            'sections' => Permissions::sectionLabels(),
-            'actions' => Permissions::actionLabels(),
             /*
-             * وما يملك الفاعلُ منحَه — تُعطَّل سواه ولا تُرفع من الشاشة.
-             *
-             * إخفاؤها كان سيجعل بطاقةَ موظّفٍ قائم تُخفي صلاحيةً يملكها
-             * بالفعل؛ وعرضُها بلا تمييزٍ كان يَعِد بما يُردّ عند الحفظ
-             * بصفحة ٤٠٣ تمحو النموذج. فتُعرض معطَّلةً بسببها مكتوبًا.
+             * المسمّياتُ بملفّاتها، وكتالوجُ الصلاحيات، وما يملك الفاعلُ منحَه —
+             * من `EmployeeAccess` نفسِها التي تقرؤها شاشةُ التعديل. وما لا يُمنح
+             * يُعرض معطّلًا بسببه مكتوبًا: إخفاؤه يُخفي عن موظّفٍ قائمٍ ما يملكه،
+             * وعرضُه بلا تمييزٍ يَعِد بما يردّه الحارسُ عند الحفظ.
              */
-            'grantable' => Permissions::grantable(auth()->user()),
-            'blockedTitles' => self::blockedJobTitles(),
+            ...EmployeeAccess::formOptions(Demo::bid(), auth()->user()),
             // ومن لا يقرأ الرواتب لا تُرسم له حقولُها — انظر EmployeeController
             'may_read_payroll' => (bool) auth()->user()?->may(Permissions::PAYROLL_VIEW),
         ]);
-    }
-
-    /**
-     * وظائفُ لا يُسندها هذا الفاعل — دورُها يحمل ما لا يملكه.
-     *
-     * والقائمةُ كانت تعرضها كلَّها: يختار المحاسبُ «بائعًا» ويملأ النموذج
-     * ويحفظ، فتُردّ صفحةُ ٤٠٣ — لأنّ دور البائع يفتح «المنتجات» و«لوحة
-     * التجهيز» وهو لا يملكهما. ولا شيء في الشاشة كان يقول ذلك قبل الضغط.
-     *
-     * @return list<string>
-     */
-    private static function blockedJobTitles(): array
-    {
-        $actor = auth()->user();
-
-        return JobTitle::where('business_id', Demo::bid())->orderBy('name')->get()
-            ->reject(fn ($t) => Permissions::mayAssignRole($actor, $t->role))
-            ->pluck('name')->values()->all();
     }
 
     public function employeesShow(string $id): Response
@@ -502,6 +484,21 @@ class PageController extends Controller
             // و«يتبع وظيفته» أو «مخصَّصة بيد» — الفرقُ يُقال لا يُخمَّن
             'permissions_are_manual' => is_array($user?->permissions),
             /*
+             * والوصولُ مرتّبًا كما في النموذج: ملفُّ الصلاحيات، والوضع، وما يفتحه
+             * فعلًا في مجموعاته — والأفعالُ الحسّاسة وحدها. ويُقرأ بـ`allows`/`may`
+             * التي يسأل بها الحارس، فلا تفترق البطاقةُ عن الباب.
+             */
+            'access' => $user ? EmployeeAccess::describe($user) : null,
+            // وفروعُ العمل بأسمائها — والفارغةُ «كل الفروع» (انظر `User::worksAt`)
+            'workBranches' => $user ? $user->branches()->orderBy('branches.id')->pluck('branches.name')->all() : [],
+            /*
+             * والراتبُ لمن يقرأ الرواتب وحده — `null` لغيره لا صفر، فلا تُرسم له
+             * خانةٌ تقول «٠» كذبًا. وهو الحارسُ نفسُه في شاشة التعديل.
+             */
+            'salary' => $user && auth()->user()?->may(Permissions::PAYROLL_VIEW)
+                ? ['basic' => (float) $user->basic_salary, 'allowances' => (float) $user->allowances]
+                : null,
+            /*
              * وأزرارُ «تعطيل» و«إعادة تعيين كلمة المرور» و«تعديل» تُرسم على
              * هذا لا على الأمنيات.
              *
@@ -511,12 +508,6 @@ class PageController extends Controller
              */
             'may_touch' => $user !== null && Permissions::mayTouch(auth()->user(), $user),
         ]);
-    }
-
-    /** مسمّيات الوظائف المعرّفة للنشاط */
-    private static function jobTitles(): array
-    {
-        return JobTitle::where('business_id', Demo::bid())->orderBy('name')->pluck('name')->all();
     }
 
     /* ------------------------------ المخزون ------------------------------ */
