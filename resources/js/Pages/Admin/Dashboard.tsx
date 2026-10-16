@@ -63,10 +63,12 @@ interface DashboardProps {
      */
     topProducts: { name: string; cat: string; sold: number; revenue: number }[];
     topEmployees: Employee[];
+    /** «مستنداتٌ تحتاج إجراء» — لمن يفتح المستندات (`DocumentRecords::summary`) */
+    documents?: { needs_action: number; expiring: number; expired: number; nearest: { id: number; title: string; expires_at: string; status: string } | null } | null;
 }
 
 export default function Dashboard() {
-    const { stats, statCatalog, salesSeries, paymentDistribution, recentInvoices, topProducts, topEmployees, context } =
+    const { stats, statCatalog, salesSeries, paymentDistribution, recentInvoices, topProducts, topEmployees, documents, context } =
         usePage<PageProps<DashboardProps>>().props;
 
     const t = useTranslate();
@@ -88,6 +90,27 @@ export default function Dashboard() {
                 <p className="mt-2 text-[12px] text-[#9ca3af]">
                     {t('آخر تحديث')}: <span dir="ltr">{updatedAt}</span>
                 </p>
+            )}
+
+            {/* مستنداتٌ تحتاج إجراء — صغيرةٌ ولا تُرسم حين لا شيء */}
+            {documents && documents.needs_action > 0 && (
+                <Card className="mt-4">
+                    <CardContent className="flex flex-wrap items-center justify-between gap-4 py-4">
+                        <div>
+                            <div className="text-[14px] font-semibold text-[#111]">{t('مستندات تحتاج إجراء')}</div>
+                            <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-[13px] text-[#4b4b4b]">
+                                <span>{t('تنتهي خلال 30 يومًا')}: <b className="tabular-nums text-[#b45309]">{documents.expiring}</b></span>
+                                <span>{t('منتهية')}: <b className="tabular-nums text-[#b91c1c]">{documents.expired}</b></span>
+                                {documents.nearest && (
+                                    <span>{t('أقرب انتهاء')}: <SmartLink routeName="admin.documents.show" href={route('admin.documents.show', documents.nearest.id)} className="underline">{documents.nearest.title}</SmartLink> <span dir="ltr">({documents.nearest.expires_at})</span></span>
+                                )}
+                            </div>
+                        </div>
+                        <SmartLink routeName="admin.documents.index" href={route('admin.documents.index', { status: documents.expired > 0 ? 'expired' : 'expiring' })} className="rounded-[10px] border border-[var(--ui-border,#e8e8e8)] px-3 py-1.5 text-[13px] hover:bg-[#fafafa]">
+                            {t('عرض المستندات')}
+                        </SmartLink>
+                    </CardContent>
+                </Card>
             )}
 
             <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">

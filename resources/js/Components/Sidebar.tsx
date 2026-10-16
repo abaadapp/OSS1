@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { usePage } from '@inertiajs/react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ChevronDown } from 'lucide-react';
 import Logo from '@/Components/Logo';
@@ -7,6 +8,7 @@ import { useTranslate } from '@/lib/i18n';
 import { NAV, type NavGroup, type NavItem } from '@/lib/nav';
 import { useNavSections } from '@/lib/navSections';
 import { cn } from '@/lib/utils';
+import type { PageProps } from '@/types';
 
 const OPEN_KEY = 'eventplus.sidebar.open';
 
@@ -41,6 +43,8 @@ export default function Sidebar({ open, onClose, nav = NAV, subtitle }: SidebarP
     const t = useTranslate();
     const current = route().current();
     const { groups, activeRoute } = useNavSections(nav);
+    /* عدّاداتُ العناصر — ما يحتاج إجراءً، من الخادم (`badges`) */
+    const { badges } = usePage<PageProps>().props;
 
     const matches = (name: string) =>
         current === name || (current?.startsWith(name.replace(/\.index$/, '.')) ?? false);
@@ -113,6 +117,11 @@ export default function Sidebar({ open, onClose, nav = NAV, subtitle }: SidebarP
             >
                 <Icon className={cn('shrink-0', depth ? 'size-4' : 'size-[18px]')} />
                 <span className="truncate">{t(item.label)}</span>
+                {item.badge && (badges?.[item.badge] ?? 0) > 0 && (
+                    <span className="ms-auto rounded-full bg-[#fef2f2] px-1.5 text-[11px] font-semibold tabular-nums text-[#b91c1c]">
+                        {(badges?.[item.badge] ?? 0) > 99 ? '99+' : badges?.[item.badge]}
+                    </span>
+                )}
             </SmartLink>
         );
     };

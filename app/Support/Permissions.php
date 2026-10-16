@@ -306,6 +306,16 @@ class Permissions
     public const ORGANIZERS_MANAGE = 'organizers.manage';
 
     /*
+     * ═══ المستندات ═══
+     *
+     * قسمُ «المستندات» يفتح سجلَّ مستندات الشركة الداخليّة وملفّاتها للقراءة؛ والإضافةُ
+     * والتعديلُ ورفعُ نسخةٍ جديدة والأرشفةُ وإدارةُ التصنيفات فعلٌ بالاسم.
+     */
+
+    /** إضافةُ المستندات وتعديلُها ورفعُ نسخها وأرشفتُها وإدارةُ تصنيفاتها */
+    public const DOCUMENTS_MANAGE = 'documents.manage';
+
+    /*
      * ═══ الذكاءُ الإداريّ — المرحلة 11 ═══
      *
      * قسمُ «الإدارة» يفتح الشاشات؛ والأرقامُ الماليّة لا تُرى بمجرّد فتح
@@ -482,6 +492,7 @@ class Permissions
         self::CREW_MANAGE => 'تعيين فريق الفعاليّة',
         self::CHECKLIST_MANAGE => 'قوالب قوائم التحقّق وإعفاء بندٍ إلزاميّ',
         self::ORGANIZERS_MANAGE => 'إدارة المنظّمين وتصنيفاتهم',
+        self::DOCUMENTS_MANAGE => 'إدارة مستندات الشركة وتصنيفاتها',
         self::ANALYTICS_FINANCIAL => 'قراءة الأداء المالي والنقد والذمم',
         self::ANALYTICS_PROJECTS => 'قراءة ربحيّة المشاريع',
         self::ANALYTICS_CUSTOMERS => 'قراءة تحليلات العملاء والخدمات والقمع',
@@ -616,6 +627,7 @@ class Permissions
         self::CREW_MANAGE => ['admin', 'manager'],
         self::CHECKLIST_MANAGE => ['admin', 'manager'],
         self::ORGANIZERS_MANAGE => ['admin', 'manager'],
+        self::DOCUMENTS_MANAGE => ['admin', 'manager'],
         /*
          * والذكاءُ الإداريّ — المرحلة 11: القراءةُ للمالك والمدير، وللمحاسب
          * ما هو عملُه (المالُ والمشاريعُ والعملاءُ والموازنةُ والتوقّعُ قراءةً).
@@ -850,6 +862,8 @@ class Permissions
         'management',
         // المنظّمون الميدانيّون — المرحلة 14: السجلُّ وتصنيفاتُه. للمالك والمدير بـ`*`، ويُمنح بالاسم
         'organizers',
+        // مستنداتُ الشركة الداخليّة وانتهاؤها. للمالك والمدير بـ`*`، ويُمنح بالاسم
+        'documents',
     ];
 
     /**
@@ -957,6 +971,7 @@ class Permissions
         'assets' => 'admin.assets.index',
         'management' => 'admin.management.index',
         'organizers' => 'admin.organizers.index',
+        'documents' => 'admin.documents.index',
     ];
 
     /**
@@ -1014,6 +1029,7 @@ class Permissions
             'assets' => 'المعدّات',
             'management' => 'الإدارة',
             'organizers' => 'المنظّمون',
+            'documents' => 'المستندات',
         ];
 
         return collect(self::SECTIONS)

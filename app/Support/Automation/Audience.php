@@ -7,6 +7,7 @@ use App\Models\AutomationRule;
 use App\Models\Communication;
 use App\Models\CustomerInvoice;
 use App\Models\DeliveryPackage;
+use App\Models\DocumentRecord;
 use App\Models\EventOperation;
 use App\Models\OperationCrewAssignment;
 use App\Models\OperationIncident;
@@ -84,6 +85,8 @@ final class Audience
                 $target instanceof ProjectTask => [$target->assignee_id],
                 $target instanceof OperationCrewAssignment => [$target->user_id],
                 $target instanceof OperationIncident => [$target->assigned_to],
+                /* والمسؤولُ عن مستند الشركة — وإلّا من أضافه، فلا ينتهي مستندٌ بلا أحدٍ يسمع */
+                $target instanceof DocumentRecord => [$target->responsible_user_id ?: $target->created_by],
                 /* ومن له مهامٌّ مفتوحة على الفعاليّة — جمهورُ رسائل مهامّها */
                 $target instanceof EventOperation => EventTasks::assigneeIds($target),
                 default => [],

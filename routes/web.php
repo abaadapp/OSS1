@@ -21,6 +21,7 @@ use App\Http\Controllers\Admin\DeliveryPackageController;
 use App\Http\Controllers\Admin\CustomerImportExportController;
 use App\Http\Controllers\Admin\CustomerInvoiceController;
 use App\Http\Controllers\Admin\DataImportController;
+use App\Http\Controllers\Admin\DocumentController;
 use App\Http\Controllers\Admin\DocumentPrintController;
 use App\Http\Controllers\Admin\EmployeeController;
 use App\Http\Controllers\Admin\EventOperationController;
@@ -494,6 +495,22 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'tenant', 'business'
     Route::put('/organizers/{id}', [OrganizerController::class, 'update'])->whereNumber('id')->name('organizers.update');
     Route::post('/organizers/{id}/status', [OrganizerController::class, 'status'])->whereNumber('id')->name('organizers.status');
     Route::delete('/organizers/{id}', [OrganizerController::class, 'destroy'])->whereNumber('id')->name('organizers.destroy');
+
+    /*
+     * مستنداتُ الشركة الداخليّة وانتهاؤها. القسمُ `documents` يقرأ ويفتح الملفّات،
+     * والكتابةُ بـ`documents.manage`. والتصنيفاتُ قبل {id}، والتعديلُ POST لأنّه يحمل ملفًّا.
+     */
+    Route::get('/documents', [DocumentController::class, 'index'])->name('documents.index');
+    Route::post('/documents', [DocumentController::class, 'store'])->name('documents.store');
+    Route::post('/documents/categories', [DocumentController::class, 'storeCategory'])->name('documents.categories.store');
+    Route::put('/documents/categories/{id}', [DocumentController::class, 'updateCategory'])->whereNumber('id')->name('documents.categories.update');
+    Route::delete('/documents/categories/{id}', [DocumentController::class, 'destroyCategory'])->whereNumber('id')->name('documents.categories.destroy');
+    Route::get('/documents/{id}', [DocumentController::class, 'show'])->whereNumber('id')->name('documents.show');
+    Route::post('/documents/{id}', [DocumentController::class, 'update'])->whereNumber('id')->name('documents.update');
+    Route::post('/documents/{id}/archive', [DocumentController::class, 'archive'])->whereNumber('id')->name('documents.archive');
+    Route::post('/documents/{id}/restore', [DocumentController::class, 'restore'])->whereNumber('id')->name('documents.restore');
+    Route::get('/documents/{id}/file', [DocumentController::class, 'file'])->whereNumber('id')->name('documents.file');
+    Route::get('/documents/{id}/files/{fid}', [DocumentController::class, 'version'])->whereNumber('id')->whereNumber('fid')->name('documents.version');
 
     /*
      * المشتريات — ثلاث شاشات على بابين.

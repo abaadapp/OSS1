@@ -5,6 +5,7 @@ namespace App\Support\Automation;
 use App\Support\Automation\Triggers\CommunicationFailed;
 use App\Support\Automation\Triggers\CrewAssignment;
 use App\Support\Automation\Triggers\DeliveryAwaiting;
+use App\Support\Automation\Triggers\DocumentExpiry;
 use App\Support\Automation\Triggers\EquipmentCheckout;
 use App\Support\Automation\Triggers\EquipmentUnreturned;
 use App\Support\Automation\Triggers\EventTasksAssigned;
@@ -59,6 +60,8 @@ final class Triggers
         'management_report_ready' => ManagementReportReady::class,
         'management_review_due' => ManagementReviewDue::class,
         'forecast_stale' => ForecastStale::class,
+        /* ومستنداتُ الشركة — انتهاءٌ يُسمع قبل وقوعه، داخليٌّ للمسؤول والإدارة */
+        'document_expiry' => DocumentExpiry::class,
     ];
 
     public static function for(string $key): Trigger
