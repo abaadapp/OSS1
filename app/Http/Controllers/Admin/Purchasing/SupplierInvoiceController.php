@@ -8,6 +8,7 @@ use App\Models\Project;
 use App\Models\PurchaseOrder;
 use App\Models\Supplier;
 use App\Models\SupplierInvoice;
+use App\Models\SupplierInvoicePayment;
 use App\Models\User;
 use App\Support\Activity;
 use App\Support\Demo;
@@ -237,24 +238,50 @@ class SupplierInvoiceController extends Controller
         ]))->pluck('name', 'id');
 
         /*
-         * والسداداتُ تُقرأ من الدفتر لا من عمود «المدفوع».
+         * والدفعاتُ تُقرأ من الدفتر لا من عمود «المدفوع».
          *
          * العمودُ يقول كم دُفع، والدفترُ يقول **متى ومن أين**. وهو ما
          * يُسأل عنه عند المراجعة: سُدّد ٣٠ من ١٠٠ — في أيّ يومٍ ومن الصندوق
          * أم من البنك؟
+         *
+         * ═══ وكلُّ قيدٍ بدفعته إن كانت ═══
+         *
+         * القيدُ يبقى مصدرَ التاريخ والمبلغ، وصفُّ الدفعة (`supplier_invoice_payments`)
+         * يضيف إيصالَها. وما سُدّد قبل جدول الدفعات قيدٌ بلا صفّ: يُقرأ كما كان، ومصدرُه
+         * من سطره الدائن ومسجِّلُه من القيد نفسِه — ممّا في الدفتر فعلًا، ولا إيصالَ يُخترع له.
          */
-        $payments = JournalEntry::where('business_id', $bid)
+        $entries = JournalEntry::where('business_id', $bid)
             ->where('sourceable_type', SupplierInvoice::class)
             ->where('sourceable_id', $invoice->id)
             ->where('source', 'سداد مورّد')
-            ->with('lines')
+            ->with('lines.account:id,system_key', 'supplierInvoicePayment.creator:id,name')
             ->orderBy('entry_date')->orderBy('id')
-            ->get()
-            ->map(fn ($e) => [
+            ->get();
+
+        $entryUsers = User::where('business_id', $bid)
+            ->whereIn('id', $entries->pluck('created_by')->filter()->unique()->all())->pluck('name', 'id');
+
+        $payments = $entries->map(function (JournalEntry $e) use ($invoice, $mayAttachment, $entryUsers) {
+            $payment = $e->supplierInvoicePayment;
+            $credit = $e->lines->first(fn ($l) => (float) $l->credit > 0);
+            $side = $payment?->paid_from
+                ?? (in_array($credit?->account?->system_key, SupplierInvoicePayment::SOURCES, true) ? $credit->account->system_key : null);
+
+            return [
+                'id' => $payment?->id,
                 'number' => $e->number,
                 'at' => optional($e->entry_date)->format('Y-m-d'),
                 'amount' => round((float) $e->lines->sum('debit'), 3),
-            ])->all();
+                'from' => $side,
+                'by' => $payment?->creator?->name ?? ($e->created_by ? ($entryUsers[$e->created_by] ?? null) : null),
+                'has_receipt' => $payment?->receipt !== null,
+                'receipt_name' => $payment?->receipt_name,
+                'receipt' => $payment?->receipt && $mayAttachment
+                    ? route('admin.purchases.invoices.payments.receipt', [$invoice->id, $payment->id]) : null,
+                /* قيدٌ سبق جدولَ الدفعات — يُعرض كما كان، بلا إيصال */
+                'legacy' => $payment === null,
+            ];
+        })->all();
 
         $po = $invoice->purchaseOrder;
 
@@ -516,8 +543,28 @@ class SupplierInvoiceController extends Controller
         $data = $request->validate([
             'amount' => ['required', 'numeric', 'min:0.001'],
             'paid_at' => ['required', 'date'],
-            'from' => ['required', Rule::in(['cash', 'bank'])],
+            'from' => ['required', Rule::in(SupplierInvoicePayment::SOURCES)],
+            /* إيصالُ هذه الدفعة — لا مرفقُ السند، فذاك فاتورةُ المورّد نفسُها */
+            'receipt' => ['nullable', 'file', 'max:'.SupplierInvoicePayment::MAX_KB, 'extensions:'.implode(',', SupplierInvoicePayment::EXTENSIONS)],
+            /* مفتاحُ النموذج — ضغطةٌ ثانية أو إعادةُ إرسالٍ لا تدفع مرّتين */
+            'request_key' => ['nullable', 'string', 'max:64'],
+        ], [
+            'receipt.extensions' => __('صيغة الإيصال غير مدعومة — المقبول: PDF أو صورة (JPG، PNG، WEBP، HEIC).'),
+            'receipt.max' => __('حجم الإيصال أكبر من 10 ميجابايت.'),
+            'receipt.uploaded' => __('تعذّر رفع الإيصال — تأكّد أن حجمه دون 10 ميجابايت.'),
+            'receipt.file' => __('الإيصال يجب أن يكون ملفًّا.'),
         ]);
+
+        /*
+         * والطلبُ نفسُه إن عاد — ضغطةٌ ثانية أو إعادةُ إرسالٍ من المتصفّح.
+         *
+         * يُسأل عنه قبل حرّاس المبلغ: دفعةٌ سدّدت السندَ كلَّه تُعاد بنجاحها، لا
+         * بـ«المستحقّ صفر» كأنّها لم تقع.
+         */
+        if (filled($data['request_key'] ?? null) && SupplierInvoicePayment::where('business_id', $bid)
+            ->where('supplier_invoice_id', $invoice->id)->where('idempotency_key', $data['request_key'])->exists()) {
+            return back()->with('toast', ['msg' => __('سُجّلت هذه الدفعة من قبل'), 'type' => 'success']);
+        }
 
         /*
          * ولا يُدفع على سندٍ لم يُعتمد.
@@ -548,15 +595,24 @@ class SupplierInvoiceController extends Controller
         }
 
         try {
-            /* القيدُ والمسدَّدُ من بابٍ واحد في `SupplierInvoices::settle` — يقرؤه الاستيرادُ التاريخيُّ أيضًا */
-            $invoice = SupplierInvoices::settle($invoice, $amount, $data['from'], Carbon::parse($data['paid_at']), auth()->id());
+            /* القيدُ والدفعةُ وإيصالُها والمسدَّدُ من بابٍ واحد في `SupplierInvoices::settle` — يقرؤه الاستيرادُ التاريخيُّ أيضًا */
+            $invoice = SupplierInvoices::settle($invoice, $amount, $data['from'], Carbon::parse($data['paid_at']), auth()->id(),
+                $request->file('receipt'), $data['request_key'] ?? null);
         } catch (RuntimeException $e) {
             return back()->withErrors(['amount' => $e->getMessage()]);
         }
 
-        Activity::log('updated', 'سدّد '.$amount.' على السند '.$invoice->supplier_ref, ['subject_id' => $invoice->id]);
+        /** @var SupplierInvoicePayment $payment */
+        $payment = $invoice->getRelation('payment');
+        if (! $payment->wasRecentlyCreated) {
+            return back()->with('toast', ['msg' => __('سُجّلت هذه الدفعة من قبل'), 'type' => 'success']);
+        }
 
-        return back()->with('toast', ['msg' => __('سُجّل السداد'), 'type' => 'success']);
+        Activity::log('updated', 'سجّل دفعة '.number_format($amount, 3).' على سند المورّد '.$invoice->supplier_ref
+            .' ('.($data['from'] === SupplierInvoicePayment::BANK ? 'بنك' : 'نقد').')'
+            .($payment->receipt ? ' مع إيصال' : ''), ['subject_id' => $invoice->id, 'subject_type' => 'supplier_invoice']);
+
+        return back()->with('toast', ['msg' => __('سُجّلت الدفعة'), 'type' => 'success']);
     }
 
     public function destroy($id)

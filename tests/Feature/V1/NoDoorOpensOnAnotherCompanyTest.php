@@ -203,6 +203,10 @@ class NoDoorOpensOnAnotherCompanyTest extends TestCase
 
         $po = PurchaseOrder::create(['business_id' => $bid, 'number' => "PO-$m", 'supplier_id' => $supplier->id, 'supplier_name' => "مورّد $m", 'status' => \App\Support\PurchaseOrders::SENT, 'items_subtotal' => 100, 'tax' => 0, 'total' => 100, 'ordered_at' => now()]);
         $si = SupplierInvoices::create($bid, ['supplier_id' => $supplier->id, 'supplier_ref' => "R-$m", 'issued_at' => now()->toDateString(), 'subtotal' => 100, 'tax' => 0], $owner);
+        /* وسندٌ معتمَدٌ عليه دفعةٌ بإيصال — إيصالُ دفعة «أ» لا يُفتح من «ب» */
+        $paidInvoice = SupplierInvoices::approve(SupplierInvoices::create($bid, ['supplier_id' => $supplier->id, 'supplier_ref' => "P-$m", 'issued_at' => now()->toDateString(), 'subtotal' => 50, 'tax' => 0], $owner), $owner);
+        $supplierPayment = SupplierInvoices::settle($paidInvoice, 10, 'bank', now(), $owner->id)->getRelation('payment');
+        $supplierPayment->update(['receipt' => "supplier-invoice-payments/$bid/x.pdf", 'receipt_name' => "إيصال $m.pdf"]);
         $journal = JournalEntry::where('business_id', $bid)->firstOrFail();
         $order = Order::create(['business_id' => $bid, 'number' => "ORD-$m", 'customer_id' => $customer->id, 'customer_name' => "عميل $m", 'status' => 'جديد', 'subtotal' => 10, 'total' => 10, 'ordered_at' => now()]);
         $bank = \App\Models\BankAccount::create(['business_id' => $bid, 'bank_name' => "بنك $m", 'label' => "حساب $m", 'active' => true, 'is_primary' => true]);
@@ -242,6 +246,7 @@ class NoDoorOpensOnAnotherCompanyTest extends TestCase
             'clid' => $checklist->id, 'checklist.iid' => $checklistItem->id, 'consumables.cid' => $consumable->id,
             'deliveries' => $package->id, 'item' => $packageItem->id, 'customerInvoices' => $invoice->id, 'customerInvoices.draft' => $draftInvoice->id,
             'customerPayments' => $payment->id, 'note' => $creditNote->id, 'purchases' => $po->id, 'purchases.invoices' => $si->id,
+            'purchases.invoices.paid' => $paidInvoice->id, 'payment' => $supplierPayment->id,
             'finance.journal' => $journal->id, 'orders.number' => $order->number, 'finance.banks' => $bank->id, 'finance.chart' => $account->id, 'finance.assets' => $fixedAsset->id,
             'communications' => $communication->id, 'whatsapp.reply' => $waConversation->id, 'whatsapp.media' => $waMessage->id, 'automation.rules' => $rule->id, 'automation.runs' => $run->id, 'automation.history' => $run->id,
             'notifications' => $notification->id, 'alerts' => $alert->id, 'management.budgets' => $budget->id, 'management.forecasts' => $forecast->id,
@@ -277,6 +282,8 @@ class NoDoorOpensOnAnotherCompanyTest extends TestCase
             $param === 'item' => $this->ids['item'],
             $param === 'contactId' => $this->ids['contactId'],
             $param === 'oid' => $this->ids['oid'],
+            $param === 'payment' => $this->ids['payment'],
+            $param === 'id' && $routeName === 'admin.purchases.invoices.payments.receipt' => $this->ids['purchases.invoices.paid'],
             $param === 'fid' => $this->ids['fid'],
             /* موظّفُ «أ» — رابطُ مهامّه في فعاليّتها لا يُجدَّد من «ب» */
             $param === 'userId' => (int) $this->ownerA->id,

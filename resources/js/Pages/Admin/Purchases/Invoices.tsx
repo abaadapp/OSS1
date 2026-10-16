@@ -24,6 +24,7 @@ import { useConfirm } from '@/Components/ConfirmDialog';
 import { useTranslate } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import type { PageProps } from '@/types';
+import { SupplierPaymentDialog } from './partials/SupplierInvoicePayments';
 
 interface Invoice {
     id: number;
@@ -127,7 +128,6 @@ export default function SupplierInvoices() {
         cost_kind: '',
     });
 
-    const payForm = useForm({ amount: '', paid_at: today, from: 'cash' });
 
     // الإجمالي يُحسب أمام العين: الفرق بين ما يُكتب وما يُحفظ يُكتشف بعد الحفظ
     const total = useMemo(
@@ -283,8 +283,6 @@ export default function SupplierInvoices() {
                         setDeciding(i);
                     }}
                     onPay={() => {
-                        payForm.clearErrors();
-                        payForm.setData({ amount: String(i.outstanding), paid_at: today, from: 'cash' });
                         setPaying(i);
                     }}
                     onCancel={() => {
@@ -545,85 +543,9 @@ export default function SupplierInvoices() {
                 </DialogContent>
             </Dialog>
 
-            {/* ===== سداد ===== */}
-            <Dialog open={paying !== null} onOpenChange={(o) => !o && setPaying(null)}>
-                <DialogContent className="sm:max-w-md">
-                    <DialogHeader>
-                        <DialogTitle>
-                            {t('سداد السند')} — {paying?.reference}
-                        </DialogTitle>
-                    </DialogHeader>
-
-                    <form
-                        onSubmit={(e) => {
-                            e.preventDefault();
-                            if (!paying) return;
-                            payForm.post(route('admin.purchases.invoices.pay', paying.id), {
-                                preserveScroll: true,
-                                onSuccess: () => setPaying(null),
-                            });
-                        }}
-                        className="space-y-4 px-5 pb-5"
-                    >
-                        <div className="rounded-[12px] bg-[#fafafa] p-3 text-[13px] text-[#6b7280]">
-                            <p className="flex justify-between">
-                                <span>{t('المستحقّ')}</span>
-                                <span className="font-semibold tabular-nums text-[#111]">
-                                    {m(paying?.outstanding ?? 0)}
-                                </span>
-                            </p>
-                            {(paying?.paid ?? 0) > 0 && (
-                                <p className="mt-1 flex justify-between text-[12px] text-[#9ca3af]">
-                                    <span>{t('سُدّد سابقًا')}</span>
-                                    <span className="tabular-nums">{m(paying?.paid ?? 0)}</span>
-                                </p>
-                            )}
-                        </div>
-
-                        <Field label="المبلغ" required error={payForm.errors.amount}>
-                            <Input
-                                type="number"
-                                step="0.001"
-                                min="0"
-                                dir="ltr"
-                                value={payForm.data.amount}
-                                onChange={(e) => payForm.setData('amount', e.target.value)}
-                            />
-                        </Field>
-
-                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                            <Field label="التاريخ" required error={payForm.errors.paid_at}>
-                                <Input
-                                    type="date"
-                                    dir="ltr"
-                                    value={payForm.data.paid_at}
-                                    onChange={(e) => payForm.setData('paid_at', e.target.value)}
-                                />
-                            </Field>
-                            <Field label="دُفع من" required error={payForm.errors.from}>
-                                <Select
-                                    value={payForm.data.from}
-                                    onChange={(e) => payForm.setData('from', e.target.value)}
-                                    options={[
-                                        { value: 'cash', label: 'الصندوق' },
-                                        { value: 'bank', label: 'البنك' },
-                                    ]}
-                                />
-                            </Field>
-                        </div>
-
-                        <div className="flex justify-end gap-2 pt-2">
-                            <Button type="button" variant="ghost" onClick={() => setPaying(null)}>
-                                {t('إلغاء')}
-                            </Button>
-                            <Button type="submit" loading={payForm.processing}>
-                                <Wallet />
-                                {t('تسجيل السداد')}
-                            </Button>
-                        </div>
-                    </form>
-                </DialogContent>
-            </Dialog>
+            {/* ===== سداد — النافذةُ نفسُها في صفحة السند: المبلغُ والتاريخُ والمصدرُ وإيصالُ الدفعة ===== */}
+            <SupplierPaymentDialog open={paying !== null} onClose={() => setPaying(null)} invoice={paying} today={today} m={m}
+                defaultAmount={paying ? String(paying.outstanding) : ''} />
 
             {/*
                 نافذةُ المراجعة — الأرقامُ الثلاثة معًا ثمّ القرار.
