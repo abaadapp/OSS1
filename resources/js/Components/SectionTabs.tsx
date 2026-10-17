@@ -21,9 +21,9 @@ export interface SectionTab {
     /**
      * فعلُ الصلاحية إن كانت الشاشة يحرسها فعلٌ لا قسم.
      *
-     * القسمُ لا يكفي لثلاثِ شاشات: مسيرةُ الرواتب وصرفُها تحت «الموظفين»،
-     * وإشعارُ الاستلام تحت «المخزون»، وسنداتُ الموردين تحت «المشتريات» —
-     * ومن مُنح القسم ولم يُمنح الفعل يرى التبويب ويُردّ بـ403.
+     * القسمُ لا يكفي لبعض الشاشات: مسيرةُ الرواتب وصرفُها تحت «الموظفين»،
+     * وسنداتُ الموردين تحت «المشتريات» — ومن مُنح القسم ولم يُمنح الفعل يرى
+     * التبويب ويُردّ بـ403.
      */
     action?: string;
 }
@@ -62,8 +62,8 @@ export default function SectionTabs({ tabs: all, current, className }: Props) {
      * تبويب نشط واحد لا أكثر.
      *
      * المطابقة بالعائلة وحدها كانت تُضيء تبويبات القسم كلّها معًا: عائلة
-     * admin.inventory.index و.stocktake و.adjustments واحدة هي
-     * admin.inventory، فكل صفحة مخزون تُطابقها جميعًا.
+     * admin.customers.index و.organizations واحدة هي admin.customers، فكل
+     * صفحة عملاء تُطابقها جميعًا.
      *
      * فالمطابقة الحرفية تُقدَّم أولًا، ولا يُلجأ إلى العائلة إلا حين لا يطابق
      * أيُّ تبويب حرفيًا (صفحات فرعية مثل admin.products.create) — ويؤخذ عندها
@@ -116,16 +116,19 @@ export default function SectionTabs({ tabs: all, current, className }: Props) {
 }
 
 /**
- * قسم العملاء — العملاء والمورّدون.
+ * قسم العملاء — العملاء والمورّدون والمنظّمون.
  *
- * كلاهما جهةٌ يتعامل معها المتجر: هذه تشتري منه وتلك يشتري منها. وكان
- * المورّدون في المخزون، فيبحث عنهم من يريد بياناتهم حيث تُعدّ البضاعة.
+ * كلُّهم جهاتٌ وأشخاصٌ تتعامل معهم الشركة: العميلُ تعمل له، والمورّدُ تشتري
+ * منه، والمنظّمُ يعمل معها في الميدان. والمنظّمون كانوا قسمًا وحدَه في
+ * القائمة — فصاروا تبويبًا هنا بسجلّهم وتصنيفاتهم وصلاحيتهم كما هي
+ * (`organizers` · `organizers.manage`)، ولا يُخلطون بجدول العملاء.
  */
 export const CUSTOMER_TABS: SectionTab[] = [
     /* الاعتباريّون أوّلًا: وزاراتٌ وشركاتٌ هي أكثرُ من تعمل له الشركة */
     { label: 'شركات وجهات', routeName: 'admin.customers.organizations', section: 'customers' },
     { label: 'العملاء', routeName: 'admin.customers.index', section: 'customers' },
     { label: 'الموردين', routeName: 'admin.suppliers.index', section: 'suppliers' },
+    { label: 'المنظّمون', routeName: 'admin.organizers.index', section: 'organizers' },
 ];
 
 /**
@@ -202,13 +205,6 @@ export const PURCHASE_TABS: SectionTab[] = [
 ];
 
 /*
- * قسم المخزون — خمسة مداخل.
- *
- * أوامر الشراء والمورّدون خرجا منه إلى «المشتريات»: بابٌ واحد لكلٍّ منهما لا
- * بابان في قسمين. والتحويل بين الفروع وحركات المخزون قراءاتٌ من قراءات
- * «المنتجات»، فلا تُفرد لهما تبويبات.
- */
-/*
  * قسمُ الإدارة — المرحلة 11: «كيف تؤدّي الشركة؟» في تبويباتٍ لا في ثلاثَ
  * عشرةَ شاشة. والمالُ يحرسه فعلُه: من فتح القسم بلا `analytics.financial`
  * لا يرى تبويبَ المال ولا النقد ولا الموازنة.
@@ -226,9 +222,14 @@ export const MANAGEMENT_TABS: SectionTab[] = [
     { label: 'التقارير', routeName: 'admin.management.reports', section: 'management' },
 ];
 
+/*
+ * قسم المخزون — رصيدُ المنتجات وحده.
+ *
+ * «عمليات جرد المخزون» و«سجل المخزون» و«إشعار استلام بضاعة» خرجت من الواجهة:
+ * القسمُ لإدارة الرصيد لا لدفاتره. والبنيةُ تحتها باقية — `StockLedger` والتسوياتُ
+ * التي تكتبها مستهلكاتُ الفعاليّة، وسندُ الاستلام الذي يُعتمد من صفحته فيُدخل
+ * البضاعةَ الرفّ. والشريطُ يختفي من نفسه حين لا يبقى إلّا تبويب.
+ */
 export const INVENTORY_TABS: SectionTab[] = [
     { label: 'المنتجات', routeName: 'admin.inventory.index', section: 'inventory' },
-    { label: 'عمليات جرد المخزون', routeName: 'admin.inventory.stocktake', section: 'inventory' },
-    { label: 'سجل المخزون', routeName: 'admin.inventory.adjustments', section: 'inventory' },
-    { label: 'إشعار استلام بضاعة', routeName: 'admin.inventory.receipts', section: 'inventory', action: 'receipt.view' },
 ];

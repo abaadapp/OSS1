@@ -3,6 +3,7 @@ import { router, usePage } from '@inertiajs/react';
 import { Plus, Tags, UsersRound } from 'lucide-react';
 import AdminLayout from '@/Layouts/AdminLayout';
 import PageHeader from '@/Components/PageHeader';
+import SectionTabs, { CUSTOMER_TABS } from '@/Components/SectionTabs';
 import SmartLink from '@/Components/SmartLink';
 import Field, { Select } from '@/Components/Field';
 import { Button } from '@/Components/ui/button';
@@ -23,7 +24,7 @@ interface Props {
 }
 
 /**
- * المنظّمون — سجلٌّ مستقلّ: ليسوا عملاءَ ولا موظّفين بحسابات.
+ * المنظّمون — تبويبٌ في قسم «العملاء»، وسجلُّهم مستقلّ: ليسوا عملاءَ ولا موظّفين بحسابات.
  *
  * يُبحث بالاسم والهاتف، ويُرشَّح بالجنس والتصنيف والحال. والتعيينُ على
  * الفعاليّة من شاشتها، ومسؤولُ المنظّمين موظّفٌ يُختار هناك.
@@ -50,6 +51,8 @@ export default function OrganizersIndex() {
                     </div>
                 }
             />
+
+            <SectionTabs tabs={CUSTOMER_TABS} current="admin.organizers.index" />
 
             {errors?.organizer && <div className="mb-4 rounded-lg bg-[#fef2f2] px-4 py-3 text-[13px] text-[#b91c1c]">{errors.organizer}</div>}
 

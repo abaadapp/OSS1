@@ -161,10 +161,11 @@ class ADocumentScreenShowsThePaperBesideItTest extends TestCase
      */
     public function test_every_list_row_opens_the_document_it_names(): void
     {
-        $receipts = (string) file_get_contents(resource_path('js/Pages/Admin/Inventory/Receipts.tsx'));
-
-        $this->assertStringContainsString('admin.inventory.receipts.show', $receipts, 'قائمةُ السندات لا تفتح سندَها');
-        $this->assertStringContainsString('admin.purchases.show', $receipts, 'قائمةُ السندات لا تفتح أمرَها');
+        // وقائمةُ السندات خرجت من الواجهة: ما ينتظر الاعتماد في «المخزون» يفتح سندَه، والسندُ يفتح أمرَه
+        $inventory = (string) file_get_contents(resource_path('js/Pages/Admin/Inventory/Index.tsx'));
+        $this->assertStringContainsString('admin.inventory.receipts.show', $inventory, 'ما ينتظر الاعتماد لا يفتح سندَه');
+        $receipt = (string) file_get_contents(resource_path('js/Pages/Admin/Inventory/ReceiptShow.tsx'));
+        $this->assertStringContainsString('admin.purchases.show', $receipt, 'السندُ لا يفتح أمرَه');
 
         $invoices = (string) file_get_contents(resource_path('js/Pages/Admin/Purchases/Invoices.tsx'));
 

@@ -1,4 +1,5 @@
 import { usePage } from '@inertiajs/react';
+import type { SectionTab } from '@/Components/SectionTabs';
 import { NAV, type NavGroup, type NavItem } from '@/lib/nav';
 import type { PageProps } from '@/types';
 
@@ -20,6 +21,20 @@ export function useNavSections(nav: NavGroup[] = NAV): NavSections {
 
     // بلا قسم صلاحية يظهر العنصر دائمًا — انظر NavItem.section
     const can = (section?: string) => !section || (auth?.abilities.includes(section) ?? false);
+    const mayTab = (tab: SectionTab) =>
+        can(tab.section) && (!tab.action || (auth?.mayActions?.includes(tab.action) ?? false));
+
+    /*
+     * وبابُ شريطِ تبويبات يُفتح لمن يملك أيَّ تبويبٍ فيه — انظر NavItem.tabs.
+     *
+     * من يملك قسمَ العنصر يدخل من بابه كما كان، ومن لا يملكه يدخل من أوّلِ
+     * تبويبٍ يملكه: من مُنح المنظّمين وحدهم يرى «العملاء» يقود إليهم.
+     */
+    const reach = (i: NavItem): NavItem | null => {
+        if (can(i.section)) return i;
+        const first = i.tabs?.find(mayTab);
+        return first ? { ...i, route: first.routeName } : null;
+    };
 
     /*
      * والأب يقود إلى أوّل ما بقي من بنيه.
@@ -29,7 +44,8 @@ export function useNavSections(nav: NavGroup[] = NAV): NavSections {
      */
     const visible = (items: NavItem[]): NavItem[] =>
         items
-            .filter((i) => can(i.section))
+            .map(reach)
+            .filter((i): i is NavItem => i !== null)
             .map((i) => {
                 if (!i.children) return i;
                 const kids = i.children.filter((c) => can(c.section));

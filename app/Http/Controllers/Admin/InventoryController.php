@@ -5,7 +5,6 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\InventoryMovement;
 use App\Models\Product;
-use App\Support\BranchAccess;
 use App\Support\Demo;
 use App\Support\StockLosses;
 use Illuminate\Http\Request;
@@ -15,37 +14,10 @@ class InventoryController extends Controller
 {
     private function bid(): int { return auth()->user()->business_id ?? Demo::bid(); }
 
-
-
-    /**
-     * شاشة الجرد الفعلي — إدخال الكمية المعدودة ومقارنتها بدفتر الفرع.
-     *
-     * «الدفترية» كانت إجمالي الشركة، والجرد يعدّ فرعًا واحدًا. فمتجرٌ بفرعين
-     * — عشرة في مسقط وخمسة في صلالة — يعدّ مسقط فيجدها عشرة كما يجب، فتقول
-     * له الشاشة إن الفرق ناقص خمسة. فيذهب يبحث عن بضاعةٍ لم تُفقد.
-     *
-     * ورصيدُ كل فرعٍ يُرسَل كاملًا لا رصيدُ الفرع المختار وحده: تبديل الفرع
-     * في الأعلى يجب أن يقلب الأرقام في مكانها، وطلبٌ جديد لكل تبديلٍ يمحو ما
-     * أُدخل من أعدادٍ قبله.
+    /*
+     * وشاشةُ الجرد («عمليات جرد المخزون») خرجت من الواجهة. وبقي تطبيقُه بلا
+     * شاشة: فيه وحدَه قيدُ فاقد الجرد وزيادته في الدفترين (`StockLosses`).
      */
-    public function stocktake()
-    {
-        $books = \App\Models\BranchStock::books($this->bid());
-        // ولمن قُيّد بفروعٍ أرصدةُ فروعه وحدها: الجردُ لا يكشف رفوفَ فرعٍ لا يعمل فيه
-        $visible = BranchAccess::restricts(auth()->user()) ? array_flip(BranchAccess::allowedBranchIds(auth()->user())) : null;
-
-        $items = collect(Demo::inventory())
-            ->map(fn (array $i) => $i + ['stock' => $visible === null
-                ? ($books[$i['id']] ?? [])
-                : array_intersect_key($books[$i['id']] ?? [], $visible)])
-            ->all();
-
-        return \Inertia\Inertia::render('Admin/Inventory/Stocktake', [
-            'items' => $items,
-            'branches' => Demo::branches(),
-            'currentBranch' => Demo::currentBranchId(),
-        ]);
-    }
 
     /** تطبيق الجرد: تعيين الكمية المعدودة وتسجيل حركة تسوية لكل فرق */
     public function applyStocktake(Request $request)
@@ -282,7 +254,7 @@ class InventoryController extends Controller
         \App\Support\Activity::log('updated', ($loss ? 'كمية معدومة: خصم ' : 'جرد فعلي: سوّى ')
             . $adjusted . ' صنفًا — فرع: ' . $branch->name);
 
-        return redirect()->route('admin.inventory.stocktake')
+        return redirect()->route('admin.inventory.index')
             ->with('toast', [
                 'msg' => $loss
                     ? __('خُصمت الكمية المعدومة من :n صنفًا', ['n' => $adjusted])

@@ -179,11 +179,18 @@ class TheMoneyActionsAreNamedOneByOneTest extends TestCase
     /** شاشةُ الاستلامات تحمل تكلفةَ كلّ صنف — فقراءتُها تُمنح باسمها */
     public function test_the_receipts_screen_asks_for_its_own_action(): void
     {
-        $this->actingAs($this->staff(['inventory']))
-            ->get(route('admin.inventory.receipts'))->assertForbidden();
+        // وقائمةُ السندات خرجت من الواجهة: السندُ يُقرأ في صفحته، وما ينتظر في «المخزون»
+        $note = $this->pendingNote();
+        $blind = $this->staff(['inventory']);
+        $reader = $this->staff(['inventory', Permissions::RECEIPT_VIEW]);
 
-        $this->actingAs($this->staff(['inventory', Permissions::RECEIPT_VIEW]))
-            ->get(route('admin.inventory.receipts'))->assertOk();
+        $this->actingAs($blind)->get(route('admin.inventory.receipts.show', $note->id))->assertForbidden();
+        $this->actingAs($blind)->get(route('admin.inventory.index'))
+            ->assertOk()->assertInertia(fn ($p) => $p->where('pendingReceipts', [])->etc());
+
+        $this->actingAs($reader)->get(route('admin.inventory.receipts.show', $note->id))->assertOk();
+        $this->actingAs($reader)->get(route('admin.inventory.index'))
+            ->assertInertia(fn ($p) => $p->where('pendingReceipts.0.id', $note->id)->etc());
     }
 
     /** وكتابةُ الاستلام فعلٌ غيرُ قراءته */
@@ -433,12 +440,12 @@ class TheMoneyActionsAreNamedOneByOneTest extends TestCase
     public function test_the_screen_is_told_which_actions_are_held(): void
     {
         $this->actingAs($this->staff(['inventory', Permissions::RECEIPT_VIEW]))
-            ->get(route('admin.inventory.receipts'))
+            ->get(route('admin.inventory.receipts.show', $this->pendingNote()->id))
             ->assertInertia(fn ($p) => $p
                 ->where('auth.mayActions', fn ($a) => collect($a)->contains(Permissions::RECEIPT_VIEW)
                     && ! collect($a)->contains(Permissions::RECEIPT_APPROVE))
-                ->where('canApprove', false)
-                ->where('canReject', false)
+                ->where('can.approve', false)
+                ->where('can.reject', false)
                 ->etc());
     }
 

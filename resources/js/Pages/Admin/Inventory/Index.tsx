@@ -1,9 +1,11 @@
 import { useMemo } from 'react';
 import { usePage } from '@inertiajs/react';
+import { PackageCheck } from 'lucide-react';
 import AdminLayout from '@/Layouts/AdminLayout';
 import PageHeader from '@/Components/PageHeader';
 import SectionTabs, { INVENTORY_TABS } from '@/Components/SectionTabs';
 import ExportMenu from '@/Components/ExportMenu';
+import SmartLink from '@/Components/SmartLink';
 import DataTable, { type Column, type Filter } from '@/Components/DataTable';
 import { Badge } from '@/Components/ui/badge';
 import { Card } from '@/Components/ui/card';
@@ -23,10 +25,12 @@ interface Props {
     stockFilter: string | null;
     /** توقّعُ المخزون للمشاريع القادمة — قراءةٌ لا خصم */
     forecast?: InventoryForecastPanel;
+    /** سنداتُ استلامٍ تنتظر الاعتماد — كميّتُها لا تدخل الرفّ قبله */
+    pendingReceipts?: { id: number; number: string; supplier: string | null; order: string | null; received_at: string | null }[];
 }
 
 export default function InventoryIndex() {
-    const { inventory: serverInventory, stockFilter, forecast, context } = usePage<PageProps<Props>>().props;
+    const { inventory: serverInventory, stockFilter, forecast, pendingReceipts = [], context } = usePage<PageProps<Props>>().props;
     const t = useTranslate();
     const currency = context!.currency;
 
@@ -136,6 +140,42 @@ export default function InventoryIndex() {
             <SectionTabs tabs={INVENTORY_TABS} current="admin.inventory.index" />
 
             {forecast && <ForecastPanel data={forecast} />}
+
+            {/*
+                وما ينتظر الاعتماد من سندات الاستلام — قائمتُها خرجت من القسم،
+                والاعتمادُ باقٍ في صفحة كلّ سند: من هنا يُفتح.
+            */}
+            {pendingReceipts.length > 0 && (
+                <Card className="mb-6 overflow-hidden border-[#fde68a]" data-testid="pending-receipts">
+                    <div className="flex items-start gap-2 border-b border-[#fef3c7] bg-[#fffbeb] px-5 py-3">
+                        <PackageCheck className="mt-0.5 size-4 shrink-0 text-[#b45309]" />
+                        <div>
+                            <h3 className="text-sm font-bold text-[#92400e]">
+                                {t('سندات استلام بانتظار الاعتماد')} <span className="tabular-nums">({number(pendingReceipts.length)})</span>
+                            </h3>
+                            <p className="text-[12px] text-[#a16207]">{t('لا تدخل الكمية المخزون قبل اعتماد سندها — افتح السند لاعتماده أو رفضه.')}</p>
+                        </div>
+                    </div>
+                    <ul className="divide-y divide-[#f4f4f5]">
+                        {pendingReceipts.map((r) => (
+                            <li key={r.id} className="flex flex-wrap items-center justify-between gap-2 px-5 py-2 text-[13px]">
+                                <SmartLink
+                                    routeName="admin.inventory.receipts.show"
+                                    href={route('admin.inventory.receipts.show', r.id)}
+                                    className="font-mono text-[12px] text-[#1d4ed8] hover:underline"
+                                >
+                                    {r.number}
+                                </SmartLink>
+                                <span className="min-w-0 flex-1 truncate text-[#4b4b4b]">
+                                    {r.supplier ?? '—'}
+                                    {r.order && <span className="ms-2 font-mono text-[11px] text-[#9ca3af]">{r.order}</span>}
+                                </span>
+                                <span className="text-[12px] text-[#6b7280]" dir="ltr">{r.received_at ?? '—'}</span>
+                            </li>
+                        ))}
+                    </ul>
+                </Card>
+            )}
 
             {updatedAt && (
                 <p className="mb-3 text-[12px] text-[#9ca3af]">

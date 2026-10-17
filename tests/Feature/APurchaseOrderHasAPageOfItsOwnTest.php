@@ -418,11 +418,12 @@ class APurchaseOrderHasAPageOfItsOwnTest extends TestCase
         $note = GoodsReceipts::record($po, [$po->items()->first()->id => 10], [], $this->owner);
         GoodsReceipts::approve($note, $this->owner);
 
-        $this->actingAs($this->owner)->get(route('admin.inventory.receipts'))
+        // وقائمةُ السندات خرجت من الواجهة — فيقول ذلك السندُ نفسُه في صفحته
+        $this->actingAs($this->owner)->get(route('admin.inventory.receipts.show', $note->id))
             ->assertOk()
             ->assertInertia(fn ($p) => $p
-                ->where('notes.0.number', $note->number)
-                ->where('notes.0.approved_at', now()->format('Y-m-d'))
+                ->where('note.number', $note->number)
+                ->where('note.approved_at', now()->format('Y-m-d'))
                 ->etc());
     }
 

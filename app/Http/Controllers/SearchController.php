@@ -10,13 +10,13 @@ use App\Models\JournalEntry;
 use App\Models\Order;
 use App\Models\Product;
 use App\Models\PurchaseOrder;
-use App\Models\StockAdjustment;
 use App\Models\Supplier;
 use App\Models\SupplierInvoice;
 use App\Models\Transaction;
 use App\Models\User;
 use App\Support\BranchAccess;
 use App\Support\Demo;
+use App\Support\Permissions;
 use App\Support\Search;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -97,9 +97,11 @@ class SearchController extends Controller
         $suppliers = $user->allows('suppliers') ? Supplier::where('business_id', $bid)
             ->where(fn ($w) => $w->where('name', $op, $like)
                 ->orWhere('phone', $op, $like)
-                ->orWhere('contact_person', $op, $like))
+                ->orWhere('contact_person', $op, $like)
+                // وبما يقدّمه — «تصوير» يجد استوديو التصوير
+                ->orWhere('service', $op, $like))
             ->limit(5)->get()->map(fn ($s) => [
-                'label' => $s->name, 'meta' => $s->phone ?: ($s->contact_person ?: '—'),
+                'label' => $s->name, 'meta' => $s->service ?: ($s->phone ?: ($s->contact_person ?: '—')),
                 'url' => route('admin.suppliers.show', $s->id),
             ]) : collect();
 
@@ -165,23 +167,20 @@ class SearchController extends Controller
                 ])
             : []);
 
-        $rows = $rows->concat($user->allows('inventory')
+        // والسندُ يُفتح في صفحته — وهي تُحرَس بفعل القراءة لا بالقسم وحده
+        $rows = $rows->concat($user->allows('inventory') && $user->may(Permissions::RECEIPT_VIEW)
             ? BranchAccess::limit(GoodsReceiptNote::where('business_id', $bid))->where('number', $op, $like)
                 ->orderByDesc('id')->limit(3)->get()->map(fn ($g) => [
                     'label' => $g->number,
                     'meta' => __('إشعار استلام'),
-                    'url' => route('admin.inventory.receipts', ['q' => $g->number]),
+                    'url' => route('admin.inventory.receipts.show', $g->id),
                 ])
             : []);
 
-        $rows = $rows->concat($user->allows('inventory')
-            ? BranchAccess::limit(StockAdjustment::where('business_id', $bid))->where('number', $op, $like)
-                ->orderByDesc('id')->limit(3)->get()->map(fn ($a) => [
-                    'label' => $a->number,
-                    'meta' => __('تسوية مخزون'),
-                    'url' => route('admin.inventory.adjustments', ['q' => $a->number]),
-                ])
-            : []);
+        /*
+         * والتسويةُ لا تُبحث: «سجل المخزون» الذي كانت تُفتح فيه خرج من الواجهة،
+         * ورقمٌ يُعرض ولا يقود إلى شيء أسوأ من غيابه. وصفوفُها باقية.
+         */
 
         $rows = $rows->concat($user->allows('finance')
             ? JournalEntry::where('business_id', $bid)->where('number', $op, $like)

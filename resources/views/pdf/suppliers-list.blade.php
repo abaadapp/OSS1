@@ -13,6 +13,7 @@
             <tr>
                 <th style="width:4%;">#</th>
                 <th>{{ __('الاسم') }}</th>
+                <th>{{ __('الخدمة / النشاط') }}</th>
                 <th>{{ __('الهاتف') }}</th>
                 <th>{{ __('البريد') }}</th>
                 <th>{{ __('مسؤول التواصل') }}</th>
@@ -24,13 +25,14 @@
                 <tr>
                     <td>{{ $i + 1 }}</td>
                     <td>{{ $s->name }}</td>
+                    <td>{{ $s->service ?: '—' }}</td>
                     <td>{{ $s->phone ?: '—' }}</td>
                     <td>{{ $s->email ?: '—' }}</td>
                     <td>{{ $s->contact_person ?: '—' }}</td>
                     <td style="text-align:left;">{{ $s->purchase_orders_count }}</td>
                 </tr>
             @empty
-                <tr><td colspan="6" style="text-align:center; color:#9ca3af; padding:18px;">{{ __('لا موردين بعد') }}</td></tr>
+                <tr><td colspan="7" style="text-align:center; color:#9ca3af; padding:18px;">{{ __('لا موردين بعد') }}</td></tr>
             @endforelse
         </tbody>
     </table>

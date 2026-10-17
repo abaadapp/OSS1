@@ -9,7 +9,6 @@ import {
     MoreVertical,
     Phone,
     Plus,
-    Tags,
     Upload,
 } from 'lucide-react';
 import AdminLayout from '@/Layouts/AdminLayout';
@@ -20,7 +19,6 @@ import RowActions from '@/Components/RowActions';
 import SmartLink from '@/Components/SmartLink';
 import StatCard from '@/Components/StatCard';
 import Field, { Select } from '@/Components/Field';
-import CatalogDialog from '@/Components/CatalogDialog';
 import { Badge } from '@/Components/ui/badge';
 import { Button } from '@/Components/ui/button';
 import { Card } from '@/Components/ui/card';
@@ -39,32 +37,17 @@ import { useTranslate } from '@/lib/i18n';
 import type { PageProps } from '@/types';
 import type { Supplier } from '@/types/models';
 
+/*
+ * حقولُ المورّد كلُّها — والخدمةُ نصٌّ حرّ يكتبه المستخدم: «تصوير فوتوغرافي»،
+ * «شاشات LED»، «تأجير كراسي». لا قائمةَ نوعٍ ولا كتالوجَ يُنشأ قبله.
+ */
 const BLANK = {
-    name: '', name_en: '', phone: '', whatsapp: '', contact_person: '', email: '', notes: '',
-    supplier_type: 'products', status: 'active', service_ids: [] as number[],
+    name: '', service: '', status: 'active', phone: '', whatsapp: '', contact_person: '', email: '', notes: '',
 };
 
-interface Catalog {
-    services: { id: number; name: string; active: boolean }[];
-    types: Record<string, string>;
-    statuses: Record<string, string>;
-}
-
-const TYPE_TONE: Record<string, 'neutral' | 'info' | 'primary'> = { products: 'neutral', services: 'info', both: 'primary' };
-
 export default function SuppliersIndex() {
-    const { suppliers, services = [], types = {}, statuses = {} } = usePage<PageProps<{ suppliers: Supplier[] } & Partial<Catalog>>>().props;
-    const { errors } = usePage().props as { errors?: Record<string, string> };
+    const { suppliers, statuses = {} } = usePage<PageProps<{ suppliers: Supplier[]; statuses?: Record<string, string> }>>().props;
     const t = useTranslate();
-    /* الترشيحُ بالنوع وبالخدمة — «مقدّم خدمة ← تصوير» (المرحلة 14) */
-    const [typeFilter, setTypeFilter] = useState('');
-    const [serviceFilter, setServiceFilter] = useState('');
-    const [catalog, setCatalog] = useState(false);
-    const visible = suppliers.filter((s) =>
-        (typeFilter === '' || (typeFilter === 'services'
-            ? s.supplier_type === 'services' || s.supplier_type === 'both'
-            : typeFilter === 'products' ? s.supplier_type !== 'services' : s.supplier_type === typeFilter))
-        && (serviceFilter === '' || (s.services ?? []).some((x) => String(x.id) === serviceFilter)));
     const [adding, setAdding] = useState(false);
     const [editing, setEditing] = useState<Supplier | null>(null);
     const [importing, setImporting] = useState(false);
@@ -83,15 +66,13 @@ export default function SuppliersIndex() {
         if (editing) {
             form.setData({
                 name: editing.name,
-                name_en: editing.name_en ?? '',
+                service: editing.service ?? '',
+                status: editing.status ?? 'active',
                 phone: editing.phone ?? '',
                 whatsapp: editing.whatsapp ?? '',
                 contact_person: editing.contact ?? '',
                 email: editing.email ?? '',
                 notes: editing.notes ?? '',
-                supplier_type: editing.supplier_type ?? 'products',
-                status: editing.status ?? 'active',
-                service_ids: (editing.services ?? []).map((x) => x.id),
             });
         } else if (adding) {
             form.setData({ ...BLANK });
@@ -176,17 +157,11 @@ export default function SuppliersIndex() {
             ),
         },
         {
-            key: 'type',
-            header: 'النوع',
-            cell: (s) => (
-                <span className="flex flex-wrap items-center gap-1">
-                    <Badge variant={TYPE_TONE[s.supplier_type ?? 'products']}>{types[s.supplier_type ?? 'products'] ?? s.supplier_type}</Badge>
-                    {(s.services ?? []).slice(0, 4).map((x) => (
-                        <span key={x.id} className="rounded-full bg-[#f5f3ff] px-2 py-0.5 text-[11px] text-[#6d28d9]">{x.name}</span>
-                    ))}
-                    {(s.services ?? []).length > 4 && <span className="text-[11px] text-[#9ca3af]">+{(s.services ?? []).length - 4}</span>}
-                </span>
-            ),
+            key: 'service',
+            header: 'الخدمة / النشاط',
+            sortable: true,
+            value: (s) => s.service ?? '',
+            cell: (s) => (s.service ? <span className="text-[#4b4b4b]">{s.service}</span> : <span className="text-[#9ca3af]">—</span>),
         },
         { key: 'contact', header: 'الشخص المسؤول', cell: (s) => s.contact || '—' },
         {
@@ -237,50 +212,26 @@ export default function SuppliersIndex() {
 
     const fields = (
         <div className="space-y-4">
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <Field label="اسم المورّد" required error={form.errors.name}>
-                    <Input value={form.data.name} onChange={(e) => form.setData('name', e.target.value)} required />
-                </Field>
-                {/* يُكتب بيدٍ حين لا يُشتقّ: الاسم اللاتينيّ يُنقل إلى العربية
-                    تلقائيًّا، أمّا العربيّ فلا صورة لاتينية له تُخمَّن */}
+            <Field label="اسم المورّد" required error={form.errors.name}>
+                <Input value={form.data.name} onChange={(e) => form.setData('name', e.target.value)} required />
+            </Field>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-[1fr_auto]">
                 <Field
-                    label="الاسم بالإنجليزية (اختياري)"
-                    hint="يظهر عند تشغيل الواجهة بالإنجليزية"
-                    error={form.errors.name_en}
+                    label="الخدمة / نوع النشاط"
+                    hint="اكتبها بكلماتك — مثل: تصوير فوتوغرافي، شاشات LED، طباعة، ضيافة، تأجير كراسي"
+                    error={form.errors.service}
                 >
                     <Input
-                        dir="ltr"
-                        value={form.data.name_en}
-                        onChange={(e) => form.setData('name_en', e.target.value)}
+                        value={form.data.service}
+                        maxLength={255}
+                        onChange={(e) => form.setData('service', e.target.value)}
                     />
                 </Field>
-            </div>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <Field label="النوع" error={form.errors.supplier_type}>
-                    <Select value={form.data.supplier_type} onChange={(e) => form.setData('supplier_type', e.target.value)}
-                        options={Object.entries(types).map(([value, label]) => ({ value, label }))} />
-                </Field>
-                <Field label="الحالة" error={form.errors.status}>
+                <Field label="الحالة" error={form.errors.status} className="sm:min-w-[140px]">
                     <Select value={form.data.status} onChange={(e) => form.setData('status', e.target.value)}
                         options={Object.entries(statuses).map(([value, label]) => ({ value, label }))} />
                 </Field>
             </div>
-            {form.data.supplier_type !== 'products' && (
-                <Field label="الخدمات التي يقدّمها" hint="من كتالوج الخدمات — يُبحث بها ويُرشَّح" error={form.errors.service_ids}>
-                    <div className="flex flex-wrap gap-2">
-                        {services.filter((x) => x.active || form.data.service_ids.includes(x.id)).map((x) => {
-                            const on = form.data.service_ids.includes(x.id);
-                            return (
-                                <button key={x.id} type="button"
-                                    onClick={() => form.setData('service_ids', on ? form.data.service_ids.filter((i) => i !== x.id) : [...form.data.service_ids, x.id])}
-                                    className={`rounded-full border px-3 py-1 text-[12.5px] ${on ? 'border-[#6d28d9] bg-[#f5f3ff] text-[#6d28d9]' : 'border-[var(--ui-border,#e8e8e8)] text-[#4b4b4b]'}`}>
-                                    {x.name}
-                                </button>
-                            );
-                        })}
-                    </div>
-                </Field>
-            )}
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <Field label="الهاتف" error={form.errors.phone}>
                     <Input dir="ltr" value={form.data.phone} onChange={(e) => form.setData('phone', e.target.value)} />
@@ -313,7 +264,7 @@ export default function SuppliersIndex() {
         <AdminLayout title="المورّدون">
             <PageHeader
                 title="المورّدون"
-                subtitle={t('إدارة موردي البضاعة وبيانات التواصل معهم')}
+                subtitle={t('موردو المنتجات ومقدّمو الخدمات وبيانات التواصل معهم')}
                 actions={
                     <>
                         {/*
@@ -355,10 +306,6 @@ export default function SuppliersIndex() {
                                 </DropdownMenuItem>
                             </DropdownMenuContent>
                         </DropdownMenu>
-                        <Button variant="outline" onClick={() => setCatalog(true)}>
-                            <Tags />
-                            {t('كتالوج الخدمات')}
-                        </Button>
                         <Button variant="outline" asChild>
                             <SmartLink routeName="admin.purchases.index" href={route('admin.purchases.index')}>
                                 <ClipboardList />
@@ -375,36 +322,21 @@ export default function SuppliersIndex() {
 
             <SectionTabs tabs={CUSTOMER_TABS} current="admin.suppliers.index" />
 
-            {errors?.service && <div className="mb-4 rounded-lg bg-[#fef2f2] px-4 py-3 text-[13px] text-[#b91c1c]">{errors.service}</div>}
-
             <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
                 {stats.map((s, i) => (
                     <StatCard key={s.label} stat={s} index={i} />
                 ))}
             </div>
 
-            <Card className="mb-4 p-4">
-                <div className="flex flex-wrap items-end gap-3">
-                    <Field label="النوع" className="min-w-[160px]">
-                        <Select value={typeFilter} placeholder="الكلّ" onChange={(e) => setTypeFilter(e.target.value)}
-                            options={Object.entries(types).map(([value, label]) => ({ value, label }))} />
-                    </Field>
-                    <Field label="الخدمة" className="min-w-[180px]">
-                        <Select value={serviceFilter} placeholder="كلّ الخدمات" onChange={(e) => setServiceFilter(e.target.value)}
-                            options={services.map((x) => ({ value: String(x.id), label: x.name }))} />
-                    </Field>
-                </div>
-            </Card>
-
             <Card className="overflow-hidden">
                 <DataTable
-                    rows={visible}
+                    rows={suppliers}
                     columns={columns}
                     rowKey={(s) => s.id}
-                    searchPlaceholder="ابحث باسم المورّد أو الهاتف…"
+                    searchPlaceholder="ابحث باسم المورّد أو الخدمة أو الهاتف…"
                     // القادم من البحث الموحّد يصل بالقائمة مُرشَّحةً بما بحث عنه
                     initialQuery={new URLSearchParams(window.location.search).get('q') ?? ''}
-                    searchable={(s) => `${s.name} ${s.name_en ?? ''} ${s.phone} ${s.whatsapp ?? ''} ${s.email} ${s.contact} ${types[s.supplier_type ?? 'products'] ?? ''} ${(s.services ?? []).map((x) => x.name).join(' ')}`}
+                    searchable={(s) => `${s.name} ${s.name_en ?? ''} ${s.service ?? ''} ${s.phone} ${s.whatsapp ?? ''} ${s.email} ${s.contact}`}
                     empty="أضِف أول مورّد لبدء إنشاء أوامر الشراء."
                 />
             </Card>
@@ -433,14 +365,6 @@ export default function SuppliersIndex() {
                 </DialogContent>
             </Dialog>
 
-            <CatalogDialog
-                open={catalog}
-                onClose={() => setCatalog(false)}
-                title="كتالوج خدمات الموردين"
-                items={services}
-                routes={{ store: 'admin.suppliers.services.store', update: 'admin.suppliers.services.update', destroy: 'admin.suppliers.services.destroy' }}
-            />
-
             <Dialog open={importing} onOpenChange={setImporting}>
                 <DialogContent className="max-w-lg">
                     <DialogHeader>
@@ -449,7 +373,7 @@ export default function SuppliersIndex() {
                     <form onSubmit={submitImport} className="space-y-4 px-5 pb-5">
                         <Field
                             label="ملف الموردين"
-                            hint="الصيغ المدعومة: CSV، XLS، XLSX، XLSM — الأعمدة: الاسم، الهاتف، البريد، مسؤول التواصل، ملاحظات. يمكنك تصدير ملف ثم تعديله وإعادة استيراده."
+                            hint="الصيغ المدعومة: CSV، XLS، XLSX، XLSM — الأعمدة: الاسم، الخدمة / النشاط، الهاتف، البريد، مسؤول التواصل، ملاحظات. يمكنك تصدير ملف ثم تعديله وإعادة استيراده."
                             error={upload.errors.file}
                             required
                         >

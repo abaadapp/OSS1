@@ -4,6 +4,7 @@ import { CalendarCheck, History, Mail, MessageCircle, Pencil, Phone, Trash2 } fr
 import AdminLayout from '@/Layouts/AdminLayout';
 import BackLink from '@/Components/BackLink';
 import PageHeader from '@/Components/PageHeader';
+import SectionTabs, { CUSTOMER_TABS } from '@/Components/SectionTabs';
 import SmartLink from '@/Components/SmartLink';
 import { Select } from '@/Components/Field';
 import { Button } from '@/Components/ui/button';
@@ -77,6 +78,8 @@ export default function OrganizerShow() {
                     </div>
                 )}
             />
+
+            <SectionTabs tabs={CUSTOMER_TABS} current="admin.organizers.show" />
 
             {errors?.organizer && <div className="mb-4 rounded-lg bg-[#fef2f2] px-4 py-3 text-[13px] text-[#b91c1c]">{errors.organizer}</div>}
 

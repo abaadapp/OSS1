@@ -1,8 +1,9 @@
 import { usePage } from '@inertiajs/react';
-import { Briefcase, ClipboardList, Mail, MessageCircle, Phone, Receipt, User } from 'lucide-react';
+import { Briefcase, ClipboardList, Mail, MessageCircle, Phone, Receipt, Tag, User } from 'lucide-react';
 import AdminLayout from '@/Layouts/AdminLayout';
 import BackLink from '@/Components/BackLink';
 import PageHeader from '@/Components/PageHeader';
+import SectionTabs, { CUSTOMER_TABS } from '@/Components/SectionTabs';
 import SmartLink from '@/Components/SmartLink';
 import { Badge } from '@/Components/ui/badge';
 import { Button } from '@/Components/ui/button';
@@ -15,23 +16,22 @@ import type { PageProps } from '@/types';
 interface Props {
     supplier: {
         id: number; name: string; name_en: string | null; phone: string | null; whatsapp: string | null; email: string | null;
-        contact_person: string | null; notes: string | null; supplier_type: string; status: string;
-        services: { id: number; name: string }[]; outstanding: number | null;
+        contact_person: string | null; notes: string | null; service: string | null; status: string;
+        outstanding: number | null;
     };
     orders: { id: number; number: string; status: string; ordered_at: string | null; total: number; project: { id: number; code: string } | null }[];
     invoices: { id: number; ref: string; approval_status: string; status: string; issued_at: string | null; total: number | null; outstanding: number | null; project: { id: number; code: string } | null }[];
     projects: { id: number; code: string; name: string; status: string; orders: number }[];
-    types: Record<string, string>;
     statuses: Record<string, string>;
     may: { purchases: boolean; money: boolean; projects: boolean };
 }
 
 /**
- * صفحةُ المورّد — مورّدَ منتجاتٍ كان أو مقدّمَ خدمة: بياناتُه وخدماتُه وأوامرُ
+ * صفحةُ المورّد — مورّدَ منتجاتٍ كان أو مقدّمَ خدمة: بياناتُه وما يقدّمه وأوامرُ
  * شرائه وسنداتُه والمشاريعُ التي عمل فيها. والمالُ لمن يفتح السندات.
  */
 export default function SupplierShow() {
-    const { supplier, orders, invoices, projects, types, statuses, may, context } = usePage<PageProps<Props>>().props;
+    const { supplier, orders, invoices, projects, statuses, may, context } = usePage<PageProps<Props>>().props;
     const t = useTranslate();
     const m = (v: number | null) => (v === null ? '—' : money(v, context!.currency));
     const projectLink = (p: { id: number; code: string } | null) => !p ? '—' : may.projects
@@ -43,7 +43,7 @@ export default function SupplierShow() {
             <BackLink routeName="admin.suppliers.index" href={route('admin.suppliers.index')} label="المورّدون" />
             <PageHeader
                 title={supplier.name}
-                subtitle={types[supplier.supplier_type] ?? supplier.supplier_type}
+                subtitle={supplier.service ?? t('مورّد')}
                 actions={may.purchases && (
                     <Button variant="outline" asChild>
                         <SmartLink routeName="admin.purchases.index" href={route('admin.purchases.index', { supplier: supplier.id, month: 'all' })}>
@@ -53,14 +53,17 @@ export default function SupplierShow() {
                 )}
             />
 
+            <SectionTabs tabs={CUSTOMER_TABS} current="admin.suppliers.show" />
+
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
                 <div className="space-y-6">
                     <Card className="space-y-3 p-6 text-[13px]">
                         <div className="flex flex-wrap gap-2">
-                            <Badge variant={supplier.supplier_type === 'products' ? 'neutral' : 'info'}>{types[supplier.supplier_type] ?? supplier.supplier_type}</Badge>
                             <Badge variant={supplier.status === 'active' ? 'success' : 'neutral'}>{statuses[supplier.status] ?? supplier.status}</Badge>
                         </div>
                         <ul className="space-y-2 text-[#4b4b4b]">
+                            {/* ما يقدّمه بكلماته — نصٌّ حرٌّ لا قائمة */}
+                            <li className="flex items-start gap-2"><Tag className="mt-0.5 size-4 shrink-0 text-[#9ca3af]" /><span>{supplier.service || t('لم تُكتب خدمته بعد')}</span></li>
                             <li className="flex items-center gap-2"><Phone className="size-4 text-[#9ca3af]" /><span dir="ltr">{supplier.phone || '—'}</span></li>
                             {supplier.whatsapp && <li className="flex items-center gap-2"><MessageCircle className="size-4 text-[#9ca3af]" /><span dir="ltr">{supplier.whatsapp}</span></li>}
                             {supplier.email && <li className="flex items-center gap-2"><Mail className="size-4 text-[#9ca3af]" /><span dir="ltr">{supplier.email}</span></li>}
@@ -70,14 +73,6 @@ export default function SupplierShow() {
                         {may.money && supplier.outstanding !== null && (
                             <p className="rounded-lg bg-[#fafafa] px-3 py-2">{t('المستحقّ له الآن')}: <strong className="tabular-nums">{m(supplier.outstanding)}</strong></p>
                         )}
-                    </Card>
-
-                    <Card className="p-6">
-                        <h3 className="mb-3 text-sm font-bold text-[#111]">{t('الخدمات التي يقدّمها')}</h3>
-                        <div className="flex flex-wrap gap-1">
-                            {supplier.services.length === 0 && <span className="text-[12px] text-[#9ca3af]">{t('لا خدمات مسجّلة')}</span>}
-                            {supplier.services.map((x) => <span key={x.id} className="rounded-full bg-[#f5f3ff] px-2.5 py-1 text-[12px] text-[#6d28d9]">{x.name}</span>)}
-                        </div>
                     </Card>
 
                     <Card className="overflow-hidden">

@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { usePage } from '@inertiajs/react';
 import { Pencil } from 'lucide-react';
 import AdminLayout from '@/Layouts/AdminLayout';
@@ -28,21 +27,26 @@ interface Props {
     product: Product;
     stats: Stat[];
     movements: Movement[];
-    thumbs: string[];
     description: string;
 }
 
+const KIND_LABEL: Record<string, string> = { item: 'صنف', service: 'خدمة', package: 'باقة' };
+
+/**
+ * صفحةُ الصنف أو الخدمة أو الباقة — بلا صور: خرجت من تجربة المنتج.
+ */
 export default function ProductShow() {
-    const { product, stats, movements, thumbs, description, context } = usePage<PageProps<Props>>().props;
+    const { product, stats, movements, description, context } = usePage<PageProps<Props>>().props;
     const t = useTranslate();
     const currency = context!.currency;
-    const [current, setCurrent] = useState(thumbs[0] ?? product.image ?? '');
+    const stocked = (product.kind ?? 'item') === 'item';
 
     const facts = [
-        { label: 'رمز المنتج SKU', value: product.sku || '—' },
-        { label: 'الباركود', value: product.barcode || '—' },
+        { label: 'نوع البند', value: t(KIND_LABEL[product.kind ?? 'item'] ?? 'صنف') },
+        { label: 'الكود / SKU', value: product.sku || '—' },
         { label: 'سعر التكلفة', value: money(product.cost, currency) },
-        { label: 'حد التنبيه', value: `${number(product.alert)} ${t('قطعة')}` },
+        // وحدُّ التنبيه لما له رفّ — الخدمةُ والباقةُ لا تنفدان
+        ...(stocked ? [{ label: 'حد التنبيه', value: `${number(product.alert)} ${t('قطعة')}` }] : []),
     ];
 
     return (
@@ -67,35 +71,10 @@ export default function ProductShow() {
                 }
             />
 
-            <div className="mb-6 grid grid-cols-1 gap-6 lg:grid-cols-2">
-                <Card className="p-5">
-                    <div className="aspect-square overflow-hidden rounded-[12px] border border-[var(--ui-border,#e8e8e8)] bg-[#fafafa]">
-                        {current && <img src={current} alt={product.name} className="size-full object-cover" />}
-                    </div>
-                    {thumbs.length > 1 && (
-                        <div className="mt-4 grid grid-cols-4 gap-3">
-                            {thumbs.map((thumb) => (
-                                <button
-                                    key={thumb}
-                                    type="button"
-                                    onClick={() => setCurrent(thumb)}
-                                    className={cn(
-                                        'aspect-square overflow-hidden rounded-full border-2 transition',
-                                        current === thumb
-                                            ? 'border-[#8b5cf6] ring-2 ring-[#ddd6fe]'
-                                            : 'border-[var(--ui-border,#e8e8e8)]',
-                                    )}
-                                >
-                                    <img src={thumb} alt={t('صورة مصغرة')} className="size-full object-cover" />
-                                </button>
-                            ))}
-                        </div>
-                    )}
-                </Card>
-
+            <div className="mb-6">
                 <Card className="p-6">
                     <div className="mb-3 flex flex-wrap items-center gap-2">
-                        <Badge status={product.stock_status}>{t(product.stock_status)}</Badge>
+                        {stocked && <Badge status={product.stock_status}>{t(product.stock_status)}</Badge>}
                         <Badge variant={product.active ? 'success' : 'neutral'}>
                             {product.active ? t('مفعّل') : t('غير مفعّل')}
                         </Badge>
@@ -118,9 +97,11 @@ export default function ProductShow() {
                         </span>
                     </div>
 
-                    <p className="mt-4 text-sm leading-relaxed text-[#4b4b4b]">{description}</p>
+                    {description
+                        ? <p className="mt-4 whitespace-pre-line text-sm leading-relaxed text-[#4b4b4b]">{description}</p>
+                        : <p className="mt-4 text-sm text-[#9ca3af]">{t('لا وصف بعد')}</p>}
 
-                    <dl className="mt-6 grid grid-cols-2 gap-4 text-sm">
+                    <dl className="mt-6 grid grid-cols-2 gap-4 text-sm sm:grid-cols-4">
                         {facts.map((f) => (
                             <div key={f.label}>
                                 <dt className="text-[#9ca3af]">{t(f.label)}</dt>

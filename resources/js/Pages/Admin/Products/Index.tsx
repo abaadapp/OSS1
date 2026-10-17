@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { router, useForm, usePage } from '@inertiajs/react';
 import { motion } from 'framer-motion';
 import {
+    Boxes,
     Copy,
     Eye,
     EyeOff,
@@ -11,9 +12,11 @@ import {
     LayoutGrid,
     List,
     MoreVertical,
+    Package,
     Plus,
     Undo2,
     Upload,
+    Wrench,
 } from 'lucide-react';
 import AdminLayout from '@/Layouts/AdminLayout';
 import PageHeader from '@/Components/PageHeader';
@@ -69,6 +72,22 @@ function stockBadge(p: Product) {
     }
 
     return <Badge status={p.stock_status} />;
+}
+
+/*
+ * والبندُ يُعرف بنوعه لا بصورته: الصورُ خرجت من تجربة المنتج، وأيقونةُ
+ * الصنف أو الخدمة أو الباقة تقول للعين ما هو قبل أن يُقرأ اسمُه.
+ */
+const KIND_ICON = { item: Boxes, service: Wrench, package: Package } as const;
+
+function KindMark({ kind, className }: { kind?: Product['kind']; className?: string }) {
+    const Icon = KIND_ICON[kind ?? 'item'] ?? Boxes;
+
+    return (
+        <span className={cn('flex shrink-0 items-center justify-center rounded-[8px] bg-[#f2f2f0] text-[#6b7280]', className)}>
+            <Icon className="size-5" />
+        </span>
+    );
 }
 
 function StockKind({ kind }: { kind: 'service' | 'package' }) {
@@ -179,11 +198,7 @@ export default function ProductsIndex() {
             header: 'المنتج',
             cell: (p) => (
                 <div className="flex items-center gap-3">
-                    {p.image ? (
-                        <img src={p.image} alt="" className="size-11 shrink-0 rounded-[8px] border border-[var(--ui-border,#e8e8e8)] object-cover" loading="lazy" />
-                    ) : (
-                        <span className="size-11 shrink-0 rounded-[8px] bg-[#f2f2f0]" />
-                    )}
+                    <KindMark kind={p.kind} className="size-11" />
                     <span className="min-w-0">
                         <SmartLink
                             routeName="admin.products.show"
@@ -197,7 +212,7 @@ export default function ProductsIndex() {
                 </div>
             ),
         },
-        { key: 'cat', header: 'القسم', cell: (p) => p.cat || '—' },
+        { key: 'cat', header: 'التصنيف', cell: (p) => p.cat || '—' },
         {
             key: 'price',
             header: 'السعر',
@@ -260,7 +275,7 @@ export default function ProductsIndex() {
 
     const tableFilters: Filter<Product>[] = [
         {
-            label: 'كل الأقسام',
+            label: 'كل التصنيفات',
             param: 'category',
             options: categories.map((c) => ({ label: c.name, value: c.name })),
         },
@@ -421,7 +436,7 @@ export default function ProductsIndex() {
                                     {t('تعطيل')}
                                 </Button>
                                 <Button variant="outline" size="sm" onClick={() => setBulk('category')}>
-                                    {t('نقل إلى قسم')}
+                                    {t('نقل إلى تصنيف')}
                                 </Button>
                                 <Button variant="outline" size="sm" onClick={() => setBulk('price')}>
                                     {t('تغيير الأسعار %')}
@@ -463,14 +478,12 @@ export default function ProductsIndex() {
                                               transition={{ duration: 0.2, delay: Math.min(i * 0.02, 0.2) }}
                                           >
                                               <Card className="flex h-full flex-col overflow-hidden">
-                                                  <div className="relative aspect-[4/3] bg-[#f7f7f5]">
-                                                      {p.image && (
-                                                          <img src={p.image} alt="" className="size-full object-cover" loading="lazy" />
-                                                      )}
-                                                      <span className="absolute start-2 top-2">
+                                                  <div className="flex items-center justify-between gap-2 border-b border-[#f4f4f5] bg-[#fafafa] p-3">
+                                                      <span className="flex items-center gap-2">
+                                                          <KindMark kind={p.kind} className="size-9" />
                                                           {stockBadge(p)}
                                                       </span>
-                                                      <span className="absolute end-2 top-2">{actionsFor(p)}</span>
+                                                      {actionsFor(p)}
                                                   </div>
                                                   <div className="flex flex-1 flex-col gap-1 p-3.5">
                                                       <SmartLink
@@ -625,19 +638,19 @@ export default function ProductsIndex() {
                 </DialogContent>
             </Dialog>
 
-            {/* نقل المحدَّد إلى قسم */}
+            {/* نقل المحدَّد إلى تصنيف */}
             <Dialog open={bulk === 'category'} onOpenChange={(o) => !o && setBulk(null)}>
                 <DialogContent>
                     <DialogHeader>
-                        <DialogTitle>{t('نقل إلى قسم')}</DialogTitle>
+                        <DialogTitle>{t('نقل إلى تصنيف')}</DialogTitle>
                     </DialogHeader>
                     <div className="p-6 pt-0">
-                        <Field label="القسم">
+                        <Field label="التصنيف">
                             <Select
                                 value={bulkForm.data.category_id}
                                 onChange={(e) => bulkForm.setData('category_id', e.target.value)}
                                 options={[
-                                    { label: 'بلا قسم', value: '' },
+                                    { label: 'بلا تصنيف', value: '' },
                                     ...categories.map((c) => ({ label: c.name, value: String(c.id) })),
                                 ]}
                             />

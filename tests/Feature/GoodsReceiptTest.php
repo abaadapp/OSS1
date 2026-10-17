@@ -192,21 +192,22 @@ class GoodsReceiptTest extends TestCase
         $this->assertSame(2.5, (float) $note->items->first()->cost);
     }
 
-    /** الورقة تُقرأ في قسم المخزون، ولا تُكتب بيدٍ هناك */
-    public function test_the_receipts_screen_lists_the_note(): void
+    /** الورقة تُقرأ في صفحتها من قسم المخزون، ولا تُكتب بيدٍ هناك */
+    public function test_the_receipt_page_reads_the_note(): void
     {
         $product = $this->product('صنف', 0, 0);
         $po = $this->order([['product' => $product, 'qty' => 3, 'cost' => 2]]);
         $this->actingAs($this->owner)->post(route('admin.purchases.receive', $po->id));
         $this->approvePendingReceipts($this->business->id);
 
+        // وقائمةُ السندات خرجت من الواجهة: السندُ يُقرأ في صفحته ومن أمر شرائه
+        $note = GoodsReceiptNote::sole();
         $props = $this->actingAs($this->owner)
-            ->get(route('admin.inventory.receipts'))->viewData('page')['props'];
+            ->get(route('admin.inventory.receipts.show', $note->id))->viewData('page')['props'];
 
-        $this->assertCount(1, $props['notes']);
-        $this->assertSame('GRN-000001', $props['notes'][0]['number']);
-        $this->assertSame(6.0, $props['notes'][0]['value']);
-        $this->assertSame($po->number, $props['notes'][0]['order']);
+        $this->assertSame('GRN-000001', $props['note']['number']);
+        $this->assertSame(6.0, $props['note']['value']);
+        $this->assertSame($po->number, $props['order']['number']);
     }
 
     /**
@@ -224,9 +225,10 @@ class GoodsReceiptTest extends TestCase
         $this->approvePendingReceipts($this->business->id);
 
         // الورقة تحمل رقم أمرها — وعليه يقوم الرابط
-        $notes = $this->actingAs($this->owner)
-            ->get(route('admin.inventory.receipts'))->viewData('page')['props']['notes'];
-        $this->assertSame($po->number, $notes[0]['order']);
+        $note = GoodsReceiptNote::sole();
+        $order = $this->actingAs($this->owner)
+            ->get(route('admin.inventory.receipts.show', $note->id))->viewData('page')['props']['order'];
+        $this->assertSame($po->number, $order['number']);
 
         // والرقم يصل إلى الشاشة الأخرى فيُملأ به البحث
         $props = $this->actingAs($this->owner)

@@ -5,7 +5,6 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Project;
 use App\Models\PurchaseOrder;
-use App\Models\ServiceCategory;
 use App\Models\Supplier;
 use App\Models\SupplierInvoice;
 use App\Support\Activity;
@@ -13,13 +12,11 @@ use App\Support\BranchAccess;
 use App\Support\Demo;
 use App\Support\LocalName;
 use App\Support\Permissions;
-use App\Support\ServiceProviders;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
-use RuntimeException;
 
 class SupplierController extends Controller
 {
@@ -29,10 +26,14 @@ class SupplierController extends Controller
     }
 
     /**
-     * قواعدُ المورّد — منتجاتٍ أو خدماتٍ أو كليهما، وخدماتُه من كتالوج شركته.
+     * قواعدُ المورّد — وما يقدّمه نصٌّ حرٌّ يكتبه المستخدم بكلماته.
      *
-     * والنوعُ والحالُ يسقطان إلى ما كانا عليه حين لا يُرسَلان: شاشةُ أمر
-     * الشراء تُضيف مورّدًا باسمه وهاتفه وحدَهما، فيكون مورّدَ منتجاتٍ نشطًا.
+     * «تصوير فوتوغرافي»، «شاشات LED»، «تأجير كراسي»: لا قائمةَ يُختار منها ولا
+     * كتالوجَ يُنشأ قبله. والحالُ تسقط إلى «نشط» حين لا تُرسَل: شاشةُ أمر
+     * الشراء تُضيف مورّدًا باسمه وهاتفه وحدَهما.
+     *
+     * والنوعُ القديم وأرقامُ الكتالوج إن وصلا من نموذجٍ قديم لا يُقرآن — انظر
+     * `Supplier` لما بقي منهما.
      *
      * @return array<string, mixed>
      */
@@ -42,31 +43,46 @@ class SupplierController extends Controller
             'name' => ['required', 'string', 'max:255'],
             // مكتوبًا بيدٍ يعلو على النقل الآليّ — انظر LocalName::apply
             'name_en' => ['nullable', 'string', 'max:255'],
+            'service' => ['nullable', 'string', 'max:255'],
             'phone' => ['nullable', 'string', 'max:50'],
             'whatsapp' => ['nullable', 'string', 'max:40'],
             'email' => ['nullable', 'email', 'max:255'],
             'contact_person' => ['nullable', 'string', 'max:255'],
             'notes' => ['nullable', 'string', 'max:1000'],
-            'supplier_type' => ['nullable', Rule::in(Supplier::TYPES)],
             'status' => ['nullable', Rule::in(Supplier::STATUSES)],
-            'service_ids' => ['nullable', 'array', 'max:40'],
-            'service_ids.*' => ['integer', Rule::exists('service_categories', 'id')->where('business_id', $this->bid())],
         ];
+    }
+
+    /**
+     * الاسمُ بلغتيه، والخدمةُ نصٌّ مشذَّب — فراغُها لا شيء.
+     *
+     * والنموذجُ لا يحمل الاسمَ الإنجليزيّ: من لم يُرسله لا يُمحى منه ما كان
+     * (`LocalName::apply` يفرّغه لاسمٍ عربيّ لم يُكتب له مقابل).
+     *
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    private function normalize(array $data, Request $request): array
+    {
+        $data = LocalName::apply($data);
+        if (! $request->has('name_en') && ($data['name_en'] ?? null) === null) {
+            unset($data['name_en']);
+        }
+        if (array_key_exists('service', $data)) {
+            $data['service'] = trim((string) $data['service']) ?: null;
+        }
+
+        return $data;
     }
 
     public function store(Request $request)
     {
-        $data = $request->validate($this->rules());
-        $services = $data['service_ids'] ?? [];
-        unset($data['service_ids']);
-        $data = LocalName::apply($data);
-        $data['supplier_type'] = $data['supplier_type'] ?? Supplier::PRODUCTS;
-        $data['status'] = $data['status'] ?? 'active';
+        $data = $this->normalize($request->validate($this->rules()), $request);
+        $data['status'] = $data['status'] ?? Supplier::ACTIVE;
 
-        $supplier = DB::transaction(function () use ($data, $services) {
+        $supplier = DB::transaction(function () use ($data) {
             $supplier = Supplier::create(array_merge($data, ['business_id' => $this->bid()]));
             Activity::log('created', 'أضاف مورّدًا: '.$data['name'], ['subject_id' => $supplier->id, 'subject_type' => 'supplier']);
-            ServiceProviders::syncServices($supplier, $services, auth()->user());
 
             return $supplier;
         });
@@ -88,18 +104,16 @@ class SupplierController extends Controller
     public function update(Request $request, $id)
     {
         $supplier = Supplier::where('business_id', $this->bid())->findOrFail($id);
-        $data = $request->validate($this->rules());
-        $services = $data['service_ids'] ?? null;
-        unset($data['service_ids']);
-        $data = LocalName::apply($data);
-        /* وما لم يُرسَل من النوع والحال يبقى كما كان — لا يُمحى بحفظٍ لا يعرفه */
-        foreach (['supplier_type', 'status'] as $kept) {
-            if (! array_key_exists($kept, $data) || $data[$kept] === null) {
-                unset($data[$kept]);
-            }
+        $data = $this->normalize($request->validate($this->rules()), $request);
+        /* وما لم يُرسَل من الحال والخدمة يبقى كما كان — لا يُمحى بحفظٍ لا يعرفه */
+        if (($data['status'] ?? null) === null) {
+            unset($data['status']);
+        }
+        if (! $request->has('service')) {
+            unset($data['service']);
         }
 
-        DB::transaction(function () use ($supplier, $data, $services, $request) {
+        DB::transaction(function () use ($supplier, $data) {
             $before = $supplier->status ?: Supplier::ACTIVE;
             $supplier->update($data);
             Activity::log('updated', 'عدّل المورّد: '.$supplier->name, ['subject_id' => $supplier->id, 'subject_type' => 'supplier']);
@@ -109,16 +123,13 @@ class SupplierController extends Controller
                     'subject_id' => $supplier->id, 'subject_type' => 'supplier',
                 ]);
             }
-            if ($request->has('service_ids')) {
-                ServiceProviders::syncServices($supplier, (array) $services, auth()->user());
-            }
         });
 
         return back()->with('toast', ['msg' => __('تم تحديث بيانات المورّد'), 'type' => 'success']);
     }
 
     /**
-     * صفحةُ المورّد — بياناتُه وخدماتُه وأوامرُ شرائه وسنداتُه ومشاريعُه.
+     * صفحةُ المورّد — بياناتُه وما يقدّمه وأوامرُ شرائه وسنداتُه ومشاريعُه.
      *
      * والمالُ على سنداته لمن يفتح السندات (`INVOICE_VIEW`)، وروابطُ أوامر
      * الشراء لمن يفتح المشتريات — الصفحةُ تقرأ ما تقرؤه الأقسامُ نفسُها.
@@ -126,10 +137,9 @@ class SupplierController extends Controller
     public function show(int|string $id): Response
     {
         $bid = $this->bid();
-        $supplier = Supplier::where('business_id', $bid)->with('serviceCategories:id,name')->findOrFail($id);
+        $supplier = Supplier::where('business_id', $bid)->findOrFail($id);
         $user = auth()->user();
         $money = $user->may(Permissions::INVOICE_VIEW);
-        ServiceProviders::ensureCategories($bid);
 
         // ولمن قُيّد بفروعٍ أوامرُ فروعه وسنداتُها وحدها — انظر BranchAccess
         $orders = BranchAccess::limit(PurchaseOrder::where('business_id', $bid))->where('supplier_id', $supplier->id)
@@ -150,8 +160,7 @@ class SupplierController extends Controller
                 'id' => $supplier->id, 'name' => $supplier->name, 'name_en' => $supplier->name_en,
                 'phone' => $supplier->phone, 'whatsapp' => $supplier->whatsapp, 'email' => $supplier->email,
                 'contact_person' => $supplier->contact_person, 'notes' => $supplier->notes,
-                'supplier_type' => $supplier->supplier_type ?: Supplier::PRODUCTS, 'status' => $supplier->status ?: 'active',
-                'services' => $supplier->serviceCategories->map(fn ($c) => ['id' => $c->id, 'name' => $c->name])->values()->all(),
+                'service' => $supplier->service, 'status' => $supplier->status ?: Supplier::ACTIVE,
                 'outstanding' => $money ? $supplier->outstanding() : null,
             ],
             'orders' => $orders->map(fn (PurchaseOrder $o) => [
@@ -167,46 +176,9 @@ class SupplierController extends Controller
                 'project' => $i->project ? ['id' => $i->project->id, 'code' => $i->project->code] : null,
             ])->values()->all(),
             'projects' => $projects,
-            'services' => ServiceProviders::catalog($bid),
-            'types' => collect(ServiceProviders::TYPE_LABELS)->map(fn ($l) => __($l))->all(),
-            'statuses' => collect(ServiceProviders::STATUS_LABELS)->map(fn ($l) => __($l))->all(),
+            'statuses' => collect(Supplier::STATUS_LABELS)->map(fn ($l) => __($l))->all(),
             'may' => ['purchases' => $user->allows('purchases'), 'money' => $money, 'projects' => $user->allows('projects')],
         ]);
-    }
-
-    /* ─────────────────────────── كتالوجُ الخدمات ─────────────────────────── */
-
-    public function storeService(Request $request)
-    {
-        $data = $request->validate(['name' => ['required', 'string', 'max:80']], [], ['name' => __('اسم الخدمة')]);
-
-        return $this->attemptService(fn () => ServiceProviders::saveCategory($this->bid(), $data['name']), __('أُضيفت الخدمة إلى الكتالوج'));
-    }
-
-    public function updateService(Request $request, int|string $id)
-    {
-        $category = ServiceCategory::where('business_id', $this->bid())->findOrFail($id);
-        $data = $request->validate(['name' => ['required', 'string', 'max:80'], 'active' => ['nullable', 'boolean']], [], ['name' => __('اسم الخدمة')]);
-
-        return $this->attemptService(fn () => ServiceProviders::saveCategory($this->bid(), $data['name'], $request->boolean('active', true), $category), __('حُفظت الخدمة'));
-    }
-
-    public function destroyService(int|string $id)
-    {
-        $category = ServiceCategory::where('business_id', $this->bid())->findOrFail($id);
-
-        return $this->attemptService(fn () => ServiceProviders::deleteCategory($category), __('حُذفت الخدمة من الكتالوج'));
-    }
-
-    private function attemptService(callable $fn, string $message)
-    {
-        try {
-            $fn();
-        } catch (RuntimeException $e) {
-            return back()->withErrors(['service' => $e->getMessage()]);
-        }
-
-        return back()->with('toast', ['msg' => $message, 'type' => 'success']);
     }
 
     /**

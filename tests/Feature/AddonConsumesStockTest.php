@@ -16,6 +16,7 @@ use App\Support\OrderCorrection;
 use App\Support\ProductAddons;
 use App\Support\StockLedger;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 /**
@@ -94,6 +95,19 @@ class AddonConsumesStockTest extends TestCase
             'inventory_quantity' => $stockId ? $each : null,
         ]);
     }
+    /**
+     * «محدّدة» بالبوكيه وحده — كما كتبها بابُ الإضافة قبل أن يُنزع من شاشة
+     * المنتج: مداها في عمودها، ومنتجاتُها صفوفٌ في `product_addons`.
+     */
+    private function narrowToBouquet(Addon $addon): void
+    {
+        $addon->update(['scope' => Addon::SCOPE_SELECTED]);
+        DB::table('product_addons')->insert([
+            'business_id' => $this->business->id, 'product_id' => $this->bouquet->id, 'addon_id' => $addon->id,
+            'sort_order' => 0, 'created_at' => now(), 'updated_at' => now(),
+        ]);
+    }
+
     private function line(array $addons, int $qty = 1): array
     {
         return [[
@@ -131,11 +145,7 @@ class AddonConsumesStockTest extends TestCase
     {
         $other = $this->product('كيس سماد', 5);
 
-        $this->actingAs($this->owner)->putJson(route('admin.products.addons.update', $this->extraRoses->id), [
-            'name' => 'زيادة 3 وردات', 'price' => 2.5,
-            'scope' => Addon::SCOPE_SELECTED, 'product_ids' => [$this->bouquet->id],
-            'inventory_product_id' => $this->rose->id, 'inventory_quantity' => 3,
-        ])->assertOk();
+        $this->narrowToBouquet($this->extraRoses);
 
         $this->assertTrue(ProductAddons::for($this->bouquet->fresh())->contains('id', $this->extraRoses->id));
         $this->assertFalse(ProductAddons::for($other)->contains('id', $this->extraRoses->id));
@@ -148,11 +158,7 @@ class AddonConsumesStockTest extends TestCase
          * ولولا فصلُهما لصار اختيارُ «البوكيه» لإضافةٍ محدّدة يحصره فيها
          * وحدها — فيفقد كتابةَ الاسم والدبّ بضغطةٍ لا تقول ذلك.
          */
-        $this->actingAs($this->owner)->putJson(route('admin.products.addons.update', $this->extraRoses->id), [
-            'name' => 'زيادة 3 وردات', 'price' => 2.5,
-            'scope' => Addon::SCOPE_SELECTED, 'product_ids' => [$this->bouquet->id],
-            'inventory_product_id' => $this->rose->id, 'inventory_quantity' => 3,
-        ])->assertOk();
+        $this->narrowToBouquet($this->extraRoses);
 
         $allowed = ProductAddons::for($this->bouquet->fresh());
 
@@ -170,69 +176,5 @@ class AddonConsumesStockTest extends TestCase
 
         $this->assertTrue(ProductAddons::for($this->bouquet)->contains('id', $ribbon->id));
         $this->assertFalse(ProductAddons::for($other)->contains('id', $ribbon->id));
-    }
-    /* ---------------------------- تعدّد المتاجر ---------------------------- */
-
-    public function test_a_stock_item_from_another_shop_is_refused(): void
-    {
-        $other = Business::create(['name' => 'محل آخر', 'email' => 'x@k.local', 'status' => 'نشط']);
-        $theirs = Product::create([
-            'business_id' => $other->id, 'name' => 'وردهم', 'price' => 1, 'cost' => 1,
-            'quantity' => 50, 'active' => true,
-        ]);
-
-        $this->actingAs($this->owner)->postJson(route('admin.products.addons.store'), [
-            'name' => 'إضافة مسروقة', 'price' => 1,
-            'inventory_product_id' => $theirs->id, 'inventory_quantity' => 2,
-        ])->assertStatus(422)->assertJsonValidationErrors('inventory_product_id');
-
-        $this->assertSame(0, Addon::where('name', 'إضافة مسروقة')->count());
-    }
-
-    public function test_a_product_from_another_shop_cannot_be_put_in_an_addon_scope(): void
-    {
-        $other = Business::create(['name' => 'محل آخر', 'email' => 'y@k.local', 'status' => 'نشط']);
-        $theirs = Product::create([
-            'business_id' => $other->id, 'name' => 'منتجهم', 'price' => 1, 'cost' => 1,
-            'quantity' => 5, 'active' => true,
-        ]);
-
-        $this->actingAs($this->owner)->putJson(route('admin.products.addons.update', $this->nameCard->id), [
-            'name' => 'كتابة اسم', 'price' => 1,
-            'scope' => Addon::SCOPE_SELECTED, 'product_ids' => [$theirs->id],
-        ])->assertStatus(422)->assertJsonValidationErrors('product_ids.0');
-    }
-
-    public function test_a_shop_cannot_edit_another_shops_addon(): void
-    {
-        $other = Business::create(['name' => 'محل آخر', 'email' => 'z@k.local', 'status' => 'نشط']);
-        $theirs = Addon::create(['business_id' => $other->id, 'name' => 'إضافتهم', 'price' => 3, 'active' => true]);
-
-        $this->actingAs($this->owner)->putJson(route('admin.products.addons.update', $theirs->id), [
-            'name' => 'مسروقة', 'price' => 99,
-        ])->assertNotFound();
-
-        $this->assertSame('إضافتهم', $theirs->fresh()->name);
-    }
-
-    public function test_a_consumption_of_zero_is_refused(): void
-    {
-        $this->actingAs($this->owner)->postJson(route('admin.products.addons.store'), [
-            'name' => 'وعدٌ فارغ', 'price' => 1,
-            'inventory_product_id' => $this->rose->id, 'inventory_quantity' => 0,
-        ])->assertStatus(422)->assertJsonValidationErrors('inventory_quantity');
-    }
-
-    public function test_unlinking_the_stock_item_clears_the_consumption(): void
-    {
-        $this->actingAs($this->owner)->putJson(route('admin.products.addons.update', $this->extraRoses->id), [
-            'name' => 'زيادة 3 وردات', 'price' => 2.5,
-            'inventory_product_id' => null, 'inventory_quantity' => null,
-        ])->assertOk();
-
-        $fresh = $this->extraRoses->fresh();
-
-        $this->assertNull($fresh->inventory_product_id);
-        $this->assertNull($fresh->inventory_quantity);
     }
 }

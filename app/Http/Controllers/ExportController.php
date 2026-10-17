@@ -101,11 +101,11 @@ class ExportController extends Controller
     public function suppliers()
     {
         $rows = array_map(fn ($s) => [
-            $s['id'], $s['name'], $s['phone'] ?? '', $s['email'] ?? '',
+            $s['id'], $s['name'], $s['service'] ?? '', $s['phone'] ?? '', $s['email'] ?? '',
             $s['contact'] ?? '', $s['orders_count'],
         ], Demo::suppliers());
 
-        return $this->stream('suppliers', [__('المعرّف'), __('الاسم'), __('الهاتف'), __('البريد'), __('مسؤول التواصل'), __('أوامر الشراء')], $rows);
+        return $this->stream('suppliers', [__('المعرّف'), __('الاسم'), __('الخدمة / النشاط'), __('الهاتف'), __('البريد'), __('مسؤول التواصل'), __('أوامر الشراء')], $rows);
     }
 
     public function transactions()

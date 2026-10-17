@@ -22,6 +22,7 @@ import type { PageProps } from '@/types';
 
 interface Row {
     name: string | null;
+    service?: string | null;
     phone: string | null;
     email: string | null;
     contact: string | null;
@@ -118,7 +119,7 @@ export default function SupplierImportPreview() {
                 <Table>
                     <TableHeader>
                         <TableRow className="hover:bg-transparent">
-                            {['#', 'الاسم', 'الهاتف', 'البريد', 'مسؤول التواصل', 'ملاحظات', 'الحالة'].map((h) => (
+                            {['#', 'الاسم', 'الخدمة / النشاط', 'الهاتف', 'البريد', 'مسؤول التواصل', 'ملاحظات', 'الحالة'].map((h) => (
                                 <TableHead key={h}>{h === '#' ? h : t(h)}</TableHead>
                             ))}
                         </TableRow>
@@ -131,6 +132,7 @@ export default function SupplierImportPreview() {
                                 <TableRow key={i} className={cn(s.row)}>
                                     <TableCell className="text-[12px] text-[#9ca3af]">{i + 1}</TableCell>
                                     <TableCell className="font-medium text-[#111]">{r.name || '—'}</TableCell>
+                                    <TableCell className="text-[#4b4b4b]">{r.service || '—'}</TableCell>
                                     <TableCell dir="ltr" className="text-[#4b4b4b]">{r.phone || '—'}</TableCell>
                                     <TableCell dir="ltr" className="text-[#6b7280]">{r.email || '—'}</TableCell>
                                     <TableCell className="text-[#4b4b4b]">{r.contact || '—'}</TableCell>

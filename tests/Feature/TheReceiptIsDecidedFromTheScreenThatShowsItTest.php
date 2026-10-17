@@ -107,10 +107,11 @@ class TheReceiptIsDecidedFromTheScreenThatShowsItTest extends TestCase
         $keeper = $this->staff(['inventory', Permissions::RECEIPT_VIEW, Permissions::RECEIPT_APPROVE]);
         $note = $this->pendingNote();
 
-        // يرى السندَ في شاشة المخزون وزرَّ اعتماده
-        $page = $this->actingAs($keeper)->get(route('admin.inventory.receipts'))->assertOk()->viewData('page')['props'];
-        $this->assertTrue($page['canApprove']);
-        $this->actingAs($keeper)->get(route('admin.inventory.receipts.show', $note->id))->assertOk();
+        // يرى السندَ في «المخزون» بانتظار الاعتماد، وزرَّ اعتماده في صفحته
+        $waiting = $this->actingAs($keeper)->get(route('admin.inventory.index'))->assertOk()->viewData('page')['props']['pendingReceipts'];
+        $this->assertSame([$note->id], array_column($waiting, 'id'));
+        $page = $this->actingAs($keeper)->get(route('admin.inventory.receipts.show', $note->id))->assertOk()->viewData('page')['props'];
+        $this->assertTrue($page['can']['approve']);
 
         $this->approve($keeper, $note)->assertSessionHasNoErrors();
 

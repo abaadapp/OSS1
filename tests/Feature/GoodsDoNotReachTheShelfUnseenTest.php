@@ -365,25 +365,34 @@ class GoodsDoNotReachTheShelfUnseenTest extends TestCase
 
     /* ---------------------------- الشاشة ---------------------------- */
 
-    /** والطابورُ يُعرض ويُعدّ */
+    /**
+     * والطابورُ يُعرض في «المخزون» — وقائمةُ السندات خرجت من الواجهة —
+     * ويُعتمد من صفحة السند بموضع كلّ سطرٍ من أمره.
+     */
     public function test_the_queue_is_listed_and_counted(): void
     {
         $po = $this->order();
         $this->actingAs($this->clerk)->post(route('admin.purchases.receive', $po->id));
+        $note = GoodsReceiptNote::sole();
 
-        $this->actingAs($this->owner)->get(route('admin.inventory.receipts'))
+        $this->actingAs($this->owner)->get(route('admin.inventory.index'))
             ->assertOk()
-            ->assertInertia(fn ($p) => $p->component('Admin/Inventory/Receipts')
-                ->where('pendingCount', 1)
-                ->where('canApprove', true)
-                ->where('notes.0.status', GoodsReceipts::PENDING)
-                ->where('notes.0.items.0.ordered', 100)
-                ->where('notes.0.items.0.remaining', 100));
+            ->assertInertia(fn ($p) => $p->component('Admin/Inventory/Index')
+                ->has('pendingReceipts', 1)
+                ->where('pendingReceipts.0.id', $note->id));
+
+        $this->actingAs($this->owner)->get(route('admin.inventory.receipts.show', $note->id))
+            ->assertOk()
+            ->assertInertia(fn ($p) => $p->component('Admin/Inventory/ReceiptShow')
+                ->where('can.approve', true)
+                ->where('note.status', GoodsReceipts::PENDING)
+                ->where('note.items.0.ordered', 100)
+                ->where('note.items.0.remaining', 100));
 
         // ومن لا يملك الفعل لا يُرسم له زرُّه
-        $this->actingAs($this->clerk)->get(route('admin.inventory.receipts'))
+        $this->actingAs($this->clerk)->get(route('admin.inventory.receipts.show', $note->id))
             ->assertOk()
-            ->assertInertia(fn ($p) => $p->where('canApprove', false));
+            ->assertInertia(fn ($p) => $p->where('can.approve', false));
     }
 
     /** وورقةُ متجرٍ آخر لا تُعتمد من هنا */

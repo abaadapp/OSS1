@@ -11,14 +11,15 @@ use App\Models\User;
 use App\Support\OrderCorrection;
 use App\Support\ProductAddons;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 /**
  * الإضافات — من إضافةٍ في المتجر إلى إضافةٍ على المنتج وعلى البند.
  *
- * وأهمّ ما يُحرس هنا التوافق: قبل هذا كانت كلّ إضافات المتجر تظهر مع كلّ
- * منتج، وتُباع بندًا مستقلًّا في السلّة. والاثنان يجب أن يظلّا يعملان — ومن
- * لم يربط شيئًا بعد لا يجوز أن تختفي إضافاته لحظة الترقية.
+ * ولم يعد لها بابُ كتابةٍ في شاشة المنتج: خرجت مع «التركيب» من بقايا المتجر.
+ * وما بقي يُحرس هنا: قراءتُها كما كُتبت (`ProductAddons`) لما تقرؤه المبيعاتُ
+ * المتقاعدة وتصحيحُ فواتيرها — ومن لم يربط شيئًا لا تختفي إضافاتُه.
  */
 class ProductAddonsTest extends TestCase
 {
@@ -69,11 +70,18 @@ class ProductAddonsTest extends TestCase
         ]);
 
     }
+    /**
+     * قائمةُ المنتج كما كتبها بابُ «التركيب» قبل أن يُنزع من شاشة المنتج —
+     * صفوفٌ في `product_addons` تقرؤها المبيعاتُ المتقاعدة كما هي.
+     */
     private function allow(array $addonIds): void
     {
-        $this->actingAs($this->owner)
-            ->put(route('admin.products.addons.sync', $this->bouquet->id), ['addon_ids' => $addonIds])
-            ->assertSessionHasNoErrors();
+        foreach (array_values($addonIds) as $i => $id) {
+            DB::table('product_addons')->insert([
+                'business_id' => $this->business->id, 'product_id' => $this->bouquet->id,
+                'addon_id' => $id, 'sort_order' => $i, 'created_at' => now(), 'updated_at' => now(),
+            ]);
+        }
     }
     public function test_a_product_with_no_links_still_offers_every_shop_addon(): void
     {
@@ -97,17 +105,6 @@ class ProductAddonsTest extends TestCase
         $this->wrapService->update(['active' => false]);
 
         $this->assertCount(1, ProductAddons::for($this->bouquet));
-    }
-    public function test_a_shop_cannot_link_another_shops_addon(): void
-    {
-        $other = Business::create(['name' => 'محل آخر', 'email' => 'o2@a.local', 'status' => 'نشط']);
-        $theirs = Addon::create(['business_id' => $other->id, 'name' => 'بالونهم', 'price' => 2, 'active' => true]);
-
-        $this->actingAs($this->owner)
-            ->put(route('admin.products.addons.sync', $this->bouquet->id), ['addon_ids' => [$theirs->id]])
-            ->assertSessionHasErrors('addon_ids.0');
-
-        $this->assertDatabaseCount('product_addons', 0);
     }
     /* ==================== الإضافة الخاصّة بمنتجٍ واحد ==================== */
 
@@ -136,147 +133,7 @@ class ProductAddonsTest extends TestCase
         // وإضافةُ المتجر تبقى للجميع كما كانت
         $this->assertTrue(ProductAddons::for($fertiliser)->contains('id', $this->wrapService->id));
     }
-    /** وربطُها بمنتجٍ آخر يُردّ في بابه لا في نقطة البيع وحدها */
-    public function test_another_products_addon_cannot_be_linked_here(): void
-    {
-        $chocolateBox = Product::create([
-            'business_id' => $this->business->id, 'name' => 'علبة شوكولاتة',
-            'price' => 6, 'cost' => 3, 'quantity' => 10, 'active' => true,
-        ]);
 
-        $ribbon = Addon::create([
-            'business_id' => $this->business->id, 'product_id' => $chocolateBox->id,
-            'name' => 'شريط ذهبي', 'price' => 0.5, 'active' => true,
-        ]);
-
-        $this->actingAs($this->owner)
-            ->put(route('admin.products.addons.sync', $this->bouquet->id), ['addon_ids' => [$ribbon->id]])
-            ->assertSessionHasErrors('addon_ids.0');
-
-        $this->assertDatabaseCount('product_addons', 0);
-    }
-
-    /** والشاشة لا تعرض على منتجٍ إضافاتِ جيرانه أصلًا */
-    public function test_the_product_screen_hides_another_products_addon(): void
-    {
-        $chocolateBox = Product::create([
-            'business_id' => $this->business->id, 'name' => 'علبة شوكولاتة',
-            'price' => 6, 'cost' => 3, 'quantity' => 10, 'active' => true,
-        ]);
-
-        Addon::create([
-            'business_id' => $this->business->id, 'product_id' => $chocolateBox->id,
-            'name' => 'شريط ذهبي', 'price' => 0.5, 'active' => true,
-        ]);
-
-        $mine = Addon::create([
-            'business_id' => $this->business->id, 'product_id' => $this->bouquet->id,
-            'name' => 'بطاقة معايدة', 'price' => 0.3, 'active' => true,
-        ]);
-
-        $names = collect(\App\Http\Controllers\Admin\ProductCompositionController::payload($this->bouquet)['addons'])
-            ->pluck('label')->all();
-
-        $this->assertContains('بطاقة معايدة', $names);
-        $this->assertContains('تغليف فاخر', $names);
-        $this->assertNotContains('شريط ذهبي', $names);
-
-        $this->assertTrue(
-            collect(\App\Http\Controllers\Admin\ProductCompositionController::payload($this->bouquet)['addons'])
-                ->firstWhere('value', $mine->id)['private'],
-        );
-    }
-
-    /** وإضافةٌ تُنشأ من شاشة المنتج تُولد خاصّةً به إن قيل ذلك */
-    public function test_the_quick_form_can_create_a_private_addon(): void
-    {
-        $this->actingAs($this->owner)->postJson(route('admin.products.addons.store'), [
-            'name' => 'شريط ذهبي', 'price' => 0.5, 'product_id' => $this->bouquet->id,
-        ])->assertOk()->assertJsonPath('addon.private', true);
-
-        $this->assertSame(
-            $this->bouquet->id,
-            (int) Addon::where('name', 'شريط ذهبي')->value('product_id'),
-        );
-    }
-
-    /** واسمٌ واحد يجوز لمنتجين: «تغليف» لكلٍّ تغليفُه وسعرُه */
-    public function test_the_same_private_name_is_free_on_another_product(): void
-    {
-        $chocolateBox = Product::create([
-            'business_id' => $this->business->id, 'name' => 'علبة شوكولاتة',
-            'price' => 6, 'cost' => 3, 'quantity' => 10, 'active' => true,
-        ]);
-
-        foreach ([$this->bouquet->id, $chocolateBox->id] as $id) {
-            $this->actingAs($this->owner)->postJson(route('admin.products.addons.store'), [
-                'name' => 'تغليف', 'price' => 1, 'product_id' => $id,
-            ])->assertOk();
-        }
-
-        $this->assertSame(2, Addon::where('name', 'تغليف')->count());
-    }
-
-    /** ولا تُنسب إضافةٌ إلى منتج متجرٍ آخر */
-    public function test_an_addon_cannot_be_owned_by_another_shops_product(): void
-    {
-        $other = Business::create(['name' => 'محل آخر', 'email' => 'own@a.local', 'status' => 'نشط']);
-        $theirs = Product::create([
-            'business_id' => $other->id, 'name' => 'باقتهم', 'price' => 9, 'cost' => 3, 'quantity' => 5,
-        ]);
-
-        $this->actingAs($this->owner)->postJson(route('admin.products.addons.store'), [
-            'name' => 'شريط', 'price' => 1, 'product_id' => $theirs->id,
-        ])->assertStatus(422)->assertJsonValidationErrors('product_id');
-    }
-    /** وتُحذف من شاشتها */
-    public function test_a_private_addon_can_be_deleted_from_its_product(): void
-    {
-        $ribbon = Addon::create([
-            'business_id' => $this->business->id, 'product_id' => $this->bouquet->id,
-            'name' => 'شريط ذهبي', 'price' => 0.5, 'active' => true,
-        ]);
-
-        $this->actingAs($this->owner)
-            ->delete(route('admin.products.addons.destroy', [$this->bouquet->id, $ribbon->id]))
-            ->assertSessionHasNoErrors();
-
-        $this->assertSame(0, Addon::where('id', $ribbon->id)->count());
-    }
-
-    /**
-     * وإضافةُ المتجر لا تُحذف من شاشة منتجٍ واحد.
-     *
-     * تُعرض مع كلّ ما يبيعه المحلّ، وحذفُها من هنا يمسّ ما لا يراه من ضغط
-     * الزرّ.
-     */
-    public function test_a_shop_wide_addon_cannot_be_deleted_from_a_product_screen(): void
-    {
-        $this->actingAs($this->owner)
-            ->delete(route('admin.products.addons.destroy', [$this->bouquet->id, $this->wrapService->id]))
-            ->assertNotFound();
-
-        $this->assertSame(1, Addon::where('id', $this->wrapService->id)->count());
-    }
-
-    /** ولا إضافةُ منتجٍ آخر */
-    public function test_another_products_addon_cannot_be_deleted_from_here(): void
-    {
-        $box = Product::create([
-            'business_id' => $this->business->id, 'name' => 'علبة',
-            'price' => 6, 'cost' => 3, 'quantity' => 4, 'active' => true,
-        ]);
-        $ribbon = Addon::create([
-            'business_id' => $this->business->id, 'product_id' => $box->id,
-            'name' => 'شريط', 'price' => 1, 'active' => true,
-        ]);
-
-        $this->actingAs($this->owner)
-            ->delete(route('admin.products.addons.destroy', [$this->bouquet->id, $ribbon->id]))
-            ->assertNotFound();
-
-        $this->assertSame(1, Addon::where('id', $ribbon->id)->count());
-    }
     /**
      * شاشةُ البيع لا تعرض على منتجٍ إضافةَ جاره.
      *

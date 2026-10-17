@@ -49,7 +49,7 @@ class InventoryDocumentsTest extends TestCase
         ]);
 
         $this->actingAs($owner);
-        $this->get(route('admin.inventory.adjustments'));
+        Ledger::ensureSystemAccounts($this->business->id);
     }
 
     private function bid(): int
@@ -59,34 +59,21 @@ class InventoryDocumentsTest extends TestCase
 
     /* ---------------------------- سجل المخزون ---------------------------- */
 
-    public function test_the_screen_is_named_the_stock_log_wherever_it_shows(): void
+    public function test_the_stock_log_left_the_screens_and_its_rows_stay(): void
     {
         /*
-         * اسمٌ واحد في موضعين: تبويبُ القسم وعنوانُ الصفحة. ولو تُرك أحدهما
-         * لَقرأ التاجر اسمًا في التبويب وآخر بعد الضغط عليه — فيظنّهما بابين.
-         *
-         * والمسارُ لا يُمسّ: `admin.inventory.adjustments` كما هو، فالروابط
-         * المحفوظة والصلاحيات لا تتغيّر بتغيّر الاسم.
+         * «سجل المخزون» خرج من الواجهة: لا تبويبَ ولا صفحة، وعنوانُه المحفوظ
+         * يعود إلى «المخزون» بدل أن ينكسر. والتسوياتُ نفسُها لا تُمحى — تُكتب
+         * وتُقيَّد كما كانت (`adjustments.store` بابٌ بلا شاشة).
          */
         $tabs = file_get_contents(resource_path('js/Components/SectionTabs.tsx'));
-        $screen = file_get_contents(resource_path('js/Pages/Admin/Inventory/Adjustments.tsx'));
+        $this->assertStringNotContainsString("routeName: 'admin.inventory.adjustments'", $tabs);
+        $this->assertFileDoesNotExist(resource_path('js/Pages/Admin/Inventory/Adjustments.tsx'));
 
-        $this->assertStringContainsString(
-            "{ label: 'سجل المخزون', routeName: 'admin.inventory.adjustments'",
-            $tabs,
-            'تبويبُ القسم لا يحمل الاسم الجديد'
-        );
+        $this->get(route('admin.inventory.adjustments'))->assertRedirect(route('admin.inventory.index'));
 
-        $this->assertSame(2, substr_count($screen, 'سجل المخزون'), 'الشاشة تحمل الاسم في عنوانها وعنوان التبويب معًا');
-        $this->assertStringNotContainsString('تعديلات المخزون', $screen, 'بقي الاسمُ القديم على الشاشة');
-
-        // والترجمة تتبع الاسم، وإلّا ظهر مفتاحٌ عربيّ في الواجهة الإنجليزية
-        $en = json_decode(file_get_contents(lang_path('en.json')), true);
-        $this->assertArrayHasKey('سجل المخزون', $en);
-        $this->assertArrayNotHasKey('تعديلات المخزون', $en, 'بقي مفتاحُ ترجمةٍ يتيمٌ للاسم القديم');
-
-        // والصفحة تفتح كما كانت — الاسمُ تغيّر لا السلوك
-        $this->get(route('admin.inventory.adjustments'))->assertOk();
+        $this->adjust()->assertSessionHasNoErrors();
+        $this->assertSame(1, StockAdjustment::where('business_id', $this->bid())->count());
     }
 
     private function adjust(array $overrides = [])

@@ -125,10 +125,11 @@ class SettingsHoldTheirGroundTest extends TestCase
          *
          * كانت تقول «انقلها إلى فرعٍ آخر» ولا نقلَ في النظام، فيبحث التاجر
          * عن زرٍّ ليس موجودًا ثمّ يظنّ العطب في بصره. ثمّ دلّته على شاشة
-         * النقل بين الفروع — وقد حُذفت بطلب صاحب النظام، فعادت تدلّ على
-         * سجلّ المخزون وهو الباب القائم.
+         * النقل بين الفروع، ثمّ على «سجلّ المخزون» — وقد خرجا من الواجهة،
+         * فصارت تدلّ على صفحة المنتج والفرعِ المختار في أعلى الشاشة.
          */
-        $this->assertStringContainsString('سجل المخزون', $message, 'النصيحة تُسمّي الشاشة التي تُنفَّذ منها');
+        $this->assertStringContainsString('صفحة المنتج', $message, 'النصيحة تُسمّي الشاشة التي تُنفَّذ منها');
+        $this->assertStringNotContainsString('سجل المخزون', $message, 'ولا تُسمّي شاشةً خرجت من الواجهة');
         $this->assertStringContainsString($other->name, $message, 'ولا تقول «فرعٌ ما» — تسمّي الفرع وكميّته');
     }
 
@@ -139,9 +140,10 @@ class SettingsHoldTheirGroundTest extends TestCase
          * نصيحةٍ لا تُحيل إلى شيء، لأنّها تبدو صحيحةً حتى تُجرَّب. وقد وقع
          * ذلك فعلًا يوم حُذفت شاشةُ النقل وبقيت الرسالة تسمّيها.
          */
-        $this->assertTrue(Route::has('admin.inventory.adjustments'));
+        $this->assertTrue(Route::has('admin.products.edit'));
 
-        $this->actingAs($this->owner)->get(route('admin.inventory.adjustments'))->assertOk();
+        $product = Product::create(['business_id' => $this->business->id, 'name' => 'منصة', 'price' => 5, 'cost' => 2, 'quantity' => 1]);
+        $this->actingAs($this->owner)->get(route('admin.products.edit', $product->id))->assertOk();
     }
 
     /**

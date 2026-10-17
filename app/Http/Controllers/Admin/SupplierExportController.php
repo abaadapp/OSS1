@@ -35,7 +35,7 @@ class SupplierExportController extends Controller
     /** أعمدة الملف — واحدةٌ للصيغتين فلا تفترقان عند أوّل تعديل */
     private function columns(): array
     {
-        return [__('الاسم'), __('الهاتف'), __('البريد'), __('مسؤول التواصل'), __('أوامر الشراء'), __('ملاحظات')];
+        return [__('الاسم'), __('الخدمة / النشاط'), __('الهاتف'), __('البريد'), __('مسؤول التواصل'), __('أوامر الشراء'), __('ملاحظات')];
     }
 
     private function suppliers()
@@ -53,13 +53,14 @@ class SupplierExportController extends Controller
 
         $sheet->fromArray($this->columns(), null, 'A1');
 
-        $lastCol = 'F';
+        $lastCol = 'G';
         $sheet->getStyle("A1:{$lastCol}1")->getFont()->setBold(true)->getColor()->setRGB('FFFFFF');
         $sheet->getStyle("A1:{$lastCol}1")->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('111111');
         $sheet->getStyle("A1:{$lastCol}1")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
 
         $rows = $this->suppliers()->map(fn ($s) => [
             $s->name,
+            $s->service ?? '',
             $s->phone ?? '',
             $s->email ?? '',
             $s->contact_person ?? '',
@@ -156,6 +157,7 @@ class SupplierExportController extends Controller
         foreach ($data as $r) {
             $get = fn ($k) => $idx[$k] !== null ? trim((string) ($r[$idx[$k]] ?? '')) : '';
             $name = $get('name');
+            $service = $get('service');
             $phone = $get('phone');
             $email = $get('email');
             $contact = $get('contact');
@@ -205,11 +207,11 @@ class SupplierExportController extends Controller
              * يمحو بريد كل مورّدٍ طابق وملاحظاته واسم مسؤول التواصل معه.
              */
             $stated = [];
-            foreach (['name', 'phone', 'email', 'contact', 'notes'] as $field) {
+            foreach (['name', 'service', 'phone', 'email', 'contact', 'notes'] as $field) {
                 $stated[$field] = $idx[$field] !== null && $get($field) !== '';
             }
 
-            $rows[] = compact('name', 'phone', 'email', 'contact', 'notes', 'status', 'note', 'targetId', 'stated');
+            $rows[] = compact('name', 'service', 'phone', 'email', 'contact', 'notes', 'status', 'note', 'targetId', 'stated');
         }
 
         session()->put(self::SESSION_KEY, ['rows' => $rows, 'file' => $file->getClientOriginalName()]);
@@ -234,7 +236,7 @@ class SupplierExportController extends Controller
         ];
 
         // ما لا يذكره الملفّ يبقى كما هو — يُقال قبل التأكيد لا بعده
-        $labels = ['name' => 'الاسم', 'phone' => 'الهاتف', 'email' => 'البريد', 'contact' => 'مسؤول التواصل', 'notes' => 'ملاحظات'];
+        $labels = ['name' => 'الاسم', 'service' => 'الخدمة / النشاط', 'phone' => 'الهاتف', 'email' => 'البريد', 'contact' => 'مسؤول التواصل', 'notes' => 'ملاحظات'];
         $untouched = [];
         if ($counts['update'] > 0) {
             foreach ($labels as $key => $label) {
@@ -265,8 +267,11 @@ class SupplierExportController extends Controller
         $updated = 0;
 
         foreach ($payload['rows'] as $r) {
+            // معاينةٌ رُفعت قبل عمود الخدمة لا تحمل مفتاحه — فلا تذكره ولا تمحوه
+            $r['stated'] = ($r['stated'] ?? []) + ['service' => false];
             $fields = [
                 'name' => $r['name'],
+                'service' => ($r['service'] ?? '') ?: null,
                 'phone' => $r['phone'] ?: null,
                 'email' => $r['email'] ?: null,
                 'contact_person' => $r['contact'] ?: null,
@@ -283,7 +288,7 @@ class SupplierExportController extends Controller
                 }
                 // وما لم يذكره الملفّ لا يُكتب — انظر بناء `stated` أعلاه
                 $columns = [
-                    'name' => 'name', 'phone' => 'phone', 'email' => 'email',
+                    'name' => 'name', 'service' => 'service', 'phone' => 'phone', 'email' => 'email',
                     'contact' => 'contact_person', 'notes' => 'notes',
                 ];
                 foreach ($columns as $field => $column) {
@@ -328,6 +333,7 @@ class SupplierExportController extends Controller
     {
         $aliases = [
             'name' => ['الاسم', 'اسم', 'المورد', 'المورّد', 'name', 'supplier', 'vendor'],
+            'service' => ['الخدمة', 'خدمة', 'النشاط', 'service', 'activity'],
             'phone' => ['الهاتف', 'هاتف', 'الجوال', 'جوال', 'رقم', 'phone', 'mobile'],
             'email' => ['البريد', 'ايميل', 'الايميل', 'email', 'mail'],
             'contact' => ['مسؤول', 'الشخص', 'المسؤول', 'contact'],
@@ -359,6 +365,7 @@ class SupplierExportController extends Controller
         if ($isHeader) {
             return ['isHeader' => true, 'index' => [
                 'name' => $found['name'] ?? 0,
+                'service' => $found['service'] ?? null,
                 'phone' => $found['phone'] ?? null,
                 'email' => $found['email'] ?? null,
                 'contact' => $found['contact'] ?? null,
@@ -371,6 +378,7 @@ class SupplierExportController extends Controller
 
         return ['isHeader' => false, 'index' => [
             'name' => 0,
+            'service' => null,
             'phone' => $cols > 1 ? 1 : null,
             'email' => $cols > 2 ? 2 : null,
             'contact' => $cols > 3 ? 3 : null,
