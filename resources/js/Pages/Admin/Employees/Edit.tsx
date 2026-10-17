@@ -2,7 +2,9 @@ import { usePage } from '@inertiajs/react';
 import AdminLayout from '@/Layouts/AdminLayout';
 import BackLink from '@/Components/BackLink';
 import PageHeader from '@/Components/PageHeader';
-import EmployeeForm, { type EmployeeFormValues } from './partials/EmployeeForm';
+import EmployeeForm, { type EmployeeFormValues, type JobTitleOption } from './partials/EmployeeForm';
+import type { RoleOption } from './partials/AccessProfileField';
+import type { PermissionGroup, RoleProfile } from './partials/EmployeePermissions';
 import { useTranslate } from '@/lib/i18n';
 import type { PageProps } from '@/types';
 import type { Branch } from '@/types/models';
@@ -11,15 +13,17 @@ interface Props {
     employee: EmployeeFormValues;
     branches: Branch[];
     branchOptions: { value: number; label: string }[];
-    jobTitles: string[];
-    sections: Record<string, string>;
-    actions: Record<string, string>;
+    jobTitles: JobTitleOption[];
+    permissionCatalog: PermissionGroup[];
+    roleProfiles: Record<string, RoleProfile>;
+    roleOptions: RoleOption[];
+    grantable: string[];
     /** ومن لا يقرأ الرواتب لا تُرسم له حقولُها — انظر EmployeeController */
     may_read_payroll: boolean;
 }
 
 export default function EmployeeEdit() {
-    const { employee, branches, branchOptions, jobTitles, sections, actions, may_read_payroll, auth } =
+    const { employee, branches, branchOptions, jobTitles, permissionCatalog, roleProfiles, roleOptions, grantable, may_read_payroll, auth } =
         usePage<PageProps<Props>>().props;
     const t = useTranslate();
 
@@ -41,8 +45,10 @@ export default function EmployeeEdit() {
                 branches={branches}
                 branchOptions={branchOptions}
                 jobTitles={jobTitles}
-                sections={sections}
-                actions={actions}
+                permissionCatalog={permissionCatalog}
+                roleProfiles={roleProfiles}
+                roleOptions={roleOptions}
+                grantable={grantable}
                 canEditPermissions={auth?.user.id !== employee.id}
             />
         </AdminLayout>

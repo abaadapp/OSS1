@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Support\AlertMetrics;
+use App\Support\BranchAccess;
 use App\Support\DashboardMetrics;
 use App\Support\Demo;
 use App\Support\DocumentRecords;
@@ -54,7 +55,7 @@ class DashboardController extends Controller
              */
             // أحدثُ الفواتير لا أحدثُ الطلبات — انظر `Demo::recentInvoices`
             'recentInvoices' => Demo::recentInvoices(6),
-            'topProducts' => Demo::topSellingProducts(5, 'month', Demo::currentBranchId()),
+            'topProducts' => Demo::topSellingProducts(5, 'month', BranchAccess::currentAllowedBranchIds()),
             /*
              * والترتيبُ بما حقّقه هذا الشهر — **في الفرع المختار**.
              *
@@ -63,7 +64,7 @@ class DashboardController extends Controller
              * الشاشةُ الواحدة رقمين لشهرٍ واحد — ولا شيء فيها يقول أيُّهما
              * على أيّ نطاق.
              */
-            'topEmployees' => collect(Demo::employees(Demo::currentBranchId()))
+            'topEmployees' => collect(Demo::employees(BranchAccess::currentAllowedBranchIds()))
                 ->sortByDesc('achieved')->take(5)->values()->all(),
             /* «مستنداتٌ تحتاج إجراء» — ما ينتهي خلال ثلاثين يومًا وما انتهى وأقربُ انتهاء؛ لمن يفتح المستندات */
             'documents' => auth()->user()?->allows('documents') ? DocumentRecords::summary(Demo::bid()) : null,

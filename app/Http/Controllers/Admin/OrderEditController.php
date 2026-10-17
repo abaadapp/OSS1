@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Order;
 use App\Models\OrderItem;
+use App\Support\BranchAccess;
 use App\Support\Demo;
 use App\Support\OrderCorrection;
 use Illuminate\Http\Request;
@@ -48,13 +49,14 @@ class OrderEditController extends Controller
      * فرعٍ لا يراه ولا يظهر له في قائمته. وأخطرُ الأبواب كان أوسعَها.
      *
      * والقاعدة هي قاعدةُ أخيه حرفًا بحرف: «من يعمل على فرعٍ بعينه لا يُحرّك
-     * طلبات فرعٍ لا يراه». و«كل الفروع» يبقى على المتجر كلِّه.
+     * طلبات فرعٍ لا يراه». و«كل الفروع» يبقى على المتجر كلِّه — ولمن قُيّد
+     * بفروعٍ على فروعه هو (BranchAccess::scope).
      *
      */
     private function find(string $number): Order
     {
         return Order::where('business_id', $this->bid())
-            ->when(Demo::currentBranchId(), fn ($w) => $w->where('branch_id', Demo::currentBranchId()))
+            ->tap(fn ($w) => BranchAccess::scope($w))
             ->where('number', $number)
             ->firstOrFail();
     }

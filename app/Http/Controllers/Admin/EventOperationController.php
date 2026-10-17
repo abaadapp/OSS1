@@ -24,6 +24,7 @@ use App\Models\ProjectTask;
 use App\Models\User;
 use App\Support\Automation\Rules;
 use App\Support\Automation\Settings as AutomationSettings;
+use App\Support\BranchAccess;
 use App\Support\Demo;
 use App\Support\InventoryForecast;
 use App\Support\Operations\Assets;
@@ -610,6 +611,12 @@ class EventOperationController extends Controller
         $this->gate(Permissions::ASSETS_RETURN);
         $operation = $this->find($id);
         $issue = OperationConsumableIssue::where('event_operation_id', $operation->id)->whereKey($cid)->with('operation', 'requirement')->firstOrFail();
+        // والإرجاعُ يُعيد الكميّة إلى فرع الصرف — فلا يُرجِع من قُيّد بفروعٍ إلى فرعٍ ليس من فروعه
+        abort_if(
+            BranchAccess::restricts(auth()->user()) && ! BranchAccess::canAccess(auth()->user(), $issue->branch_id),
+            403,
+            __('هذا الفرع ليس من فروع عملك.'),
+        );
         $data = $request->validate(['quantity' => ['required', 'integer', 'min:0', 'max:1000000'], 'notes' => ['nullable', 'string', 'max:2000']]);
 
         return $this->attempt(fn () => Consumables::giveBack($issue, $data, auth()->user()), __('أُقفل الصرف'), 'consumable');

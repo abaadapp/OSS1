@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { useForm } from '@inertiajs/react';
-import { Check, KeyRound, Plus, ShieldCheck, Target, UserRound, Wallet } from 'lucide-react';
+import { Briefcase, Check, KeyRound, Plus, ShieldCheck, Target, UserRound, Wallet } from 'lucide-react';
 import SmartLink from '@/Components/SmartLink';
 import Field, { Select } from '@/Components/Field';
 import Toggle from '@/Components/Toggle';
@@ -20,6 +20,12 @@ import { initials } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import { useTranslate } from '@/lib/i18n';
 import type { Branch } from '@/types/models';
+import AccessProfileField, { type RoleOption } from './AccessProfileField';
+import EmployeePermissions, {
+    type PermissionGroup,
+    type PermissionMode,
+    type RoleProfile,
+} from './EmployeePermissions';
 
 export interface EmployeeFormValues {
     id?: number;
@@ -37,44 +43,49 @@ export interface EmployeeFormValues {
     monthly_target?: number | string | null;
     basic_salary?: number | string | null;
     allowances?: number | string | null;
-    /** null تعني «اتبع الدور»؛ مصفوفة تعني قائمة يدوية */
+    /** null تعني «يتبع الوظيفة»؛ مصفوفة تعني قائمة مخصّصة */
     permissions?: string[] | null;
-    /** ما يمنحه الدور — يُعرض حين تكون الصلاحيات موروثة */
-    role_permissions?: string[];
-    /** فروع العمل المسموح بها. الفارغة = كل فروع المتجر */
+    /** ملفُّ صلاحياته الآن — يُقال إن كان المسمّى المختار سيغيّره */
+    role?: string;
+    /** فروع العمل المسجّلة. الفارغة = كل فروع المتجر */
     branches?: number[];
+}
+
+/** مسمًّى وظيفيّ بملفّه — `EmployeeAccess::jobTitles` */
+export interface JobTitleOption {
+    name: string;
+    role: string;
+    role_label: string;
+    /** ملفُّه يحمل ما لا يملكه الفاعل — `Permissions::mayAssignRole` */
+    blocked: boolean;
 }
 
 interface Props {
     branches: Branch[];
-    /** فروع المتجر كخيارات — مصدر الإذن، لا الحقل النصّي القديم */
+    /** فروع المتجر كخيارات — لا الحقل النصّي القديم */
     branchOptions?: { value: number; label: string }[];
-    jobTitles: string[];
+    jobTitles: JobTitleOption[];
     employee?: EmployeeFormValues;
     defaultBranch?: string | null;
-    /** مفتاح القسم → اسمه المعروض */
-    sections?: Record<string, string>;
-    /** أفعالٌ تُمنح بأسمائها — لا أقسامٌ تُفتح. انظر Permissions::ACTIONS */
-    actions?: Record<string, string>;
+    /** المجموعاتُ والأفعالُ الحسّاسة — `EmployeeAccess::catalog` */
+    permissionCatalog: PermissionGroup[];
+    /** ما يحمله كلُّ ملفّ — `Permissions::roleGrants` */
+    roleProfiles: Record<string, RoleProfile>;
+    /** ملفّاتُ الموظّفين الخمسة لإضافة مسمًّى من هنا */
+    roleOptions: RoleOption[];
     /**
      * ما يملك الفاعلُ منحَه — وسواه يُعطَّل بسببه مكتوبًا.
      *
-     * والخادمُ يردّ من يمنح ما لا يملك بـ٤٠٣ كاملة (`refuseGrantingMoreThanIHave`)
-     * — صفحةُ خطأٍ تمحو النموذج كلَّه ولا تقول أيُّ مربّعٍ سبّبها. فيُقال
-     * قبل الضغط. ويُقرأ من `Permissions::grantable` نفسِها التي يقيس بها
-     * الحارس، فلا تفترق الشاشةُ عن الباب.
+     * والخادمُ يردّ من يمنح ما لا يملك بـ٤٠٣ (`refuseGrantingMoreThanIHave`)، ويُقرأ
+     * هذا من `Permissions::grantable` نفسِها التي يقيس بها الحارس.
      */
-    grantable?: string[];
-    /** وظائفُ لا يُسندها الفاعل: دورُها يحمل ما لا يملكه — `mayAssignRole` */
-    blockedTitles?: string[];
-    /** لا يُعدّل المدير صلاحيات حسابه */
+    grantable: string[];
+    /** لا يُعدّل المرءُ صلاحيات حسابه */
     canEditPermissions?: boolean;
     /*
      * ومن لا يقرأ الرواتب لا يرى حقولَها.
      *
-     * `PAYROLL_VIEW` تحرس شاشةَ المسيرة — وكان الرقمُ نفسُه معروضًا هنا
-     * ومكتوبًا، فمن مُنح القسم ليصحّح مسمًّى يقرأ رواتب المتجر كلَّه ويغيّرها.
-     * والخادمُ يرفع الحقلين من الحمولة كذلك، فلا يكفي إخفاؤهما.
+     * والخادمُ يرفع الحقلين من الحمولة كذلك (`withoutPayrollFields`)، فلا يكفي إخفاؤهما.
      */
     mayReadPayroll?: boolean;
 }
@@ -112,11 +123,18 @@ function Section({
 /**
  * نموذج الموظف — يخدم الإضافة والتعديل بحقل واحد لكل معنى.
  *
- * كان شبكةً واحدة من سبعة حقول بلا تجميع: «كلمة المرور» بجانب «البريد»
- * و«رمز الدخول» وحده في صفٍّ نصفه فارغ، وتلميحٌ يهبط تحت عمودٍ فيزيح ما
- * تحته. والحقول مختلطة: بيانات تعريف وأمانٌ وأداء في مستوًى واحد.
+ * ═══ المسمّى ليس صلاحية ═══
  *
- * فصُنّفت في ثلاثة أقسام، وكلٌّ منها شبكةٌ مكتملة الصفوف لا تترك فجوة.
+ * كان الحقلُ «الوظيفة / الدور»: اسمٌ يُكتب للبطاقة وصلاحيةٌ تُشتقّ منه في خانةٍ
+ * واحدة. فصار «المسمى الوظيفي» اسمًا، ويُقال تحته ملفُّ الصلاحيات الأساسيّ
+ * الذي يحمله — والصلاحياتُ قسمٌ وحدها: «صلاحيات الوظيفة» أو «تخصيص».
+ *
+ * ═══ وحفظُ الموظّف لا يغيّر صلاحياته بلا قصد ═══
+ *
+ * كان النموذجُ يرسل قائمةً مخصّصةً في كلّ حفظ، تبدأ من أقسام الدور وحدها. فمن
+ * فُتح ملفُّه لتصحيح هاتفه صار «مخصّصًا» وخسر أفعالَ دوره (المحاسبُ يفقد «عرض
+ * مسيرة الرواتب»). والآن «صلاحيات الوظيفة» ترسل `manual_permissions=false`
+ * فيبقى العمودُ `null`، والمخصّصةُ ترسل قائمتها كما هي.
  */
 export default function EmployeeForm({
     branches,
@@ -124,34 +142,27 @@ export default function EmployeeForm({
     jobTitles,
     employee,
     defaultBranch,
-    sections,
-    actions,
+    permissionCatalog,
+    roleProfiles,
+    roleOptions,
     grantable,
-    blockedTitles,
     canEditPermissions = true,
     mayReadPayroll = true,
 }: Props) {
     const t = useTranslate();
-    /*
-     * الصلاحيات المخصّصة قدرةٌ تُشترى.
-     *
-     * وبلا هذا كانت الشاشة ترسم المربّعات كاملةً على الباقة الأساسية: يؤشّرها
-     * المالك ويحفظ فيُردّ — بابٌ معروضٌ لا يُفتح. والخادم يبقى الحارس، وهذا
-     * ليقول قبل المحاولة لا بعدها.
-     */
     const editing = !!employee;
+    const ids = { title: useId(), branch: useId(), name: useId(), phone: useId(), salary: useId(), allowances: useId(), target: useId() };
 
     /*
      * القائمة محلّية لأن الوظيفة الجديدة تُضاف بلا إعادة تحميل الصفحة:
      * الاعتماد على الخاصية القادمة من الخادم كان سيتطلّب reload يمحو ما
      * كُتب في بقيّة الحقول.
      */
-    const [titles, setTitles] = useState<string[]>(jobTitles);
+    const [titles, setTitles] = useState<JobTitleOption[]>(jobTitles);
     const [addingTitle, setAddingTitle] = useState(false);
     /*
      * الوظيفة المضافة تُختار بعد أن تصير القائمة تعرفها لا معها: ضبط القيمة
-     * في اللحظة نفسها يجعل قائمة الاختيار ترفض قيمةً ليست بين خياراتها بعد،
-     * فتُضاف الوظيفة ويبقى الحقل فارغًا — والمستخدم يظنّ الإضافة فشلت.
+     * في اللحظة نفسها يجعل قائمة الاختيار ترفض قيمةً ليست بين خياراتها بعد.
      */
     const [pendingTitle, setPendingTitle] = useState<string | null>(null);
 
@@ -168,33 +179,17 @@ export default function EmployeeForm({
         monthly_target: Number(employee?.monthly_target ?? 0) ? String(employee!.monthly_target) : '',
         basic_salary: Number(employee?.basic_salary ?? 0) ? String(employee!.basic_salary) : '',
         allowances: Number(employee?.allowances ?? 0) ? String(employee!.allowances) : '',
-        // علمٌ يُرسل دائمًا: مصفوفة فارغة تسقط من طلب HTTP، فبدونه لا يميّز
-        // الخادم «لم تُرسل الصلاحيات» من «أُرسلت فارغة» — ولا يستطيع رفضها
-        manual_permissions: true,
-        permissions: employee?.permissions ?? employee?.role_permissions ?? [],
+        // موظّفٌ جديد يبدأ بصلاحيات وظيفته — والتخصيصُ اختيارٌ لا افتراض
+        permission_mode: (Array.isArray(employee?.permissions) ? 'custom' : 'inherited') as PermissionMode,
+        permissions: employee?.permissions ?? [],
     });
 
-    /*
-     * ما لا يُمنح يُعطَّل — ولا يُرفع.
-     *
-     * رفعُه كان سيُخفي عن بطاقةِ موظّفٍ قائمٍ صلاحيةً يملكها بالفعل، فيظنّ
-     * القارئُ أنّها نُزعت. و`grantable` غائبةٌ تعني «لا حدّ» — شاشاتٌ لا
-     * ترسل هذه الخاصّية تبقى كما كانت.
-     */
-    const mayGrant = (key: string) => !grantable || grantable.includes(key);
-    const titleBlocked = (name: string) => (blockedTitles ?? []).includes(name);
+    const chosen = titles.find((x) => x.name === form.data.job_title) ?? null;
+    const profile = chosen ? (roleProfiles[chosen.role] ?? null) : null;
+    // تبدّلُ ملفّ الصلاحيات لا يقع بصمت — يُقال قبل الحفظ
+    const roleChange = editing && chosen && employee?.role && chosen.role !== employee.role ? chosen : null;
 
-    const togglePermission = (key: string) =>
-        form.setData(
-            'permissions',
-            form.data.permissions.includes(key)
-                ? form.data.permissions.filter((k) => k !== key)
-                : [...form.data.permissions, key],
-        );
-
-    // الاسم وحده: الصلاحيات تُحدَّد لهذا الموظف بعينه في القسم أدناه، فلا معنى
-    // لسؤالٍ عن صلاحيات «الوظيفة» يُجاب مرّتين ويتناقض جوابه
-    const titleForm = useForm({ name: '' });
+    const titleForm = useForm({ name: '', role: '' });
 
     /*
      * حسابٌ قديم خارج نطاق افنت بلس — يُعرض عنوانه ولا يُنقل حتى يُطلب النقل.
@@ -203,7 +198,7 @@ export default function EmployeeForm({
     const legacyEmail = editing && employee?.on_domain === false && !moving;
 
     useEffect(() => {
-        if (pendingTitle && titles.includes(pendingTitle)) {
+        if (pendingTitle && titles.some((x) => x.name === pendingTitle)) {
             form.setData('job_title', pendingTitle);
             setPendingTitle(null);
         }
@@ -212,8 +207,7 @@ export default function EmployeeForm({
 
     /*
      * تُحفظ عبر مسار الوظائف نفسه — لا مسار ثانٍ يكرّر التحقق ويفترق عنه.
-     * وعند النجاح تُضاف إلى القائمة وتُختار مباشرة، فلا يعيد المستخدم
-     * اختيارها، ولا يُعاد تحميل الصفحة فيضيع ما كُتب في بقيّة الحقول.
+     * ومعها ملفُّها صريحًا: الخادمُ يرفضها بلا ملفّ، ولا يسقط بها على «مبيعات».
      */
     const saveTitle = () => {
         titleForm.post(route('admin.jobTitles.store'), {
@@ -221,7 +215,13 @@ export default function EmployeeForm({
             preserveState: true,
             onSuccess: () => {
                 const name = titleForm.data.name.trim();
-                setTitles((list) => (list.includes(name) ? list : [...list, name].sort()));
+                const role = titleForm.data.role;
+                const label = roleOptions.find((o) => o.value === role)?.label ?? role;
+                setTitles((list) =>
+                    list.some((x) => x.name === name)
+                        ? list
+                        : [...list, { name, role, role_label: label, blocked: false }].sort((a, b) => a.name.localeCompare(b.name)),
+                );
                 setPendingTitle(name);
                 titleForm.reset();
                 setAddingTitle(false);
@@ -229,8 +229,31 @@ export default function EmployeeForm({
         });
     };
 
+    /** الانتقالُ إلى التخصيص يبدأ ممّا يملكه الآن — لا من صفحةٍ بيضاء */
+    const changeMode = (mode: PermissionMode) => {
+        if (mode === 'custom') {
+            const start = form.data.permissions.length > 0 ? form.data.permissions : (profile?.grants ?? []);
+            form.setData((d) => ({ ...d, permission_mode: 'custom', permissions: [...start] }));
+        } else {
+            form.setData((d) => ({ ...d, permission_mode: 'inherited', permissions: [] }));
+        }
+    };
+
     const submit = (e: React.FormEvent) => {
         e.preventDefault();
+        /*
+         * ما يصل الخادمَ عن الصلاحيات:
+         *   - من يعدّل نفسه: لا شيء — الخادمُ يردّ تعديلَ صلاحيات النفس، ولو أُرسل
+         *     العلمُ لرُدّ حفظُ هاتفه معه.
+         *   - «صلاحيات الوظيفة»: `manual_permissions=false` ← العمودُ `null`.
+         *   - «تخصيص»: القائمةُ كما اختيرت ← هي كلُّ ما يملكه.
+         */
+        form.transform(({ permission_mode, permissions, ...rest }) => {
+            if (!canEditPermissions) return rest;
+            return permission_mode === 'custom'
+                ? { ...rest, manual_permissions: true, permissions }
+                : { ...rest, manual_permissions: false };
+        });
         if (editing) form.put(route('admin.employees.update', employee!.id));
         else form.post(route('admin.employees.store'));
     };
@@ -252,61 +275,93 @@ export default function EmployeeForm({
                 </Card>
             )}
 
-            <Section icon={UserRound} title="البيانات الأساسية" hint="ما يظهر في القوائم والتقارير">
+            <Section icon={UserRound} title="بيانات الموظف" hint="ما يظهر في القوائم والتقارير">
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                    <Field label="الاسم الكامل" required error={form.errors.name}>
+                    <Field label="الاسم الكامل" required htmlFor={ids.name} error={form.errors.name}>
                         <Input
+                            id={ids.name}
                             value={form.data.name}
                             onChange={(e) => form.setData('name', e.target.value)}
                             required
                         />
                     </Field>
 
-                    <Field
-                        label="الوظيفة / الدور"
-                        hint="الصلاحيات تُشتقّ منها"
-                        error={form.errors.job_title}
-                    >
+                    <Field label="رقم الهاتف" htmlFor={ids.phone} error={form.errors.phone}>
+                        <Input
+                            id={ids.phone}
+                            type="tel"
+                            dir="ltr"
+                            value={form.data.phone}
+                            onChange={(e) => form.setData('phone', e.target.value)}
+                            placeholder="+968 9xxxxxxx"
+                        />
+                    </Field>
+                </div>
+            </Section>
+
+            <Section icon={Briefcase} title="العمل والفروع" hint="المسمى الوظيفي يُسند ملف صلاحياته الأساسي">
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                    <Field label="المسمى الوظيفي" required htmlFor={ids.title} error={form.errors.job_title} className="md:col-span-2">
                         {/*
                             زرّ الإضافة بجانب القائمة: وظيفةٌ ناقصة كانت تعني
                             ترك النموذج والذهاب إلى تبويب الوظائف ثم العودة
-                            وإعادة تعبئة ما كُتب — فيُختار مسمًّى قريب بدل
-                            الصحيح، وتُبنى صلاحيات الموظف على وظيفة ليست وظيفته.
+                            وإعادة تعبئة ما كُتب.
                         */}
                         <div className="flex items-center gap-2">
                             <div className="min-w-0 flex-1">
                                 <Select
+                                    id={ids.title}
                                     value={form.data.job_title}
                                     onChange={(e) => form.setData('job_title', e.target.value)}
                                     /*
-                                        والوظيفةُ التي لا يُسندها الفاعلُ تبقى
-                                        معروضةً معطَّلةً بسببها: دورُها يفتح ما
-                                        لا يفتحه هو، ومن أسند دورًا أسند ما
-                                        يحمله — انظر `Permissions::mayAssignRole`.
+                                        والوظيفةُ التي لا يُسندها الفاعلُ تبقى معروضةً
+                                        معطَّلةً بسببها: ملفُّها يفتح ما لا يفتحه هو، ومن
+                                        أسند ملفًّا أسند ما يحمله — `Permissions::mayAssignRole`.
                                     */
                                     options={titles.map((j) => ({
-                                        label: titleBlocked(j) ? `${j} — ${t('تفتح ما لا تفتحه')}` : j,
-                                        value: j,
-                                        disabled: titleBlocked(j),
+                                        label: j.blocked
+                                            ? `${j.name} — ${t('ملفها «:profile» يفتح ما لا تفتحه', { profile: j.role_label })}`
+                                            : j.name,
+                                        value: j.name,
+                                        disabled: j.blocked,
                                     }))}
-                                    placeholder="اختر الوظيفة…"
+                                    placeholder="اختر المسمى الوظيفي…"
                                 />
                             </div>
                             <Button
                                 type="button"
                                 variant="outline"
                                 size="icon"
-                                title={t('إضافة وظيفة')}
-                                aria-label={t('إضافة وظيفة')}
+                                title={t('إضافة مسمى وظيفي')}
+                                aria-label={t('إضافة مسمى وظيفي')}
                                 onClick={() => setAddingTitle(true)}
                             >
                                 <Plus />
                             </Button>
                         </div>
+                        {chosen && (
+                            <p className="mt-1.5 text-[12px] text-[#6b7280]" data-testid="title-profile">
+                                {t('ملف الصلاحيات الأساسي: :profile', { profile: chosen.role_label })}
+                            </p>
+                        )}
+                        {roleChange && (
+                            <p className="mt-1.5 rounded-[10px] bg-[#fffbeb] px-3 py-2 text-[12px] text-[#b45309]" data-testid="role-change">
+                                {t('سيتغيّر ملف الصلاحيات الأساسي من «:from» إلى «:to» عند الحفظ.', {
+                                    from: roleProfiles[employee!.role!]?.label ?? employee!.role!,
+                                    to: roleChange.role_label,
+                                })}
+                            </p>
+                        )}
                     </Field>
 
-                    <Field label="الفرع الأساسي" error={form.errors.branch}>
+                    <Field
+                        label="الفرع الأساسي للعرض"
+                        htmlFor={ids.branch}
+                        hint="يظهر في القوائم والتقارير — لا يمنح ولا يمنع شيئًا"
+                        error={form.errors.branch}
+                    >
                         <Select
+                            id={ids.branch}
                             value={form.data.branch}
                             onChange={(e) => form.setData('branch', e.target.value)}
                             options={branches.map((b) => ({ label: b.name, value: b.name }))}
@@ -315,24 +370,25 @@ export default function EmployeeForm({
                     </Field>
 
                     {/*
-                        فروع العمل — هي مصدر الإذن، لا «الفرع الأساسي» أعلاه.
-                        الفارغة تعني كل فروع المتجر: موظفوك الحاليون كلّهم بلا
-                        تحديد، فجعلُ الفارغ منعًا كان سيقفل كل كاشير دفعةً واحدة.
+                        فروع العمل — تُحفظ في جدولها (`branch_user`) ويفرضها
+                        الخادم (`BranchAccess`): مبدّلُ الفروع وما يُكتب في
+                        فرعٍ و«كل الفروع» نفسُها. والتلميح يقول ذلك كما هو.
                     */}
                     {branchOptions.length > 0 && (
                         <Field
                             label="فروع العمل"
                             className="md:col-span-2"
-                            hint="بلا تحديد = كل الفروع. الموظف يعمل في فروعه وحدها"
+                            hint="بلا تحديد = كل الفروع. ومن حُدّدت له فروعٌ لا يرى غيرها ولا يعمل فيها."
                             error={form.errors.branches}
                         >
-                            <div className="flex flex-wrap gap-2">
+                            <div className="flex flex-wrap gap-2" role="group" aria-label={t('فروع العمل')}>
                                 {branchOptions.map((b) => {
                                     const on = form.data.branches.includes(b.value);
                                     return (
                                         <button
                                             key={b.value}
                                             type="button"
+                                            aria-pressed={on}
                                             onClick={() =>
                                                 form.setData(
                                                     'branches',
@@ -355,16 +411,6 @@ export default function EmployeeForm({
                             </div>
                         </Field>
                     )}
-
-                    <Field label="رقم الهاتف" error={form.errors.phone}>
-                        <Input
-                            type="tel"
-                            dir="ltr"
-                            value={form.data.phone}
-                            onChange={(e) => form.setData('phone', e.target.value)}
-                            placeholder="+968 9xxxxxxx"
-                        />
-                    </Field>
                 </div>
             </Section>
 
@@ -385,12 +431,6 @@ export default function EmployeeForm({
                         hint="به يدخل الموظف — ولا يتكرّر في النظام"
                         error={form.errors.login_username}
                     >
-                        {/*
-                            الحساب القديم خارج النطاق لا يُنقل بلا قصد: يُعرض
-                            عنوانه كما هو، ولا يتبدّل إلا بضغطةٍ تقول ذلك. ولو
-                            نُقل مع أيّ حفظ لَتبدّل بريدُ دخوله وهو يصحّح رقم
-                            هاتفه — ثمّ يقف غدًا أمام الشاشة بعنوانٍ لا يعرفه.
-                        */}
                         {legacyEmail ? (
                             <div className="flex items-center justify-between gap-3 rounded-[10px] border border-[var(--ui-border,#e8e8e8)] bg-[#f7f7f5] px-3 py-2">
                                 <span className="text-[13px] text-[#4b4b4b]" dir="ltr">
@@ -424,11 +464,7 @@ export default function EmployeeForm({
 
                     {/*
                         الكلمة القائمة لا تُعرض هنا ولا في أيّ شاشة: تُحفظ
-                        مُجزَّأةً بلا طريقٍ يعود منها إلى نصّها. ومن يفتح ملفّ
-                        موظّفٍ يقرأ كلمته يفتح كلمةَ صاحبها في كل موقعٍ آخر
-                        يستعملها فيه — والناس يعيدون كلماتهم.
-                        فالمعروض هنا ما يُكتب الآن: يُكتب، ويُرى بالعين،
-                        ثمّ يُملى على صاحبه.
+                        مُجزَّأةً بلا طريقٍ يعود منها إلى نصّها.
                     */}
                     <Field
                         label={editing ? 'كلمة مرور جديدة' : 'كلمة المرور'}
@@ -447,7 +483,7 @@ export default function EmployeeForm({
                     </Field>
 
                     {editing && (
-                        <Field label="حالة الحساب" hint="الحساب المعطَّل لا يستطيع الدخول">
+                        <Field label="حالة الحساب" hint="الحساب المعطَّل لا يستطيع الدخول" error={form.errors.status}>
                             <div className="pt-1.5">
                                 <Toggle
                                     on={form.data.status}
@@ -461,66 +497,50 @@ export default function EmployeeForm({
             </Section>
 
             {/*
-                الراتب قبل الهدف: هو ما يُدفع كلّ شهر، والهدف تقديرٌ يُقاس عليه.
-                ومنه تُملأ مسيرة الرواتب — فبلا إدخاله تُفتح المسيرة على أصفار.
+                الراتب: منه تُملأ مسيرة الرواتب. ولا تُرسم حقولُه لمن لا يملك
+                «عرض مسيرة الرواتب» — لا مخفيّةً في الصفحة ولا ظاهرة.
             */}
             <Section
                 icon={Wallet}
                 title="الراتب"
                 hint={mayReadPayroll ? 'منه تُملأ مسيرة رواتب الشهر' : 'صلاحيةٌ لا تملكها'}
             >
-                {! mayReadPayroll && (
+                {mayReadPayroll ? (
+                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                        <Field label="الراتب الأساسي" htmlFor={ids.salary} hint="اتركه فارغًا لمن لا راتب له" error={form.errors.basic_salary}>
+                            <Input
+                                id={ids.salary}
+                                inputMode="decimal"
+                                dir="ltr"
+                                value={form.data.basic_salary}
+                                onChange={(e) => form.setData('basic_salary', e.target.value)}
+                                placeholder="0"
+                            />
+                        </Field>
+
+                        <Field label="البدلات" htmlFor={ids.allowances} hint="سكن، مواصلات، وما يجري مجراها" error={form.errors.allowances}>
+                            <Input
+                                id={ids.allowances}
+                                inputMode="decimal"
+                                dir="ltr"
+                                value={form.data.allowances}
+                                onChange={(e) => form.setData('allowances', e.target.value)}
+                                placeholder="0"
+                            />
+                        </Field>
+                    </div>
+                ) : (
                     <p className="rounded-[10px] bg-[#fffbeb] p-3 text-[12px] leading-relaxed text-[#b45309]">
                         {t('قراءة الرواتب صلاحيةٌ لا تملكها — يكتبها من يملكها، ولا يتغيّر ما هو مسجَّل بحفظك.')}
                     </p>
                 )}
-
-                <div className={cn('grid grid-cols-1 gap-4 md:grid-cols-2', ! mayReadPayroll && 'hidden')}>
-                    <Field label="الراتب الأساسي" hint="اتركه فارغًا لمن لا راتب له" error={form.errors.basic_salary}>
-                        <Input
-                            inputMode="decimal"
-                            dir="ltr"
-                            value={form.data.basic_salary}
-                            onChange={(e) => form.setData('basic_salary', e.target.value)}
-                            placeholder="0"
-                        />
-                    </Field>
-
-                    <Field label="البدلات" hint="سكن، مواصلات، وما يجري مجراها" error={form.errors.allowances}>
-                        <Input
-                            inputMode="decimal"
-                            dir="ltr"
-                            value={form.data.allowances}
-                            onChange={(e) => form.setData('allowances', e.target.value)}
-                            placeholder="0"
-                        />
-                    </Field>
-                </div>
             </Section>
 
-            {/*
-                والعمولةُ رُفعت من هنا.
-
-                كان تحت هذا العنوان حقلٌ ثانٍ — «نسبة العمولة %» — يُدخَل
-                ويُحفظ ولا يُصرف منه شيء: لا مسيرةَ رواتبَ تقرؤه، ولا كشفَ
-                عمولةٍ في النظام يُبنى عليه. ولافتةُ القسم كانت تقول «الهدف
-                والعمولة»، فيُصدّق التاجرُ أنّ ما يكتبه يُحتسب لموظّفه.
-
-                والحقلُ الذي لا يُدير شيئًا أسوأ من غيابه: صاحبُه يظنّ أنّ
-                الأمر مضبوطٌ فلا يسأل عنه. فرُفع، والعمود يبقى بما فيه.
-            */}
-            <Section
-                icon={Target}
-                title="الهدف الشهري"
-                hint="عليه يُحتسب «تحقيق الهدف» في قائمة الموظفين"
-            >
+            <Section icon={Target} title="الأداء" hint="عليه يُحتسب «تحقيق الهدف» في قائمة الموظفين">
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                    <Field
-                        label="الهدف الشهري"
-                        hint="اتركه فارغًا لبلا هدف"
-                        error={form.errors.monthly_target}
-                    >
+                    <Field label="الهدف الشهري" htmlFor={ids.target} hint="اتركه فارغًا لبلا هدف" error={form.errors.monthly_target}>
                         <Input
+                            id={ids.target}
                             inputMode="decimal"
                             dir="ltr"
                             value={form.data.monthly_target}
@@ -531,87 +551,24 @@ export default function EmployeeForm({
                 </div>
             </Section>
 
-            {sections && (
-                <Section
-                    icon={ShieldCheck}
-                    title="الصلاحيات"
-                    hint="حدّد ما يفتحه هذا الموظف — لا شيء يُفتح ما لم تُعلّمه"
-                >
-                    {!canEditPermissions ? (
-                        <p className="text-[13px] text-[#6b7280]">
-                            {t('لا يمكنك تعديل صلاحيات حسابك الخاص.')}
-                        </p>
-                    ) : (
-                        <div className="space-y-4">
-                            <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
-                                {Object.entries(sections).map(([key, label]) => (
-                                    <label
-                                        key={key}
-                                        title={mayGrant(key) ? undefined : t('لا تملك هذه الصلاحية — ولا تُمنح ما لا تملك.')}
-                                        className={cn(
-                                            'flex items-center gap-2.5',
-                                            mayGrant(key)
-                                                ? 'cursor-pointer'
-                                                : 'cursor-not-allowed opacity-60',
-                                        )}
-                                    >
-                                        <input
-                                            type="checkbox"
-                                            checked={form.data.permissions.includes(key)}
-                                            onChange={() => togglePermission(key)}
-                                            disabled={! mayGrant(key)}
-                                            className="size-4 rounded border-[#d1d5db] accent-[#111]"
-                                        />
-                                        <span className="text-sm text-[#374151]">{label}</span>
-                                    </label>
-                                ))}
-                            </div>
-
-                            {actions && Object.keys(actions).length > 0 && (
-                                <div className="space-y-2.5 border-t border-[#e5e7eb] pt-4">
-                                    {/*
-                                        والفعلُ يُعرض تحت عنوانه لا مع الأقسام: «المبيعات»
-                                        تفتح شاشة، و«تصحيح فاتورة مكتملة» تعيد كتابة مستندٍ
-                                        ضريبيّ — وصفٌّ واحد يجمعهما يجعل الثانية تُعلَّم سهوًا.
-                                    */}
-                                    <p className="text-[13px] font-semibold text-[#374151]">
-                                        {t('أفعالٌ حسّاسة')}
-                                    </p>
-                                    <p className="text-[12px] text-[#6b7280]">
-                                        {t('تُمنح بالاسم — ولا يفتح أيٌّ منها شاشةً بنفسه.')}
-                                    </p>
-
-                                    {Object.entries(actions).map(([key, label]) => (
-                                        <label
-                                            key={key}
-                                            title={mayGrant(key) ? undefined : t('لا تملك هذه الصلاحية — ولا تُمنح ما لا تملك.')}
-                                            className={cn(
-                                                'flex items-center gap-2.5',
-                                                mayGrant(key)
-                                                    ? 'cursor-pointer'
-                                                    : 'cursor-not-allowed opacity-60',
-                                            )}
-                                        >
-                                            <input
-                                                type="checkbox"
-                                                checked={form.data.permissions.includes(key)}
-                                                onChange={() => togglePermission(key)}
-                                                disabled={! mayGrant(key)}
-                                                className="size-4 rounded border-[#d1d5db] accent-[#111]"
-                                            />
-                                            <span className="text-sm text-[#374151]">{label}</span>
-                                        </label>
-                                    ))}
-                                </div>
-                            )}
-
-                            {form.errors.permissions && (
-                                <p className="text-[12px] text-[#b91c1c]">{form.errors.permissions}</p>
-                            )}
-                        </div>
-                    )}
-                </Section>
-            )}
+            <Section icon={ShieldCheck} title="الصلاحيات" hint="ما يفتحه هذا الموظف — ويُفرض على الخادم">
+                {!canEditPermissions ? (
+                    <p className="text-[13px] text-[#6b7280]">{t('لا يمكنك تعديل صلاحيات حسابك الخاص.')}</p>
+                ) : (
+                    <EmployeePermissions
+                        catalog={permissionCatalog}
+                        profile={profile}
+                        titleName={chosen?.name ?? null}
+                        ownerProfile={chosen?.role === 'admin'}
+                        mode={form.data.permission_mode}
+                        selected={form.data.permissions}
+                        onModeChange={changeMode}
+                        onSelectedChange={(keys) => form.setData('permissions', keys)}
+                        grantable={grantable}
+                        error={form.errors.permissions}
+                    />
+                )}
+            </Section>
 
             <div className="flex items-center gap-3">
                 <Button type="submit" loading={form.processing}>
@@ -628,26 +585,34 @@ export default function EmployeeForm({
             <Dialog open={addingTitle} onOpenChange={setAddingTitle}>
                 <DialogContent className="max-w-lg">
                     <DialogHeader>
-                        <DialogTitle>{t('إضافة وظيفة')}</DialogTitle>
+                        <DialogTitle>{t('إضافة مسمى وظيفي')}</DialogTitle>
                     </DialogHeader>
                     {/*
                         النموذج هنا ليس <form> متداخلًا: نموذجٌ داخل نموذج
                         يجعل زرّ الحفظ يُرسل الاثنين، فيُحفظ الموظف ناقصًا.
                     */}
                     <div className="space-y-4 px-5 pb-5">
-                        <Field label="اسم الوظيفة" required error={titleForm.errors.name}>
+                        <Field label="المسمى الوظيفي" required error={titleForm.errors.name}>
                             <Input
                                 value={titleForm.data.name}
                                 onChange={(e) => titleForm.setData('name', e.target.value)}
-                                placeholder={t('مثال: مشرف الصالة')}
+                                placeholder={t('مثال: مشرف الفعالية')}
+                                aria-label={t('المسمى الوظيفي')}
                             />
                         </Field>
+
+                        <AccessProfileField
+                            value={titleForm.data.role}
+                            onChange={(role) => titleForm.setData('role', role)}
+                            options={roleOptions}
+                            error={titleForm.errors.role}
+                        />
 
                         <div className="flex justify-end gap-2 pt-1">
                             <Button type="button" variant="ghost" onClick={() => setAddingTitle(false)}>
                                 {t('إلغاء')}
                             </Button>
-                            <Button type="button" loading={titleForm.processing} onClick={saveTitle}>
+                            <Button type="button" loading={titleForm.processing} disabled={titleForm.data.role === ''} onClick={saveTitle}>
                                 <Check />
                                 {t('إضافة')}
                             </Button>

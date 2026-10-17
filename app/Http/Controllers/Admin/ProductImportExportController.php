@@ -11,6 +11,7 @@ use App\Models\OrderItem;
 use App\Models\Product;
 use App\Models\Setting;
 use App\Support\Activity;
+use App\Support\BranchAccess;
 use App\Support\Demo;
 use App\Support\StockLedger;
 use Illuminate\Http\Request;
@@ -317,7 +318,7 @@ class ProductImportExportController extends Controller
             'options' => $payload['options'],
             'hasHeader' => $payload['has_header'],
             'branchColumns' => $analysis['branch_columns'],
-            'branchNames' => Branch::where('business_id', $this->bid())->orderBy('id')->pluck('name', 'id'),
+            'branchNames' => BranchAccess::limit(Branch::where('business_id', $this->bid()), null, 'id')->orderBy('id')->pluck('name', 'id'),
             'taxRate' => $this->taxRate(),
             'truncated' => $payload['truncated'],
             'sheets' => count($payload['sheets']) > 1 ? $payload['sheets'] : [],
@@ -601,7 +602,8 @@ class ProductImportExportController extends Controller
         // أعمدة الفروع: عمودٌ عنوانه اسم فرع = رصيد ذلك الفرع
         $branchColumns = [];
         if (($opts['branch_mode'] ?? 'single') === 'columns') {
-            $branches = Branch::where('business_id', $bid)->get();
+            // ولمن قُيّد بفروعٍ أعمدةُ فروعه وحدها: عمودٌ باسم فرعٍ آخر لا يكتب رصيده
+            $branches = BranchAccess::limit(Branch::where('business_id', $bid), null, 'id')->get();
             foreach ($header as $i => $cell) {
                 foreach ($branches as $b) {
                     if ($this->norm((string) $cell) === $this->norm((string) $b->name)) {

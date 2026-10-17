@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Branch;
 use App\Models\Order;
 use App\Support\Activity;
+use App\Support\BranchAccess;
 use App\Support\Demo;
 use App\Support\FlowerOrder;
 use App\Support\OrderStatus;
@@ -36,12 +37,13 @@ class OrderDetailController extends Controller
      *
      * الرقم يصل من شريط العنوان، وطلبُ متجرٍ آخر بالرقم نفسه ليس مستبعدًا:
      * الترقيم يبدأ من واحدٍ عند كل تاجر. والفرع يُحترم كما تحترمه شاشة
-     * المبيعات — من يعمل على فرعٍ بعينه لا يُحرّك طلبات فرعٍ لا يراه.
+     * المبيعات — من يعمل على فرعٍ بعينه لا يُحرّك طلبات فرعٍ لا يراه، ومن
+     * قُيّد بفروعٍ لا يُحرّك في «كل الفروع» إلّا طلباتِها (BranchAccess::scope).
      */
     private function find(string $number): Order
     {
         return Order::where('business_id', $this->bid())
-            ->when(Demo::currentBranchId(), fn ($w) => $w->where('branch_id', Demo::currentBranchId()))
+            ->tap(fn ($w) => BranchAccess::scope($w))
             ->where('number', $number)
             ->firstOrFail();
     }

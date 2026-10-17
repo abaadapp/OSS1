@@ -12,6 +12,7 @@ use App\Models\Order;
 use App\Models\Quotation;
 use App\Models\Setting;
 use App\Support\Activity;
+use App\Support\BranchAccess;
 use App\Support\Demo;
 use App\Support\Document\PaperSize;
 use App\Support\DocumentRenderer;
@@ -72,7 +73,7 @@ class PdfController extends Controller
     public function orderReceipt($number)
     {
         $bid = auth()->user()->business_id ?? Demo::bid();
-        $order = Order::where('business_id', $bid)->where('number', $number)->with('items')->firstOrFail();
+        $order = BranchAccess::limit(Order::where('business_id', $bid))->where('number', $number)->with('items')->firstOrFail();
 
         ['html' => $html, 'paper' => $paper] = self::saleHtml($bid, $order);
 
@@ -100,7 +101,7 @@ class PdfController extends Controller
     public function orderThermal($number)
     {
         $bid = auth()->user()->business_id ?? Demo::bid();
-        $order = Order::where('business_id', $bid)->where('number', $number)->with('items')->firstOrFail();
+        $order = BranchAccess::limit(Order::where('business_id', $bid))->where('number', $number)->with('items')->firstOrFail();
 
         ['html' => $html, 'paper' => $paper] = self::saleHtml($bid, $order, thermal: true);
 
@@ -195,7 +196,8 @@ class PdfController extends Controller
         $bid = auth()->user()->business_id ?? Demo::bid();
         $customer = Customer::where('business_id', $bid)->findOrFail($id);
 
-        $orders = Order::where('business_id', $bid)->where('customer_id', $customer->id)->sold()
+        // ولمن قُيّد بفروعٍ: كشفُه ما بيع في فروعه — انظر BranchAccess
+        $orders = BranchAccess::limit(Order::where('business_id', $bid))->where('customer_id', $customer->id)->sold()
             ->orderBy('ordered_at')->get();
         $returns = collect();
 
@@ -304,7 +306,7 @@ class PdfController extends Controller
     public function taxInvoice($number)
     {
         $bid = auth()->user()->business_id ?? Demo::bid();
-        $order = Order::where('business_id', $bid)->where('number', $number)->with('items')->firstOrFail();
+        $order = BranchAccess::limit(Order::where('business_id', $bid))->where('number', $number)->with('items')->firstOrFail();
 
         if (! ShopIdentity::confirmed(BusinessModel::find($bid))) {
             abort(409, __('لم تُسمَّ شركتك بعد — والفاتورة الضريبية تحمل اسمها. أتمّ التهيئة من «الإعدادات ‹ تهيئة الشركة» ثمّ أصدِرها.'));
@@ -366,7 +368,7 @@ class PdfController extends Controller
     public function customerInvoice($id)
     {
         $bid = auth()->user()->business_id ?? Demo::bid();
-        $invoice = CustomerInvoice::where('business_id', $bid)->whereKey($id)
+        $invoice = BranchAccess::invoices(CustomerInvoice::where('business_id', $bid))->whereKey($id)
             ->with('items')->firstOrFail();
 
         /*

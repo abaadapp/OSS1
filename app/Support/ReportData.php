@@ -65,7 +65,7 @@ class ReportData
 
     private static function branchOptions(int $bid): array
     {
-        return Branch::where('business_id', $bid)->orderBy('id')
+        return BranchAccess::limit(Branch::where('business_id', $bid), null, 'id')->orderBy('id')
             ->get(['id', 'name'])->map(fn ($b) => ['value' => (string) $b->id, 'label' => $b->name])->all();
     }
 
@@ -561,6 +561,8 @@ class ReportData
             ->when($start, fn ($q) => $q->whereDate('issued_at', '>=', $start->toDateString()))
             ->when($status, fn ($q) => $q->where('status', $status))
             ->when($branch, fn ($q) => $q->where('branch_id', $branch))
+            // وبلا فرعٍ مختار: فروعُ من قُيّد بفروعٍ وحدها — انظر BranchAccess
+            ->tap(fn ($q) => BranchAccess::invoices($q))
             ->when($state, fn ($q) => $q->paymentState($state));
 
         $count = (clone $base)->count();
@@ -884,6 +886,7 @@ class ReportData
             ->whereIn('reason', $reasons)
             ->when($start, fn ($q) => $q->where('adjusted_at', '>=', $start))
             ->when($branch, fn ($q) => $q->where('branch_id', $branch))
+            ->tap(fn ($q) => BranchAccess::limit($q))
             ->when($reason, fn ($q) => $q->where('reason', $reason));
 
         $count = (clone $base)->count();

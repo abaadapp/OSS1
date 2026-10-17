@@ -113,6 +113,8 @@ interface Requirement {
 /* المستهلَكات — المرحلة 11: صرفٌ من الرفّ على الفعاليّة وردٌّ لما لم يُستهلك */
 interface ConsumableIssue {
     id: number;
+    /** فرعُ الصرف من فروع عمل المستخدم — وإلّا لا زرَّ إرجاع (انظر Consumables::summary) */
+    returnable?: boolean;
     product_id: number;
     product: string | null;
     requirement: string | null;
@@ -789,7 +791,7 @@ function EquipmentTab({ p }: { p: Props }) {
                                 <span className="block text-[11px] text-[#9ca3af]"><span dir="ltr">{c.issued_at}</span> · {t('صُرف')} {c.issued} · {t('رُدّ')} {c.returned} · {t('استُهلك')} {c.consumed} × <span dir="ltr">{m(c.unit_cost)}</span> = <span dir="ltr">{m(c.consumed_cost)}</span></span>
                                 {c.notes && <span className="block text-[11px] text-[#6b7280]">{c.notes}</span>}
                             </span>
-                            {c.status === 'issued' && p.may.return && <Button size="sm" onClick={() => { setGivingBack(c); setGiveBackForm({ quantity: '0', notes: '' }); }}>{t('ردّ وإقفال')}</Button>}
+                            {c.status === 'issued' && p.may.return && c.returnable !== false && <Button size="sm" onClick={() => { setGivingBack(c); setGiveBackForm({ quantity: '0', notes: '' }); }}>{t('ردّ وإقفال')}</Button>}
                         </li>
                     ))}
                 </ul>

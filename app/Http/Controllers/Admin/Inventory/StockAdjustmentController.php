@@ -9,6 +9,7 @@ use App\Models\InventoryMovement;
 use App\Models\Product;
 use App\Models\StockAdjustment;
 use App\Support\Activity;
+use App\Support\BranchAccess;
 use App\Support\Demo;
 use App\Support\Ledger;
 use App\Support\Pagination;
@@ -54,7 +55,8 @@ class StockAdjustmentController extends Controller
         $bid = $this->bid();
         Ledger::ensureSystemAccounts($bid);
 
-        $q = StockAdjustment::where('business_id', $bid)->with(['product', 'creator', 'branch']);
+        // التسوياتُ لا تتبع الشريط — ولمن قُيّد بفروعٍ تسوياتُ فروعه وحدها
+        $q = BranchAccess::limit(StockAdjustment::where('business_id', $bid))->with(['product', 'creator', 'branch']);
 
         if ($s = Search::term($request)) {
             $like = Search::like();
@@ -70,7 +72,7 @@ class StockAdjustmentController extends Controller
 
         $adjustments = $q->paginate(Pagination::perPage($request, 20))->withQueryString();
 
-        $all = StockAdjustment::where('business_id', $bid)->get();
+        $all = BranchAccess::limit(StockAdjustment::where('business_id', $bid))->get();
 
         return Inertia::render('Admin/Inventory/Adjustments', [
             'adjustments' => collect($adjustments->items())->map(fn ($a) => [
@@ -94,7 +96,7 @@ class StockAdjustmentController extends Controller
             'reasons' => StockAdjustment::REASONS,
             // التعديل يقع على فرعٍ بعينه، فالنموذج يلزمه اختياره — والفرع
             // الحاليّ في الجلسة قيمةٌ ابتدائية لا أكثر
-            'branches' => Branch::where('business_id', $bid)->orderBy('id')->get(['id', 'name'])->all(),
+            'branches' => BranchAccess::limit(Branch::where('business_id', $bid), null, 'id')->orderBy('id')->get(['id', 'name'])->all(),
             'currentBranchId' => Demo::currentBranchId(),
             'products' => Product::where('business_id', $bid)->orderBy('name')
                 ->get(['id', 'name', 'sku', 'quantity', 'cost'])

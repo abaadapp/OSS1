@@ -39,6 +39,7 @@ import { SETTINGS_NAV } from './partials/SettingsNav';
 import BackToSettings from './partials/BackToSettings';
 import BranchesPanel from './panels/BranchesPanel';
 import EmployeesPanel, { type JobTitle } from './panels/EmployeesPanel';
+import type { RoleOption } from '../Employees/partials/AccessProfileField';
 import ActivityPanel, { type ActivityData } from './panels/ActivityPanel';
 import TrashPanel, { type TrashData } from './panels/TrashPanel';
 import ChartPanel, { type ChartData } from './panels/ChartPanel';
@@ -76,8 +77,11 @@ interface Props {
     locale: string;
     /* لا تصل إلا حين يُطلب قسمها في الرابط — انظر settingsSection في PageController */
     branches?: Branch[];
+    canCreateBranch?: boolean;
     employees?: Employee[];
     jobTitles?: JobTitle[];
+    /** ملفّاتُ الصلاحيات الخمسة لنافذة الوظيفة — `EmployeeAccess::roleOptions` */
+    roleOptions?: RoleOption[];
     logs?: ActivityData['logs'];
     pagination?: ActivityData['pagination'];
     filters?: ActivityData['filters'];
@@ -184,7 +188,7 @@ const NOTIF_COLORS: Record<string, string> = {
 
 export default function SettingsIndex() {
     const { settings, business, recovery, mail, templates, notificationsAll, customAlerts, alertMetrics,
-        alertSections, staffPermissions, locale, branches, employees, jobTitles, logs, pagination, filters, products,
+        alertSections, staffPermissions, locale, branches, canCreateBranch, employees, jobTitles, roleOptions, logs, pagination, filters, products,
         expenses, customers: trashedCustomers, trashedBranches, windowDays, accounts, trial, types } =
         usePage<PageProps<Props>>().props;
     const { auth } = usePage<PageProps>().props;
@@ -546,9 +550,9 @@ export default function SettingsIndex() {
                 </SettingsSection>
             ) : tab === 'branches' ? (
                 /* بياناته تصل مع الرابط؛ وغيابها يعني فتحًا بلا `?section` */
-                <BranchesPanel branches={branches ?? []} />
+                <BranchesPanel branches={branches ?? []} canCreate={canCreateBranch !== false} />
             ) : tab === 'employees' ? (
-                <EmployeesPanel employees={employees ?? []} jobTitles={jobTitles ?? []} />
+                <EmployeesPanel employees={employees ?? []} jobTitles={jobTitles ?? []} roleOptions={roleOptions ?? []} />
             ) : tab === 'activity' ? (
                 /* العنوان يُمرَّر: التصفية والتصفّح يعودان إلى الإعدادات لا
                    إلى الصفحة المستقلّة، وإلا قفز المستخدم عند أوّل «التالي» */

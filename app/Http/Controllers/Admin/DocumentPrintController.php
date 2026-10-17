@@ -10,6 +10,7 @@ use App\Models\Order;
 use App\Models\PurchaseOrder;
 use App\Models\SupplierInvoice;
 use App\Support\Activity;
+use App\Support\BranchAccess;
 use App\Support\Demo;
 use App\Support\DocumentPaper;
 use App\Support\DocumentRenderer;
@@ -35,7 +36,8 @@ class DocumentPrintController extends Controller
     public function delivery(string $number)
     {
         $bid = $this->bid();
-        $order = Order::where('business_id', $bid)->where('number', $number)
+        // ولمن قُيّد بفروعٍ: ورقةُ فرعٍ ليس من فروعه لا تُطبع — انظر BranchAccess
+        $order = BranchAccess::limit(Order::where('business_id', $bid))->where('number', $number)
             ->with('items')->firstOrFail();
 
         Activity::log('report', 'طبع سند تسليم للطلب: '.$order->number, ['subject_id' => $order->id]);
@@ -56,7 +58,7 @@ class DocumentPrintController extends Controller
     public function purchase(int $id)
     {
         $bid = $this->bid();
-        $po = PurchaseOrder::where('business_id', $bid)->whereKey($id)
+        $po = BranchAccess::limit(PurchaseOrder::where('business_id', $bid))->whereKey($id)
             ->with('items', 'supplier')->firstOrFail();
 
         Activity::log('report', 'طبع أمر الشراء: '.$po->number, ['subject_id' => $po->id]);
@@ -72,7 +74,7 @@ class DocumentPrintController extends Controller
     public function supplierInvoice(int $id)
     {
         $bid = $this->bid();
-        $invoice = SupplierInvoice::where('business_id', $bid)->whereKey($id)
+        $invoice = BranchAccess::limitThrough(SupplierInvoice::where('business_id', $bid), 'purchaseOrder')->whereKey($id)
             ->with('supplier', 'purchaseOrder')->firstOrFail();
 
         Activity::log('report', 'طبع فاتورة المورّد: '.$invoice->supplier_ref, ['subject_id' => $invoice->id]);
@@ -93,7 +95,7 @@ class DocumentPrintController extends Controller
     public function creditNote(int $note)
     {
         $bid = $this->bid();
-        $note = CustomerCreditNote::where('business_id', $bid)->whereKey($note)
+        $note = BranchAccess::limitThrough(CustomerCreditNote::where('business_id', $bid), 'invoice', null, false, true)->whereKey($note)
             ->with('invoice')->firstOrFail();
 
         Activity::log('report', 'طبع إشعار دائن: '.$note->number, ['subject_id' => $note->id]);
@@ -124,7 +126,7 @@ class DocumentPrintController extends Controller
     public function grn(int $id)
     {
         $bid = $this->bid();
-        $note = GoodsReceiptNote::where('business_id', $bid)->whereKey($id)
+        $note = BranchAccess::limit(GoodsReceiptNote::where('business_id', $bid))->whereKey($id)
             ->with('items', 'supplier', 'branch', 'purchaseOrder')->firstOrFail();
 
         Activity::log('report', 'طبع سند الاستلام: '.$note->number, ['subject_id' => $note->id]);

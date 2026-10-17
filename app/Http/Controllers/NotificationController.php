@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\DismissedNotification;
 use App\Models\InternalNotification;
 use App\Models\Order;
+use App\Support\BranchAccess;
 use App\Support\Demo;
 use Illuminate\Http\Request;
 
@@ -18,7 +19,7 @@ class NotificationController extends Controller
         $bid = auth()->user()->business_id ?? Demo::bid();
 
         $latest = Order::where('business_id', $bid)->sold()
-            ->when(Demo::currentBranchId(), fn ($q) => $q->where('branch_id', Demo::currentBranchId()))
+            ->tap(fn ($q) => BranchAccess::scope($q))
             ->orderByDesc('id')->first();
 
         return response()->json([

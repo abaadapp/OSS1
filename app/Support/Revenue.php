@@ -72,7 +72,7 @@ class Revenue
      * ساعة، و`between` تشمل الطرفين — فما وقع على الحدّ يُحسب في المدّتين
      * معًا. وهو العطبُ نفسُه الذي أُصلح في `Demo::adminStats`.
      */
-    public static function query(int $bid, ?Carbon $start = null, ?Carbon $end = null, ?int $branchId = null): Builder
+    public static function query(int $bid, ?Carbon $start = null, ?Carbon $end = null, int|array|null $branchId = null): Builder
     {
         return CustomerInvoice::query()
             ->where('business_id', $bid)
@@ -81,7 +81,7 @@ class Revenue
             ->where('is_opening_balance', false)
             ->when($start, fn ($q) => $q->whereDate(self::DATE, '>=', $start->toDateString()))
             ->when($end, fn ($q) => $q->whereDate(self::DATE, '<', $end->toDateString()))
-            ->when($branchId, fn ($q) => $q->where('branch_id', $branchId));
+            ->tap(fn ($q) => BranchAccess::filter($q, $branchId));
     }
 
     /**
@@ -106,7 +106,7 @@ class Revenue
      *               credited: float, creditedTax: float,
      *               total: float, net: float, netTax: float}
      */
-    public static function summary(int $bid, ?Carbon $start = null, ?Carbon $end = null, ?int $branchId = null): array
+    public static function summary(int $bid, ?Carbon $start = null, ?Carbon $end = null, int|array|null $branchId = null): array
     {
         /*
          * و`toBase()` في كلّ تجميعٍ هنا.
@@ -161,13 +161,13 @@ class Revenue
     }
 
     /** الإجماليُّ وحده — بعد المردودات */
-    public static function total(int $bid, ?Carbon $start = null, ?Carbon $end = null, ?int $branchId = null): float
+    public static function total(int $bid, ?Carbon $start = null, ?Carbon $end = null, int|array|null $branchId = null): float
     {
         return self::summary($bid, $start, $end, $branchId)['total'];
     }
 
     /** عددُ الفواتير الصادرة */
-    public static function count(int $bid, ?Carbon $start = null, ?Carbon $end = null, ?int $branchId = null): int
+    public static function count(int $bid, ?Carbon $start = null, ?Carbon $end = null, int|array|null $branchId = null): int
     {
         return self::query($bid, $start, $end, $branchId)->count();
     }
@@ -189,7 +189,7 @@ class Revenue
      *
      * @return Collection<string, array{sum: float, count: int}>
      */
-    public static function series(int $bid, string $unit, Carbon $start, Carbon $end, ?int $branchId = null): Collection
+    public static function series(int $bid, string $unit, Carbon $start, Carbon $end, int|array|null $branchId = null): Collection
     {
         $driver = DB::connection()->getDriverName();
         $column = $unit === 'hour' ? 'issued_by_at' : self::DATE;
@@ -262,7 +262,7 @@ class Revenue
      *
      * @return \Illuminate\Database\Query\Builder
      */
-    public static function items(int $bid, ?Carbon $start = null, ?Carbon $end = null, ?int $branchId = null)
+    public static function items(int $bid, ?Carbon $start = null, ?Carbon $end = null, int|array|null $branchId = null)
     {
         return DB::table('customer_invoice_items')
             ->join('customer_invoices', 'customer_invoices.id', '=', 'customer_invoice_items.customer_invoice_id')
@@ -271,7 +271,7 @@ class Revenue
             ->where('customer_invoices.is_opening_balance', false)
             ->when($start, fn ($q) => $q->whereDate('customer_invoices.'.self::DATE, '>=', $start->toDateString()))
             ->when($end, fn ($q) => $q->whereDate('customer_invoices.'.self::DATE, '<', $end->toDateString()))
-            ->when($branchId, fn ($q) => $q->where('customer_invoices.branch_id', $branchId));
+            ->tap(fn ($q) => BranchAccess::filter($q, $branchId, 'customer_invoices.branch_id'));
     }
 
     /* ========================= التحصيل ========================= */
@@ -327,7 +327,7 @@ class Revenue
      *
      * @return Collection<int, array{key: string, total: float, count: int}>
      */
-    public static function byMethod(int $bid, ?Carbon $start = null, ?Carbon $end = null, ?int $branchId = null): Collection
+    public static function byMethod(int $bid, ?Carbon $start = null, ?Carbon $end = null, int|array|null $branchId = null): Collection
     {
         $rows = $branchId === null
             ? self::collections($bid, $start, $end)->toBase()
@@ -336,7 +336,7 @@ class Revenue
             : self::collections($bid, $start, $end)->toBase()
                 ->join('customer_payment_allocations as a', 'a.customer_payment_id', '=', 'customer_payments.id')
                 ->join('customer_invoices as i', 'i.id', '=', 'a.customer_invoice_id')
-                ->where('i.branch_id', $branchId)
+                ->tap(fn ($q) => BranchAccess::filter($q, $branchId, 'i.branch_id'))
                 ->selectRaw('customer_payments.method as method, SUM(a.amount) as s, COUNT(DISTINCT customer_payments.id) as c')
                 ->groupBy('customer_payments.method')->orderByDesc('s')->get();
 
@@ -365,7 +365,7 @@ class Revenue
      * وتكلفةُ المشروع الحقيقيّة تُجمع من المشتريات وسندات الموردين
      * والمصروفات، لا من بطاقة صنف (انظر §16 في وثيقة المعمارية).
      */
-    public static function cogs(int $bid, ?Carbon $start = null, ?Carbon $end = null, ?int $branchId = null): float
+    public static function cogs(int $bid, ?Carbon $start = null, ?Carbon $end = null, int|array|null $branchId = null): float
     {
         $row = self::items($bid, $start, $end, $branchId)
             ->join('products', 'products.id', '=', 'customer_invoice_items.product_id')

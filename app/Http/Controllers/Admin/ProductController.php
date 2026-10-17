@@ -8,6 +8,7 @@ use App\Models\BranchStock;
 use App\Models\ImportBatch;
 use App\Models\Product;
 use App\Support\Activity;
+use App\Support\BranchAccess;
 use App\Support\Demo;
 use App\Support\Lexicon;
 use App\Support\ListFilters;
@@ -148,7 +149,7 @@ class ProductController extends Controller
             'sorts' => Sort::keys(self::SORTS),
             // لاستيراد ملف: الكميات المستوردة يجب أن تُودَع في فرع محدّد،
             // وإلا اختلّ التوازن «مجموع الفروع = كمية المنتج»
-            'branches' => Branch::where('business_id', $this->bid())
+            'branches' => BranchAccess::limit(Branch::where('business_id', $this->bid()), null, 'id')
                 ->orderBy('id')->get(['id', 'name']),
             'currentBranchId' => Demo::activeBranchId(),
             // زرّ التراجع لا يظهر إلا حين يكون له ما يتراجع عنه

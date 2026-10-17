@@ -215,7 +215,8 @@ export const NAV: NavGroup[] = [
                 covers: [...covers(FINANCE_TABS), 'admin.finance.statement'],
             },
             {
-                label: 'الرواتب والموظفين',
+                // القسمُ «الموظفون»، والرواتبُ تبويباتٌ داخله تظهر بأفعالها (`EMPLOYEE_TABS`)
+                label: 'الموظفون',
                 icon: UserCog,
                 route: 'admin.employees.index',
                 section: 'employees',

@@ -183,7 +183,8 @@ class DocumentRenderer
     {
         $values = DocumentTemplates::settings($businessId, 'sale', $override);
 
-        $order = Order::where('business_id', $businessId)
+        // والمثالُ من فروع من قُيّد بفروعٍ: معاينةُ القالب لا تكشف بيعَ فرعٍ آخر
+        $order = BranchAccess::limit(Order::where('business_id', $businessId))
             ->with('items', 'customerInvoices')
             ->latest('id')
             ->first() ?? self::sampleOrder($businessId);
@@ -351,7 +352,7 @@ class DocumentRenderer
      */
     public static function customerInvoice(int $businessId, ?array $override = null): string
     {
-        $invoice = CustomerInvoice::where('business_id', $businessId)
+        $invoice = BranchAccess::invoices(CustomerInvoice::where('business_id', $businessId))
             ->with('items', 'customer')->latest('id')->first()
             ?? CustomerInvoices::draft($businessId, Customer::where('business_id', $businessId)->first(), [
                 'issued_at' => now()->toDateString(),
@@ -386,15 +387,16 @@ class DocumentRenderer
     private static function latestOrSample(int $businessId, string $type): array
     {
         $record = match ($type) {
-            'delivery' => Order::where('business_id', $businessId)
+            // والمثالُ من فروع من قُيّد بفروع — انظر BranchAccess
+            'delivery' => BranchAccess::limit(Order::where('business_id', $businessId))
                 ->with('items')->latest('id')->first(),
-            'purchase' => PurchaseOrder::where('business_id', $businessId)
+            'purchase' => BranchAccess::limit(PurchaseOrder::where('business_id', $businessId))
                 ->with('items', 'supplier')->latest('id')->first(),
-            'grn' => GoodsReceiptNote::where('business_id', $businessId)
+            'grn' => BranchAccess::limit(GoodsReceiptNote::where('business_id', $businessId))
                 ->with('items', 'supplier', 'branch', 'purchaseOrder')->latest('id')->first(),
-            'supplier_invoice' => SupplierInvoice::where('business_id', $businessId)
+            'supplier_invoice' => BranchAccess::limitThrough(SupplierInvoice::where('business_id', $businessId), 'purchaseOrder')
                 ->with('supplier', 'purchaseOrder')->latest('id')->first(),
-            'credit_note' => CustomerCreditNote::where('business_id', $businessId)
+            'credit_note' => BranchAccess::limitThrough(CustomerCreditNote::where('business_id', $businessId), 'invoice', null, false, true)
                 ->with('invoice')->latest('id')->first(),
             'customer_receipt' => CustomerPayment::where('business_id', $businessId)
                 ->with('customer', 'bankAccount', 'allocations.invoice')->latest('id')->first(),

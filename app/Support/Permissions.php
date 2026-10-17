@@ -1016,7 +1016,12 @@ class Permissions
             'orders' => 'المبيعات', 'inventory' => 'المخزون',
             'finance' => 'المالية', 'expenses' => 'مصاريف شهرية', 'settings' => 'الإعدادات',
             'suppliers' => 'الموردين', 'purchases' => 'المشتريات',
-            'employees' => 'الرواتب والموظفين',
+            /*
+             * «الموظفون» لا «الرواتب والموظفين»: القسمُ يفتح الموظفين ومسمّياتهم،
+             * والرواتبُ تُقرأ وتُعتمد وتُصرف بأفعالها (`PAYROLL_*`). والاسمُ القديم
+             * كان يقول لمن يمنحه إنّه يمنح الرواتب معه — وهو لا يمنحها.
+             */
+            'employees' => 'الموظفون',
             // كانت ساقطةً فتُعرض «reports» بحروفٍ لاتينية في قائمة صلاحيات عربية
             'reports' => 'التقارير',
             'quotations' => 'عروض الأسعار',
@@ -1083,6 +1088,14 @@ class Permissions
         'admin.notifications.feed', 'admin.notifications.dismiss', 'admin.notifications.clear',
         // وقراءةُ تنبيهٍ داخليّ من الجرس — لكلّ من دخل اللوحة، والتنبيهُ لصاحبه وحده — المرحلة 8
         'admin.notifications.internal.read',
+        /*
+         * وتبديلُ الفرع: مرشِّحُ عرضٍ لكلّ من دخل اللوحة، لا بابُ إعدادات.
+         *
+         * كان يسقط على «الإعدادات» (انظر ALIASES) والمبدّلُ في رأس كلّ شاشة،
+         * فيضغطه المحاسبُ فيُمنع. وحارسُه في متحكّمه: فرعٌ من فروع عمله
+         * وحدها — انظر BranchAccess.
+         */
+        'admin.branch.switch',
     ];
 
     /**
@@ -1152,11 +1165,31 @@ class Permissions
         return $route !== null && in_array($route, self::SHELL, true);
     }
 
+    /**
+     * مسارٌ بعينه يُنسب إلى الشاشة التي يُستعمل منها — قبل كلّ اشتقاق.
+     *
+     * ALIASES تنسب مقطعًا كاملًا، وهذه تنسب اسمًا واحدًا. «اعتماد الاستلام»
+     * و«رفضه» زرّاهما في شاشتي المخزون وحدهما (`Inventory/Receipts`
+     * و`Inventory/ReceiptShow`) ومسارُهما تحت `purchases` — فمن مُنح «المخزون»
+     * و«اعتماد الاستلام» رأى الزرّ ومُنع عند الضغط بقسمٍ لم يُعطَه. ولو نُسب
+     * مقطعُ `purchases` كلُّه إلى المخزون لانتقلت المشتريات كلُّها معه.
+     *
+     * والقسمُ بابٌ لا إذن: الفعلُ يُسأل عنه في متحكّمه بعد القسم
+     * (`receipt.approve` و`receipt.reject`) — فالمخزونُ وحده لا يعتمد شيئًا.
+     */
+    public const ROUTE_SECTIONS = [
+        'admin.purchases.receipts.approve' => 'inventory',
+        'admin.purchases.receipts.reject' => 'inventory',
+    ];
+
     /** استخراج القسم من اسم المسار: admin.products.index → products */
     public static function sectionFromRoute(?string $route): string
     {
         if (! $route) {
             return 'dashboard';
+        }
+        if (isset(self::ROUTE_SECTIONS[$route])) {
+            return self::ROUTE_SECTIONS[$route];
         }
         $parts = explode('.', $route);
         $section = $parts[1] ?? 'dashboard';

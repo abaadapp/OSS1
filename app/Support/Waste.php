@@ -100,6 +100,8 @@ class Waste
         if (! empty($filters['branch_id'])) {
             $q->where('stock_adjustments.branch_id', (int) $filters['branch_id']);
         }
+        // وبلا فرعٍ مختار: فروعُ من قُيّد بفروعٍ وحدها — انظر BranchAccess
+        BranchAccess::limit($q, null, 'stock_adjustments.branch_id');
         if (! empty($filters['product_id'])) {
             $q->where('stock_adjustments.product_id', (int) $filters['product_id']);
         }

@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\InventoryMovement;
 use App\Models\Product;
+use App\Support\BranchAccess;
 use App\Support\Demo;
 use App\Support\StockLosses;
 use Illuminate\Http\Request;
@@ -30,9 +31,13 @@ class InventoryController extends Controller
     public function stocktake()
     {
         $books = \App\Models\BranchStock::books($this->bid());
+        // ولمن قُيّد بفروعٍ أرصدةُ فروعه وحدها: الجردُ لا يكشف رفوفَ فرعٍ لا يعمل فيه
+        $visible = BranchAccess::restricts(auth()->user()) ? array_flip(BranchAccess::allowedBranchIds(auth()->user())) : null;
 
         $items = collect(Demo::inventory())
-            ->map(fn (array $i) => $i + ['stock' => $books[$i['id']] ?? []])
+            ->map(fn (array $i) => $i + ['stock' => $visible === null
+                ? ($books[$i['id']] ?? [])
+                : array_intersect_key($books[$i['id']] ?? [], $visible)])
             ->all();
 
         return \Inertia\Inertia::render('Admin/Inventory/Stocktake', [

@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Customer;
 use App\Models\CustomerInvoice;
+use App\Support\BranchAccess;
 use App\Support\Demo;
 use Illuminate\Http\Request;
 
@@ -55,7 +56,8 @@ class CustomerController extends Controller
          * فيه، فكان العمودان صفرًا لكلّ عميلٍ منذ فتحت الشركةُ بابها.
          * انظر `App\Support\Revenue`.
          */
-        $sold = fn ($q) => $q->where('status', CustomerInvoice::ISSUED);
+        // ولمن قُيّد بفروعٍ: فواتيرُ فروعه وما بلا فرع — انظر BranchAccess::invoices
+        $sold = fn ($q) => BranchAccess::invoices($q->where('status', CustomerInvoice::ISSUED), null, 'customer_invoices.branch_id');
 
         $q = Customer::where('business_id', $this->bid())
             ->withCount(['invoices as orders_count' => $sold])

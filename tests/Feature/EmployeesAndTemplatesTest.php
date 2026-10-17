@@ -267,14 +267,24 @@ class EmployeesAndTemplatesTest extends TestCase
         $this->assertTrue($e->allows('inventory'), 'ضاعت صلاحية مُنحت يدويًا');
     }
 
-    /** وتُضاف الوظيفة باسمها وحده — لا حقل ثانٍ يسأل عن صلاحية تُحدَّد لاحقًا */
-    public function test_a_title_can_be_created_with_just_a_name(): void
+    /**
+     * وتُضاف الوظيفة باسمها وملفّ صلاحياتها الأساسيّ — لا باسمها وحده.
+     *
+     * كانت تُضاف بالاسم وحده فتسقط في الخادم على «مبيعات» بصمت: من أضاف
+     * «مشرف الصالة» أسند لحاملها عروضَ الأسعار والعملاء وهو لا يعلم.
+     */
+    public function test_a_title_is_created_with_its_name_and_its_profile(): void
     {
         $this->actingAs($this->owner)->post(route('admin.jobTitles.store'), [
             'name' => 'مشرف الصالة',
+        ])->assertSessionHasErrors('role');
+        $this->assertDatabaseMissing('job_titles', ['name' => 'مشرف الصالة']);
+
+        $this->actingAs($this->owner)->post(route('admin.jobTitles.store'), [
+            'name' => 'مشرف الصالة', 'role' => 'delivery',
         ])->assertRedirect()->assertSessionHasNoErrors();
 
-        $this->assertDatabaseHas('job_titles', ['name' => 'مشرف الصالة']);
+        $this->assertDatabaseHas('job_titles', ['name' => 'مشرف الصالة', 'role' => 'delivery']);
     }
 
     public function test_a_renamed_title_is_still_accepted_when_saving_the_employee(): void

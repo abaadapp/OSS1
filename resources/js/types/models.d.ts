@@ -82,6 +82,19 @@ export interface Employee {
     may_touch?: boolean;
     /** أهو صفُّ القارئ نفسِه؟ — ولا يُعطّل أحدٌ حسابَ نفسِه */
     is_me?: boolean;
+    /** صاحبُ النشاط (`admin`) — ليس موظّفًا يُعدّ (`User::isEmployee`) */
+    is_owner?: boolean;
+    /** المسمّى الوظيفيّ كما كُتب */
+    job_title?: string | null;
+    /** ملفُّ الصلاحيات الأساسيّ — مفتاحُه واسمُه */
+    access_role?: string;
+    access_role_label?: string;
+    /** «يتبع الوظيفة» أو «مخصّصة» */
+    permissions_mode?: 'inherited' | 'custom';
+    /** مع المخصّصة: عددُ أقسامها وأفعالها والحسّاسِ منها */
+    permissions_summary?: { sections: number; actions: number; sensitive: number } | null;
+    /** فروعُ العمل المسجّلة — والفارغةُ «كل الفروع» */
+    work_branches?: string[];
 }
 
 export interface Supplier {
