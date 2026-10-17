@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { router } from '@inertiajs/react';
-import { ArrowDown, ArrowUp, CalendarDays, ChevronDown, ChevronUp } from 'lucide-react';
+import { ArrowDownRight, ArrowUpRight, CalendarDays, ChevronDown, ChevronUp } from 'lucide-react';
 import Field, { Select } from '@/Components/Field';
 import SmartLink from '@/Components/SmartLink';
 import { Button } from '@/Components/ui/button';
@@ -28,13 +28,6 @@ export interface MonthlyExpenses {
  * الإجماليُّ وتفصيلُه من الدفتر (صافي حسابات المصروف في قيود الشهر) فيطابق
  * اليوميّة؛ والمدفوعُ والمستحقُّ والمتأخّر من مستندات الشهر. وما ذهب إلى المخزون
  * معلومةٌ لا يُجمع — أصلٌ حتى يُستهلك. انظر `MonthlyExpenses`.
- *
- * والوجهُ الأوّل خمسةُ أرقام: الإجماليّ والمقارنةُ والمدفوعُ والمستحقُّ والمتأخّر.
- * ومجموعاتُ الحسابات وعددُ القيود والمستندات وروابطُ اليوميّة وشرحُ المصدر
- * تحت «عرض التفاصيل» — كلُّها كما كانت، مطويّةً لا محذوفة.
- *
- * وهي غيرُ «مصاريف شهرية» (سجلّ المصروفات): هذه كلُّ مصروفٍ قُيّد في الدفتر —
- * الرواتبُ وسنداتُ الموردين والتكلفةُ معه — وذاك سجلُّ فواتير المصروف وحدها.
  */
 export default function MonthlyExpensesCard({ data, links, m }: {
     data: MonthlyExpenses;
@@ -55,12 +48,11 @@ export default function MonthlyExpensesCard({ data, links, m }: {
     return (
         <Card className="mb-6 p-5">
             <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="min-w-0">
-                    <h2 className="flex items-center gap-2 text-[15px] font-bold text-[#111]"><CalendarDays className="size-4" aria-hidden />{t('مصروفات الشهر من الدفتر')}</h2>
-                    {/* وليست «مصاريف شهرية»: تلك سجلُّ فواتير المصروف وحدها، وهذه كلُّ ما قُيّد مصروفًا */}
-                    <p className="mt-0.5 text-[12px] text-[#9ca3af]">{t('يشمل الرواتب وسندات الموردين والتكلفة — لا سجل المصروفات وحده، ومستقل عن تبويبات المدة أدناه')}</p>
+                <div>
+                    <h2 className="flex items-center gap-2 text-[15px] font-bold text-[#111]"><CalendarDays className="size-4" />{t('مصروفات الشهر من الدفتر')}</h2>
+                    <p className="mt-0.5 text-[12px] text-[#9ca3af]">{t('كامل مصروفات الشهر في دفتر القيود، بما فيها الرواتب وسندات الموردين والتكلفة — مستقلة عن تبويبات المدة أدناه')}</p>
                 </div>
-                <Field label="الشهر" className="w-full sm:w-[190px]">
+                <Field label="الشهر" className="w-[190px]">
                     <Select value={data.month} onChange={(e) => choose(e.target.value)} options={data.months.map((x) => ({ value: x.value, label: x.label }))} />
                 </Field>
             </div>
@@ -70,16 +62,28 @@ export default function MonthlyExpensesCard({ data, links, m }: {
                     <div className="text-[12px] text-[#9ca3af]">{t('إجمالي مصروفات :month', { month: data.label })}</div>
                     <div className="mt-1 text-[28px] font-bold tabular-nums tracking-tight text-[#111]">{m(data.total)}</div>
                 </div>
-                {/* الصعودُ والهبوطُ سهمان عموديّان: لا يُقرآن مقلوبَين في واجهةٍ من اليمين */}
                 <div className={'mb-1 flex items-center gap-1 text-[12.5px] ' + (up ? 'text-[#b91c1c]' : down ? 'text-[#047857]' : 'text-[#6b7280]')}>
-                    {up ? <ArrowUp className="size-4" aria-hidden /> : down ? <ArrowDown className="size-4" aria-hidden /> : null}
+                    {up ? <ArrowUpRight className="size-4" /> : down ? <ArrowDownRight className="size-4" /> : null}
                     {data.change.percent === null
                         ? t('لا مصروفات في :month للمقارنة', { month: data.previous.label })
                         : t(':percent٪ عن :month (:amount)', { percent: String(Math.abs(data.change.percent)), month: data.previous.label, amount: m(data.previous.total) })}
                 </div>
             </div>
 
-            <dl className="mt-4 grid grid-cols-3 gap-4 border-t border-[var(--ui-border,#e8e8e8)] pt-4">
+            {data.groups.length === 0 ? (
+                <p className="mt-4 text-[13px] text-[#9ca3af]">{t('لا مصروفات مقيّدة في هذا الشهر')}</p>
+            ) : (
+                <ul className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                    {data.groups.map((g) => (
+                        <li key={g.key} className="flex items-center justify-between gap-3 rounded-[12px] bg-[#fafafa] px-3 py-2 text-[13px]">
+                            <span className="text-[#4b4b4b]">{g.label}</span>
+                            <span className="font-semibold tabular-nums text-[#111]">{m(g.total)}</span>
+                        </li>
+                    ))}
+                </ul>
+            )}
+
+            <dl className="mt-4 grid grid-cols-2 gap-4 border-t border-[var(--ui-border,#e8e8e8)] pt-4 sm:grid-cols-4">
                 <div>
                     <dt className="text-[12px] text-[#9ca3af]">{t('المدفوع')}</dt>
                     <dd className="mt-0.5 text-[16px] font-semibold tabular-nums text-[#047857]">{m(data.obligations.paid)}</dd>
@@ -92,23 +96,25 @@ export default function MonthlyExpensesCard({ data, links, m }: {
                     <dt className="text-[12px] text-[#9ca3af]">{t('المتأخر')}</dt>
                     <dd className={'mt-0.5 text-[16px] font-semibold tabular-nums ' + (data.obligations.overdue > 0.0005 ? 'text-[#b91c1c]' : 'text-[#6b7280]')}>{m(data.obligations.overdue)}</dd>
                 </div>
+                <div>
+                    <dt className="text-[12px] text-[#9ca3af]">{t('العمليات')}</dt>
+                    <dd className="mt-0.5 text-[16px] font-semibold tabular-nums text-[#111]">{t(':entries قيدًا · :documents مستندًا', { entries: String(data.entries), documents: String(documents) })}</dd>
+                </div>
             </dl>
+            <p className="mt-2 text-[11.5px] leading-relaxed text-[#9ca3af]">
+                {t('المدفوع والمستحق والمتأخر من مستندات الشهر: المصروفات وسندات الموردين المعتمدة ومسيرة الرواتب — والمصروف غير المسدَّد يُحسب مستحقًّا ولا يدخل الإجمالي حتى يُسدَّد.')}
+                {data.inventory_purchases > 0.0005 && <> {t('ومشتريات للمخزون :amount لا تُحسب مصروفًا حتى تُستهلك.', { amount: m(data.inventory_purchases) })}</>}
+            </p>
 
-            <Button variant="outline" size="sm" className="mt-4" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
-                {open ? <ChevronUp /> : <ChevronDown />}{t('عرض التفاصيل')}
+            <Button variant="outline" size="sm" className="mt-3" onClick={() => setOpen((v) => !v)}>
+                {open ? <ChevronUp /> : <ChevronDown />}{t('عرض تفاصيل المصروفات')}
             </Button>
 
             {open && (
-                <div className="mt-4 space-y-4 border-t border-[var(--ui-border,#e8e8e8)] pt-4">
-                    {data.groups.length === 0 && <p className="text-[13px] text-[#9ca3af]">{t('لا مصروفات مقيّدة في هذا الشهر')}</p>}
-
+                <div className="mt-3 space-y-3">
                     {data.groups.map((g) => (
                         <div key={g.key}>
-                            {/* المجموعةُ بإجماليّها في رأسها، وحساباتُها تحتها — اسمُها مرّةً لا مرّتين */}
-                            <div className="mb-1 flex items-center justify-between gap-3 rounded-[10px] bg-[#fafafa] px-3 py-1.5 text-[12.5px]">
-                                <span className="font-semibold text-[#374151]">{g.label}</span>
-                                <span className="font-semibold tabular-nums text-[#111]">{m(g.total)}</span>
-                            </div>
+                            <div className="mb-1 text-[12px] font-semibold text-[#374151]">{g.label}</div>
                             <table className="w-full text-[12.5px]">
                                 <tbody>
                                     {g.accounts.map((a) => (
@@ -123,18 +129,6 @@ export default function MonthlyExpensesCard({ data, links, m }: {
                             </table>
                         </div>
                     ))}
-
-                    <div>
-                        <p className="text-[12.5px] text-[#4b4b4b]">
-                            <span className="text-[#9ca3af]">{t('العمليات')}: </span>
-                            <span className="tabular-nums">{t(':entries قيدًا · :documents مستندًا', { entries: String(data.entries), documents: String(documents) })}</span>
-                        </p>
-                        <p className="mt-1 text-[11.5px] leading-relaxed text-[#9ca3af]">
-                            {t('المدفوع والمستحق والمتأخر من مستندات الشهر: المصروفات وسندات الموردين المعتمدة ومسيرة الرواتب — والمصروف غير المسدَّد يُحسب مستحقًّا ولا يدخل الإجمالي حتى يُسدَّد.')}
-                            {data.inventory_purchases > 0.0005 && <> {t('ومشتريات للمخزون :amount لا تُحسب مصروفًا حتى تُستهلك.', { amount: m(data.inventory_purchases) })}</>}
-                        </p>
-                    </div>
-
                     <div className="flex flex-wrap gap-2 border-t border-[#f4f4f5] pt-3">
                         <Button variant="ghost" size="sm" asChild>
                             <SmartLink routeName="admin.finance.journal" href={route('admin.finance.journal', { from: data.from, to: data.to })}>{t('قيود الشهر في اليومية')}</SmartLink>
