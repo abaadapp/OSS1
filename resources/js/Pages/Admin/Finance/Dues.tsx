@@ -81,10 +81,11 @@ export default function Dues() {
         );
 
     return (
-        <AdminLayout title="المبالغ المستحقة">
+        <AdminLayout title="عليك الدفع">
+            {/* العنوانُ بلغة من يسأل، والاسمُ المحاسبيّ سطرٌ تحته — انظر FINANCE_TABS */}
             <PageHeader
-                title="المبالغ المستحقة"
-                subtitle={t('ما على الشركة: فواتير لم تُدفع، وسندات موردين، ورواتب اعتُمدت ولم تُصرف')}
+                title="عليك الدفع"
+                subtitle={t('المبالغ المستحقة: مصروفات لم تُدفع، وسندات موردين، ورواتب اعتُمدت ولم تُصرف')}
             />
 
             <SectionTabs tabs={FINANCE_TABS} current="admin.finance.dues" />
