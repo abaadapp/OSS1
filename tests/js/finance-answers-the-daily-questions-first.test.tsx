@@ -1,10 +1,12 @@
-import { render, screen, within } from '@testing-library/react';
+import { render, renderHook, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import SectionTabs, { FINANCE_TABS, type SectionTab } from '@/Components/SectionTabs';
 import Summary from '@/Pages/Admin/Finance/Summary';
 import MonthlyExpensesCard, { type MonthlyExpenses } from '@/Pages/Admin/Finance/partials/MonthlyExpensesCard';
 import { money } from '@/lib/format';
+import { NAV } from '@/lib/nav';
+import { useNavSections } from '@/lib/navSections';
 import { pageProps } from './setup';
 
 vi.mock('@/Layouts/AdminLayout', () => ({ default: ({ children }: { children: React.ReactNode }) => <div>{children}</div> }));
@@ -127,6 +129,49 @@ describe('شريط المالية', () => {
         render(<SectionTabs tabs={FINANCE_TABS} current="admin.finance.summary" />);
 
         expect(screen.getByRole('link', { name: 'الملخّص المالي' }).parentElement).toHaveClass('overflow-x-auto');
+    });
+});
+
+describe('القائمة الجانبية', () => {
+    const realRoute = globalThis.route;
+    /** `route()` بلا معامل تقول أين المستخدم — والإعدادُ لا يعرف ذلك */
+    const at = (current: string) => {
+        globalThis.route = ((...args: unknown[]) =>
+            args.length === 0 ? { current: () => current } : (realRoute as (...a: unknown[]) => string)(...args)) as never;
+    };
+    const finance = () => {
+        const { result } = renderHook(() => useNavSections());
+        return { item: result.current.groups.flatMap((g) => g.items).find((i) => i.label === 'المالية'), active: result.current.activeRoute };
+    };
+
+    afterEach(() => {
+        globalThis.route = realRoute;
+    });
+
+    it('opens the financial summary from «المالية» — not the bank accounts', () => {
+        const item = NAV.flatMap((g) => g.items).find((i) => i.label === 'المالية');
+        expect(item?.route).toBe('admin.finance.summary');
+        expect(item?.section).toBe('finance');
+
+        at('admin.dashboard');
+        grant(['finance']);
+        expect(finance().item?.route).toBe('admin.finance.summary');
+    });
+
+    it('keeps the bank accounts one tab away and «المالية» lit on every finance page', () => {
+        expect(FINANCE_TABS.find((tb) => tb.label === 'الحسابات البنكية')?.routeName).toBe('admin.finance.index');
+
+        grant(['finance', 'expenses']);
+        for (const page of ['admin.finance.summary', 'admin.finance.index', 'admin.finance.statement', 'admin.finance.journal', 'admin.finance.assets', 'admin.finance.receivables', 'admin.expenses.index']) {
+            at(page);
+            expect(finance().active, page).toBe('admin.finance.summary');
+        }
+    });
+
+    it('still hides «المالية» from whoever does not hold the section', () => {
+        at('admin.dashboard');
+        grant(['expenses']);
+        expect(finance().item).toBeUndefined();
     });
 });
 
