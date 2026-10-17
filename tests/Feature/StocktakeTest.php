@@ -137,20 +137,17 @@ class StocktakeTest extends TestCase
         $this->assertSame(13, (int) $this->product->fresh()->quantity);
     }
 
-    public function test_the_screen_shows_the_branch_book_not_the_company_total(): void
+    public function test_the_book_is_read_per_branch_not_as_the_company_total(): void
     {
         /*
-         * والرقم المعروض هو ما يقرأه العادّ ويقارن به. فلو عُرض الإجمالي
-         * لظنّ نفسه ناقصًا خمسة وهو مضبوط — ولذهب يبحث عن بضاعةٍ لم تُفقد.
+         * والرقمُ الذي يُقارَن به العدُّ رصيدُ الفرع — فلو قُرئ الإجماليّ لظنّ
+         * العادُّ نفسه ناقصًا خمسة وهو مضبوط. (وشاشةُ الجرد خرجت من الواجهة؛
+         * والدفترُ نفسُه يقرؤه التطبيقُ وقائمةُ المخزون.)
          */
-        $props = $this->actingAs($this->owner)
-            ->get(route('admin.inventory.stocktake'))
-            ->viewData('page')['props'];
+        $books = BranchStock::books($this->business->id);
 
-        $item = collect($props['items'])->firstWhere('id', $this->product->id);
-
-        $this->assertSame(10, $item['stock'][$this->muscat->id]);
-        $this->assertSame(5, $item['stock'][$this->salalah->id]);
+        $this->assertSame(10, $books[$this->product->id][$this->muscat->id]);
+        $this->assertSame(5, $books[$this->product->id][$this->salalah->id]);
     }
 
     public function test_a_product_never_allocated_sits_in_the_first_branch(): void
@@ -165,14 +162,10 @@ class StocktakeTest extends TestCase
             'price' => 3, 'cost' => 1, 'quantity' => 7, 'active' => true,
         ]);
 
-        $props = $this->actingAs($this->owner)
-            ->get(route('admin.inventory.stocktake'))
-            ->viewData('page')['props'];
+        $books = BranchStock::books($this->business->id);
 
-        $item = collect($props['items'])->firstWhere('id', $fresh->id);
-
-        $this->assertSame(7, $item['stock'][$this->muscat->id]);
-        $this->assertArrayNotHasKey($this->salalah->id, $item['stock']);
+        $this->assertSame(7, $books[$fresh->id][$this->muscat->id]);
+        $this->assertArrayNotHasKey($this->salalah->id, $books[$fresh->id]);
     }
 
     public function test_the_movement_records_the_branch_difference(): void

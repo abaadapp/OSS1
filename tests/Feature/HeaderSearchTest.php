@@ -132,7 +132,7 @@ class HeaderSearchTest extends TestCase
             'subtotal' => 60, 'tax' => 3, 'total' => 63,
         ]);
 
-        GoodsReceiptNote::create([
+        $grn = GoodsReceiptNote::create([
             'business_id' => $this->business->id, 'branch_id' => $this->branch->id,
             'supplier_id' => $this->supplier->id, 'number' => 'GRN-000033',
             'received_at' => now()->toDateString(), 'receiver' => 'أمين المخزن',
@@ -158,8 +158,8 @@ class HeaderSearchTest extends TestCase
         $expected = [
             'PO-000011' => route('admin.purchases.orders', ['q' => 'PO-000011']),
             'SR-000022' => route('admin.purchases.invoices', ['q' => 'SR-000022']),
-            'GRN-000033' => route('admin.inventory.receipts', ['q' => 'GRN-000033']),
-            'SA-000044' => route('admin.inventory.adjustments', ['q' => 'SA-000044']),
+            // وسندُ الاستلام يُفتح في صفحته — قائمةُ السندات خرجت من الواجهة
+            'GRN-000033' => route('admin.inventory.receipts.show', $grn->id),
             'JV-000055' => route('admin.finance.journal', ['q' => 'JV-000055']),
             'EXP-000066' => route('admin.expenses.index', ['month' => '', 'q' => 'EXP-000066']),
         ];
@@ -170,6 +170,9 @@ class HeaderSearchTest extends TestCase
             $this->assertNotNull($hit, "لم يُوجَد السند {$code} برمزه");
             $this->assertSame($url, $hit['url'], "وجهةُ {$code} لا تُرشَّح برمزه");
         }
+
+        // والتسويةُ لا تُبحث: «سجل المخزون» الذي كانت تُفتح فيه خرج من الواجهة
+        $this->assertNull(collect($this->search('SA-000044'))->firstWhere('label', 'SA-000044'));
     }
 
     /**

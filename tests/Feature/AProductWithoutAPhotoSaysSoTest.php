@@ -7,7 +7,6 @@ use App\Models\Business;
 use App\Models\Category;
 use App\Models\Product;
 use App\Models\User;
-use App\Support\ProductImages;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
@@ -25,10 +24,9 @@ use Tests\TestCase;
  * فيُعرض للتاجر ولزبونه صورةُ شيءٍ لا صلة له بالمنتج: سيّارةٌ أو شاطئٌ أو
  * وجهُ إنسان مكان «لانيارد». ووقع على متجرٍ حقيقيّ.
  *
- * والمكتوبُ في العمود أسوأ من المحسوب: `ProductImages::hasRealMain` تقرأ
- * العمود الخام فتقول «له صورةٌ رفعها صاحبُه» — فيُنشر بها في متجره على
- * الإنترنت (وهناك حارسٌ يمنع البديل المحسوب ولا يمنع المكتوب)، وتُعدّ في
- * سقف الصور، ويُرسم لها زرُّ حذفٍ لملفٍّ لا وجود له.
+ * والمكتوبُ في العمود أسوأ من المحسوب: كان يُقرأ «له صورةٌ رفعها صاحبُه»
+ * فيُنشر بها، وتُعدّ في سقف الصور، ويُرسم لها زرُّ حذفٍ لملفٍّ لا وجود له.
+ * (والصورُ اليوم خارجَ تجربة المنتج كلِّها — وما رُفع قبلُ يبقى في عموده.)
  *
  * ═══ وما صار ═══
  *
@@ -90,31 +88,20 @@ class AProductWithoutAPhotoSaysSoTest extends TestCase
         $this->assertSame('', $this->add()->image);
     }
 
-    public function test_and_the_system_does_not_call_it_photographed(): void
+    /**
+     * والصورُ خرجت من نموذج المنتج — فما رُفع قبل ذلك يبقى في عموده ويُقرأ
+     * رابطًا كما كان، وما يُرسل اليوم مع النموذج لا يُكتب.
+     */
+    public function test_a_photo_uploaded_before_is_kept_and_a_new_one_is_not_written(): void
     {
-        /*
-         * وهذا هو الفارق الذي يصل الزبون: `Storefront` تعرض الصورة لمن
-         * `hasRealMain` وحده — وكان المكتوبُ في العمود يتخطّى ذلك الحارس.
-         */
-        $this->assertFalse(ProductImages::hasRealMain($this->add()));
-    }
+        $old = Product::create([
+            'business_id' => $this->business->id, 'name' => 'وردة', 'price' => 5, 'cost' => 0, 'quantity' => 0,
+            'image' => 'products/rose.jpg',
+        ]);
+        $this->assertStringContainsString('/storage/products/rose.jpg', $old->image);
 
-    public function test_a_photo_that_was_uploaded_is_kept_and_read_as_a_link(): void
-    {
         $product = $this->add(['image' => UploadedFile::fake()->image('rose.jpg')]);
-
-        $this->assertNotNull($product->getRawOriginal('image'));
-        $this->assertStringContainsString('/storage/products/', $product->image);
-        $this->assertTrue(ProductImages::hasRealMain($product));
-    }
-
-    public function test_the_gallery_calls_it_a_placeholder_and_does_not_count_it(): void
-    {
-        $product = $this->add();
-        $gallery = ProductImages::gallery($product);
-
-        $this->assertTrue($gallery[0]['placeholder']);
-        $this->assertSame(0, ProductImages::count($product));
+        $this->assertNull($product->getRawOriginal('image'));
     }
 
     /* ==================== ولا يعود من بابٍ آخر ==================== */

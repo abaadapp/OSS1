@@ -51,13 +51,12 @@ use App\Http\Controllers\Admin\PageController;
 use App\Http\Controllers\Admin\Payroll\PayrollPaymentController;
 use App\Http\Controllers\Admin\Payroll\PayrollRunController;
 use App\Http\Controllers\Admin\PolicyController;
-use App\Http\Controllers\Admin\ProductCompositionController;
 use App\Http\Controllers\Admin\ProductController;
 use App\Http\Controllers\Admin\ProjectBillingController;
 use App\Http\Controllers\Admin\ProjectController;
 use App\Http\Controllers\Admin\ProjectWorkflowController;
-use App\Http\Controllers\Admin\ProductImageController;
 use App\Http\Controllers\Admin\ProductImportExportController;
+use App\Http\Controllers\Admin\ProductPackageController;
 use App\Http\Controllers\Admin\PurchaseOrderController;
 use App\Http\Controllers\Admin\QuotationController;
 use App\Http\Controllers\Admin\ScopeOfWorkController;
@@ -259,54 +258,22 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'tenant', 'business'
     Route::delete('/products/{id}', [ProductController::class, 'destroy'])->name('products.destroy');
 
     /*
-     * صور المنتج — مسارٌ بذاته لا حقلٌ في نموذج المنتج.
+     * وصورُ المنتج وتركيبُه (المقاسات والوصفة والإضافات) خرجت من تجربة المنتج
+     * بأبوابها: بقايا متجر التجزئة لا كتالوجُ معارضَ وفعاليّات. وصفوفُها
+     * وملفّاتُها القديمة باقيةٌ لا تُمحى — والمبيعاتُ المتقاعدة تقرؤها
+     * (`OrderCorrection`).
      *
-     * نموذج المنتج يكتب الكمية مطلقةً ويُزيح رصيد الفرع بفارقها، فمن بدّل
-     * صورةً بحفظ النموذج كلِّه كتب فوق كلّ ما تغيّر بينه وبين فتحه الشاشة.
-     * فالصور تُدار بطلباتٍ صغيرة لا تمسّ عمودًا آخر.
-     */
-    Route::post('/products/{id}/images', [ProductImageController::class, 'store'])->name('products.images.store');
-    Route::post('/products/{id}/images/{imageId}/main', [ProductImageController::class, 'promote'])->name('products.images.promote');
-    Route::delete('/products/{id}/images/{imageId}', [ProductImageController::class, 'destroy'])->name('products.images.destroy');
-    Route::delete('/products/{id}/image', [ProductImageController::class, 'destroyMain'])->name('products.images.destroyMain');
-
-    /*
-     * تركيب المنتج: مقاساتُه ووصفتُه وإضافاتُه.
-     *
-     * تحت `/products/{id}` عمدًا: الحارس يشتقّ القسم من اسم المسار، فتقع
-     * كلّها تحت صلاحية «المنتجات» بلا صلاحيةٍ جديدة تُخترع.
-     */
-    /*
-     * قسمٌ أو إضافةٌ تُنشأ من جانب الحقل الذي يحتاجها.
-     *
-     * قبل هذا لم يكن للأقسام ولا للإضافات بابُ إنشاءٍ إطلاقًا: تأتي من
-     * تهيئة نوع النشاط أو من استيراد ملفّ. وتُوضع تحت `/products/` كي
-     * يقيسها الحارس بصلاحية «المنتجات» بلا صلاحيةٍ جديدة.
+     * وقسمٌ يُنشأ من جانب حقله في نموذج المنتج — تحت `/products/` كي يقيسه
+     * الحارس بصلاحية «المنتجات» بلا صلاحيةٍ جديدة.
      */
     Route::post('/products/categories', [CatalogQuickAddController::class, 'storeCategory'])->name('products.categories.store');
-    Route::post('/products/addons', [CatalogQuickAddController::class, 'storeAddon'])->name('products.addons.store');
-    // تعديل إضافةٍ قائمة — سعرها ومداها وما تأكله من الرفّ. ويسبق مسار
-    // «products/{id}/addons» فلا يبتلعه: هذا معرّف إضافةٍ لا معرّف منتج
-    Route::put('/products/addons/{addon}', [CatalogQuickAddController::class, 'updateAddon'])->name('products.addons.update');
-
-    Route::post('/products/{id}/variants', [ProductCompositionController::class, 'storeVariant'])->name('products.variants.store');
-    Route::put('/products/{id}/variants/{variant}', [ProductCompositionController::class, 'updateVariant'])->name('products.variants.update');
-    Route::delete('/products/{id}/variants/{variant}', [ProductCompositionController::class, 'destroyVariant'])->name('products.variants.destroy');
-    Route::post('/products/{id}/recipe', [ProductCompositionController::class, 'storeRecipeItem'])->name('products.recipe.store');
-    Route::put('/products/{id}/recipe/{item}', [ProductCompositionController::class, 'updateRecipeItem'])->name('products.recipe.update');
-    Route::delete('/products/{id}/recipe/{item}', [ProductCompositionController::class, 'destroyRecipeItem'])->name('products.recipe.destroy');
     /*
-     * بنودُ الباقة — وهي غيرُ الوصفة.
-     *
-     * الوصفةُ تقول «كم يُخصم من الرفّ»، والباقةُ تقول «ما يشمله هذا العرض».
-     * وتُدار من شاشة المنتج نفسِها بصلاحية «المنتجات» — من يملك تركيبَ
-     * المنتج يملك ما تحويه باقتُه.
+     * بنودُ الباقة — ما يشمله هذا العرض، ويفكّه عرضُ السعر إلى بنوده.
+     * وتُدار من شاشة المنتج نفسِها بصلاحية «المنتجات».
      */
-    Route::post('/products/{id}/package', [ProductCompositionController::class, 'storePackageItem'])->name('products.package.store');
-    Route::put('/products/{id}/package/{item}', [ProductCompositionController::class, 'updatePackageItem'])->name('products.package.update');
-    Route::delete('/products/{id}/package/{item}', [ProductCompositionController::class, 'destroyPackageItem'])->name('products.package.destroy');
-    Route::put('/products/{id}/addons', [ProductCompositionController::class, 'syncAddons'])->name('products.addons.sync');
-    Route::delete('/products/{id}/addons/{addon}', [ProductCompositionController::class, 'destroyAddon'])->name('products.addons.destroy');
+    Route::post('/products/{id}/package', [ProductPackageController::class, 'storePackageItem'])->name('products.package.store');
+    Route::put('/products/{id}/package/{item}', [ProductPackageController::class, 'updatePackageItem'])->name('products.package.update');
+    Route::delete('/products/{id}/package/{item}', [ProductPackageController::class, 'destroyPackageItem'])->name('products.package.destroy');
     Route::post('/products/{id}/restore', [TrashController::class, 'restore'])
         ->defaults('type', 'product')->name('products.restore');
     // المحو النهائي يتبع صلاحية الحذف نفسها: من أخفاه يمحوه، ولا أحد سواه
@@ -419,33 +386,31 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'tenant', 'business'
     Route::get('/inventory', [PageController::class, 'inventoryIndex'])->name('inventory.index');
     Route::get('/inventory/xlsx', [ReportExportController::class, 'inventoryXlsx'])->name('inventory.xlsx');
     Route::get('/inventory/export-pdf', [PdfController::class, 'inventoryReport'])->name('inventory.exportPdf');
-    Route::get('/inventory/stocktake', [InventoryController::class, 'stocktake'])->name('inventory.stocktake');
+    /*
+     * «عمليات جرد المخزون» و«سجل المخزون» و«إشعار استلام بضاعة» خرجت من الواجهة:
+     * قسمُ المخزون لرصيد المنتجات وحده. وعناوينُها القديمة تعود إليه بدل أن تنكسر.
+     *
+     * وما تحتها باقٍ لا يُمحى: صفوفُ الجرد والتسويات وسنداتُ الاستلام وقيودُها،
+     * وبابا الكتابة اليدويّة (`stocktake.apply` · `adjustments.store`) بلا شاشة —
+     * فيهما وحدَهما منطقُ قيد الفاقد والزيادة في الدفترين (`StockLosses`)، وحذفُه
+     * قرارٌ مستقلّ. والاستلامُ يُعتمد من صفحة سنده (`receipts.show`) كما كان.
+     */
+    Route::get('/inventory/stocktake', fn () => redirect()->route('admin.inventory.index'))->name('inventory.stocktake');
     Route::post('/inventory/stocktake', [InventoryController::class, 'applyStocktake'])->name('inventory.stocktake.apply');
     // التحويل بين الفروع — حركة واحدة بدل «صرف» ثم «إضافة»
 
     /*
-     * تعديلات المخزون وإشعارات التسليم.
-     *
-     * التعديل يُنقص المخزون ويُقيّد الخسارة معًا: الاكتفاء بتنقيص العدد يُبقي
-     * قيمة المخزون في الميزانية كما كانت، فيظهر المتجر أغنى ممّا هو بقيمة كلّ
-     * ما تلف عنده. والإشعار مستند حركةٍ لا مال — ولا يمسّ المخزون إن كان
-     * مربوطًا بطلبٍ أنقصه يوم البيع.
+     * التسوية تُنقص المخزون وتُقيّد الخسارة معًا: الاكتفاء بتنقيص العدد يُبقي
+     * قيمة المخزون في الميزانية كما كانت. (بلا شاشة — انظر أعلاه.)
      */
-    Route::get('/inventory/adjustments', [StockAdjustmentController::class, 'index'])->name('inventory.adjustments');
+    Route::get('/inventory/adjustments', fn () => redirect()->route('admin.inventory.index'))->name('inventory.adjustments');
     Route::post('/inventory/adjustments', [StockAdjustmentController::class, 'store'])->name('inventory.adjustments.store');
     /*
-     * إشعارات الاستلام — قراءةٌ فقط.
-     *
-     * لا تُكتب بيدٍ ولا تُحذف: تُنشئها لحظةُ استلام أمر الشراء شاهدةً على
-     * واقعةٍ جرت. ونموذجٌ يُنشئ إشعارًا بلا استلامٍ يجعل الورقة تقول ما لم
-     * يقله المخزون.
+     * سنداتُ الاستلام — لا تُكتب بيدٍ ولا تُحذف: تُنشئها لحظةُ استلام أمر
+     * الشراء، وتُعتمد من صفحة السند الواحد فتدخل البضاعةُ الرفّ. وقائمتُها
+     * خرجت من الواجهة: ما ينتظر الاعتماد يُعرض في «المخزون» وفي الجرس.
      */
-    /*
-     * سندات النقل بين الفروع — البابُ الذي لم يكن.
-     *
-     * وتحت `inventory` كأخواتها: من يملك المخزون ينقل بضاعته بين فروعه.
-     */
-    Route::get('/inventory/receipts', [GoodsReceiptNoteController::class, 'index'])->name('inventory.receipts');
+    Route::get('/inventory/receipts', fn () => redirect()->route('admin.inventory.index'))->name('inventory.receipts');
     Route::get('/inventory/receipts/{id}/pdf', [DocumentPrintController::class, 'grn'])->name('inventory.receipts.pdf');
     /*
      * مرفقاتُ المستندات المالية — على القرص الخاصّ، وتُقرأ ببابٍ يسأل.
@@ -474,10 +439,10 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'tenant', 'business'
     Route::post('/suppliers/import/confirm', [SupplierExportController::class, 'confirm'])->name('suppliers.import.confirm');
     Route::post('/suppliers/import/cancel', [SupplierExportController::class, 'cancel'])->name('suppliers.import.cancel');
     Route::post('/suppliers', [SupplierController::class, 'store'])->name('suppliers.store');
-    /* كتالوجُ خدمات الموردين — قبل {id} كالتصدير (المرحلة 14) */
-    Route::post('/suppliers/services', [SupplierController::class, 'storeService'])->name('suppliers.services.store');
-    Route::put('/suppliers/services/{id}', [SupplierController::class, 'updateService'])->whereNumber('id')->name('suppliers.services.update');
-    Route::delete('/suppliers/services/{id}', [SupplierController::class, 'destroyService'])->whereNumber('id')->name('suppliers.services.destroy');
+    /*
+     * وكتالوجُ خدمات الموردين لم يعد له باب: ما يقدّمه المورّد نصٌّ يُكتب في
+     * نموذجه (`suppliers.service`). وجداولُ الكتالوج باقيةٌ بصفوفها — انظر `Supplier`.
+     */
     Route::get('/suppliers/{id}', [SupplierController::class, 'show'])->whereNumber('id')->name('suppliers.show');
     Route::put('/suppliers/{id}', [SupplierController::class, 'update'])->name('suppliers.update');
     Route::delete('/suppliers/{id}', [SupplierController::class, 'destroy'])->name('suppliers.destroy');

@@ -1253,7 +1253,6 @@ class Demo
     public static function suppliers(): array
     {
         return Supplier::where('business_id', self::bid())
-            ->with('serviceCategories:id,name')
             ->withCount(['purchaseOrders', 'invoices'])->orderBy('name')->get()->map(fn ($s) => [
                 'id' => $s->id,
                 'name' => $s->name,
@@ -1265,10 +1264,9 @@ class Demo
                 'email' => $s->email,
                 'contact' => $s->contact_person,
                 'notes' => $s->notes,
-                /* منتجاتٌ أم خدماتٌ أم كلاهما — وما يقدّمه من خدماتٍ يُرشَّح به */
-                'supplier_type' => $s->supplier_type ?: Supplier::PRODUCTS,
-                'status' => $s->status ?: 'active',
-                'services' => $s->serviceCategories->map(fn ($c) => ['id' => $c->id, 'name' => $c->name])->values()->all(),
+                /* ما يقدّمه بكلماته — «تصوير فوتوغرافي»، «شاشات LED» — ويُبحث به */
+                'service' => $s->service,
+                'status' => $s->status ?: Supplier::ACTIVE,
                 'orders_count' => $s->purchase_orders_count,
                 /*
              * ومن اشتُري منه مرّةً لا يُحذف — والزرُّ لا يُرسم عليه.
@@ -2727,7 +2725,7 @@ class Demo
          *
          * ولمن يملك الاعتماد وحده: من لا يقدر على الفعل لا يُنبَّه به.
          *
-         * والقراءةُ معه: الرابطُ يقود إلى شاشة الإشعارات، وهي تُحرَس بفعلها.
+         * والقراءةُ معه: الرابطُ يقود إلى صفحة السند، وهي تُحرَس بفعلها.
          * فمن مُنح الاعتماد ولم يُمنح القراءة كان الجرسُ يقوده إلى ٤٠٣.
          */
         if ($u && $u->may(Permissions::RECEIPT_APPROVE) && $u->may(Permissions::RECEIPT_VIEW)) {
@@ -2744,7 +2742,8 @@ class Demo
                     ]),
                     'time' => optional($note->received_at)->format('Y-m-d'),
                     'icon' => 'package-plus', 'color' => 'warning',
-                    'url' => route('admin.inventory.receipts', ['status' => GoodsReceipts::PENDING]),
+                    // إلى السند نفسِه — زرُّ اعتماده هناك، وقائمةُ السندات خرجت من الواجهة
+                    'url' => route('admin.inventory.receipts.show', $note->id),
                 ]);
             }
         }

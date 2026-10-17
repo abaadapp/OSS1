@@ -11,6 +11,7 @@ use App\Models\Business;
 use App\Models\CustomAlert;
 use App\Models\Customer;
 use App\Models\CustomerAddress;
+use App\Models\GoodsReceiptNote;
 use App\Models\JobTitle;
 use App\Models\Order;
 use App\Models\Product;
@@ -24,19 +25,18 @@ use App\Support\Demo;
 use App\Support\DocumentTemplates;
 use App\Support\Emojis;
 use App\Support\EmployeeAccess;
+use App\Support\GoodsReceipts;
 use App\Support\InventoryForecast;
 use App\Support\InvoiceBranding;
 use App\Support\Mailer;
 use App\Support\OrderStatus;
 use App\Support\Permissions;
-use App\Support\ProductImages;
 use App\Support\PurchaseOrders;
 use App\Support\PurchaseOrderTotals;
 use App\Support\PurchaseUnits;
 use App\Support\Quotations;
 use App\Support\Reports;
 use App\Support\Roles;
-use App\Support\ServiceProviders;
 use App\Support\ShopIdentity;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -56,11 +56,10 @@ class PageController extends Controller
 
     public function productsCreate(): Response
     {
-        // التركيب يُملأ مع المنتج: القوائم (المكوّنات والإضافات) تُرسل فارغةَ
-        // الصفوف لا فارغةَ الخيارات — فمن يكتب باقةً يختار مكوّناتها الآن
         return Inertia::render('Admin/Products/Create', [
             'categories' => Demo::categories(),
-            'composition' => ProductCompositionController::blank(
+            /* ولا بنودَ لباقةٍ لم تُحفظ — والخياراتُ تصل ليُرى ما يصلح منها */
+            'package' => ProductPackageController::blank(
                 auth()->user()->business_id ?? Demo::bid(),
             ),
         ]);
@@ -70,10 +69,6 @@ class PageController extends Controller
     {
         $product = Demo::product($id);
         abort_if(empty($product), 404);
-
-        // الصفّ نفسه لا نسخته المسطّحة: المعرض علاقةٌ لا عمود
-        $model = Product::where('business_id', auth()->user()->business_id ?? Demo::bid())
-            ->with('images')->find($id);
 
         $margin = $product['price'] - $product['cost'];
         $marginPct = $product['price'] > 0 ? round(($margin / $product['price']) * 100) : 0;
@@ -93,17 +88,10 @@ class PageController extends Controller
                 fn ($m) => $m['product'] === $product['name'],
             )), 0, 6),
             /*
-             * المعرض من بابه الواحد — الرئيسية أوّلًا ثمّ ما بعدها.
-             *
-             * كان سطرًا يبني قائمةً من صورةٍ واحدة، فالمصفوفة موجودةٌ
-             * والمعرض لا. والشاشة تعرض المصغّرات حين تزيد على واحدة —
-             * فبقيت لا تعرضها أبدًا.
+             * ولا صورَ في صفحة المنتج: خرجت من تجربته (ملفّاتُها القديمة باقية).
+             * والوصفُ ما كُتب أو لا شيء — كان وصفُ «باقة ورود» يُعرض لكلّ بندٍ بلا وصف.
              */
-            'thumbs' => $model
-                ? array_column(ProductImages::gallery($model), 'url')
-                : array_values(array_filter([$product['image']])),
-            'description' => $product['description']
-                ?? __('باقة أنيقة من الورود الطبيعية الطازجة مناسبة لجميع المناسبات، منسّقة بعناية بأيدي خبراء التنسيق لدينا لتمنح لمسة جمالية مميزة.'),
+            'description' => $product['description'] ?? '',
         ]);
     }
 
@@ -112,26 +100,14 @@ class PageController extends Controller
         $product = Demo::product($id);
         abort_if(empty($product), 404);
 
-        $model = Product::where('business_id', auth()->user()->business_id ?? Demo::bid())
-            ->with('images')->find($id);
+        $model = Product::where('business_id', auth()->user()->business_id ?? Demo::bid())->find($id);
 
         return Inertia::render('Admin/Products/Edit', [
             'product' => $product,
             'categories' => Demo::categories(),
             'description' => $product['description'] ?? '',
-            'composition' => $model
-                ? ProductCompositionController::payload($model)
-                : null,
-            /*
-             * المعرض يصل إلى شاشة التعديل لتُدار منه الصور.
-             *
-             * والسقف معه: الشاشة تُخفي زرّ الرفع عند بلوغه بدل أن تقبل الملفّ
-             * ثمّ تردّه — ورفضٌ بعد انتظار رفعِ أربعة ميغابايت أسوأ من زرٍّ
-             * مطفأ يقول لماذا.
-             */
-            'gallery' => $model ? ProductImages::gallery($model) : [],
-            'galleryMax' => ProductImages::MAX,
-            'galleryLimits' => ProductImages::uploadLimits(),
+            /* بنودُ الباقة — والصورُ والتركيبُ خرجا من شاشة المنتج */
+            'package' => $model ? ProductPackageController::payload($model) : null,
         ]);
     }
 
@@ -541,6 +517,26 @@ class PageController extends Controller
                 'products' => array_values($forecast['products']),
                 'may_settings' => (bool) auth()->user()?->allows('settings'),
             ],
+            /*
+             * وما ينتظر الاعتماد من سندات الاستلام — كميّتُه لا تدخل الرفّ قبله.
+             *
+             * قائمةُ السندات خرجت من الواجهة، والاعتمادُ لم يخرج: يُعرض هنا ما
+             * يحتاج يدًا وحده، ويُعتمد من صفحة كلّ سند. ولمن يقرأ السندات وحده،
+             * ومن فروعه وحدها.
+             */
+            'pendingReceipts' => auth()->user()?->may(Permissions::RECEIPT_VIEW)
+                ? BranchAccess::limit(GoodsReceiptNote::where('business_id', $bid))
+                    ->where('status', GoodsReceipts::PENDING)
+                    ->with(['supplier:id,name', 'purchaseOrder:id,number'])
+                    ->orderBy('received_at')->orderBy('id')->limit(20)->get()
+                    ->map(fn (GoodsReceiptNote $n) => [
+                        'id' => $n->id,
+                        'number' => $n->number,
+                        'supplier' => $n->supplier?->name,
+                        'order' => $n->purchaseOrder?->number,
+                        'received_at' => optional($n->received_at)->format('Y-m-d'),
+                    ])->all()
+                : [],
         ]);
     }
 
@@ -548,15 +544,10 @@ class PageController extends Controller
 
     public function suppliersIndex(): Response
     {
-        $bid = (int) (auth()->user()->business_id ?? Demo::bid());
-        ServiceProviders::ensureCategories($bid);
-
         return Inertia::render('Admin/Suppliers/Index', [
+            /* وما يقدّمه كلٌّ منهم نصٌّ يكتبه المستخدم ويُبحث به — لا كتالوج */
             'suppliers' => Demo::suppliers(),
-            /* كتالوجُ الخدمات — يُختار منه ويُرشَّح به: «مقدّم خدمة ← تصوير» */
-            'services' => ServiceProviders::catalog($bid),
-            'types' => collect(ServiceProviders::TYPE_LABELS)->map(fn ($l) => __($l))->all(),
-            'statuses' => collect(ServiceProviders::STATUS_LABELS)->map(fn ($l) => __($l))->all(),
+            'statuses' => collect(Supplier::STATUS_LABELS)->map(fn ($l) => __($l))->all(),
         ]);
     }
 

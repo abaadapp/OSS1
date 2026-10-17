@@ -11,10 +11,16 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * المورّد — منتجاتٍ أو خدماتٍ أو كليهما.
  *
  * مقدّمُ الخدمة مورّدٌ لا عالمٌ ماليٌّ ثانٍ: أوامرُ شرائه وسنداتُه وذممُه
- * هي نفسُها، ويزيد عليه كتالوجُ ما يقدّمه (`ServiceCategory`) يُبحث به.
+ * هي نفسُها. وما يقدّمه نصٌّ حرٌّ يكتبه المستخدم (`service`) — «تصوير
+ * فوتوغرافي»، «شاشات LED» — لا اختيارٌ من قائمة.
  */
 class Supplier extends Model
 {
+    /*
+     * النوعُ القديم (`supplier_type`) وكتالوجُ الخدمات (`serviceCategories`) باقيان
+     * بصفوفهما للتوافق — لا تكتبهما شاشةٌ ولا يقرؤهما منطق. ونصُّ `service` نُقل
+     * منهما مرّةً بالهجرة.
+     */
     public const PRODUCTS = 'products';
 
     public const SERVICES = 'services';
@@ -32,6 +38,8 @@ class Supplier extends Model
     /** @var list<string> */
     public const STATUSES = [self::ACTIVE, self::INACTIVE];
 
+    public const STATUS_LABELS = [self::ACTIVE => 'نشط', self::INACTIVE => 'متوقف'];
+
     protected $guarded = [];
 
     public function serviceCategories(): BelongsToMany
@@ -48,11 +56,6 @@ class Supplier extends Model
     public function isActive(): bool
     {
         return ($this->status ?: self::ACTIVE) === self::ACTIVE;
-    }
-
-    public function providesServices(): bool
-    {
-        return in_array($this->supplier_type, [self::SERVICES, self::BOTH], true);
     }
 
     public function purchaseOrders(): HasMany { return $this->hasMany(PurchaseOrder::class); }

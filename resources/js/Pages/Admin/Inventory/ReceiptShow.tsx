@@ -98,12 +98,12 @@ export default function ReceiptShow() {
 
     return (
         <AdminLayout title={note.number}>
-            {/* الرجوعُ طريقٌ لا فعل: فوق الترويسة لا بين أزرارها */}
-            <BackLink
-                routeName="admin.inventory.receipts"
-                href={route('admin.inventory.receipts')}
-                label="كل سندات الاستلام"
-            />
+            {/*
+                الرجوعُ طريقٌ لا فعل: فوق الترويسة لا بين أزرارها. وإلى «المخزون»
+                لا إلى قائمة سنداتٍ خرجت من الواجهة — هناك ما ينتظر الاعتماد،
+                وأمرُ الشراء يُفتح من بيانات السند أدناه.
+            */}
+            <BackLink routeName="admin.inventory.index" href={route('admin.inventory.index')} label="المخزون" />
 
             <PageHeader
                 title={note.number}

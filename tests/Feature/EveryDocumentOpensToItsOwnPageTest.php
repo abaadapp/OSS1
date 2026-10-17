@@ -115,16 +115,23 @@ class EveryDocumentOpensToItsOwnPageTest extends TestCase
                 ->etc());
     }
 
-    /** وقائمةُ السندات تحمل مفتاحَ الأمر — والرقمُ وحده لا يفتح شيئًا */
-    public function test_the_receipts_list_carries_the_key_that_opens_the_order(): void
+    /**
+     * وقائمةُ السندات خرجت من الواجهة: عنوانُها القديم يعود إلى «المخزون»،
+     * وهناك ما ينتظر الاعتماد بمفتاح صفحته — والرقمُ وحده لا يفتح شيئًا.
+     */
+    public function test_a_waiting_receipt_is_opened_from_the_inventory_by_its_key(): void
     {
         $note = $this->receipt();
 
+        $this->actingAs($this->owner)->get(route('admin.inventory.receipts'))
+            ->assertRedirect(route('admin.inventory.index'));
+
         $this->actingAs($this->owner)
-            ->get(route('admin.inventory.receipts'))
+            ->get(route('admin.inventory.index'))
             ->assertInertia(fn ($p) => $p
-                ->where('notes.0.order', 'PO-000001')
-                ->where('notes.0.order_id', $note->purchase_order_id)
+                ->where('pendingReceipts.0.id', $note->id)
+                ->where('pendingReceipts.0.number', 'GRN-000001')
+                ->where('pendingReceipts.0.order', 'PO-000001')
                 ->etc());
     }
 

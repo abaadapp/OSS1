@@ -34,7 +34,7 @@ final class ProjectPurchases
 
         // ولمن قُيّد بفروعٍ أوامرُ فروعه وسنداتُها وحدها — انظر BranchAccess
         $orders = BranchAccess::limit(PurchaseOrder::where('business_id', $project->business_id))->where('project_id', $project->id)
-            ->with(['supplier:id,name,supplier_type', 'items:id,purchase_order_id,line_kind,quantity,received_quantity'])
+            ->with(['supplier:id,name,service', 'items:id,purchase_order_id,line_kind,quantity,received_quantity'])
             ->orderByDesc('ordered_at')->orderByDesc('id')->get();
 
         $invoices = BranchAccess::limitThrough(SupplierInvoice::where('business_id', $project->business_id), 'purchaseOrder')->where('project_id', $project->id)
@@ -72,7 +72,7 @@ final class ProjectPurchases
             ->map(fn ($group) => [
                 'id' => $group->first()->supplier_id,
                 'name' => $group->first()->supplier?->name ?? $group->first()->supplier_name,
-                'type' => $group->first()->supplier?->supplier_type,
+                'service' => $group->first()->supplier?->service,
                 'orders' => $group->count(),
                 'total' => round((float) $group->where('status', '!=', PurchaseOrders::DRAFT)->sum('total'), 3),
             ])->values()->all();

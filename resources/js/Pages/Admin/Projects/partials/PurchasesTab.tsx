@@ -23,7 +23,7 @@ export interface ProjectPurchases {
         id: number; ref: string; supplier: string | null; purchase_order_id: number | null; approval_status: string; status: string;
         issued_at: string | null; total: number | null; paid: number | null; outstanding: number | null;
     }[];
-    suppliers: { id: number | null; name: string | null; type: string | null; orders: number; total: number }[];
+    suppliers: { id: number | null; name: string | null; service: string | null; orders: number; total: number }[];
     kinds: string[];
     statuses: string[];
     money: boolean;
@@ -170,7 +170,10 @@ export default function PurchasesTab({ projectId, data, m }: { projectId: number
                         {data.suppliers.length === 0 && <li className="px-5 py-6 text-center text-[13px] text-[#9ca3af]">—</li>}
                         {data.suppliers.map((x, i) => (
                             <li key={x.id ?? `x${i}`} className="flex items-center justify-between gap-2 px-5 py-2 text-[13px]">
-                                <span className="truncate">{x.name}</span>
+                                <span className="min-w-0 truncate">
+                                    {x.name}
+                                    {x.service && <span className="ms-1 text-[12px] text-[#9ca3af]">· {x.service}</span>}
+                                </span>
                                 <span className="shrink-0 tabular-nums text-[12px] text-[#6b7280]">{x.orders} · {m(x.total)}</span>
                             </li>
                         ))}

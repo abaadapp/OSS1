@@ -1,13 +1,5 @@
 /** أشكال البيانات القادمة من App\Support\Demo — مأخوذة من مخرجاتها الفعلية */
 
-export interface ProductVariantOption {
-    id: number;
-    name: string;
-    label: string;
-    price: number;
-    sku: string | null;
-}
-
 export interface Product {
     id: number;
     name: string;
@@ -19,19 +11,12 @@ export interface Product {
     qty: number;
     sku: string;
     barcode: string;
-    image: string | null;
     stock_status: string;
     active: boolean;
     /** يُعرض في المتجر على الإنترنت — غير `active` التي تعني «يُباع» */
     alert: number;
     tax: number;
     discount: number;
-    /** مقاساتُه الفعّالة — الفارغة تعني منتجًا بسيطًا يُباع بسعره */
-    variants?: ProductVariantOption[];
-    /** معرّفات الإضافات المسموحة — و`null` يعني «كلّها» (سلوك ما قبل الربط) */
-    addon_ids?: number[] | null;
-    /** ذو الوصفة رصيدُه مكوّناتُه لا عمودُه */
-    has_recipe?: boolean;
     /** صنفٌ · خدمةٌ · باقة — والخدمةُ والباقةُ لا رفَّ لهما */
     kind?: 'item' | 'service' | 'package';
 }
@@ -110,11 +95,10 @@ export interface Supplier {
     orders_count: number;
     /** ما يقبله `SupplierController::destroy` — من اشتُري منه مرّةً يبقى */
     can_delete?: boolean;
-    /** المرحلة 14: منتجاتٌ أم خدماتٌ أم كلاهما، وما يقدّمه من خدمات */
-    supplier_type?: 'products' | 'services' | 'both';
+    /** ما يقدّمه بكلماته — «تصوير فوتوغرافي»، «شاشات LED» — نصٌّ حرّ لا قائمة */
+    service?: string | null;
     status?: 'active' | 'inactive';
     whatsapp?: string | null;
-    services?: { id: number; name: string }[];
 }
 
 export interface InventoryItem {

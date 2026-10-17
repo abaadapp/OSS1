@@ -134,7 +134,7 @@ class ProductController extends Controller
             'id' => $p->id, 'name' => $p->name, 'cat' => $p->category?->name ?? '—',
             'kind' => $p->kind ?? Product::ITEM,
             'price' => (float) $p->price, 'cost' => (float) $p->cost, 'qty' => $p->quantity,
-            'sku' => $p->sku, 'barcode' => $p->barcode, 'image' => $p->image,
+            'sku' => $p->sku, 'barcode' => $p->barcode,
             'stock_status' => $p->stock_status, 'active' => (bool) $p->active,
             'alert' => $p->alert_qty, 'tax' => (float) $p->tax, 'discount' => (float) $p->discount,
         ]);
@@ -193,14 +193,11 @@ class ProductController extends Controller
             // وضريبةٌ ٩٠٠٪ تُخرج فاتورةً بعشرة أضعاف ثمنها. كانا يُقبلان
             'tax' => ['nullable', 'numeric', 'min:0', 'max:100'],
             'discount' => ['nullable', 'numeric', 'min:0', 'max:100'],
-            'image' => ['nullable', 'image', 'max:4096'],
-            // التركيب يُملأ مع المنتج لا بعده — انظر ProductCompositionController::draftRules
-        ] + ProductCompositionController::draftRules($this->bid()),
-            ['category_id.exists' => __('قسم غير معروف')] + ProductCompositionController::draftMessages());
-
-        // مسوّدةُ التركيب ليست عمودًا في products؛ تُنحّى قبل الإنشاء وتُكتب بعده
-        $composition = $data['composition'] ?? [];
-        unset($data['composition']);
+            /*
+             * ولا صورةَ ولا تركيبَ (مقاساتٍ ووصفةً وإضافات): بقايا متجر التجزئة
+             * خرجت من نموذج المنتج. وما أُرسل منها من نموذجٍ قديم لا يُقرأ.
+             */
+        ], ['category_id.exists' => __('قسم غير معروف')]);
 
         $data['business_id'] = $this->bid();
         // القيم الرقمية الفارغة → افتراضياتها (الأعمدة NOT NULL؛ الفراغ يُحوَّل إلى null فيفشل)
@@ -226,18 +223,6 @@ class ProductController extends Controller
         $data['active'] = $request->boolean('active', true);
         // اسمٌ إنجليزيّ من المعجم إن لم يُكتب بيد — انظر Lexicon
         $data = Lexicon::fill($data);
-        /*
-         * وما لم تُرفع له صورةٌ يبقى بلا صورة.
-         *
-         * كان يُكتب في عموده رابطُ `picsum.photos` — صورةٌ عشوائيّةٌ من
-         * الإنترنت. فيصير المنتجُ في نظر النظام **مصوَّرًا**: يُنشر بها في
-         * متجر التاجر على الإنترنت (`Storefront` تسأل `hasRealMain`)،
-         * وتُعدّ في سقف الصور، ويُرسم لها زرُّ حذفٍ لملفٍّ لا وجود له.
-         * ووقع على متجرٍ حقيقيّ: صنفٌ اسمه «لانيارد» يحمل صورةَ شيءٍ آخر.
-         */
-        $data['image'] = $request->hasFile('image')
-            ? $request->file('image')->store('products', 'public')
-            : null;
         $product = Product::create($data);
         // إسناد الكمية الافتتاحية إلى الفرع الحالي/الأول ليبقى مجموع الفروع = كمية المنتج
         BranchStock::adjust($this->bid(), $this->defaultBranchId(), $product->id, (int) ($data['quantity'] ?? 0));
@@ -253,12 +238,6 @@ class ProductController extends Controller
             (int) ($data['quantity'] ?? 0), StockLedger::OPENING, auth()->user()->name,
         );
         Activity::log('created', 'أضاف منتجًا: '.$data['name']);
-
-        // المقاسات والوصفة والإضافات التي كُتبت في نفس الشاشة — بعد أن صار
-        // للمنتج معرّفٌ تُعلَّق به
-        if ($composition) {
-            ProductCompositionController::applyDraft($product, $composition);
-        }
 
         /*
          * الإضافة تنتهي فيُخرَج منها، خلافًا للتعديل الذي يبقى في مكانه.
@@ -305,19 +284,7 @@ class ProductController extends Controller
             // وضريبةٌ ٩٠٠٪ تُخرج فاتورةً بعشرة أضعاف ثمنها. كانا يُقبلان
             'tax' => ['nullable', 'numeric', 'min:0', 'max:100'],
             'discount' => ['nullable', 'numeric', 'min:0', 'max:100'],
-            /*
-             * والصورة ليست من هذا النموذج — بابها مسارُها.
-             *
-             * كانت تُرفع مع السعر والكمية والوصف في طلبٍ واحد، وهذا النموذج
-             * يكتب الكمية **مطلقةً** ويُزيح رصيد الفرع بفارقها. فمن فتح
-             * الشاشة ثمّ باع صنفًا على الصندوق ثمّ بدّل الصورة، أعاد الكمية
-             * إلى ما كانت عليه قبل البيعة — بضاعةٌ تعود إلى الرفّ لأنّ أحدًا
-             * غيّر صورة.
-             *
-             * فصارت الصور تُدار بطلباتٍ صغيرة لا تمسّ عمودًا آخر: انظر
-             * `ProductImageController`. والإنشاء يبقى على حاله — لا معرّض
-             * قبل أن يوجد المنتج.
-             */
+            // ولا صورةَ ولا تركيبَ — خرجا من نموذج المنتج، انظر `store`
         ], ['category_id.exists' => __('قسم غير معروف')]);
         $data['name_en'] = $data['name_en'] ?? null;
         $data['active'] = $request->boolean('active', true);
@@ -358,7 +325,7 @@ class ProductController extends Controller
         Activity::log('updated', 'عدّل المنتج: '.$product->name, ['subject_id' => $product->id]);
 
         // ويبقى في صفحة التعديل كذلك: من يصحّح سعرًا يريد أن يرى أنه ثبت،
-        // وغالبًا يتبعه بتعديل الكمية أو الصورة في القسم المجاور
+        // وغالبًا يتبعه بتعديل الكمية في القسم المجاور
         return redirect()->route('admin.products.edit', $product->id)->with('toast', ['msg' => __('تم تحديث المنتج بنجاح'), 'type' => 'success']);
     }
 

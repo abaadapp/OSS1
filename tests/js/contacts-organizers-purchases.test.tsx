@@ -125,7 +125,7 @@ describe('PurchasesTab', () => {
             { id: 12, number: 'PO-000012', supplier_id: 6, supplier: 'مخازن الكراسي', status: 'مُرسل', receipt: 'pending', closed: false, ordered_at: '2026-10-02', expected_delivery_at: '2026-10-05', total: 500, kinds: ['product'], items: 2 },
         ],
         invoices: [{ id: 21, ref: 'INV-1', supplier: 'شركة النور', purchase_order_id: 11, approval_status: 'معتمد', status: 'جزئي', issued_at: '2026-10-03', total: money ? 1000 : null, paid: money ? 400 : null, outstanding: money ? 600 : null }],
-        suppliers: [{ id: 5, name: 'شركة النور', type: 'services', orders: 1, total: 1000 }, { id: 6, name: 'مخازن الكراسي', type: 'products', orders: 1, total: 500 }],
+        suppliers: [{ id: 5, name: 'شركة النور', service: 'صوتيات وإضاءة', orders: 1, total: 1000 }, { id: 6, name: 'مخازن الكراسي', service: null, orders: 1, total: 500 }],
         kinds: ['product', 'service', 'custom'],
         statuses: ['مسودة', 'مُرسل', 'مستلم جزئيًا', 'مستلم'],
         money,

@@ -9,24 +9,21 @@ use App\Models\InventoryMovement;
 use App\Models\Product;
 use App\Models\StockAdjustment;
 use App\Support\Activity;
-use App\Support\BranchAccess;
 use App\Support\Demo;
-use App\Support\Ledger;
-use App\Support\Pagination;
-use App\Support\Search;
-use App\Support\Sort;
 use App\Support\StockLosses;
 use App\Support\Waste;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
-use Inertia\Inertia;
-use Inertia\Response;
 use RuntimeException;
 
 /**
  * تعديلات المخزون — تلفٌ وفقدٌ وتصحيحُ عدّ.
+ *
+ * وشاشتُها («سجل المخزون») خرجت من الواجهة؛ وبقي بابُ الكتابة بلا شاشة لأنّ
+ * فيه قيدَ الخسارة في الدفترين (`StockLosses`). والتسوياتُ التي تكتبها
+ * مستهلكاتُ الفعاليّة لا تمرّ من هنا — تكتبها `Operations\Consumables`.
  *
  * التعديل ليس تصحيحًا للرقم وحده: قطعةٌ تلفت مالٌ ضاع، فتنقص من المخزون
  * وتُقيَّد خسارةً في الدفتر. والاكتفاء بتنقيص العدد يُبقي قيمة المخزون في
@@ -37,83 +34,9 @@ use RuntimeException;
  */
 class StockAdjustmentController extends Controller
 {
-    /** ما يُرتَّب في تعديلات المخزون */
-    private const SORTS = [
-        'number' => 'number',
-        'reason' => 'reason',
-        'delta' => 'quantity_delta',
-        'date' => 'adjusted_at',
-    ];
-
     private function bid(): int
     {
         return auth()->user()->business_id ?? Demo::bid();
-    }
-
-    public function index(Request $request): Response
-    {
-        $bid = $this->bid();
-        Ledger::ensureSystemAccounts($bid);
-
-        // التسوياتُ لا تتبع الشريط — ولمن قُيّد بفروعٍ تسوياتُ فروعه وحدها
-        $q = BranchAccess::limit(StockAdjustment::where('business_id', $bid))->with(['product', 'creator', 'branch']);
-
-        if ($s = Search::term($request)) {
-            $like = Search::like();
-            $q->where(fn ($w) => $w->where('number', $like, "%{$s}%")
-                ->orWhere('notes', $like, "%{$s}%")
-                ->orWhereHas('product', fn ($p) => $p->where('name', $like, "%{$s}%")));
-        }
-        if ($reason = $request->query('reason')) {
-            $q->where('reason', $reason);
-        }
-
-        Sort::apply($q, $request, self::SORTS, fn ($w) => $w->orderByDesc('adjusted_at')->orderByDesc('id'));
-
-        $adjustments = $q->paginate(Pagination::perPage($request, 20))->withQueryString();
-
-        $all = BranchAccess::limit(StockAdjustment::where('business_id', $bid))->get();
-
-        return Inertia::render('Admin/Inventory/Adjustments', [
-            'adjustments' => collect($adjustments->items())->map(fn ($a) => [
-                'id' => $a->id,
-                'number' => $a->number,
-                'product' => $a->product?->name ?? '—',
-                'sku' => $a->product?->sku,
-                'branch' => $a->branch?->name,
-                'delta' => (float) $a->quantity_delta,
-                'cost' => (float) $a->cost_at_time,
-                'value' => $a->valueImpact(),
-                'reason' => $a->reason,
-                'notes' => $a->notes,
-                'author' => $a->creator?->name,
-                'at' => optional($a->adjusted_at)->format('Y-m-d'),
-            ])->all(),
-            'pagination' => Pagination::meta($adjustments),
-            'filters' => $request->only('q', 'reason')
-                + Sort::params($request, self::SORTS),
-            'sorts' => Sort::keys(self::SORTS),
-            'reasons' => StockAdjustment::REASONS,
-            // التعديل يقع على فرعٍ بعينه، فالنموذج يلزمه اختياره — والفرع
-            // الحاليّ في الجلسة قيمةٌ ابتدائية لا أكثر
-            'branches' => BranchAccess::limit(Branch::where('business_id', $bid), null, 'id')->orderBy('id')->get(['id', 'name'])->all(),
-            'currentBranchId' => Demo::currentBranchId(),
-            'products' => Product::where('business_id', $bid)->orderBy('name')
-                ->get(['id', 'name', 'sku', 'quantity', 'cost'])
-                ->map(fn ($p) => [
-                    'value' => $p->id,
-                    'label' => $p->sku ? $p->name.' — '.$p->sku : $p->name,
-                    'quantity' => (int) $p->quantity,
-                    'cost' => (float) $p->cost,
-                ])->all(),
-            'summary' => [
-                'count' => $all->count(),
-                // الخسارة موجبةٌ في العرض: «خسرتَ ٤٠» أوضح من «‏−٤٠»
-                'loss' => round(abs($all->where('quantity_delta', '<', 0)->sum(fn ($a) => $a->valueImpact())), 3),
-                'gain' => round($all->where('quantity_delta', '>', 0)->sum(fn ($a) => $a->valueImpact()), 3),
-            ],
-            'today' => now()->format('Y-m-d'),
-        ]);
     }
 
     public function store(Request $request)

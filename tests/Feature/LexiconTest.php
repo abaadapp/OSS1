@@ -5,7 +5,6 @@ namespace Tests\Feature;
 use App\Models\Business;
 use App\Models\Category;
 use App\Models\Product;
-use App\Models\ProductVariant;
 use App\Models\User;
 use App\Support\Demo;
 use App\Support\Lexicon;
@@ -177,19 +176,6 @@ class LexiconTest extends TestCase
             ->assertOk();
 
         $this->assertSame('Bouquets', Category::firstOrFail()->name_en);
-    }
-
-    public function test_a_size_is_translated_too(): void
-    {
-        $product = Product::create([
-            'business_id' => $this->business->id, 'name' => 'بوكيه', 'price' => 15, 'cost' => 5, 'quantity' => 5,
-        ]);
-
-        $this->actingAs($this->owner)
-            ->post(route('admin.products.variants.store', $product->id), ['name' => 'كبير', 'price' => 25])
-            ->assertSessionHasNoErrors();
-
-        $this->assertSame('Large', ProductVariant::firstOrFail()->name_en);
     }
 
     /* ------------------------------ الملء الرجعيّ ------------------------------ */

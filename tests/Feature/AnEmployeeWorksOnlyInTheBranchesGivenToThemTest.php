@@ -200,10 +200,6 @@ class AnEmployeeWorksOnlyInTheBranchesGivenToThemTest extends TestCase
         $this->assertSame(10, $row['totalQty']);
         $this->assertSame(['مسقط'], collect($row['branches'])->pluck('name')->all());
 
-        $counted = collect($this->get(route('admin.inventory.stocktake'))->assertOk()->viewData('page')['props']['items'])
-            ->firstWhere('id', $product->id);
-        $this->assertSame([$this->muscat->id], array_keys($counted['stock']));
-
         // وصاحبُ النشاط يرى الشركة كلَّها كما كان
         $this->actingAs($this->owner);
         $row = collect($this->get(route('admin.inventory.index'))->viewData('page')['props']['inventory'])->firstWhere('id', $product->id);
@@ -292,7 +288,8 @@ class AnEmployeeWorksOnlyInTheBranchesGivenToThemTest extends TestCase
         $this->assertSame(GoodsReceipts::PENDING, $atSur->fresh()->status);
         $this->get(route('admin.inventory.receipts.show', $atSur->id))->assertNotFound();
 
-        $listed = collect($this->get(route('admin.inventory.receipts'))->assertOk()->viewData('page')['props']['notes'])->pluck('id')->all();
+        // وما ينتظر الاعتماد في «المخزون» سنداتُ فروعه وحدها — قائمةُ السندات خرجت من الواجهة
+        $listed = collect($this->get(route('admin.inventory.index'))->assertOk()->viewData('page')['props']['pendingReceipts'])->pluck('id')->all();
         $this->assertSame([$atMuscat->id], $listed);
 
         $this->post(route('admin.purchases.receipts.approve', $atMuscat->id))->assertSessionHasNoErrors();

@@ -179,13 +179,11 @@ class NoDoorOpensOnAnotherCompanyTest extends TestCase
         $checklistItem = $checklist->items()->firstOrFail();
         $consumable = Consumables::issue($op, $product, ['quantity' => 2, 'key' => 'k'], $owner);
 
-        /* المرحلة 14: شخصُ اتصالٍ للجهة، ومنظّمٌ بتصنيفه على الفعاليّة، وخدمةٌ في كتالوج المورّدين */
+        /* المرحلة 14: شخصُ اتصالٍ للجهة، ومنظّمٌ بتصنيفه على الفعاليّة */
         $contact = \App\Support\CustomerContacts::save($customer, ['name' => "شخص $m", 'email' => 'buyer@a.om', 'phone' => '99887700'], $owner);
         $organizerCategory = \App\Support\Organizers::saveCategory($bid, "تصنيف $m");
         $organizer = \App\Support\Organizers::create($bid, ['name' => "منظّم $m", 'gender' => 'female', 'category_ids' => [$organizerCategory->id]], $owner);
         $organizerAssignment = \App\Support\Operations\OperationOrganizers::assign($op, ['organizer_id' => $organizer->id, 'organizer_category_id' => $organizerCategory->id], $owner);
-        $service = \App\Support\ServiceProviders::saveCategory($bid, "خدمة $m");
-        \App\Support\ServiceProviders::syncServices($supplier, [$service->id], $owner);
 
         /* ومستندٌ داخليّ بتصنيفه ونسخة ملفّه */
         $documentCategory = \App\Support\DocumentRecords::saveCategory($bid, "تصنيف مستند $m");
@@ -254,7 +252,7 @@ class NoDoorOpensOnAnotherCompanyTest extends TestCase
             'payroll' => $payroll->id, 'branches' => (int) Branch::where('business_id', $bid)->value('id'), 'settings.policies' => $policy->id,
             'customer' => $customer->id, 'finance.cheques' => $payment->id, 'inventory.receipts' => 0,
             'contactId' => $contact->id, 'organizers' => $organizer->id, 'organizers.categories' => $organizerCategory->id,
-            'oid' => $organizerAssignment->id, 'suppliers.services' => $service->id,
+            'oid' => $organizerAssignment->id,
             'documents' => $document->id, 'documents.categories' => $documentCategory->id, 'fid' => $documentFile->id,
         ];
     }

@@ -197,34 +197,9 @@ class ProductSectionAuditTest extends TestCase
         ]);
     }
 
-    /* ------------------- الصورة المحذوفة لا تبقى ------------------- */
+    /* ------------------- الصورة خرجت من نموذج المنتج ------------------- */
 
-    /**
-     * والصورة صارت بابًا آخر — انظر ProductImageController.
-     *
-     * كانت تُرفع مع السعر والكمية في طلبٍ واحد، وهذا النموذج يكتب الكمية
-     * مطلقةً ويُزيح رصيد الفرع بفارقها: فمن بدّل صورةً أعاد الكمية إلى ما
-     * كانت عليه قبل أيّ بيعةٍ وقعت بينهما. والثابت المحروس هنا واحدٌ لم
-     * يتغيّر: **ما زال الملفّ يُمحى من القرص مع صفّه.**
-     */
-    public function test_a_removed_image_does_not_stay_on_disk(): void
-    {
-        Storage::fake('public');
-        $p = $this->product();
-
-        $this->post(route('admin.products.images.store', $p->id), [
-            'images' => [UploadedFile::fake()->image('one.jpg')],
-        ])->assertSessionHasNoErrors();
-
-        $first = $p->fresh()->getRawOriginal('image');
-        Storage::disk('public')->assertExists($first);
-
-        $this->delete(route('admin.products.images.destroyMain', $p->id))->assertSessionHasNoErrors();
-
-        Storage::disk('public')->assertMissing($first);
-    }
-
-    /** ونموذج المنتج ما عاد يقبلها: بابٌ مغلقٌ لا يُكتب منه شيء */
+    /** ونموذج المنتج ما عاد يقبلها: بابٌ مغلقٌ لا يُكتب منه شيء — والصورُ كلُّها خرجت من تجربة المنتج */
     public function test_the_product_form_no_longer_carries_the_image(): void
     {
         Storage::fake('public');

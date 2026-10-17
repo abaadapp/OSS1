@@ -27,7 +27,6 @@ import {
     ShoppingCart,
     Truck,
     UserCog,
-    UsersRound,
     Wrench,
     Users,
     Wallet,
@@ -57,6 +56,14 @@ export interface NavItem {
      * من البحث ومن روابط المستندات — فتبقى معروفةً لقسمها لا يتيمة.
      */
     hidden?: boolean;
+    /**
+     * شريطُ تبويبات القسم إن كان العنصرُ بابَه.
+     *
+     * فيظهر لمن يملك أيَّ تبويبٍ فيه — لا قسمَ العنصر وحده — ويقود إلى أوّلِ ما
+     * يملك. «العملاء» بابُ العملاء والمورّدين والمنظّمين: ومن مُنح المنظّمين
+     * وحدهم كان سيفقد بابَهم حين خرجوا من القائمة إلى تبويبٍ هنا.
+     */
+    tabs?: SectionTab[];
     /**
      * مفتاحُ عدّادٍ في `badges` المشتركة — رقمٌ صغير بجوار العنصر حين يزيد على صفر.
      *
@@ -110,8 +117,9 @@ export const NAV: NavGroup[] = [
                 icon: Users,
                 route: 'admin.customers.index',
                 section: 'customers',
-                /* وصفحةُ المورّد تحت تبويب «الموردين» هنا — المرحلة 14 */
-                covers: [...covers(CUSTOMER_TABS), 'admin.suppliers.show'],
+                /* والمورّدون والمنظّمون تبويباتٌ هنا بصفحاتهم — لا أقسامٌ في القائمة */
+                tabs: CUSTOMER_TABS,
+                covers: [...covers(CUSTOMER_TABS), 'admin.suppliers.show', 'admin.organizers.show'],
             },
             /* وواتساب: صندوقُ وارد الشركة — ما يكتبه العملاءُ ويُجاب من هنا */
             { label: 'واتساب', icon: MessageCircle, route: 'admin.whatsapp.index', section: 'communications' },
@@ -160,16 +168,9 @@ export const NAV: NavGroup[] = [
                 ],
             },
             /*
-             * والمنظّمون الميدانيّون — المرحلة 14: سجلٌّ مستقلّ بتصنيفاته، يُعيَّنون
-             * منه على الفعاليّة. قسمٌ له بابُه، لا تبويبٌ في المشروع.
+             * والمنظّمون الميدانيّون انتقلوا إلى قسم «العملاء» تبويبًا (`CUSTOMER_TABS`):
+             * سجلُّهم وتصنيفاتُهم هناك، وتعيينُهم على الفعاليّة من شاشتها كما كان.
              */
-            {
-                label: 'المنظّمون',
-                icon: UsersRound,
-                route: 'admin.organizers.index',
-                section: 'organizers',
-                covers: ['admin.organizers.show'],
-            },
             /*
              * وعروضُ الأسعار وحزمُ التسليم خرجت من الشريط: هي مراحلُ المشروع لا
              * أقسامٌ بجانبه — العرضُ بطاقةٌ في قائمة المشاريع حتى يُقبل، والتسليمُ
