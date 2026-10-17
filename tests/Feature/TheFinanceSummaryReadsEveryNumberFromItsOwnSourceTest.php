@@ -23,13 +23,13 @@ use Illuminate\Support\Carbon;
 use Tests\TestCase;
 
 /**
- * الملخّصُ الماليّ رُتّب من جديد — وكلُّ رقمٍ فيه من مصدره كما كان.
+ * الملخّصُ الماليّ — كلُّ رقمٍ فيه من مصدره، أيًّا كان شكلُ الشاشة.
  *
- * تبسيطُ الواجهة لا يمسّ الحساب: الصندوقُ من الدفتر، والبنكُ من `Bank::total`،
- * و«لك عند العملاء» من `Receivables::totals`، و«عليك الدفع» من مجاميع شاشته
- * نفسها، ومصروفاتُ الشهر من `MonthlyExpenses`، وأرقامُ المدّة من
- * `Demo::reportSummary`. والاسمُ وحده تغيّر: `period.sales` صار
- * `period.invoice_total` — الرقمُ نفسه.
+ * الواجهةُ تُرتَّب وتعود ولا تمسّ الحساب: الصندوقُ من الدفتر، والبنكُ من
+ * `Bank::total`، و«لك الآن» من `Receivables::totals`، و«عليك الآن» من مجاميع
+ * «المبالغ المستحقة» نفسها، ومصروفاتُ الشهر من `MonthlyExpenses`، وأرقامُ المدّة
+ * من `Demo::reportSummary`. وإجماليُّ الفواتير يصل باسمه `period.invoice_total`
+ * — الرقمُ نفسه الذي كان يُسمّى `sales`.
  */
 class TheFinanceSummaryReadsEveryNumberFromItsOwnSourceTest extends TestCase
 {
@@ -114,16 +114,16 @@ class TheFinanceSummaryReadsEveryNumberFromItsOwnSourceTest extends TestCase
         $bid = (int) $this->business->id;
         $props = $this->summary();
 
-        // وضعك الآن
+        // الصندوقُ والبنكُ و«لك الآن»
         $this->assertEqualsWithDelta(round(Ledger::account($bid, 'cash')->balance(), 3), $props['cash'], 0.0005, 'الصندوقُ من الدفتر');
         $this->assertEqualsWithDelta(Bank::total($bid), $props['bank'], 0.0005, 'البنكُ من Bank::total');
         $this->assertEqualsWithDelta(3400.0, $props['bank'], 0.0005);
         $this->assertCount(2, $props['accounts']);
-        $this->assertEquals(Receivables::totals($bid), $props['receivables'], 'لك عند العملاء من Receivables::totals');
+        $this->assertEquals(Receivables::totals($bid), $props['receivables'], '«لك الآن» من Receivables::totals');
         $this->assertEqualsWithDelta(1000.0, $props['receivables']['total'], 0.0005);
         $this->assertEqualsWithDelta(1000.0, $props['receivables']['overdue'], 0.0005);
 
-        // عليك الدفع — المجاميعُ نفسُها التي تقرؤها شاشتُه، وكلُّ مستندٍ مرّةً واحدة
+        // عليك الآن — المجاميعُ نفسُها التي تقرؤها «المبالغ المستحقة»، وكلُّ مستندٍ مرّةً واحدة
         $dues = $this->get(route('admin.finance.dues'))->assertOk()->viewData('page')['props']['totals'];
         $this->assertEquals($dues, $props['dues']);
         $this->assertEqualsWithDelta(300.0, $props['dues']['expenses'], 0.0005, 'المصروفُ غيرُ المسدَّد');
@@ -156,7 +156,7 @@ class TheFinanceSummaryReadsEveryNumberFromItsOwnSourceTest extends TestCase
         }
     }
 
-    public function test_the_screens_folded_behind_the_accounting_menu_still_open_with_their_own_permission(): void
+    public function test_every_finance_tab_still_opens_with_its_own_permission(): void
     {
         foreach (['admin.finance.summary', 'admin.finance.transactions', 'admin.finance.receivables', 'admin.finance.dues',
             'admin.finance.index', 'admin.finance.cheques', 'admin.expenses.index', 'admin.finance.journal',
@@ -164,7 +164,7 @@ class TheFinanceSummaryReadsEveryNumberFromItsOwnSourceTest extends TestCase
             $this->get(route($route))->assertOk();
         }
 
-        // من يملك «المالية» دون «المصروفات» يفتح أدوات المحاسب ولا يفتح سجلَّ المصروفات
+        // من يملك «المالية» دون «المصروفات» يفتح شاشاتها ولا يفتح سجلَّ المصروفات
         $clerk = User::create(['business_id' => $this->business->id, 'name' => 'محاسب', 'email' => 'clerk@hadath.om',
             'password' => bcrypt('password'), 'role' => 'accountant', 'status' => 'نشط', 'permissions' => ['dashboard', 'finance']]);
         $this->actingAs($clerk);

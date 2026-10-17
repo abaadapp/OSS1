@@ -32,9 +32,8 @@ export default function Receivables({ totals, aging, invoices, reconciliation }:
     const m = (v: number) => money(v, context!.currency);
 
     return (
-        <AdminLayout title={t('لك عند العملاء')}>
-            {/* العنوانُ بلغة من يسأل، والاسمُ المحاسبيّ سطرٌ تحته — انظر FINANCE_TABS */}
-            <PageHeader title={t('لك عند العملاء')} subtitle={t('الذمم المدينة: فواتير العملاء غير المحصّلة — وما تأخّر منها')} />
+        <AdminLayout title={t('الذمم المدينة')}>
+            <PageHeader title={t('الذمم المدينة')} subtitle={t('ما لك على عملائك — وما تأخّر منه.')} />
             <SectionTabs tabs={FINANCE_TABS} current="admin.finance.receivables" />
 
             <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">

@@ -13,7 +13,7 @@ vi.mock('@/Components/RangeTabs', () => ({ default: () => null }));
  * «مصروفات الشهر» — بطاقةٌ شهريّة تعرض ما يقوله الدفتر ولا تحسب شيئًا.
  *
  * الإجماليُّ والتفصيلُ والمقارنةُ من الخادم، والروابطُ إلى مصادرها لمن يفتح
- * أقسامَها وحدهم، والتفاصيلُ تُفتح بيد — والوجهُ الأوّل خمسةُ أرقامٍ لا أكثر.
+ * أقسامَها وحدهم، والتفاصيلُ تُفتح بيد.
  */
 
 const data = (over: Partial<MonthlyExpenses> = {}): MonthlyExpenses => ({
@@ -35,25 +35,17 @@ const data = (over: Partial<MonthlyExpenses> = {}): MonthlyExpenses => ({
 const m = (v: number) => `${v.toFixed(3)} ر.ع`;
 
 describe('MonthlyExpensesCard', () => {
-    it('reads the month total, the comparison and the obligations — and keeps the groups for the details', async () => {
-        const user = userEvent.setup();
+    it('reads the month total, its groups, the comparison and the obligations', () => {
         render(<MonthlyExpensesCard data={data()} links={{ expenses: true, supplier_invoices: true, payroll: true }} m={m} />);
 
         expect(screen.getByText('مصروفات الشهر من الدفتر')).toBeInTheDocument();
-        expect(screen.getByText(/يشمل الرواتب وسندات الموردين والتكلفة/)).toBeInTheDocument();
-        expect(screen.getByText(/لا سجل المصروفات وحده/)).toBeInTheDocument();
-        expect(screen.getByText(/مستقل عن تبويبات المدة/)).toBeInTheDocument();
+        expect(screen.getByText(/بما فيها الرواتب وسندات الموردين والتكلفة/)).toBeInTheDocument();
         expect(screen.getByText('1200.000 ر.ع')).toBeInTheDocument();
-        expect(screen.getByText(/50٪ عن سبتمبر 2026/)).toBeInTheDocument();
-        expect(screen.getByText('700.000 ر.ع')).toBeInTheDocument();
-        expect(screen.getByText('400.000 ر.ع')).toBeInTheDocument();
-        expect(screen.getByText('150.000 ر.ع')).toBeInTheDocument();
-        expect(screen.queryByText('رواتب ومستحقات موظفين')).not.toBeInTheDocument();
-        expect(screen.queryByText(/مشتريات للمخزون/)).not.toBeInTheDocument();
-
-        await user.click(screen.getByRole('button', { name: /عرض التفاصيل/ }));
         expect(screen.getByText('رواتب ومستحقات موظفين')).toBeInTheDocument();
+        expect(screen.getByText(/50٪ عن سبتمبر 2026/)).toBeInTheDocument();
+        expect(screen.getByText('150.000 ر.ع')).toBeInTheDocument();
         expect(screen.getByText(/مشتريات للمخزون 600.000/)).toBeInTheDocument();
+        expect(screen.getByText(/مستقلة عن تبويبات المدة/)).toBeInTheDocument();
     });
 
     it('opens the details by account and links only to the sections the reader may open', async () => {
@@ -61,7 +53,7 @@ describe('MonthlyExpensesCard', () => {
         const { rerender } = render(<MonthlyExpensesCard data={data()} links={{ expenses: true, supplier_invoices: false, payroll: false }} m={m} />);
 
         expect(screen.queryByText('5150')).not.toBeInTheDocument();
-        await user.click(screen.getByRole('button', { name: /عرض التفاصيل/ }));
+        await user.click(screen.getByRole('button', { name: /عرض تفاصيل المصروفات/ }));
         expect(screen.getByText('5150')).toBeInTheDocument();
         expect(screen.getByRole('link', { name: 'قيود الشهر في اليومية' })).toHaveAttribute('href', expect.stringContaining('admin.finance.journal'));
         expect(screen.getAllByRole('link', { name: 'سجل مصروفات الشهر' })).toHaveLength(1);
