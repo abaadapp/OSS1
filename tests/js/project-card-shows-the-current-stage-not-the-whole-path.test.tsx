@@ -27,7 +27,6 @@ const workflow = (over: Partial<Workflow> = {}): Workflow => ({
     ],
     focus: 'deposit',
     next: 'execution',
-    can_advance: false,
     pending: ['لم تُصدر فاتورة الدفعة المقدمة بعد.'],
     ...over,
 });
@@ -95,7 +94,9 @@ describe('the project card', () => {
 
     it('opens the project from anywhere on the card, and keeps its next step and menu above the link', async () => {
         const user = userEvent.setup();
-        list(props([row({ workflow: workflow({ can_advance: true, pending: [] }) })]));
+        /* الدفعةُ تمّت والفريقُ ما زال عليها — فيُقترح الانتقالُ إلى التي بعدها */
+        const doneHere = workflow().stages.map((s) => (s.key === 'deposit' ? { ...s, state: 'done' as const } : s));
+        list(props([row({ workflow: workflow({ stages: doneHere, pending: [] }) })]));
         const c = card('مؤتمر الطاقة');
 
         const link = within(c).getByRole('link', { name: 'مؤتمر الطاقة' });
@@ -107,7 +108,7 @@ describe('the project card', () => {
         expect(within(c).getByRole('button', { name: 'خيارات' })).toHaveClass('relative', 'z-10');
 
         await user.click(advance);
-        expect(router.post).toHaveBeenCalledWith('/admin.projects.workflow.advance/5', {}, expect.anything());
+        expect(router.post).toHaveBeenCalledWith('/admin.projects.workflow.move/5', { stage: 'execution' }, expect.anything());
     });
 
     it('names a quotation by its first stage and state', () => {

@@ -1,3 +1,4 @@
+import { router } from '@inertiajs/react';
 import { CalendarCheck, FileCheck2, FileSignature, Lock, PackageCheck, Receipt, Wallet, type LucideIcon } from 'lucide-react';
 
 /**
@@ -5,15 +6,16 @@ import { CalendarCheck, FileCheck2, FileSignature, Lock, PackageCheck, Receipt, 
  *
  * ═══ الحقيقةُ في الخادم ═══
  *
- * أيُّ مرحلةٍ تمّت وأين يقف الفريق يحسبه `ProjectWorkflow` من مستندات
- * المشروع (العرض والنطاق الموقَّع والفواتير والفعاليّات والتسليم). وهذا
+ * أيُّ مرحلةٍ تمّت يحسبه `ProjectWorkflow` من مستندات المشروع (العرض
+ * والنطاق الموقَّع والفواتير والفعاليّات والتسليم)، وأين يقف الفريق اختيارُه
+ * اليدويّ — يُنقل إلى أيّ مرحلةٍ بلا شرط (`moveStage`). وهذا
  * الملفّ يرسم ما يصله ولا يقرّر شيئًا: اسمُ المرحلة وأيقونتُها، وتحويلُ
  * الحمولة إلى ما يرسمه الشريط. فبطاقةُ القائمة وصفحةُ المشروع تقرآن
  * المصدرَ نفسَه ولا تفترقان.
  */
 export type StageKey = 'quote' | 'scope' | 'deposit' | 'execution' | 'delivery' | 'final' | 'closing';
 
-/** done: تمّت · current: يُعمل عليها الآن · todo: لم تُفتح · failed: وقفت (ملغى) · skipped: لم تُسجَّل قبل الإقفال */
+/** done: تمّت · current: يُعمل عليها الآن · todo: بعد الحاليّة ولم تتمّ · failed: وقفت (ملغى) · skipped: قبل الحاليّة ولم تكتمل */
 export type StageState = 'done' | 'current' | 'todo' | 'failed' | 'skipped';
 
 export interface Stage {
@@ -21,7 +23,7 @@ export interface Stage {
     label: string;
     icon: LucideIcon;
     state: StageState;
-    /** أهي المرحلةُ التي يعمل عليها الفريق؟ — وقد تكون تامّةً تنتظر «تم — الانتقال» */
+    /** أهي المرحلةُ التي اختارها الفريق؟ — تامّةً كانت أو ناقصة */
     focus?: boolean;
     /** ما يُكتب بجانب الاسم: «ملغى»، «مؤجَّل»، «فُتح»، «بلا دفعة مقدمة» */
     note?: string;
@@ -33,22 +35,23 @@ export interface WorkflowStage {
     state: StageState;
     done?: boolean;
     focus: boolean;
+    /** كلُّ مرحلةٍ تُختار — لا مانعَ في المسار، والإذنُ يُسأل عند النقل */
     reachable?: boolean;
     note: string | null;
-    /** ما ينقصها لتتمّ */
+    /** ما ينقصها لتتمّ — للعرض، لا يمنع شيئًا */
     pending?: string[];
-    /** ما يمنع الوصولَ إليها */
-    blocked_by?: string[];
+    /** تحذيرٌ يُقرأ ولا يمنع: تجاوزها المسارُ ولم تكتمل */
+    warnings?: string[];
 }
 
 export interface Workflow {
     stages: WorkflowStage[];
     focus: StageKey;
+    /** أوّلُ مرحلةٍ لم تتمّ — معلومة، لا تحكم «الآن» */
     frontier?: StageKey | null;
+    /** جارتا المرحلة الحاليّة — اختصارٌ للنقل، لا الطريقُ الوحيد */
     next: StageKey | null;
     previous?: StageKey | null;
-    can_advance: boolean;
-    can_back?: boolean;
     /** في البطاقة: ما ينقص المرحلةَ الحاليّة */
     pending?: string[];
 }
@@ -64,6 +67,16 @@ export const STAGES: { key: StageKey; label: string; icon: LucideIcon }[] = [
 ];
 
 export const STAGE_LABEL: Record<StageKey, string> = Object.fromEntries(STAGES.map((s) => [s.key, s.label])) as Record<StageKey, string>;
+
+/** أتمّت المرحلةُ التي يقف عليها الفريق؟ — فيُقترح «تم — الانتقال» إلى التي بعدها، اقتراحًا لا شرطًا */
+export function focusDone(workflow: Pick<Workflow, 'stages' | 'focus'>): boolean {
+    return workflow.stages.find((s) => s.key === workflow.focus)?.state === 'done';
+}
+
+/** نقلُ المسار إلى أيّ مرحلة — للأمام أو للخلف أو قفزًا؛ والخادمُ يسأل عن الإذن وحدَه */
+export function moveStage(projectId: number, stage: StageKey) {
+    router.post(route('admin.projects.workflow.move', projectId), { stage }, { preserveScroll: true, preserveState: true });
+}
 
 /** حمولةُ الخادم ← ما يرسمه الشريط — بلا حكمٍ واحدٍ يُضاف هنا */
 export function toStages(workflow: Pick<Workflow, 'stages'>): Stage[] {

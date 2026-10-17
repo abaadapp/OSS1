@@ -30,20 +30,18 @@ const TABS = ['المسار', 'البيانات', 'النطاق', 'المتطل�
 
 const workflow: Workflow = {
     stages: [
-        { key: 'quote', state: 'done', done: true, focus: false, reachable: true, note: null, pending: [], blocked_by: [] },
-        { key: 'scope', state: 'done', done: true, focus: false, reachable: true, note: 'فُتح', pending: [], blocked_by: [] },
-        { key: 'deposit', state: 'current', done: false, focus: true, reachable: true, note: null, pending: ['لم تُصدر فاتورة الدفعة المقدمة بعد.'], blocked_by: [] },
-        { key: 'execution', state: 'todo', done: false, focus: false, reachable: false, note: null, pending: [], blocked_by: ['لم تكتمل مرحلة «الدفعة المقدمة» بعد'] },
-        { key: 'delivery', state: 'todo', done: false, focus: false, reachable: false, note: null, pending: [], blocked_by: [] },
-        { key: 'final', state: 'todo', done: false, focus: false, reachable: false, note: null, pending: [], blocked_by: [] },
-        { key: 'closing', state: 'todo', done: false, focus: false, reachable: false, note: null, pending: [], blocked_by: [] },
+        { key: 'quote', state: 'done', done: true, focus: false, reachable: true, note: null, pending: [], warnings: [] },
+        { key: 'scope', state: 'done', done: true, focus: false, reachable: true, note: 'فُتح', pending: [], warnings: [] },
+        { key: 'deposit', state: 'current', done: false, focus: true, reachable: true, note: null, pending: ['لم تُصدر فاتورة الدفعة المقدمة بعد.'], warnings: [] },
+        { key: 'execution', state: 'todo', done: false, focus: false, reachable: true, note: null, pending: ['لا فعاليّة تشغيليّة على هذا المشروع — أنشئ فعاليّة التنفيذ وأتمّها.'], warnings: [] },
+        { key: 'delivery', state: 'todo', done: false, focus: false, reachable: true, note: null, pending: [], warnings: [] },
+        { key: 'final', state: 'todo', done: false, focus: false, reachable: true, note: null, pending: [], warnings: [] },
+        { key: 'closing', state: 'todo', done: false, focus: false, reachable: true, note: null, pending: [], warnings: [] },
     ],
     focus: 'deposit',
     frontier: 'deposit',
     next: 'execution',
     previous: 'scope',
-    can_advance: false,
-    can_back: true,
 };
 
 const draft = { id: 31, number: null, status: 'مسودة', role: 'project_deposit', payment_state: 'غير مدفوعة', issued_at: null, due_at: null, total: 5250, outstanding: null, percent: 50, method: 'percent' };
@@ -197,12 +195,12 @@ describe('the header says the essentials', () => {
         expect(router.post).toHaveBeenCalledWith('/admin.projects.transition/5', { status: 'on_hold' }, expect.anything());
     });
 
-    it('moves forward from the header when the server says the stage is done', async () => {
+    it('suggests moving on from the header once the stage is done — a suggestion, not a gate', async () => {
         const user = userEvent.setup();
-        show({ workflow: { ...workflow, can_advance: true } });
+        show({ workflow: { ...workflow, stages: workflow.stages.map((s) => (s.key === 'deposit' ? { ...s, state: 'done' as const, done: true, pending: [] } : s)) } });
 
         await user.click(within(screen.getByRole('banner')).getByRole('button', { name: /تم — الانتقال إلى التنفيذ/ }));
-        expect(router.post).toHaveBeenCalledWith('/admin.projects.workflow.advance/5', {}, expect.anything());
+        expect(router.post).toHaveBeenCalledWith('/admin.projects.workflow.move/5', { stage: 'execution' }, expect.anything());
     });
 
     it('says a critical problem in full — not as a badge', () => {
@@ -236,15 +234,41 @@ describe('the stepper is compact', () => {
         expect(stepper).toHaveClass('py-1.5');
     });
 
-    it('opens the stage in «المسار» when it is pressed', async () => {
+    it('moves the project to whichever stage a manager presses — back, forward or past an unfinished one — and opens it in «المسار»', async () => {
+        const user = userEvent.setup();
+        show();
+        const stepper = () => screen.getByRole('list', { name: 'مراحل المشروع' });
+
+        await user.click(tab('المهامّ'));
+        await user.click(within(stepper()).getByRole('button', { name: /نطاق العمل/ }));
+        expect(router.post).toHaveBeenLastCalledWith('/admin.projects.workflow.move/5', { stage: 'scope' }, expect.anything());
+        expect(tab('المسار')).toHaveAttribute('aria-selected', 'true');
+        expect(document.getElementById('stage-scope')).not.toBeNull();
+
+        /* قفزٌ فوق «التنفيذ» وهو لم يكتمل — لا زرَّ معطَّلٌ ولا رسالةُ منع */
+        await user.click(within(stepper()).getByRole('button', { name: /الفاتورة النهائية/ }));
+        expect(router.post).toHaveBeenLastCalledWith('/admin.projects.workflow.move/5', { stage: 'final' }, expect.anything());
+        expect(within(stepper()).getAllByRole('button').every((b) => !b.hasAttribute('disabled'))).toBe(true);
+        expect(screen.getByText(/اضغط أيّ مرحلة لتنقل المشروع إليها/)).toBeInTheDocument();
+    });
+
+    it('only opens the current stage when it is pressed — nothing is posted', async () => {
         const user = userEvent.setup();
         show();
 
-        await user.click(tab('المهامّ'));
-        await user.click(within(screen.getByRole('list', { name: 'مراحل المشروع' })).getByRole('button', { name: /نطاق العمل/ }));
-
+        await user.click(within(screen.getByRole('list', { name: 'مراحل المشروع' })).getByRole('button', { name: /الدفعة المقدمة/ }));
+        expect(router.post).not.toHaveBeenCalled();
         expect(tab('المسار')).toHaveAttribute('aria-selected', 'true');
+    });
+
+    it('lets whoever does not manage the project open a stage — and move nothing', async () => {
+        const user = userEvent.setup();
+        show({ may: { ...props().may, manage: false } });
+
+        await user.click(within(screen.getByRole('list', { name: 'مراحل المشروع' })).getByRole('button', { name: /نطاق العمل/ }));
+        expect(router.post).not.toHaveBeenCalled();
         expect(document.getElementById('stage-scope')).not.toBeNull();
+        expect(screen.queryByText(/اضغط أيّ مرحلة لتنقل المشروع إليها/)).not.toBeInTheDocument();
     });
 
     it('still names a stop on a cancelled project', () => {

@@ -2,16 +2,10 @@
 
 namespace Tests\Feature;
 
-use App\Models\ActivityLog;
 use App\Models\CustomerInvoice;
-use App\Models\DocumentApproval;
 use App\Models\EventOperation;
-use App\Models\JournalEntry;
 use App\Models\Project;
-use App\Models\ScopeOfWork;
 use App\Models\Setting;
-use App\Models\User;
-use App\Support\CustomerInvoices;
 use App\Support\DeliveryPackages;
 use App\Support\Import\Provenance;
 use App\Support\Operations\EventOperations;
@@ -33,10 +27,10 @@ use Tests\TestCase;
  *   عرض السعر → نطاق العمل → الدفعة المقدّمة → التنفيذ → التسليم →
  *   الفاتورة النهائيّة → الإغلاق
  *
- * و«تم — الانتقال» لا يتقدّم قبل أن تتمّ المرحلة، و«رجوع» لا يمحو فاتورةً
- * ولا توقيعًا ولا قيدًا. والمؤشّرُ لا يتجاوز الحقيقة: فاتورةُ دفعةٍ تُلغى
- * تُعيده إليها. والإقفالُ يسأل عن النطاق الموقَّع والتنفيذ المكتمل والفوترة
- * الكاملة فوق موانعه القديمة. وبطاقةُ القائمة وصفحةُ المشروع مصدرُهما واحد.
+ * والمؤشّرُ (`workflow_stage`) اختيارٌ يدويٌّ حرّ لا تحرسه هذه الحقائق — انظر
+ * `TheProjectPathMovesToAnyStageByHandTest`. والإقفالُ يسأل عن النطاق الموقَّع
+ * والتنفيذ المكتمل والفوترة الكاملة فوق موانعه القديمة. وبطاقةُ القائمة
+ * وصفحةُ المشروع مصدرُهما واحد.
  */
 class TheProjectWalksSevenStagesFromQuoteToCloseTest extends TestCase
 {
@@ -97,7 +91,8 @@ class TheProjectWalksSevenStagesFromQuoteToCloseTest extends TestCase
 
         Projects::close($project->fresh(), $this->owner);
         $this->assertSame(array_fill_keys(ProjectWorkflow::STAGES, true), $this->done($project));
-        $this->assertSame('closing', ProjectWorkflow::for($project->fresh())['focus']);
+        /* والمراحلُ تمّت بمستنداتها والمؤشّرُ حيث تركه الفريق — الإقفالُ لا يجرّه */
+        $this->assertSame('scope', ProjectWorkflow::for($project->fresh())['focus']);
     }
 
     public function test_execution_reads_the_event_operations_not_a_button(): void
@@ -131,118 +126,7 @@ class TheProjectWalksSevenStagesFromQuoteToCloseTest extends TestCase
         $this->assertTrue($this->done($project)['delivery']);
     }
 
-    /* ─────────────────────────── تقدّمٌ ورجوع ─────────────────────────── */
-
-    public function test_advancing_needs_a_finished_stage_and_entering_execution_starts_the_project(): void
-    {
-        $project = $this->acceptedProject(1000, 10);
-        $this->actingAs($this->owner);
-
-        $this->post(route('admin.projects.workflow.advance', $project->id))->assertSessionHasErrors('workflow');
-        $this->assertSame('scope', $project->fresh()->workflow_stage);
-
-        $this->signedScope($project);
-        $this->actingAs($this->owner)->post(route('admin.projects.workflow.advance', $project->id))->assertSessionHasNoErrors();
-        $this->assertSame('deposit', $project->fresh()->workflow_stage);
-        $this->assertTrue(ActivityLog::where('description', 'like', '%من «نطاق العمل» إلى «الدفعة المقدمة»%')->exists());
-
-        $this->post(route('admin.projects.workflow.advance', $project->id))->assertSessionHasErrors('workflow');
-
-        $this->post(route('admin.projects.billing.waive', $project->id), ['reason' => 'يدفع بعد التسليم'])->assertSessionHasNoErrors();
-        $this->post(route('admin.projects.workflow.advance', $project->id))->assertSessionHasNoErrors();
-
-        $fresh = $project->fresh();
-        $this->assertSame('execution', $fresh->workflow_stage);
-        $this->assertSame(Project::IN_PROGRESS, $fresh->status, 'الدخولُ إلى التنفيذ يبدأه');
-    }
-
-    public function test_going_back_reviews_and_erases_nothing(): void
-    {
-        $project = $this->acceptedProject(1000, 10);
-        $scope = $this->signedScope($project);
-        $invoice = $this->deposit($project);
-        $project->update(['workflow_stage' => 'execution']);
-
-        $entries = JournalEntry::count();
-        $invoiceRow = $invoice->fresh()->only(['status', 'number', 'total', 'issued_at']);
-        $this->actingAs($this->owner)->post(route('admin.projects.workflow.back', $project->id))->assertSessionHasNoErrors();
-        $this->assertSame('deposit', ProjectWorkflow::for($project->fresh())['focus']);
-
-        /* خطوةٌ واحدةٌ لا اثنتان: مؤشّرٌ أبعدُ من ذلك يجعل البطاقةَ تقول غير الحقيقة */
-        $this->actingAs($this->owner)->post(route('admin.projects.workflow.back', $project->id))
-            ->assertSessionHasErrors(['workflow' => 'المسار على مرحلةٍ تامّة قبل التي يُعمل عليها — الرجوع خطوةٌ واحدة. لمراجعة ما قبلها افتحها من الشريط.']);
-        $this->assertSame('deposit', $project->fresh()->workflow_stage);
-
-        /* لا فاتورةٌ أُلغيت ولا تغيّرت، ولا توقيعٌ نُقض، ولا قيدٌ عُكس */
-        $this->assertEquals($invoiceRow, $invoice->fresh()->only(['status', 'number', 'total', 'issued_at']));
-        $this->assertSame(ScopeOfWork::SIGNED, $scope->fresh()->status);
-        $this->assertSame(1, DocumentApproval::where('approvable_type', $scope->getMorphClass())->count());
-        $this->assertTrue($scope->fresh('approval')->approval->verify());
-        $this->assertSame($entries, JournalEntry::count());
-        $this->assertTrue(ActivityLog::where('description', 'like', '%ولم يُمحَ مستندٌ ولا توقيع%')->exists());
-
-        /* والمراحلُ ما زالت تامّةً — والعودةُ إلى الأمام بزرّها */
-        $this->assertTrue($this->done($project)['scope'] && $this->done($project)['deposit']);
-        $this->actingAs($this->owner)->post(route('admin.projects.workflow.advance', $project->id))->assertSessionHasNoErrors();
-        $this->assertSame('execution', $project->fresh()->workflow_stage);
-    }
-
-    public function test_going_back_is_refused_once_a_later_stage_is_already_done(): void
-    {
-        $project = $this->acceptedProject(1000, 10);
-        $this->signedScope($project);
-        $this->deposit($project);
-        $project->update(['workflow_stage' => 'execution']);
-
-        /* التسليمُ قُبل والتنفيذُ لم يكتمل — الحقيقةُ تقدّمت على المؤشّر */
-        $this->acceptedDelivery($project->fresh());
-        $flow = ProjectWorkflow::for($project->fresh());
-        $this->assertSame('execution', $flow['focus']);
-        $this->assertFalse($flow['can_back']);
-
-        $this->actingAs($this->owner)->post(route('admin.projects.workflow.back', $project->id))
-            ->assertSessionHasErrors(['workflow' => 'تمّت مرحلةٌ بعد هذه — الرجوع الآن يجعل المسار يقول غير الحقيقة. افتح المرحلة من الشريط لمراجعتها.']);
-        $this->assertSame('execution', $project->fresh()->workflow_stage);
-    }
-
-    public function test_the_pointer_never_lags_the_truth_by_more_than_one_stage(): void
-    {
-        $project = $this->acceptedProject(1000, 10);
-        $this->signedScope($project);
-        $this->deposit($project);
-        $this->completedOperation($project->fresh());
-        $this->acceptedDelivery($project->fresh());
-
-        /* المؤشّرُ المكتوبُ ما زال على «نطاق العمل» — والحقيقةُ عند الفاتورة النهائيّة */
-        $this->assertSame('scope', $project->fresh()->workflow_stage);
-        $flow = ProjectWorkflow::for($project->fresh());
-        $this->assertSame('delivery', $flow['focus'], 'تامّةٌ تنتظر الانتقال — لا «نطاق العمل» وقد تمّ التنفيذ والتسليم');
-        $this->assertSame('done', collect($flow['stages'])->firstWhere('key', 'delivery')['state']);
-        $this->assertSame('final', $flow['next']);
-        $this->assertTrue($flow['can_advance']);
-
-        $this->actingAs($this->owner)->post(route('admin.projects.workflow.advance', $project->id))->assertSessionHasNoErrors();
-        $this->assertSame('final', ProjectWorkflow::for($project->fresh())['focus']);
-    }
-
-    public function test_the_pointer_never_runs_past_the_truth(): void
-    {
-        $project = $this->acceptedProject(1000, 10);
-        $project->update(['workflow_stage' => 'final']);
-        $this->assertSame('scope', ProjectWorkflow::for($project->fresh())['focus'], 'مؤشّرٌ كُتب بيدٍ لا يتجاوز أوّلَ ما لم يتمّ');
-
-        $this->signedScope($project);
-        $invoice = $this->deposit($project);
-        $project->update(['workflow_stage' => 'execution']);
-        $this->assertSame('execution', ProjectWorkflow::for($project->fresh())['focus']);
-
-        /* فاتورةُ الدفعة تُلغى من بابها — فيعود المسارُ إلى مرحلتها وحدَه */
-        CustomerInvoices::cancel($invoice->fresh(), 'خطأ في المبلغ', $this->owner->id);
-        $flow = ProjectWorkflow::for($project->fresh());
-        $this->assertSame('deposit', $flow['focus']);
-        $this->assertSame('current', $flow['stages'][2]['state']);
-        $this->assertSame('execution', $project->fresh()->workflow_stage, 'والمؤشّرُ المكتوبُ لم يُمسّ — القراءةُ تقصّه');
-    }
+    /* ─────────────────────────── الموقوف ─────────────────────────── */
 
     public function test_a_cancelled_project_shows_where_it_stopped(): void
     {
@@ -252,9 +136,7 @@ class TheProjectWalksSevenStagesFromQuoteToCloseTest extends TestCase
 
         $this->assertSame('failed', $flow['stages'][1]['state']);
         $this->assertSame('ملغى', $flow['stages'][1]['note']);
-        $this->assertFalse($flow['can_advance']);
-        $this->assertFalse($flow['can_back']);
-        $this->actingAs($this->owner)->post(route('admin.projects.workflow.advance', $project->id))->assertSessionHasErrors('workflow');
+        $this->assertSame(Project::CANCELLED, $project->fresh()->status);
     }
 
     /* ─────────────────────────── الإغلاق ─────────────────────────── */
@@ -327,26 +209,9 @@ class TheProjectWalksSevenStagesFromQuoteToCloseTest extends TestCase
 
         $this->assertSame('scope', $cards[$waiting->id]['workflow']['focus']);
         $this->assertSame('deposit', $cards[$signed->id]['workflow']['focus']);
-        $this->assertTrue($cards[$signed->id]['workflow']['can_advance'], 'الدفعةُ صدرت — «تم — الانتقال» على البطاقة');
-    }
-
-    public function test_only_project_managers_move_the_path_and_never_on_another_company(): void
-    {
-        $project = $this->acceptedProject(1000, 10);
-        $this->signedScope($project);
-        $seller = User::create([
-            'business_id' => $this->business->id, 'name' => 'بائع', 'email' => 'seller@eventplus.om',
-            'password' => bcrypt('password'), 'role' => 'sales', 'status' => 'نشط',
-        ]);
-
-        $this->actingAs($seller)->post(route('admin.projects.workflow.advance', $project->id))->assertForbidden();
-        $this->actingAs($seller)->post(route('admin.projects.workflow.back', $project->id))->assertForbidden();
-
-        $mine = $this->business;
-        $this->journeyCompany('شركة أخرى');
-        $this->actingAs($this->owner)->post(route('admin.projects.workflow.advance', $project->id))->assertNotFound();
-
-        $this->assertSame('scope', $project->fresh()->workflow_stage);
-        $this->assertNotNull($mine);
+        /* الدفعةُ صدرت — تامّةٌ على البطاقة بلا ما ينقصها، فيُقترح الانتقال */
+        $this->assertSame('done', $cards[$signed->id]['workflow']['stages'][2]['state']);
+        $this->assertSame([], $cards[$signed->id]['workflow']['pending']);
+        $this->assertArrayNotHasKey('can_advance', $cards[$signed->id]['workflow']);
     }
 }

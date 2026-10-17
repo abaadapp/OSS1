@@ -35,20 +35,18 @@ afterEach(() => vi.clearAllMocks());
 
 const flow: Workflow = {
     stages: [
-        { key: 'quote', state: 'done', done: true, focus: false, reachable: true, note: null, pending: [], blocked_by: [] },
-        { key: 'scope', state: 'done', done: true, focus: false, reachable: true, note: null, pending: [], blocked_by: [] },
-        { key: 'deposit', state: 'current', done: false, focus: true, reachable: true, note: null, pending: ['لم تُصدر فاتورة الدفعة المقدمة بعد.'], blocked_by: [] },
-        { key: 'execution', state: 'todo', done: false, focus: false, reachable: false, note: null, pending: ['لا فعاليّة تشغيليّة على هذا المشروع — أنشئ فعاليّة التنفيذ وأتمّها.'], blocked_by: ['لم تكتمل مرحلة «الدفعة المقدمة» بعد', 'لم تُصدر فاتورة الدفعة المقدمة بعد.'] },
-        { key: 'delivery', state: 'todo', done: false, focus: false, reachable: false, note: null, pending: [], blocked_by: [] },
-        { key: 'final', state: 'todo', done: false, focus: false, reachable: false, note: null, pending: [], blocked_by: [] },
-        { key: 'closing', state: 'todo', done: false, focus: false, reachable: false, note: null, pending: [], blocked_by: [] },
+        { key: 'quote', state: 'done', done: true, focus: false, reachable: true, note: null, pending: [], warnings: [] },
+        { key: 'scope', state: 'done', done: true, focus: false, reachable: true, note: null, pending: [], warnings: [] },
+        { key: 'deposit', state: 'current', done: false, focus: true, reachable: true, note: null, pending: ['لم تُصدر فاتورة الدفعة المقدمة بعد.'], warnings: [] },
+        { key: 'execution', state: 'todo', done: false, focus: false, reachable: true, note: null, pending: ['لا فعاليّة تشغيليّة على هذا المشروع — أنشئ فعاليّة التنفيذ وأتمّها.'], warnings: [] },
+        { key: 'delivery', state: 'todo', done: false, focus: false, reachable: true, note: null, pending: [], warnings: [] },
+        { key: 'final', state: 'todo', done: false, focus: false, reachable: true, note: null, pending: [], warnings: [] },
+        { key: 'closing', state: 'todo', done: false, focus: false, reachable: true, note: null, pending: [], warnings: [] },
     ],
     focus: 'deposit',
     frontier: 'deposit',
     next: 'execution',
     previous: 'scope',
-    can_advance: false,
-    can_back: true,
 };
 
 const data = (): ProcessData => ({
@@ -96,12 +94,16 @@ describe('the project path', () => {
         render(<ProcessTab p={project} d={data()} stages={toStages(flow)} may={may} m={(v) => String(v ?? '—')} focus={null} onTab={() => undefined} />);
 
         expect(screen.getByRole('button', { name: /إنشاء فاتورة الدفعة المقدمة/ })).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: /تم — الانتقال إلى/ })).toBeDisabled();
+        /* الدفعةُ لم تتمّ — والانتقالُ منها متاحٌ على كلّ حال */
+        expect(screen.getByRole('button', { name: 'الانتقال إلى التنفيذ' })).toBeEnabled();
 
-        /* والمرحلةُ المقفلة تقول ما يمنعها */
+        /* ومرحلةٌ بعدها تُفتح بما ينقصها تحذيرًا — لا قفلَ ولا «لا تُفتح» */
         const stage = (key: string) => within(document.getElementById(`stage-${key}`)!).getAllByRole('button')[0];
         await user.click(stage('execution'));
-        expect(screen.getByText('لا تُفتح هذه المرحلة بعد')).toBeInTheDocument();
+        expect(screen.queryByText('لا تُفتح هذه المرحلة بعد')).not.toBeInTheDocument();
+        expect(screen.queryByText(/لم تكتمل مرحلة/)).not.toBeInTheDocument();
+        expect(within(document.getElementById('stage-execution')!).getByText(/لا فعاليّة تشغيليّة على هذا المشروع/)).toBeInTheDocument();
+        expect(within(document.getElementById('stage-execution')!).getByRole('button', { name: 'الانتقال إلى هذه المرحلة' })).toBeEnabled();
 
         await user.click(stage('quote'));
         expect(screen.getByText('دليل القبول')).toBeInTheDocument();

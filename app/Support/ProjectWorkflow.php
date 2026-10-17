@@ -9,9 +9,10 @@ use App\Models\Project;
 use App\Models\ScopeOfWork;
 use App\Models\User;
 use App\Support\Operations\EventOperations;
+use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
-use RuntimeException;
+use InvalidArgumentException;
 
 /**
  * مسارُ المشروع — سبعُ مراحل، وكلٌّ منها تُقرأ من حقيقتها.
@@ -30,12 +31,16 @@ use RuntimeException;
  * • الفاتورة النهائيّة: صافي المفوتَر بلغ القيمةَ الحاليّة (`ProjectFinancials`).
  * • الإغلاق: المشروعُ مُقفَل.
  *
- * ═══ و«أين نعمل الآن» مؤشّرٌ تحرسه الحقيقة ═══
+ * ═══ و«أين نعمل الآن» اختيارٌ يدويٌّ حرّ ═══
  *
- * `workflow_stage` المرحلةُ التي يعمل عليها الفريق: لا تتقدّم إلّا بعد أن
- * تتمّ التي قبلها (`advance`)، وتعود خطوةً للمراجعة (`back`) بلا أن يُمحى
- * شيء — لا فاتورةٌ ولا توقيعٌ ولا قيد. وما يتجاوز أوّلَ مرحلةٍ لم تتمّ
- * يُقصّ عند القراءة: فاتورةُ دفعةٍ أُلغيت تُعيد المسارَ إليها وحدَه.
+ * `workflow_stage` المرحلةُ التي اختارها الفريق — مؤشّرُ عملٍ لا مصدرُ حقيقة.
+ * يُنقل إلى أيّ مرحلةٍ في أيّ وقت (`moveTo`)، للأمام أو للخلف أو قفزًا، بلا
+ * سؤالٍ عن اكتمال ما قبلها ولا ما بعدها. والحقائقُ تُعرض بجانبه — ما تمّ،
+ * وما ينقص، وتحذيرٌ على ما تجاوزه المسارُ وهو ناقص — ولا تحرسه.
+ *
+ * والنقلُ لا يمحو شيئًا: لا فاتورةً ولا توقيعًا ولا قيدًا ولا حزمةَ تسليم.
+ * ولا يغيّر حالةَ المشروع — البدءُ والتأجيلُ والإقفالُ أبوابُها في `Projects`
+ * — ولا الإقفالُ يجرّ المؤشّرَ إلى «الإغلاق»: الحالةُ والمرحلةُ مفهومان منفصلان.
  *
  * ومنه تقرأ بطاقةُ القائمة وصفحةُ المشروع معًا — مصدرٌ واحدٌ لا اثنان.
  */
@@ -236,7 +241,7 @@ final class ProjectWorkflow
     }
 
     /**
-     * من الحقائق إلى المسار: ما تمّ، وأين يقف الفريق، وما بعده.
+     * من الحقائق إلى المسار: ما تمّ، وأين اختار الفريقُ أن يقف، وما حوله.
      *
      * @param  array<string, array<string, mixed>>  $facts
      * @return array<string, mixed>
@@ -247,24 +252,17 @@ final class ProjectWorkflow
         $done = array_map(fn (string $k) => (bool) $facts[$k]['done'], self::STAGES);
         $frontier = array_search(false, $done, true);
         $frontier = $frontier === false ? null : (int) $frontier;
-        $open = $project->isOpen();
-
-        $pointer = array_search($project->workflow_stage, self::STAGES, true);
-        $cap = $frontier ?? $last;
 
         /*
-         * ═══ والمؤشّرُ لا يبتعد عن الحقيقة أكثرَ من خطوة ═══
+         * ═══ المؤشّرُ ما اختاره الفريق — لا يُقصّ ═══
          *
-         * لا يتجاوز أوّلَ مرحلةٍ لم تتمّ (`$cap`)، ولا يتأخّر عنها إلّا بمرحلةٍ
-         * واحدة: تامّةٍ تنتظر «تم — الانتقال»، أو أُعيد إليها للمراجعة. فمشروعٌ
-         * تمّ تنفيذُه وتسليمُه ومؤشّرُه على «الدفعة» لا تقول بطاقتُه «الدفعة
-         * المقدمة» — تقول «التسليم» تامًّا ينتظر الانتقال إلى الفاتورة النهائيّة.
+         * مرحلةٌ مكتوبةٌ صحيحة هي «الآن» كما هي: تقدّمت على الحقيقة أو تأخّرت
+         * عنها، والمشروعُ قائمٌ أو مُقفَل أو ملغى. وأوّلُ مرحلةٍ لم تتمّ
+         * (`frontier`) معلومةٌ تُعرض لا حَكَم — لا تُقرأ إلّا حين لا مؤشّرَ
+         * مكتوبًا أصلًا.
          */
-        $focus = match (true) {
-            $project->isClosed() => $last,
-            $pointer === false => $cap,
-            default => max(max(0, $cap - 1), min((int) $pointer, $cap)),
-        };
+        $pointer = array_search($project->workflow_stage, self::STAGES, true);
+        $focus = $pointer !== false ? (int) $pointer : ($frontier ?? $last);
 
         $stages = [];
         foreach (self::STAGES as $i => $key) {
@@ -289,123 +287,70 @@ final class ProjectWorkflow
                 'state' => $state,
                 'done' => $done[$i],
                 'focus' => $i === $focus,
-                'reachable' => $frontier === null || $i <= $frontier,
+                /* كلُّ مرحلةٍ تُختار — والإذنُ يُسأل عند النقل (`PROJECT_MANAGE`) لا هنا */
+                'reachable' => true,
                 'note' => $note,
                 'pending' => array_values($facts[$key]['pending']),
-                /* وما يمنع الوصولَ إليها: ما لم يتمّ في أوّل مرحلةٍ مفتوحةٍ قبلها */
-                'blocked_by' => $frontier !== null && $i > $frontier
-                    ? array_merge([__('لم تكتمل مرحلة «:stage» بعد', ['stage' => __(self::LABELS[self::STAGES[$frontier]])])], array_values($facts[self::STAGES[$frontier]]['pending']))
-                    : [],
+                /* تحذيرٌ يُقرأ ولا يمنع: مرحلةٌ تجاوزها المسارُ ولم تكتمل */
+                'warnings' => $state === 'skipped' ? [__('تجاوزها المسار ولم تكتمل بعد — للعلم، لا يمنع شيئًا.')] : [],
             ];
         }
-
-        $backBlock = self::backBlock($open, $focus, $cap, $done);
 
         return [
             'stages' => $stages,
             'focus' => self::STAGES[$focus],
+            /* أوّلُ مرحلةٍ لم تتمّ — معلومةٌ لا تحكم «الآن» ولا تقفل مرحلة */
             'frontier' => $frontier === null ? null : self::STAGES[$frontier],
             'next' => $focus < $last ? self::STAGES[$focus + 1] : null,
             'previous' => $focus > 0 ? self::STAGES[$focus - 1] : null,
-            'can_advance' => $open && $done[$focus] && $focus < $last,
-            'can_back' => $backBlock === null,
-            'back_blocked' => $backBlock,
         ];
-    }
-
-    /**
-     * أيجوز «رجوع» الآن؟ — `null` إن جاز، وإلّا سببُ المنع بنصّه.
-     *
-     * الرجوعُ خطوةٌ واحدةٌ من المرحلة التي يُعمل عليها إلى التامّة قبلها،
-     * للمراجعة. ولا يجوز إن تمّت مرحلةٌ بعدها: الحقيقةُ تقدّمت، والمؤشّرُ
-     * المُعاد يجعل البطاقةَ تقول غيرها. والمراجعةُ بلا تحريكٍ متاحةٌ دائمًا —
-     * كلُّ مرحلةٍ في الشريط تُفتح تفاصيلُها.
-     *
-     * @param  list<bool>  $done
-     */
-    private static function backBlock(bool $open, int $focus, int $cap, array $done): ?string
-    {
-        return match (true) {
-            ! $open => __('لا يتحرّك مسار مشروعٍ مُقفَل أو ملغى.'),
-            $focus === 0 => __('هذه أوّل مرحلة في المسار.'),
-            $focus < $cap => __('المسار على مرحلةٍ تامّة قبل التي يُعمل عليها — الرجوع خطوةٌ واحدة. لمراجعة ما قبلها افتحها من الشريط.'),
-            in_array(true, array_slice($done, $focus + 1), true) => __('تمّت مرحلةٌ بعد هذه — الرجوع الآن يجعل المسار يقول غير الحقيقة. افتح المرحلة من الشريط لمراجعتها.'),
-            default => null,
-        };
     }
 
     /* ─────────────────────────── الحركة ─────────────────────────── */
 
     /**
-     * «تم — الانتقال إلى …» — لا تتقدّم المرحلةُ إلّا وقد تمّت التي قبلها.
+     * نقلُ المسار إلى أيّ مرحلة — للأمام أو للخلف أو قفزًا فوق مراحل.
      *
-     * والدخولُ إلى التنفيذ يبدأه: مشروعٌ مؤكَّدٌ يصير «قيد التنفيذ» من بابه
-     * (`Projects::transition`) لا بكتابةٍ هنا.
-     */
-    public static function advance(Project $project, ?User $actor = null): Project
-    {
-        return DB::transaction(function () use ($project, $actor) {
-            $locked = Project::where('business_id', $project->business_id)->lockForUpdate()->findOrFail($project->id);
-
-            if (! $locked->isOpen()) {
-                throw new RuntimeException(__('لا يتحرّك مسار مشروعٍ مُقفَل أو ملغى.'));
-            }
-
-            $flow = self::for($locked);
-            $focus = collect($flow['stages'])->firstWhere('key', $flow['focus']);
-
-            if (! $flow['can_advance']) {
-                throw new RuntimeException($focus['done']
-                    ? __('هذه آخر مرحلة في المسار.')
-                    : __('لم تكتمل مرحلة «:stage» بعد — :why', [
-                        'stage' => __(self::LABELS[$flow['focus']]),
-                        'why' => implode(' · ', $focus['pending']),
-                    ]));
-            }
-
-            $next = (string) $flow['next'];
-            $locked->update(['workflow_stage' => $next]);
-
-            if ($next === self::EXECUTION && $locked->status === Project::CONFIRMED) {
-                Projects::transition($locked, Project::IN_PROGRESS, null, $actor);
-            }
-
-            Activity::log('status', 'نقل المشروع '.$locked->code.' في مساره من «'.self::LABELS[$flow['focus']].'» إلى «'.self::LABELS[$next].'»', [
-                'subject_id' => $locked->id, 'subject_type' => 'project', 'icon' => 'arrow-left', 'color' => 'primary',
-            ]);
-
-            return $locked->fresh();
-        });
-    }
-
-    /**
-     * «رجوع إلى …» — خطوةٌ للمراجعة، لا تراجعٌ يمحو.
+     * لا يُسأل إلّا ثلاثة: المشروعُ من شركة الفاعل، والمرحلةُ من السبع،
+     * والفاعلُ يملك `PROJECT_MANAGE`. ولا يُسأل عن اكتمال الحاليّة ولا
+     * السابقة، ولا عن فاتورةٍ أو توقيعٍ أو فعاليّةٍ أو تسليم.
      *
-     * لا تُلغى فاتورةٌ ولا يُنقض توقيعٌ ولا يُعكس قيد: المؤشّرُ وحدَه يعود.
-     * وما يحتاج تغييرًا بعدها له بابُه — نسخةٌ جديدة من النطاق، أو أمرُ
-     * تغيير، أو إلغاءٌ وإشعارُ دائنٍ لفاتورةٍ صدرت.
+     * ويكتب المؤشّرَ وحدَه وسطرًا في السجلّ: لا تُلغى فاتورةٌ ولا يُنقض
+     * توقيعٌ ولا يُعكس قيدٌ ولا تُلغى حزمة، ولا تتغيّر حالةُ المشروع — «بدء
+     * التنفيذ» و«الإقفال» أبوابُهما في `Projects`.
+     *
+     * وبلا فاعلٍ ولا مستخدمٍ في الطلب (بذرةٌ أو أمرُ طرفيّة) لا يُسأل عن إذن.
      */
-    public static function back(Project $project, ?User $actor = null): Project
+    public static function moveTo(Project $project, string $stage, ?User $actor = null): Project
     {
-        return DB::transaction(function () use ($project) {
-            $locked = Project::where('business_id', $project->business_id)->lockForUpdate()->findOrFail($project->id);
+        if (! in_array($stage, self::STAGES, true)) {
+            throw new InvalidArgumentException(__('مرحلةٌ غير معروفة في مسار المشروع.'));
+        }
 
-            if (! $locked->isOpen()) {
-                throw new RuntimeException(__('لا يتحرّك مسار مشروعٍ مُقفَل أو ملغى.'));
+        $actor ??= auth()->user();
+        if ($actor !== null && ! $actor->may(Permissions::PROJECT_MANAGE)) {
+            throw new AuthorizationException(__('نقل مسار المشروع لمن يملك إدارة المشروع.'));
+        }
+
+        return DB::transaction(function () use ($project, $stage, $actor) {
+            /* المشروعُ من شركة الفاعل — ومن غيرها كأنّه غيرُ موجود */
+            $bid = $actor !== null ? (int) ($actor->business_id ?? Demo::bid()) : (int) $project->business_id;
+            $locked = Project::where('business_id', $bid)->lockForUpdate()->findOrFail($project->id);
+
+            $from = in_array($locked->workflow_stage, self::STAGES, true) ? (string) $locked->workflow_stage : null;
+            if ($from === $stage) {
+                return $locked;
             }
 
-            $flow = self::for($locked);
+            $locked->update(['workflow_stage' => $stage]);
 
-            if (! $flow['can_back']) {
-                throw new RuntimeException((string) $flow['back_blocked']);
-            }
-
-            $previous = (string) $flow['previous'];
-            $locked->update(['workflow_stage' => $previous]);
-
-            Activity::log('status', 'أعاد المشروع '.$locked->code.' في مساره من «'.self::LABELS[$flow['focus']].'» إلى «'.self::LABELS[$previous].'» — للمراجعة، ولم يُمحَ مستندٌ ولا توقيع', [
-                'subject_id' => $locked->id, 'subject_type' => 'project', 'icon' => 'arrow-right', 'color' => 'warning',
-            ]);
+            $back = $from !== null && array_search($stage, self::STAGES, true) < array_search($from, self::STAGES, true);
+            Activity::log('status', $from === null
+                ? 'نقل المشروع '.$locked->code.' يدويًا إلى «'.self::LABELS[$stage].'»'
+                : 'نقل المشروع '.$locked->code.' يدويًا من «'.self::LABELS[$from].'» إلى «'.self::LABELS[$stage].'»', [
+                    'subject_id' => $locked->id, 'subject_type' => 'project',
+                    'icon' => $back ? 'arrow-right' : 'arrow-left', 'color' => 'primary',
+                ]);
 
             return $locked->fresh();
         });
@@ -415,7 +360,7 @@ final class ProjectWorkflow
      * من عمل في مرحلةٍ أبعد من المؤشّر — يلحقه المؤشّرُ إليها بلا ضجيج.
      *
      * إصدارُ الدفعة من مرحلتها والمؤشّرُ على النطاق يعني أنّ الفريق هناك.
-     * ولا يتجاوز أوّلَ مرحلةٍ لم تتمّ — القراءةُ تقصّه على كلّ حال.
+     * ولا يعود به إلى الخلف أبدًا: مرحلةٌ اختارها الفريقُ بعدها تبقى.
      */
     public static function touch(Project $project, string $stage): void
     {
