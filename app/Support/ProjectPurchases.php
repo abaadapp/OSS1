@@ -32,11 +32,12 @@ final class ProjectPurchases
     {
         $money = $user->may(Permissions::INVOICE_VIEW);
 
-        $orders = PurchaseOrder::where('business_id', $project->business_id)->where('project_id', $project->id)
+        // ولمن قُيّد بفروعٍ أوامرُ فروعه وسنداتُها وحدها — انظر BranchAccess
+        $orders = BranchAccess::limit(PurchaseOrder::where('business_id', $project->business_id))->where('project_id', $project->id)
             ->with(['supplier:id,name,supplier_type', 'items:id,purchase_order_id,line_kind,quantity,received_quantity'])
             ->orderByDesc('ordered_at')->orderByDesc('id')->get();
 
-        $invoices = SupplierInvoice::where('business_id', $project->business_id)->where('project_id', $project->id)
+        $invoices = BranchAccess::limitThrough(SupplierInvoice::where('business_id', $project->business_id), 'purchaseOrder')->where('project_id', $project->id)
             ->with('supplier:id,name')->orderByDesc('issued_at')->orderByDesc('id')->get();
 
         $rows = $orders->map(function (PurchaseOrder $o) {

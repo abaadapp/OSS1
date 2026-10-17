@@ -6642,5 +6642,6 @@
     "رُفض تأكيد التنفيذ :n": "Completion confirmation :n rejected",
     "هذا الفرع ليس من فروع عملك.": "This branch is not one of your working branches.",
     "أنت تعمل في فروعٍ محدّدة — اختر للموظف فروعًا منها، فترك الفروع فارغةً يفتح له كل الفروع.": "You work in specific branches — pick branches for this employee from yours; leaving them empty opens every branch.",
-    "لا تمنح فرعًا لا تعمل فيه.": "You cannot grant a branch you do not work in."
+    "لا تمنح فرعًا لا تعمل فيه.": "You cannot grant a branch you do not work in.",
+    "إضافة فرعٍ جديد لصاحب النشاط ولمن لا تُحدَّد له فروع عمل.": "Adding a new branch is for the business owner and staff without specific working branches."
 }

@@ -19,11 +19,11 @@ import type { Branch } from '@/types/models';
  * التي تُبقي الرابط المباشر يعمل. ولذلك لا يعرف شيئًا عن AdminLayout ولا عن
  * ترويسة الصفحة — يأخذ بياناته من الخارج ويرسم نفسه، فلا تتباعد النسختان.
  */
-export default function BranchesPanel({ branches }: { branches: Branch[] }) {
+export default function BranchesPanel({ branches, canCreate = true }: { branches: Branch[]; canCreate?: boolean }) {
     const { errors } = usePage<PageProps>().props;
     const t = useTranslate();
     // النموذج يبقى مفتوحًا إن عاد الخادم بأخطاء، وإلا ضاعت مدخلات المستخدم
-    const [adding, setAdding] = useState(Object.keys(errors ?? {}).length > 0);
+    const [adding, setAdding] = useState(canCreate && Object.keys(errors ?? {}).length > 0);
 
     const form = useForm({ name: '', phone: '', address: '' });
 
@@ -109,7 +109,7 @@ export default function BranchesPanel({ branches }: { branches: Branch[] }) {
                 </Card>
             </div>
 
-            {adding && (
+            {canCreate && adding && (
                 <Card className="p-6">
                     <div className="mb-5 flex items-center gap-2">
                         <span className="flex size-9 items-center justify-center rounded-[10px] bg-[#111] text-white">
@@ -155,10 +155,18 @@ export default function BranchesPanel({ branches }: { branches: Branch[] }) {
                     الإعدادات حيث لا ترويسة له، فيلزم أن يحمل أدواته معه */}
                 <div className="flex items-center justify-between border-b border-[var(--ui-border,#e8e8e8)] px-5 pt-5 pb-4">
                     <h3 className="text-[17px] font-bold text-[#111]">{t('قائمة الفروع')}</h3>
-                    <Button onClick={() => setAdding((v) => !v)}>
-                        <Plus />
-                        {t('إضافة فرع')}
-                    </Button>
+                    {/* والزرُّ لمن يُنشئ فعلًا: المقيَّدُ بفروعٍ لا يُنشئ فرعًا لن يكون من
+                        فروعه — والخادمُ يردّه أيضًا (`BranchAccess::mayCreateBranch`) */}
+                    {canCreate ? (
+                        <Button onClick={() => setAdding((v) => !v)}>
+                            <Plus />
+                            {t('إضافة فرع')}
+                        </Button>
+                    ) : (
+                        <p className="max-w-[60%] text-end text-[12px] text-[#6b7280]" data-testid="branch-create-locked">
+                            {t('إضافة فرعٍ جديد لصاحب النشاط ولمن لا تُحدَّد له فروع عمل.')}
+                        </p>
+                    )}
                 </div>
                 <DataTable
                     rows={branches}

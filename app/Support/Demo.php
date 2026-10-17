@@ -986,7 +986,8 @@ class Demo
          * في كل صفّ، فمئتا عميلٍ ستّمئة استعلام — ويجمعان الملغى والمعلّق
          * معًا، فيخالفان صفحة العميل نفسه.
          */
-        $sold = fn ($q) => $q->where('status', CustomerInvoice::ISSUED);
+        // ولمن قُيّد بفروعٍ: عددُ فواتير العميل ومجموعُها وآخرُها من فروعه وحدها
+        $sold = fn ($q) => BranchAccess::invoices($q->where('status', CustomerInvoice::ISSUED), null, 'customer_invoices.branch_id');
 
         /*
          * وآخرُ فاتورةٍ برقمها لا بتاريخها وحده.
@@ -996,7 +997,7 @@ class Demo
          * في سجلّ الفواتير بالاسم ويقلّب الصفحات. وهما عمودان في الاستعلام
          * نفسه، فلا استعلامَ لكلّ صفّ.
          */
-        $lastSold = fn (string $column) => CustomerInvoice::select($column)
+        $lastSold = fn (string $column) => BranchAccess::invoices(CustomerInvoice::select($column), null, 'customer_invoices.branch_id')
             ->whereColumn('customer_invoices.customer_id', 'customers.id')
             ->where('status', CustomerInvoice::ISSUED)
             ->orderByDesc('issued_at')
@@ -1073,7 +1074,8 @@ class Demo
      */
     public static function customerOrders($id): array
     {
-        return CustomerInvoice::where('business_id', self::bid())->where('customer_id', $id)->withMoney()
+        // ولمن قُيّد بفروعٍ فواتيرُ فروعه وحدها — انظر BranchAccess
+        return BranchAccess::invoices(CustomerInvoice::where('business_id', self::bid()))->where('customer_id', $id)->withMoney()
             ->where('status', '!=', CustomerInvoice::DRAFT)
             ->withCount('items')->orderByDesc('issued_at')->orderByDesc('id')->get()->map(fn ($i) => [
                 'id' => $i->number,
@@ -2204,7 +2206,7 @@ class Demo
          * و`whereHas` تمرّ على العلاقة، فيسري عليها حذفُ العميل الناعم —
          * فيُقرأ الجدولان من عالمٍ واحد.
          */
-        $totalPurchases = (float) CustomerInvoice::where('business_id', $bid)
+        $totalPurchases = (float) BranchAccess::invoices(CustomerInvoice::where('business_id', $bid))
             ->where('status', CustomerInvoice::ISSUED)
             ->whereHas('customer')->sum('total');
 
@@ -2729,7 +2731,8 @@ class Demo
          * فمن مُنح الاعتماد ولم يُمنح القراءة كان الجرسُ يقوده إلى ٤٠٣.
          */
         if ($u && $u->may(Permissions::RECEIPT_APPROVE) && $u->may(Permissions::RECEIPT_VIEW)) {
-            $waiting = GoodsReceiptNote::where('business_id', $bid)
+            // ولمن قُيّد بفروعٍ سنداتُ فروعه وحدها: الجرسُ لا يقود إلى ما لا يُفتح
+            $waiting = BranchAccess::limit(GoodsReceiptNote::where('business_id', $bid))
                 ->where('status', GoodsReceipts::PENDING)
                 ->with('supplier')->orderBy('id')->limit($limit)->get();
 
@@ -2809,7 +2812,7 @@ class Demo
          * يحتاج انتباهًا فعلًا: فاتورةٌ مضى استحقاقُها وعليها باقٍ — والحالُ
          * تُشتقّ من `scopeOverdue` لا تُخزَّن.
          */
-        $overdue = CustomerInvoice::where('business_id', $bid)
+        $overdue = BranchAccess::invoices(CustomerInvoice::where('business_id', $bid))
             ->overdue()->orderBy('due_at')->limit($limit)->get();
         foreach ($overdue as $invoice) {
             $add('invoice-'.$invoice->number, [

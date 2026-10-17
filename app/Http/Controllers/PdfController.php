@@ -196,7 +196,8 @@ class PdfController extends Controller
         $bid = auth()->user()->business_id ?? Demo::bid();
         $customer = Customer::where('business_id', $bid)->findOrFail($id);
 
-        $orders = Order::where('business_id', $bid)->where('customer_id', $customer->id)->sold()
+        // ولمن قُيّد بفروعٍ: كشفُه ما بيع في فروعه — انظر BranchAccess
+        $orders = BranchAccess::limit(Order::where('business_id', $bid))->where('customer_id', $customer->id)->sold()
             ->orderBy('ordered_at')->get();
         $returns = collect();
 
@@ -367,7 +368,7 @@ class PdfController extends Controller
     public function customerInvoice($id)
     {
         $bid = auth()->user()->business_id ?? Demo::bid();
-        $invoice = CustomerInvoice::where('business_id', $bid)->whereKey($id)
+        $invoice = BranchAccess::invoices(CustomerInvoice::where('business_id', $bid))->whereKey($id)
             ->with('items')->firstOrFail();
 
         /*

@@ -74,7 +74,7 @@ class DocumentPrintController extends Controller
     public function supplierInvoice(int $id)
     {
         $bid = $this->bid();
-        $invoice = SupplierInvoice::where('business_id', $bid)->whereKey($id)
+        $invoice = BranchAccess::limitThrough(SupplierInvoice::where('business_id', $bid), 'purchaseOrder')->whereKey($id)
             ->with('supplier', 'purchaseOrder')->firstOrFail();
 
         Activity::log('report', 'طبع فاتورة المورّد: '.$invoice->supplier_ref, ['subject_id' => $invoice->id]);
@@ -95,7 +95,7 @@ class DocumentPrintController extends Controller
     public function creditNote(int $note)
     {
         $bid = $this->bid();
-        $note = CustomerCreditNote::where('business_id', $bid)->whereKey($note)
+        $note = BranchAccess::limitThrough(CustomerCreditNote::where('business_id', $bid), 'invoice', null, false, true)->whereKey($note)
             ->with('invoice')->firstOrFail();
 
         Activity::log('report', 'طبع إشعار دائن: '.$note->number, ['subject_id' => $note->id]);

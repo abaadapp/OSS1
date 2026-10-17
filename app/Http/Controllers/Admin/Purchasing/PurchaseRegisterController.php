@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\PurchaseOrder;
 use App\Models\Supplier;
 use App\Models\SupplierInvoice;
+use App\Support\BranchAccess;
 use App\Support\Demo;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -42,7 +43,8 @@ class PurchaseRegisterController extends Controller
 
         $supplierId = $request->query('supplier');
 
-        $orders = PurchaseOrder::where('business_id', $bid)->with('supplier')
+        // ولمن قُيّد بفروعٍ أوامرُ فروعه وسنداتُها وحدها — انظر BranchAccess
+        $orders = BranchAccess::limit(PurchaseOrder::where('business_id', $bid))->with('supplier')
             ->when($span, fn ($q) => $q->whereBetween('ordered_at', $span))
             ->when($supplierId, fn ($q) => $q->where('supplier_id', $supplierId))
             ->orderByDesc('ordered_at')->get()
@@ -131,10 +133,10 @@ class PurchaseRegisterController extends Controller
      */
     private function months(int $bid): array
     {
-        $fromOrders = PurchaseOrder::where('business_id', $bid)->whereNotNull('ordered_at')
+        $fromOrders = BranchAccess::limit(PurchaseOrder::where('business_id', $bid))->whereNotNull('ordered_at')
             ->get(['ordered_at'])->map(fn ($o) => $o->ordered_at->format('Y-m'))->all();
 
-        $fromInvoices = SupplierInvoice::where('business_id', $bid)->whereNotNull('issued_at')
+        $fromInvoices = BranchAccess::limitThrough(SupplierInvoice::where('business_id', $bid), 'purchaseOrder')->whereNotNull('issued_at')
             ->get(['issued_at'])->map(fn ($i) => $i->issued_at->format('Y-m'))->all();
 
         return collect($fromOrders)->concat($fromInvoices)

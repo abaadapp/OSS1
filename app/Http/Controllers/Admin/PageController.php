@@ -164,6 +164,7 @@ class PageController extends Controller
     {
         return Inertia::render('Admin/Branches/Index', [
             'branches' => Demo::branches(),
+            'canCreateBranch' => BranchAccess::mayCreateBranch(auth()->user()),
         ]);
     }
 
@@ -822,7 +823,8 @@ class PageController extends Controller
     private function settingsSection(?string $section, Request $request): array
     {
         return match ($section) {
-            'branches' => ['branches' => Demo::branches()],
+            // وزرُّ الإضافة لمن يُنشئ فعلًا — انظر BranchAccess::mayCreateBranch
+            'branches' => ['branches' => Demo::branches(), 'canCreateBranch' => BranchAccess::mayCreateBranch(auth()->user())],
             'employees' => $this->employeesData(),
             'activity' => ActivityController::adminData($request),
             'trash' => TrashController::panelData(),

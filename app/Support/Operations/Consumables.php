@@ -218,8 +218,16 @@ final class Consumables
     public static function summary(EventOperation $operation): array
     {
         $issues = OperationConsumableIssue::where('event_operation_id', $operation->id)->with('product:id,name,sku', 'requirement:id,description')->orderBy('id')->get();
+        /*
+         * والصرفُ يبقى صرفَ الفعاليّة كلِّه بتكلفته — هو تكلفةُ المشروع لا ورقةُ فرع.
+         * لكنّ الإرجاعَ يُعيد الكميّة إلى فرع الصرف، فلا يُعرض زرُّه لمن قُيّد بفروعٍ
+         * على صرفٍ من فرعٍ ليس من فروعه — والخادمُ يردّه أيضًا (EventOperationController).
+         */
+        $user = auth()->user();
+        $mine = BranchAccess::restricts($user) ? BranchAccess::allowedBranchIds($user) : null;
 
         $rows = $issues->map(fn (OperationConsumableIssue $i) => [
+            'returnable' => $mine === null || in_array((int) $i->branch_id, $mine, true),
             'id' => $i->id, 'product_id' => $i->product_id, 'product' => $i->product?->name, 'requirement' => $i->requirement?->description,
             'issued' => (int) $i->issued_quantity, 'returned' => (int) $i->returned_quantity, 'consumed' => $i->consumedQuantity(),
             'unit_cost' => (float) $i->unit_cost, 'consumed_cost' => $i->consumedCost(), 'status' => $i->status,

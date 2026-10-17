@@ -133,19 +133,98 @@ final class BranchAccess
      * قائمةُ أوامر الشراء أو سندات الاستلام لا تتبع الشريط: صاحبُ النشاط
      * يراها كلَّها في أيّ فرعٍ وقف. فلا يغيّرها هذا له، ويحصرها للمقيَّد في فروعه.
      *
+     * و`$withUnbranched` لمستندٍ فرعُه اختياريّ: فاتورةُ عميلٍ صدرت من مشروعٍ
+     * بلا فرع مستندُ الشركة لا مستندُ فرعٍ آخر، فتُرى. أمّا ما يحرّك رصيدَ فرعٍ
+     * (طلبٌ، أمرُ شراء، استلام، تسوية، حركة) فلا يُرى إلّا في فروعه: ورقةٌ بلا
+     * فرعٍ منها قديمةٌ، وفعلُها يقع على الفرع الأوّل وقد لا يكون من فروعه.
+     *
      * @template T of Builder
      *
      * @param  T  $query
      * @return T
      */
-    public static function limit(Builder $query, ?User $user = null, string $column = 'branch_id'): Builder
+    public static function limit(Builder $query, ?User $user = null, string $column = 'branch_id', bool $withUnbranched = false): Builder
     {
         $user ??= auth()->user();
         if (! self::restricts($user)) {
             return $query;
         }
 
-        return $query->whereIn($column, self::granted($user)->select('branch_user.branch_id'));
+        $granted = self::granted($user)->select('branch_user.branch_id');
+
+        return $withUnbranched
+            ? $query->where(fn ($w) => $w->whereIn($column, $granted)->orWhereNull($column))
+            : $query->whereIn($column, $granted);
+    }
+
+    /**
+     * حدُّ الإذن عبر المستند الأصل — لسجلٍّ لا عمودَ فرعٍ له ويتبع ما يحمله.
+     *
+     * سندُ المورّد بلا `branch_id`، لكنّه يتبع أمرَ شرائه، والإشعارُ الدائن
+     * يتبع فاتورته. فيُرى ما كان أصلُه من فروعه، وما لا أصلَ له (سندٌ بلا أمر
+     * شراء) ليس من فرعٍ أصلًا فيبقى مرئيًّا — إلّا أن يُطلب غيرُ ذلك.
+     *
+     * @template T of Builder
+     *
+     * @param  T  $query
+     * @return T
+     */
+    public static function limitThrough(Builder $query, string $relation, ?User $user = null, bool $withoutParent = true, bool $parentUnbranched = false): Builder
+    {
+        $user ??= auth()->user();
+        if (! self::restricts($user)) {
+            return $query;
+        }
+
+        return $query->where(fn ($w) => $w
+            ->whereHas($relation, fn ($parent) => self::limit($parent, $user, $parent->qualifyColumn('branch_id'), $parentUnbranched))
+            ->when($withoutParent, fn ($w) => $w->orWhereDoesntHave($relation)));
+    }
+
+    /**
+     * فواتيرُ العملاء: فرعُها اختياريّ — وما بلا فرعٍ مستندُ الشركة يُرى.
+     *
+     * @template T of Builder
+     *
+     * @param  T  $query
+     * @return T
+     */
+    public static function invoices(Builder $query, ?User $user = null, string $column = 'branch_id'): Builder
+    {
+        return self::limit($query, $user, $column, true);
+    }
+
+    /**
+     * إنشاءُ فرعٍ لصاحب النشاط ولمن لا تُقيَّد فروعه.
+     *
+     * فرعٌ يُنشئه موظّفٌ محصورٌ في مسقط لا يقع في فروعه: لا يراه في المبدّل
+     * ولا يعمل فيه، ويبقى فرعًا في الشركة أنشأه من لا يدخله. فالإنشاءُ لمن
+     * يرى الفروع كلَّها.
+     */
+    public static function mayCreateBranch(?User $user): bool
+    {
+        return $user !== null && $user->business_id !== null && ! self::restricts($user);
+    }
+
+    /**
+     * صفوفُ الفروع المسجّلة للموظّف ولو حُذف الفرع — لسلّة المحذوفات.
+     *
+     * فرعٌ محذوفٌ لا يفتح شيئًا (انظر granted)، لكنّ استعادته فعلٌ على فرعٍ
+     * بعينه: يستعيد المقيَّدُ فرعَه هو، لا فرعًا لم يكن من فروعه.
+     *
+     * @template T of Builder
+     *
+     * @param  T  $query
+     * @return T
+     */
+    public static function limitListed(Builder $query, ?User $user = null, string $column = 'id'): Builder
+    {
+        $user ??= auth()->user();
+        if (! self::restricts($user)) {
+            return $query;
+        }
+
+        return $query->whereIn($column, DB::table('branch_user')->where('user_id', $user->id)->select('branch_id'));
     }
 
     /**

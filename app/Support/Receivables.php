@@ -212,7 +212,18 @@ final class Receivables
     {
         $rows = [];
 
-        $invoices = CustomerInvoice::where('business_id', $businessId)
+        /*
+         * ولمن قُيّد بفروعٍ كشفُ العميل في فروعه (BranchAccess): فواتيرُها وما بلا
+         * فرع، وإشعاراتُها، وما خُصّص لها من كلّ دفعة — لا الدفعةُ كاملةً.
+         *
+         * الدفعةُ بلا فرع: تُقبض في الشركة لا في فرع. وتخصيصاتُها تعرف فواتيرَها،
+         * فيُكتب منها ما وقع على فواتيره وحده — كما يتبع التحصيلُ الفرعَ في
+         * `Revenue::byMethod`. ولو كُتبت كاملةً لنقص رصيدُه بما سُدّد عن فرعٍ آخر.
+         * وصاحبُ النشاط ومن لم يُقيَّد يقرأ الكشفَ كما كان حرفًا بحرف.
+         */
+        $restricted = BranchAccess::restricts(auth()->user());
+
+        $invoices = BranchAccess::invoices(CustomerInvoice::where('business_id', $businessId))
             ->where('customer_id', $customerId)
             ->where('status', CustomerInvoice::ISSUED)->get();
 
@@ -226,12 +237,23 @@ final class Receivables
             }
         }
 
+        $mine = $restricted
+            ? BranchAccess::invoices(CustomerInvoice::where('business_id', $businessId))->where('customer_id', $customerId)->pluck('id')
+            : null;
+
         $payments = CustomerPayment::where('business_id', $businessId)
-            ->where('customer_id', $customerId)->live()->get();
+            ->where('customer_id', $customerId)->live()
+            ->when($restricted, fn ($q) => $q->with(['allocations' => fn ($a) => $a->whereIn('customer_invoice_id', $mine)]))
+            ->get();
 
         foreach ($payments as $p) {
+            $amount = $restricted ? (float) $p->allocations->sum('amount') : (float) $p->amount;
+            if ($restricted && $amount <= 0.0005) {
+                continue;
+            }
+
             $rows[] = ['at' => $p->occurred_at, 'kind' => 'تحصيل', 'ref' => $p->number,
-                'debit' => 0.0, 'credit' => round((float) $p->amount, 3)];
+                'debit' => 0.0, 'credit' => round($amount, 3)];
         }
 
         usort($rows, fn ($a, $b) => [$a['at']?->timestamp ?? 0, $a['ref']] <=> [$b['at']?->timestamp ?? 0, $b['ref']]);

@@ -14,6 +14,7 @@ use App\Models\Product;
 use App\Models\Project;
 use App\Models\Setting;
 use App\Support\Activity;
+use App\Support\BranchAccess;
 use App\Support\CustomerContacts;
 use App\Support\CustomerInvoices;
 use App\Support\CustomerPayments;
@@ -87,10 +88,15 @@ class CustomerInvoiceController extends Controller
             ])->all();
     }
 
-    /** الفاتورةُ من متجر الطالب لا من رقمٍ في الرابط */
+    /**
+     * الفاتورةُ من متجر الطالب لا من رقمٍ في الرابط — ومن فروعه إن قُيّد بفروع.
+     *
+     * والصفحةُ وأفعالُها كلُّها تمرّ هنا: فاتورةُ فرعٍ آخر لا تُفتح ولا تُصدَر
+     * ولا تُلغى ولا يُكتب عليها إشعار — انظر BranchAccess.
+     */
     private function find(int|string $id): CustomerInvoice
     {
-        return CustomerInvoice::where('business_id', $this->bid())
+        return BranchAccess::invoices(CustomerInvoice::where('business_id', $this->bid()))
             ->whereKey($id)->with('items', 'customer')->firstOrFail();
     }
 
@@ -120,7 +126,8 @@ class CustomerInvoiceController extends Controller
         $per = (int) $request->integer('per_page');
         $per = in_array($per, self::PER_PAGE, true) ? $per : self::PER_PAGE[0];
 
-        $page = CustomerInvoice::where('business_id', $bid)->withMoney()->with('customer')
+        // القائمةُ لا تتبع الشريط — ولمن قُيّد بفروعٍ فواتيرُ فروعه وحدها
+        $page = BranchAccess::invoices(CustomerInvoice::where('business_id', $bid))->withMoney()->with('customer')
             // والمعاملُ من `Search::like` لا مكتوبًا بيده: `like` على Postgres
             // حسّاسٌ لحالة الأحرف و`ilike` ليس كذلك — ومن كتبه بيده أصاب في
             // شاشةٍ وأخطأ في أخرى
@@ -333,7 +340,8 @@ class CustomerInvoiceController extends Controller
     {
         $bid = $this->bid();
 
-        $note = CustomerCreditNote::where('business_id', $bid)->whereKey($note)
+        // والإشعارُ يتبع فاتورتَه في فروع من قُيّد بفروع
+        $note = BranchAccess::limitThrough(CustomerCreditNote::where('business_id', $bid), 'invoice', null, false, true)->whereKey($note)
             ->with('invoice')->firstOrFail();
 
         return Inertia::render('Admin/CustomerInvoices/CreditNoteShow', [

@@ -9,6 +9,7 @@ use App\Models\ServiceCategory;
 use App\Models\Supplier;
 use App\Models\SupplierInvoice;
 use App\Support\Activity;
+use App\Support\BranchAccess;
 use App\Support\Demo;
 use App\Support\LocalName;
 use App\Support\Permissions;
@@ -130,9 +131,10 @@ class SupplierController extends Controller
         $money = $user->may(Permissions::INVOICE_VIEW);
         ServiceProviders::ensureCategories($bid);
 
-        $orders = PurchaseOrder::where('business_id', $bid)->where('supplier_id', $supplier->id)
+        // ولمن قُيّد بفروعٍ أوامرُ فروعه وسنداتُها وحدها — انظر BranchAccess
+        $orders = BranchAccess::limit(PurchaseOrder::where('business_id', $bid))->where('supplier_id', $supplier->id)
             ->with('project:id,code,name')->orderByDesc('ordered_at')->orderByDesc('id')->limit(100)->get();
-        $invoices = SupplierInvoice::where('business_id', $bid)->where('supplier_id', $supplier->id)
+        $invoices = BranchAccess::limitThrough(SupplierInvoice::where('business_id', $bid), 'purchaseOrder')->where('supplier_id', $supplier->id)
             ->with('project:id,code,name')->orderByDesc('issued_at')->orderByDesc('id')->limit(100)->get();
 
         $projectIds = $orders->pluck('project_id')->merge($invoices->pluck('project_id'))->filter()->unique()->values();

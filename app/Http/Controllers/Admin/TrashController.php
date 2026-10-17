@@ -11,6 +11,7 @@ use App\Models\Expense;
 use App\Models\Product;
 use App\Support\Activity;
 use App\Support\Books;
+use App\Support\BranchAccess;
 use App\Support\Demo;
 use App\Support\ProductImages;
 use Illuminate\Database\Eloquent\Builder;
@@ -105,6 +106,9 @@ class TrashController extends Controller
 
         $trashed = function (string $type) use ($bid, $since) {
             $q = self::MODELS[$type]::onlyTrashed()->where('business_id', $bid);
+            if ($type === 'branch') {
+                $q = BranchAccess::limitListed($q);
+            }
 
             // الفرع لا يُمحى فلا مهلة له، ولا يُخفى من الشاشة بمرور الوقت
             if (in_array($type, self::PURGEABLE, true)) {
@@ -200,9 +204,10 @@ class TrashController extends Controller
     /** المتجر يُقرأ من الجلسة لا من الطلب: معرّفٌ من متجر الجار يُردّ ٤٠٤ */
     private static function findTrashed(string $type, int $id)
     {
-        return self::MODELS[$type]::onlyTrashed()
-            ->where('business_id', self::bid())
-            ->findOrFail($id);
+        $q = self::MODELS[$type]::onlyTrashed()->where('business_id', self::bid());
+
+        // والمقيَّدُ بفروعٍ لا يستعيد فرعًا لم يكن من فروعه — انظر BranchAccess
+        return ($type === 'branch' ? BranchAccess::limitListed($q) : $q)->findOrFail($id);
     }
 
     /**

@@ -51,6 +51,13 @@ class BranchController extends Controller
 
     public function store(Request $request)
     {
+        // والإنشاءُ لمن يرى الفروع كلَّها — انظر BranchAccess::mayCreateBranch
+        abort_unless(
+            BranchAccess::mayCreateBranch($request->user()),
+            403,
+            __('إضافة فرعٍ جديد لصاحب النشاط ولمن لا تُحدَّد له فروع عمل.'),
+        );
+
         $data = $request->validate([
             /*
              * الاسم يُميّز فرعًا من فرع — فلا يتكرّر.

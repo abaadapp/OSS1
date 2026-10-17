@@ -4,13 +4,16 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Customer;
+use App\Models\Order;
 use App\Support\Activity;
+use App\Support\BranchAccess;
 use App\Support\CreditSales;
 use App\Support\CustomerInvoices;
 use App\Support\Demo;
 use App\Support\Permissions;
 use App\Support\Receivables;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -76,7 +79,7 @@ class ReceivablesController extends Controller
              * وهي ذمّةٌ قائمةٌ من لحظة البيع — تُعرض هنا كي لا يظنّ التاجر أنّ
              * ما لم يُفوتَر لم يُبَع.
              */
-            'uninvoiced' => Receivables::uninvoicedOrders($bid, (int) $customer->id)
+            'uninvoiced' => $this->inMyBranches(Receivables::uninvoicedOrders($bid, (int) $customer->id))
                 ->map(fn ($o) => [
                     'id' => $o->id,
                     'number' => $o->number,
@@ -84,7 +87,7 @@ class ReceivablesController extends Controller
                     'total' => (float) $o->total,
                 ])->all(),
             'summary' => [
-                'outstanding' => Receivables::customerOutstanding($bid, (int) $customer->id),
+                'outstanding' => $this->outstandingInMyBranches($bid, (int) $customer->id),
                 'credit' => Receivables::customerCredit($bid, (int) $customer->id),
                 'headroom' => Receivables::creditHeadroom($customer),
             ],
@@ -101,6 +104,46 @@ class ReceivablesController extends Controller
                 'bill' => (bool) auth()->user()?->may(Permissions::CUSTOMER_INVOICE_ISSUE),
             ],
         ]);
+    }
+
+    /**
+     * ولمن قُيّد بفروعٍ طلباتُ فروعه وحدها — انظر BranchAccess.
+     *
+     * @param  Collection<int, Order>  $orders
+     * @return Collection<int, Order>
+     */
+    private function inMyBranches(Collection $orders): Collection
+    {
+        $user = auth()->user();
+        if (! BranchAccess::restricts($user)) {
+            return $orders;
+        }
+
+        $mine = BranchAccess::allowedBranchIds($user);
+
+        return $orders->filter(fn (Order $o) => in_array((int) $o->branch_id, $mine, true))->values();
+    }
+
+    /**
+     * المستحقُّ في البطاقة كما يقرؤه الكشفُ تحتها.
+     *
+     * لمن لم يُقيَّد: `customerOutstanding` كما هو. ولمن قُيّد بفروعٍ: فواتيرُ فروعه
+     * وما بلا فرع، وطلباتُ فروعه التي لم تُفوتَر — ولا تُمسّ القراءةُ المحفوظة
+     * في `Receivables::openInvoices` (تُرشَّح نسختُها هنا لا هي).
+     */
+    private function outstandingInMyBranches(int $bid, int $customerId): float
+    {
+        $user = auth()->user();
+        if (! BranchAccess::restricts($user)) {
+            return Receivables::customerOutstanding($bid, $customerId);
+        }
+
+        $mine = BranchAccess::allowedBranchIds($user);
+        $open = Receivables::openInvoices($bid, $customerId)
+            ->filter(fn ($i) => $i->branch_id === null || in_array((int) $i->branch_id, $mine, true));
+
+        return round($open->sum(fn ($i) => $i->outstanding())
+            + $this->inMyBranches(Receivables::uninvoicedOrders($bid, $customerId))->sum(fn (Order $o) => (float) $o->total), 3);
     }
 
     /**
@@ -129,6 +172,13 @@ class ReceivablesController extends Controller
         ], [], ['order_ids' => __('الطلبات')]);
 
         $record = Customer::where('business_id', $this->bid())->whereKey($customer)->firstOrFail();
+
+        // ولا يُفوتِر من قُيّد بفروعٍ طلبَ فرعٍ ليس من فروعه — الرقمُ يُكتب في الطلب كما يُنقر
+        $outside = array_diff(
+            array_map('intval', $data['order_ids']),
+            BranchAccess::limit(Order::where('business_id', $this->bid()))->whereIn('id', $data['order_ids'])->pluck('id')->map(fn ($id) => (int) $id)->all(),
+        );
+        abort_if(BranchAccess::restricts(auth()->user()) && $outside !== [], 403, __('هذا الفرع ليس من فروع عملك.'));
 
         try {
             $invoice = CustomerInvoices::consolidate(

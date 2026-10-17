@@ -562,7 +562,7 @@ class ReportData
             ->when($status, fn ($q) => $q->where('status', $status))
             ->when($branch, fn ($q) => $q->where('branch_id', $branch))
             // وبلا فرعٍ مختار: فروعُ من قُيّد بفروعٍ وحدها — انظر BranchAccess
-            ->tap(fn ($q) => BranchAccess::limit($q))
+            ->tap(fn ($q) => BranchAccess::invoices($q))
             ->when($state, fn ($q) => $q->paymentState($state));
 
         $count = (clone $base)->count();

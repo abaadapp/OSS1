@@ -12,6 +12,7 @@ use App\Models\SupplierInvoice;
 use App\Models\SupplierInvoicePayment;
 use App\Models\User;
 use App\Support\Activity;
+use App\Support\BranchAccess;
 use App\Support\Demo;
 use App\Support\Document\PaperSize;
 use App\Support\DocumentPaper;
@@ -74,7 +75,8 @@ class SupplierInvoiceController extends Controller
         $bid = $this->bid();
         Ledger::ensureSystemAccounts($bid);
 
-        $q = SupplierInvoice::where('business_id', $bid)->with(['supplier', 'purchaseOrder']);
+        // السندُ يتبع أمرَ شرائه: لمن قُيّد بفروعٍ سنداتُ أوامرِ فروعه، وما لا أمرَ له
+        $q = BranchAccess::limitThrough(SupplierInvoice::where('business_id', $bid), 'purchaseOrder')->with(['supplier', 'purchaseOrder']);
 
         if ($s = Search::term($request)) {
             $like = Search::like();
@@ -96,7 +98,7 @@ class SupplierInvoiceController extends Controller
 
         $invoices = $q->paginate(Pagination::perPage($request, 20))->withQueryString();
 
-        $all = SupplierInvoice::where('business_id', $bid)->get();
+        $all = BranchAccess::limitThrough(SupplierInvoice::where('business_id', $bid), 'purchaseOrder')->get();
 
         /*
          * ومن بلغ الدفترَ منها يُعرف باستعلامٍ واحد لا باستعلامٍ لكلّ صفّ.
@@ -162,7 +164,8 @@ class SupplierInvoiceController extends Controller
                 ->get(['id', 'name', 'name_en'])
                 ->map(fn ($s) => ['value' => $s->id, 'label' => Demo::ln($s->name, $s->name_en)])->all(),
             // أوامرُ لم تُفوتَر بعد — ربط السند بأمره يمنع عدّ الشراء مرّتين
-            'orders' => PurchaseOrder::where('business_id', $bid)
+            // ولمن قُيّد بفروعٍ أوامرُ فروعه وحدها — لا يُربط سندٌ بأمرٍ لا يراه
+            'orders' => BranchAccess::limit(PurchaseOrder::where('business_id', $bid))
                 ->whereDoesntHave('invoices')->orderByDesc('id')->limit(100)
                 ->get(['id', 'number', 'supplier_id', 'total'])
                 ->map(fn ($o) => [
@@ -188,7 +191,7 @@ class SupplierInvoiceController extends Controller
                 'overdue_value' => round($all->filter(fn ($i) => $i->isOverdue())->sum(fn ($i) => $i->outstanding()), 3),
             ],
             'today' => now()->format('Y-m-d'),
-            'pendingCount' => SupplierInvoice::where('business_id', $bid)
+            'pendingCount' => BranchAccess::limitThrough(SupplierInvoice::where('business_id', $bid), 'purchaseOrder')
                 ->where('approval_status', SupplierInvoices::PENDING)->count(),
             // ومن يرى الزرّ هو من يملك الفعل
             'canApprove' => (bool) auth()->user()?->may(Permissions::INVOICE_APPROVE),
@@ -227,7 +230,7 @@ class SupplierInvoiceController extends Controller
 
         $bid = $this->bid();
 
-        $invoice = SupplierInvoice::where('business_id', $bid)
+        $invoice = BranchAccess::limitThrough(SupplierInvoice::where('business_id', $bid), 'purchaseOrder')
             ->with(['supplier', 'purchaseOrder.items', 'purchaseOrder.supplier'])
             ->findOrFail($id);
 
@@ -477,7 +480,7 @@ class SupplierInvoiceController extends Controller
         }
 
         $data = $request->validate(['override_reason' => ['nullable', 'string', 'max:200']]);
-        $invoice = SupplierInvoice::where('business_id', $this->bid())->findOrFail($id);
+        $invoice = BranchAccess::limitThrough(SupplierInvoice::where('business_id', $this->bid()), 'purchaseOrder')->findOrFail($id);
 
         try {
             SupplierInvoices::approve($invoice, auth()->user(), $data['override_reason'] ?? null);
@@ -505,7 +508,7 @@ class SupplierInvoiceController extends Controller
             'reason' => __('سبب الرفض'),
         ]);
 
-        $invoice = SupplierInvoice::where('business_id', $this->bid())->findOrFail($id);
+        $invoice = BranchAccess::limitThrough(SupplierInvoice::where('business_id', $this->bid()), 'purchaseOrder')->findOrFail($id);
 
         try {
             SupplierInvoices::reject($invoice, $data['reason'], auth()->user());
@@ -527,7 +530,7 @@ class SupplierInvoiceController extends Controller
             'reason' => __('سبب الإلغاء'),
         ]);
 
-        $invoice = SupplierInvoice::where('business_id', $this->bid())->findOrFail($id);
+        $invoice = BranchAccess::limitThrough(SupplierInvoice::where('business_id', $this->bid()), 'purchaseOrder')->findOrFail($id);
 
         try {
             SupplierInvoices::cancel($invoice, $data['reason'], auth()->user());
@@ -551,7 +554,7 @@ class SupplierInvoiceController extends Controller
         }
 
         $bid = $this->bid();
-        $invoice = SupplierInvoice::where('business_id', $bid)->findOrFail($id);
+        $invoice = BranchAccess::limitThrough(SupplierInvoice::where('business_id', $bid), 'purchaseOrder')->findOrFail($id);
 
         $data = $request->validate([
             'amount' => ['required', 'numeric', 'min:0.001'],
@@ -641,7 +644,7 @@ class SupplierInvoiceController extends Controller
         }
 
         $bid = $this->bid();
-        $invoice = SupplierInvoice::where('business_id', $bid)->findOrFail($id);
+        $invoice = BranchAccess::limitThrough(SupplierInvoice::where('business_id', $bid), 'purchaseOrder')->findOrFail($id);
 
         /*
          * سندٌ سُدّد منه شيء لا يُحذف.

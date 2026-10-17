@@ -16,7 +16,7 @@ import type { Branch } from '@/types/models';
  * الموضعين، فلا تفترقان مع أول تعديل.
  */
 export default function BranchesIndex() {
-    const { branches } = usePage<PageProps<{ branches: Branch[] }>>().props;
+    const { branches, canCreateBranch } = usePage<PageProps<{ branches: Branch[]; canCreateBranch?: boolean }>>().props;
     const t = useTranslate();
 
     return (
@@ -27,7 +27,7 @@ export default function BranchesIndex() {
             />
 
             <BackToSettings />
-            <BranchesPanel branches={branches} />
+            <BranchesPanel branches={branches} canCreate={canCreateBranch !== false} />
         </AdminLayout>
     );
 }

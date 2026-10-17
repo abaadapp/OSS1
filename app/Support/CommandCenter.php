@@ -443,14 +443,15 @@ final class CommandCenter
                 __('أنجز المهمّة أو أعد جدولتها'), route('admin.projects.show', $task->project_id), $task->due_at));
         }
 
-        foreach (CustomerInvoice::where('business_id', $bid)->overdue()->withMoney()->with('customer')->orderBy('due_at')->limit(self::LIMIT)->get() as $inv) {
+        // صفوفُ اليوم روابطُ إلى سجلّاتها — ولمن قُيّد بفروعٍ سجلّاتُ فروعه وحدها (BranchAccess)
+        foreach (BranchAccess::invoices(CustomerInvoice::where('business_id', $bid))->overdue()->withMoney()->with('customer')->orderBy('due_at')->limit(self::LIMIT)->get() as $inv) {
             $rows->push(self::row('customer_invoice', 'danger',
                 __('فاتورة :number — :customer', ['number' => (string) $inv->number, 'customer' => (string) ($inv->customer?->name ?? $inv->customer_name)]),
                 null, __('طالب بالسداد — ذكّر العميل'), route('admin.customerInvoices.show', $inv->id),
                 $inv->due_at, $money ? $inv->outstanding() : null));
         }
 
-        $supplierDue = SupplierInvoice::where('business_id', $bid)->owed()->whereNotNull('due_at')->whereDate('due_at', '<', $today)
+        $supplierDue = BranchAccess::limitThrough(SupplierInvoice::where('business_id', $bid), 'purchaseOrder')->owed()->whereNotNull('due_at')->whereDate('due_at', '<', $today)
             ->whereRaw('(total - paid) > 0.0005')->with('supplier')->orderBy('due_at')->limit(self::LIMIT)->get();
         foreach ($supplierDue as $si) {
             $rows->push(self::row('supplier_invoice', 'danger',
@@ -465,7 +466,7 @@ final class CommandCenter
                 $e->due_date, $money ? (float) $e->amount : null));
         }
 
-        $pos = PurchaseOrder::where('business_id', $bid)->whereIn('status', [PurchaseOrders::SENT, PurchaseOrders::PARTIAL])
+        $pos = BranchAccess::limit(PurchaseOrder::where('business_id', $bid))->whereIn('status', [PurchaseOrders::SENT, PurchaseOrders::PARTIAL])
             ->whereNotNull('expected_delivery_at')->whereDate('expected_delivery_at', '<', $today)
             ->with('supplier')->orderBy('expected_delivery_at')->limit(self::LIMIT)->get();
         foreach ($pos as $po) {

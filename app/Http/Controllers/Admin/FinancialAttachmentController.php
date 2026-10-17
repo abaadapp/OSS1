@@ -120,7 +120,8 @@ class FinancialAttachmentController extends Controller
     {
         $this->mustBeAllowed();
 
-        $row = CustomerInvoiceAttachment::where('business_id', $this->bid())
+        // وفاتورتُه من فروع من قُيّد بفروعٍ — انظر BranchAccess
+        $row = BranchAccess::limitThrough(CustomerInvoiceAttachment::where('business_id', $this->bid()), 'invoice', null, false, true)
             ->where('customer_invoice_id', $id)
             ->findOrFail($attachment);
 
@@ -132,7 +133,8 @@ class FinancialAttachmentController extends Controller
     {
         $this->mustBeAllowed();
 
-        $invoice = SupplierInvoice::where('business_id', $this->bid())->findOrFail($id);
+        // والسندُ يتبع أمرَ شرائه في فروع من قُيّد بفروعٍ
+        $invoice = BranchAccess::limitThrough(SupplierInvoice::where('business_id', $this->bid()), 'purchaseOrder')->findOrFail($id);
 
         return $this->stream($invoice->attachment, $invoice->attachment_name, $invoice->supplier_ref);
     }
@@ -147,7 +149,7 @@ class FinancialAttachmentController extends Controller
     {
         $this->mustBeAllowed();
 
-        $row = SupplierInvoicePayment::where('business_id', $this->bid())
+        $row = BranchAccess::limitThrough(SupplierInvoicePayment::where('business_id', $this->bid()), 'invoice.purchaseOrder')
             ->where('supplier_invoice_id', $id)
             ->findOrFail($payment);
 
