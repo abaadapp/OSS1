@@ -7,7 +7,6 @@ use App\Models\Project;
 use App\Support\Demo;
 use App\Support\Permissions;
 use App\Support\ProjectBilling;
-use App\Support\ProjectWorkflow;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -74,8 +73,6 @@ class ProjectBillingController extends Controller
             return back()->withErrors(['billing' => $e->getMessage()]);
         }
 
-        ProjectWorkflow::touch($project, ProjectWorkflow::DEPOSIT);
-
         return back()->with('toast', [
             'msg' => $invoice->number
                 ? __('صدرت فاتورة الدفعة المقدمة :n', ['n' => $invoice->number])
@@ -117,8 +114,6 @@ class ProjectBillingController extends Controller
         } catch (RuntimeException $e) {
             return back()->withErrors(['billing' => $e->getMessage()]);
         }
-
-        ProjectWorkflow::touch($project, ProjectWorkflow::FINAL);
 
         return back()->with('toast', [
             'msg' => $invoice->number

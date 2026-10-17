@@ -14,7 +14,7 @@ import { useTranslate } from '@/lib/i18n';
 import { PROJECT_STATUS_LABEL } from '@/lib/projects';
 import { STATE_LABEL } from '@/lib/quotations';
 import { cn } from '@/lib/utils';
-import { quoteStages, STAGE_LABEL, toStages, type Stage, type Workflow } from '@/lib/projectStages';
+import { focusDone, moveStage, quoteStages, STAGE_LABEL, toStages, type Stage, type Workflow } from '@/lib/projectStages';
 import type { PageProps } from '@/types';
 
 interface Row {
@@ -197,19 +197,21 @@ interface Next {
 /**
  * الخطوةُ التالية للمشروع — من المرحلة التي يقف عليها (`workflow.focus`).
  *
- * وما يُقرَّر هنا اسمُ الزرّ ووجهتُه فقط: أيُّ مرحلةٍ تمّت وهل يجوز الانتقال
- * جاء من الخادم.
+ * وما يُقرَّر هنا اسمُ الزرّ ووجهتُه فقط: أيُّ مرحلةٍ تمّت جاء من الخادم.
+ * و«تم — الانتقال» اقتراحٌ حين تتمّ الحاليّة لا شرط — كلُّ مرحلةٍ تُختار من
+ * شريط صفحة المشروع.
  */
 function projectNext(p: Row, manage: boolean): Next | null {
     const page = { routeName: 'admin.projects.show', href: route('admin.projects.show', p.id) };
     const at = (tab: string) => ({ routeName: 'admin.projects.show', href: route('admin.projects.show', { id: p.id, tab }) });
     const w = p.workflow;
     if (p.status === 'closed' || p.status === 'cancelled') return null;
-    if (w.can_advance && w.next && manage) {
+    if (focusDone(w) && w.next && manage) {
+        const to = w.next;
         return {
             label: 'تم — الانتقال إلى :stage',
-            params: { stage: STAGE_LABEL[w.next] },
-            run: () => router.post(route('admin.projects.workflow.advance', p.id), {}, { preserveScroll: true }),
+            params: { stage: STAGE_LABEL[to] },
+            run: () => moveStage(p.id, to),
         };
     }
     switch (w.focus) {
@@ -447,7 +449,7 @@ function ProjectCard({ p, mine, money: m, manage }: { p: Row; mine: boolean; mon
             alerts={alerts}
             next={projectNext(p, manage)}
             menu={menu}
-            hint={p.workflow.can_advance ? null : (p.workflow.pending?.[0] ?? null)}
+            hint={p.workflow.pending?.[0] ?? null}
         />
     );
 }

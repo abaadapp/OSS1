@@ -7,13 +7,13 @@ use App\Models\Project;
 use App\Support\Demo;
 use App\Support\Permissions;
 use App\Support\ProjectWorkflow;
-use RuntimeException;
+use Illuminate\Http\Request;
 
 /**
- * التنقّلُ في مسار المشروع — «تم — الانتقال» و«رجوع».
+ * نقلُ مسار المشروع إلى أيّ مرحلة — اختيارٌ يدويٌّ حرّ.
  *
- * والحركةُ في `ProjectWorkflow`: لا تتقدّم قبل أن تتمّ المرحلة، ولا تعود
- * بمحو شيء. وهنا يُسأل عن الإذن ويُردّ الجواب.
+ * والنقلُ في `ProjectWorkflow::moveTo`: لا يسأل عن اكتمال مرحلة، ولا يمحو
+ * شيئًا، ولا يغيّر حالة المشروع. وهنا يُسأل عن الإذن ويُردّ الجواب.
  */
 class ProjectWorkflowController extends Controller
 {
@@ -24,29 +24,17 @@ class ProjectWorkflowController extends Controller
         return Project::where('business_id', (int) (auth()->user()->business_id ?? Demo::bid()))->whereKey($id)->firstOrFail();
     }
 
-    public function advance(int|string $id)
+    public function move(Request $request, int|string $id)
     {
         $project = $this->project($id);
+        $stage = $request->input('stage');
 
-        try {
-            $moved = ProjectWorkflow::advance($project, auth()->user());
-        } catch (RuntimeException $e) {
-            return back()->withErrors(['workflow' => $e->getMessage()]);
+        if (! is_string($stage) || ! in_array($stage, ProjectWorkflow::STAGES, true)) {
+            return back()->withErrors(['workflow' => __('مرحلةٌ غير معروفة في مسار المشروع.')]);
         }
+
+        $moved = ProjectWorkflow::moveTo($project, $stage, auth()->user());
 
         return back()->with('toast', ['msg' => __('انتقل المشروع إلى «:stage»', ['stage' => __(ProjectWorkflow::LABELS[$moved->workflow_stage] ?? '')]), 'type' => 'success']);
-    }
-
-    public function back(int|string $id)
-    {
-        $project = $this->project($id);
-
-        try {
-            $moved = ProjectWorkflow::back($project, auth()->user());
-        } catch (RuntimeException $e) {
-            return back()->withErrors(['workflow' => $e->getMessage()]);
-        }
-
-        return back()->with('toast', ['msg' => __('عاد المشروع إلى «:stage» — لم يُمحَ شيء', ['stage' => __(ProjectWorkflow::LABELS[$moved->workflow_stage] ?? '')]), 'type' => 'success']);
     }
 }

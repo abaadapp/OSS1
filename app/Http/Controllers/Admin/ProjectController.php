@@ -171,7 +171,7 @@ class ProjectController extends Controller
     }
 
     /**
-     * المسارُ مضغوطًا للبطاقة — حالُ كلّ مرحلة وأين يقف الفريق وما يمنع.
+     * المسارُ مضغوطًا للبطاقة — حالُ كلّ مرحلة وأين يقف الفريق وما ينقصها.
      *
      * @param  array<string, mixed>  $flow
      * @return array<string, mixed>
@@ -184,7 +184,6 @@ class ProjectController extends Controller
             ], $flow['stages']),
             'focus' => $flow['focus'],
             'next' => $flow['next'],
-            'can_advance' => $flow['can_advance'],
             'pending' => collect($flow['stages'])->firstWhere('key', $flow['focus'])['pending'] ?? [],
         ];
     }

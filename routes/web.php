@@ -632,8 +632,7 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'tenant', 'business'
     Route::post('/projects/{id}/scope/{scope}/draft', [ScopeOfWorkController::class, 'draft'])->whereNumber('scope')->name('projects.scope.draft');
     Route::post('/projects/{id}/scope/{scope}/send', [ScopeOfWorkController::class, 'send'])->whereNumber('scope')->name('projects.scope.send');
     Route::get('/projects/{id}/scope/{scope}/preview', [ScopeOfWorkController::class, 'preview'])->whereNumber('scope')->name('projects.scope.preview');
-    Route::post('/projects/{id}/workflow/advance', [ProjectWorkflowController::class, 'advance'])->name('projects.workflow.advance');
-    Route::post('/projects/{id}/workflow/back', [ProjectWorkflowController::class, 'back'])->name('projects.workflow.back');
+    Route::post('/projects/{id}/workflow/move', [ProjectWorkflowController::class, 'move'])->name('projects.workflow.move');
     Route::get('/projects/{id}/billing/deposit/preview', [ProjectBillingController::class, 'preview'])->name('projects.billing.preview');
     Route::post('/projects/{id}/billing/deposit', [ProjectBillingController::class, 'deposit'])->name('projects.billing.deposit');
     Route::post('/projects/{id}/billing/waive-deposit', [ProjectBillingController::class, 'waive'])->name('projects.billing.waive');

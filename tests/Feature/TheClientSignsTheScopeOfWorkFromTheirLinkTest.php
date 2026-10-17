@@ -67,9 +67,10 @@ class TheClientSignsTheScopeOfWorkFromTheirLinkTest extends TestCase
         $this->assertSame(ProjectWorkflow::SCOPE, $flow['focus']);
         $this->assertSame(['done', 'current', 'todo', 'todo', 'todo', 'todo', 'todo'], array_column($flow['stages'], 'state'));
         $this->assertSame(['لم يُعدّ نطاق العمل بعد.'], $flow['stages'][1]['pending']);
-        $this->assertFalse($flow['can_advance'], 'لا انتقالَ قبل التوقيع');
-        /* وما بعده مقفلٌ ويقول لماذا */
-        $this->assertStringContainsString('نطاق العمل', $flow['stages'][2]['blocked_by'][0]);
+        $this->assertFalse($flow['stages'][1]['done'], 'لم يُوقَّع بعد');
+        /* وما بعده لا يُقفل: كلُّ مرحلةٍ تُختار، وما ينقص يُقال ولا يمنع */
+        $this->assertSame(array_fill(0, 7, true), array_column($flow['stages'], 'reachable'));
+        $this->assertArrayNotHasKey('blocked_by', $flow['stages'][2]);
     }
 
     public function test_the_draft_reads_its_lines_from_the_current_scope_and_is_reviewed_before_it_leaves(): void
@@ -192,7 +193,7 @@ class TheClientSignsTheScopeOfWorkFromTheirLinkTest extends TestCase
 
         $flow = ProjectWorkflow::for($project->fresh());
         $this->assertTrue($flow['stages'][1]['done']);
-        $this->assertTrue($flow['can_advance']);
+        $this->assertSame('done', $flow['stages'][1]['state']);
         $this->assertSame('deposit', $flow['next']);
 
         /* وتعود الصفحةُ تقول ما قُرّر — بلا نموذج */
@@ -418,7 +419,7 @@ class TheClientSignsTheScopeOfWorkFromTheirLinkTest extends TestCase
             ->assertOk()
             ->assertInertia(fn (AssertableInertia $page) => $page->component('Admin/Projects/Show')
                 ->where('workflow.focus', 'scope')
-                ->where('workflow.can_advance', true)
+                ->where('workflow.stages.1.done', true)
                 ->where('scope_of_work.signed.state', 'signed')
                 ->where('scope_of_work.signed.approval.verified', true)
                 ->where('quotation.decided_by_name', 'سالم الهنائي')

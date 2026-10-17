@@ -1,4 +1,4 @@
-import { Check, Minus, X } from 'lucide-react';
+import { AlertTriangle, Check, X } from 'lucide-react';
 import { useTranslate } from '@/lib/i18n';
 import type { Stage, StageKey } from '@/lib/projectStages';
 import { cn } from '@/lib/utils';
@@ -7,19 +7,37 @@ const PURPLE = '#6d28d9';
 
 /**
  * شريطُ مراحل المشروع — سطرٌ واحدٌ مضغوط: المنجزةُ ✓ في دائرةٍ ممتلئة،
- * والتي يعمل عليها الفريقُ بحلقةٍ واسمِها (تامّةً تنتظر «تم — الانتقال» أو
- * جارية)، وما بعدها رقمُها رماديًّا، والموقوفةُ ✕ حمراء.
+ * والتي يقف عليها الفريقُ بحلقةٍ واسمِها، وما قبلها ولم يكتمل بتحذيرٍ
+ * كهرمانيّ، وما بعدها رقمُها رماديًّا، والموقوفةُ ✕ حمراء.
+ *
+ * ═══ كلُّ مرحلةٍ تُختار ═══
+ *
+ * بـ`onMove` (لمن يملك إدارة المشروع) تصير كلُّ مرحلةٍ زرًّا ينقل المشروعَ
+ * إليها مباشرةً — للأمام أو للخلف أو قفزًا، تامّةً كانت أو ناقصة. لا مرحلةَ
+ * معطَّلةٌ بسبب ما قبلها. وبـ`onPick` وحدَه (لمن يقرأ ولا يدير) تفتح المرحلةَ
+ * في تبويب «المسار» ولا تنقل شيئًا.
  *
  * ═══ قليلٌ من النصّ ═══
  *
  * اسمُ المرحلة الحاليّة يُكتب دائمًا، وبقيّةُ الأسماء حين يتّسع العرض
- * (وتبقى للقارئ الآليّ وفي التلميح). ولا شرحَ تحت المراحل: ما ينقصها وما
- * يمنعها في تبويب «المسار» — وبـ`onPick` تصير كلُّ مرحلةٍ زرًّا يفتحها هناك.
+ * (وتبقى للقارئ الآليّ وفي التلميح). ولا شرحَ تحت المراحل: ما ينقصها في
+ * تبويب «المسار».
  *
  * والحالاتُ من الخادم (`ProjectWorkflow`) — الشريطُ يرسم ولا يحكم.
  */
-export default function ProjectStepper({ stages, onPick, className }: { stages: Stage[]; onPick?: (key: StageKey) => void; className?: string }) {
+export default function ProjectStepper({
+    stages,
+    onPick,
+    onMove,
+    className,
+}: {
+    stages: Stage[];
+    onPick?: (key: StageKey) => void;
+    onMove?: (key: StageKey) => void;
+    className?: string;
+}) {
     const t = useTranslate();
+    const press = onMove ?? onPick;
 
     return (
         <ol
@@ -28,10 +46,17 @@ export default function ProjectStepper({ stages, onPick, className }: { stages: 
         >
             {stages.map((s, k) => {
                 const Icon = s.icon;
-                const Tag = onPick ? 'button' : 'span';
+                const Tag = press ? 'button' : 'span';
                 /* والموقوفةُ تُقرأ بسببها («ملغى») — هو ما يُنتبه إليه */
                 const name = s.state === 'failed' && s.note ? t(s.note) : t(s.label);
-                const hint = [t(s.label), s.state === 'done' ? t('تمّت') : null, s.note && s.state !== 'failed' ? t(s.note) : null].filter(Boolean).join(' · ');
+                const hint = [
+                    t(s.label),
+                    s.state === 'done' ? t('تمّت') : s.state === 'skipped' ? t('لم تكتمل') : null,
+                    s.note && s.state !== 'failed' ? t(s.note) : null,
+                    onMove && !s.focus ? t('اضغط لنقل المشروع إليها') : null,
+                ]
+                    .filter(Boolean)
+                    .join(' · ');
 
                 /*
                  * ‏min-w-fit: المرحلةُ لا تضيق عن اسمها الظاهر فيركب جارتَها — وما
@@ -40,14 +65,17 @@ export default function ProjectStepper({ stages, onPick, className }: { stages: 
                 return (
                     <li key={s.key} data-state={s.state} className="flex min-w-fit flex-1 items-center gap-1 last:flex-none" aria-current={s.focus ? 'step' : undefined}>
                         <Tag
-                            {...(onPick ? { type: 'button' as const, onClick: () => onPick(s.key) } : {})}
+                            {...(press ? { type: 'button' as const, onClick: () => press(s.key) } : {})}
                             title={hint}
                             className={cn(
                                 // ‏relative: الاسمُ المطويُّ للقارئ الآليّ (`sr-only`) يُحسب داخل زرّه، فلا يمدّ عرضَ الصفحة
                                 'relative inline-flex shrink-0 items-center gap-1.5 rounded-md px-0.5 py-0.5 text-[12.5px] font-medium',
-                                onPick && 'hover:bg-[#f5f3ff]',
+                                press && 'cursor-pointer hover:bg-[#f5f3ff] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#c4b5fd]',
+                                /* ومن ينقل يلمس بإصبعه: الزرُّ لا يصغر عن ٣٢ نقطة */
+                                onMove && 'min-h-8 px-1',
                                 s.state === 'done' && 'text-[#6d28d9]',
-                                (s.state === 'todo' || s.state === 'skipped') && 'text-[#a1a1aa]',
+                                s.state === 'todo' && 'text-[#a1a1aa]',
+                                s.state === 'skipped' && 'text-[#b45309]',
                                 s.state === 'failed' && 'text-[#dc2626]',
                                 s.focus && 'font-semibold text-[#6d28d9]',
                             )}
@@ -59,7 +87,7 @@ export default function ProjectStepper({ stages, onPick, className }: { stages: 
                                     s.state === 'done' && 'bg-[#6d28d9] text-white',
                                     s.state === 'failed' && 'bg-[#dc2626] text-white',
                                     s.state === 'current' && 'bg-[#f3e8ff] text-[#6d28d9] ring-2 ring-[#6d28d9]',
-                                    s.state === 'skipped' && 'border border-dashed border-[#d4d4d8]',
+                                    s.state === 'skipped' && 'border border-dashed border-[#f59e0b] bg-[#fffbeb] text-[#b45309]',
                                     s.state === 'todo' && 'bg-[#f4f4f5] text-[11px] tabular-nums',
                                     s.focus && s.state === 'done' && 'ring-2 ring-[#c4b5fd] ring-offset-1',
                                 )}
@@ -71,7 +99,7 @@ export default function ProjectStepper({ stages, onPick, className }: { stages: 
                                 ) : s.state === 'current' ? (
                                     <Icon className="size-3" />
                                 ) : s.state === 'skipped' ? (
-                                    <Minus className="size-3" />
+                                    <AlertTriangle className="size-3" />
                                 ) : (
                                     k + 1
                                 )}

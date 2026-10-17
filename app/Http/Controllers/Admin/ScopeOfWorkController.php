@@ -13,7 +13,6 @@ use App\Support\Demo;
 use App\Support\InvoiceBranding;
 use App\Support\Messaging\Notifiers;
 use App\Support\Permissions;
-use App\Support\ProjectWorkflow;
 use App\Support\ScopesOfWork;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\Request;
@@ -126,8 +125,6 @@ class ScopeOfWorkController extends Controller
             return back()->withErrors(['scope' => $e->getMessage()]);
         }
 
-        ProjectWorkflow::touch($project, ProjectWorkflow::SCOPE);
-
         return redirect()->route('admin.projects.scope.show', $project->id)
             ->with('toast', ['msg' => __('نطاق العمل :n مسودّة — أكمله وراجعه', ['n' => $scope->number]), 'type' => 'success']);
     }
@@ -203,8 +200,6 @@ class ScopeOfWorkController extends Controller
         } catch (RuntimeException $e) {
             return back()->withErrors(['scope' => $e->getMessage()]);
         }
-
-        ProjectWorkflow::touch($project, ProjectWorkflow::SCOPE);
 
         return back()->with('toast', ['msg' => __('خرج نطاق العمل :n للتوقيع — أرسل رابطه للعميل', ['n' => $sent->number]), 'type' => 'success']);
     }

@@ -33,7 +33,7 @@ import ProjectStepper from '@/Components/ProjectStepper';
 import TabHead from '@/Components/project/TabHead';
 import MoreDetails from '@/Components/project/MoreDetails';
 import { isLate, isUnready, projectSignals, SignalBadges, type Signal } from '@/Components/project/ProjectSignals';
-import { STAGE_LABEL, toStages, type StageKey, type Workflow } from '@/lib/projectStages';
+import { focusDone, moveStage, STAGE_LABEL, toStages, type StageKey, type Workflow } from '@/lib/projectStages';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/Components/ui/dropdown-menu';
 import type { PageProps } from '@/types';
 import ProjectInventoryForecast, { type ProjectForecast } from '@/Components/InventoryForecast';
@@ -293,6 +293,14 @@ export default function ProjectShow({ project: p, scope, requirements, members, 
         setFocus(null);
         window.setTimeout(() => setFocus(key), 0);
     };
+    /*
+     * ومن يدير المشروعَ يضغط أيَّ مرحلةٍ فينقله إليها — بلا شرطٍ ولا تسلسل —
+     * وتُفتح في «المسار» ليُرى ما فيها. والضغطُ على الحاليّة يفتحها فقط.
+     */
+    const choose = (key: StageKey) => {
+        if (key !== at) moveStage(p.id, key);
+        pick(key);
+    };
 
     /*
      * وما يُنتبه إليه — شاراتٌ تفتح تبويبَها، ونقطةٌ حمراء على التبويب نفسِه.
@@ -349,11 +357,15 @@ export default function ProjectShow({ project: p, scope, requirements, members, 
         else if (a.right > b.right) bar.scrollLeft += a.right - b.right + 16;
     }, [current]);
 
-    /* الخطوةُ التالية — زرٌّ واحدٌ في الرأس: «تم — الانتقال» إن تمّت المرحلة، وإلّا ما تنتظره */
+    /*
+     * الخطوةُ التالية — زرٌّ واحدٌ في الرأس: «تم — الانتقال» إن تمّت المرحلة،
+     * وإلّا ما تنتظره. والاقتراحُ ليس شرطًا: كلُّ مرحلةٍ تُختار من الشريط.
+     */
     const next: { label: string; params?: Record<string, string>; icon: React.ReactNode; run?: () => void; href?: string; routeName?: string } | null = (() => {
         if (!open) return null;
-        if (workflow.can_advance && workflow.next && may.manage) {
-            return { label: 'تم — الانتقال إلى :stage', params: { stage: t(STAGE_LABEL[workflow.next]) }, icon: <ArrowLeft className="ltr:rotate-180" />, run: () => post('admin.projects.workflow.advance') };
+        if (focusDone(workflow) && workflow.next && may.manage) {
+            const to = workflow.next;
+            return { label: 'تم — الانتقال إلى :stage', params: { stage: t(STAGE_LABEL[to]) }, icon: <ArrowLeft className="ltr:rotate-180" />, run: () => moveStage(p.id, to) };
         }
         if (focusStage?.done) return null;
         if (at === 'scope') return { label: scope_of_work.latest ? 'متابعة نطاق العمل' : 'إعداد نطاق العمل', icon: <FileText />, routeName: 'admin.projects.scope.show', href: route('admin.projects.scope.show', p.id) };
@@ -462,7 +474,8 @@ export default function ProjectShow({ project: p, scope, requirements, members, 
                     <Alert tone="danger">{t('المفوتَر على هذا المشروع فوق قيمته المعتمَدة الحاليّة — راجع الحاجة إلى إشعار دائن.')}</Alert>
                 )}
 
-                <ProjectStepper stages={stages} onPick={pick} className="mb-3" />
+                <ProjectStepper stages={stages} onPick={pick} onMove={may.manage ? choose : undefined} className={may.manage ? 'mb-1.5' : 'mb-3'} />
+                {may.manage && <p className="mb-3 px-1 text-[11.5px] text-[#a1a1aa]">{t('اضغط أيّ مرحلة لتنقل المشروع إليها — لا يتغيّر بها مستندٌ ولا حالة المشروع')}</p>}
 
                 {/*
                     الأسماءُ كما هي، والشريطُ أخفّ: حشوٌ أصغر ونصٌّ أصغر، ويمرّ أفقيًّا

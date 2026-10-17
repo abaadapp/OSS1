@@ -32,7 +32,7 @@ import { useTranslate } from '@/lib/i18n';
 import { DELIVERY_STATE_LABEL, deliveryTone } from '@/lib/deliveries';
 import { CO_STATE_LABEL, coTone } from '@/lib/projects';
 import { operationTone } from '@/lib/operations';
-import { STAGE_LABEL, type Stage, type StageKey, type Workflow, type WorkflowStage } from '@/lib/projectStages';
+import { moveStage, STAGE_LABEL, type Stage, type StageKey, type Workflow, type WorkflowStage } from '@/lib/projectStages';
 import { SCOPE_STATE_LABEL, scopeTone } from '@/lib/scopes';
 import { cn } from '@/lib/utils';
 
@@ -172,16 +172,18 @@ export interface ProcessMay {
 }
 
 /**
- * مسارُ المشروع — سبعُ مراحل، كلٌّ منها بما تمّ منها وما ينقصها وزرِّ خطوتها.
+ * مسارُ المشروع — سبعُ مراحل، كلٌّ منها بما تمّ منها وما ينقصها وأزرارِ عملها.
  *
  * ═══ الحقيقةُ من الخادم ═══
  *
- * أيُّ مرحلةٍ تمّت، وأين يقف الفريق، وما يمنع الوصولَ إلى ما بعدها —
- * كلُّه في `workflow` من `ProjectWorkflow`. وهنا يُرسم ويُضغط: كلُّ زرٍّ يمرّ
- * بالباب الذي تمرّ به الشاشاتُ الأخرى، والخادمُ يعيد السؤالَ قبل أن يكتب.
+ * أيُّ مرحلةٍ تمّت، وما ينقص كلًّا منها، وأين اختار الفريقُ أن يقف — كلُّه
+ * في `workflow` من `ProjectWorkflow`. وهنا يُرسم ويُضغط: كلُّ زرٍّ يمرّ بالباب
+ * الذي تمرّ به الشاشاتُ الأخرى، والخادمُ يعيد السؤالَ قبل أن يكتب.
  *
- * و«تم — الانتقال» يظهر في المرحلة التي يقف عليها الفريق حين تتمّ، و«رجوع»
- * يعيد المؤشّر خطوةً للمراجعة — لا يمحو فاتورةً ولا توقيعًا.
+ * ═══ والتنقّلُ حرّ ═══
+ *
+ * لا مرحلةَ مقفلةٌ بسبب ما قبلها: من يدير المشروعَ ينقله إلى أيّ مرحلةٍ من
+ * داخلها أو من الشريط فوق. وما لم يكتمل يُقال تحذيرًا يُقرأ — لا مانعًا.
  */
 export default function ProcessTab({
     p,
@@ -573,7 +575,7 @@ export default function ProcessTab({
                     const isOpen = expanded.has(s.key);
                     const Icon = s.icon;
                     const w = byKey[s.key];
-                    const locked = !s.focus && s.state === 'todo';
+                    const missing = !w?.done && (w?.pending?.length ?? 0) > 0 && s.key !== 'closing';
 
                     return (
                         <li key={s.key} id={`stage-${s.key}`} className="relative scroll-mt-24 ps-12">
@@ -602,7 +604,7 @@ export default function ProcessTab({
                                             <span className={cn('text-[15px] font-semibold', s.state === 'todo' || s.state === 'skipped' ? 'text-[#71717a]' : 'text-[#18181b]')}>{t(s.label)}</span>
                                             {s.focus && <span className="rounded-full bg-[#6d28d9] px-2 py-0.5 text-[10.5px] font-medium text-white">{t('الآن')}</span>}
                                             {s.state === 'done' && <span className="text-[11.5px] text-[#6d28d9]">{t('تمّت')}</span>}
-                                            {locked && <Lock className="size-3.5 text-[#a1a1aa]" aria-label={t('لم تُفتح بعد')} />}
+                                            {s.state === 'skipped' && <AlertTriangle className="size-3.5 text-[#d97706]" aria-label={t('لم تكتمل')} />}
                                             {s.note && <span className="rounded-full bg-[#fffbeb] px-2 py-0.5 text-[10.5px] font-medium text-[#b45309]">{t(s.note)}</span>}
                                         </div>
                                         <div className="mt-0.5 truncate text-[12.5px] text-[#71717a]">{summary[s.key]}</div>
@@ -611,22 +613,16 @@ export default function ProcessTab({
                                 </button>
                                 {isOpen && (
                                     <div className="border-t border-[#f0f0f0] px-4 py-3">
-                                        {locked && (w?.blocked_by?.length ?? 0) > 0 && (
-                                            <div className="mb-3 rounded-[10px] bg-[#f4f4f5] px-3 py-2 text-[12.5px] text-[#52525b]">
-                                                <div className="mb-1 flex items-center gap-1.5 font-medium">
-                                                    <Lock className="size-3.5" />
-                                                    {t('لا تُفتح هذه المرحلة بعد')}
-                                                </div>
-                                                <ul className="list-disc space-y-0.5 ps-5">
-                                                    {w!.blocked_by!.map((x) => (
-                                                        <li key={x}>{x}</li>
-                                                    ))}
-                                                </ul>
+                                        {/* تحذيرٌ يُقرأ ولا يمنع: مرحلةٌ تجاوزها المسارُ ولم تكتمل */}
+                                        {(w?.warnings ?? []).map((x) => (
+                                            <div key={x} className="mb-2 flex items-start gap-1.5 rounded-[10px] bg-[#fffbeb] px-3 py-2 text-[12.5px] font-medium text-[#92400e]">
+                                                <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+                                                {x}
                                             </div>
-                                        )}
-                                        {s.focus && !w?.done && (w?.pending?.length ?? 0) > 0 && s.key !== 'closing' && <Blockers items={w!.pending!} soft />}
-                                        <div className={cn(s.focus && !w?.done && (w?.pending?.length ?? 0) > 0 && 'mt-3')}>{body[s.key]}</div>
-                                        {s.focus && open && may.manage && <StageNav wf={wf} projectId={p.id} />}
+                                        ))}
+                                        {missing && <Blockers items={w!.pending!} soft />}
+                                        <div className={cn(missing && 'mt-3')}>{body[s.key]}</div>
+                                        {may.manage && <StageNav wf={wf} projectId={p.id} stage={s.key} onMoved={(k) => setExpanded((prev) => new Set(prev).add(k))} />}
                                     </div>
                                 )}
                             </div>
@@ -707,48 +703,49 @@ export default function ProcessTab({
 /* ─────────────────────────── التنقّل ─────────────────────────── */
 
 /**
- * «تم — الانتقال» و«رجوع» — في المرحلة التي يقف عليها الفريق وحدَها.
+ * النقلُ إلى مرحلة — في كلّ مرحلةٍ مفتوحةٍ لمن يدير المشروع.
  *
- * والانتقالُ معطَّلٌ حتى تتمّ المرحلة (والخادمُ يردّه على كلّ حال)، والرجوعُ
- * خطوةٌ للمراجعة: يقول قبل الضغط إنّه لا يمحو شيئًا.
+ * في الحاليّة: جارتاها اختصارًا («رجوع إلى …» و«الانتقال إلى …»)، وفي غيرها:
+ * «الانتقال إلى هذه المرحلة». ولا زرَّ معطَّلٌ بسبب ما قبلها ولا ما بعدها،
+ * ولا نافذةَ تأكيد: النقلُ مؤشّرٌ للفريق يُعاد بضغطة، ويقول تحته إنّه لا يمسّ
+ * مستندًا ولا حالة.
  */
-export function StageNav({ wf, projectId }: { wf: Workflow; projectId: number }) {
+export function StageNav({ wf, projectId, stage, onMoved }: { wf: Workflow; projectId: number; stage: StageKey; onMoved?: (key: StageKey) => void }) {
     const t = useTranslate();
-    const [confirmBack, setConfirmBack] = useState(false);
-    const go = (name: string) => router.post(route(name, projectId), {}, { preserveScroll: true });
-
-    if (!wf.next && !wf.can_back) return null;
+    const go = (key: StageKey) => {
+        moveStage(projectId, key);
+        onMoved?.(key);
+    };
+    const here = stage === wf.focus;
 
     return (
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-dashed border-[#e4e4e7] pt-3">
-            {wf.can_back && wf.previous ? (
-                <Button variant="ghost" size="sm" onClick={() => setConfirmBack(true)}>
-                    <ArrowRight className="ltr:rotate-180" />
-                    {t('رجوع إلى :stage', { stage: t(STAGE_LABEL[wf.previous]) })}
-                </Button>
-            ) : (
-                <span />
-            )}
-            {wf.next && (
-                <Button disabled={!wf.can_advance} onClick={() => go('admin.projects.workflow.advance')} title={wf.can_advance ? undefined : t('تكتمل المرحلة أولًا')}>
-                    {t('تم — الانتقال إلى :stage', { stage: t(STAGE_LABEL[wf.next]) })}
-                    <ArrowLeft className="ltr:rotate-180" />
-                </Button>
-            )}
-            <Dialog open={confirmBack} onOpenChange={setConfirmBack}>
-                <DialogContent className="max-w-md">
-                    <DialogHeader>
-                        <DialogTitle>{t('رجوع إلى :stage', { stage: t(STAGE_LABEL[wf.previous ?? 'quote']) })}</DialogTitle>
-                        <DialogDescription>
-                            {t('الرجوع خطوةٌ للمراجعة: لا تُلغى فاتورة، ولا يُنقض توقيع، ولا يُعكس قيد. وما يحتاج تغييرًا بعدها له بابه — نسخةٌ جديدة من نطاق العمل، أو أمر تغيير، أو إلغاءٌ وإشعار دائن لفاتورة صدرت.')}
-                        </DialogDescription>
-                    </DialogHeader>
-                    <DialogFooter>
-                        <Button variant="outline" onClick={() => setConfirmBack(false)}>{t('تراجع')}</Button>
-                        <Button onClick={() => { go('admin.projects.workflow.back'); setConfirmBack(false); }}>{t('رجوع')}</Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
+        <div className="mt-4 border-t border-dashed border-[#e4e4e7] pt-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+                {here ? (
+                    <>
+                        {wf.previous ? (
+                            <Button variant="ghost" size="sm" onClick={() => go(wf.previous!)}>
+                                <ArrowRight className="ltr:rotate-180" />
+                                {t('رجوع إلى :stage', { stage: t(STAGE_LABEL[wf.previous]) })}
+                            </Button>
+                        ) : (
+                            <span />
+                        )}
+                        {wf.next && (
+                            <Button size="sm" onClick={() => go(wf.next!)}>
+                                {t('الانتقال إلى :stage', { stage: t(STAGE_LABEL[wf.next]) })}
+                                <ArrowLeft className="ltr:rotate-180" />
+                            </Button>
+                        )}
+                    </>
+                ) : (
+                    <Button variant="outline" size="sm" onClick={() => go(stage)}>
+                        <ArrowLeft className="ltr:rotate-180" />
+                        {t('الانتقال إلى هذه المرحلة')}
+                    </Button>
+                )}
+            </div>
+            <p className="mt-2 text-[11.5px] text-[#a1a1aa]">{t('تغيير المرحلة مؤشّرٌ للفريق فقط: لا يغيّر حالة المشروع، ولا يُلغي فاتورة، ولا يمسّ توقيعًا ولا قيدًا.')}</p>
         </div>
     );
 }
