@@ -4,7 +4,6 @@ namespace Tests\Feature;
 
 use App\Models\Business;
 use App\Models\Currency;
-use App\Models\Order;
 use App\Models\Setting;
 use App\Models\User;
 use App\Support\ShopIdentity;
@@ -38,7 +37,7 @@ class AShopSaysItsOwnNameTest extends TestCase
             'password' => bcrypt('password'), 'role' => 'sales', 'status' => 'نشط',
             'permissions' => ['pos'],
         ]);
-        }
+    }
 
     use RefreshDatabase;
 
@@ -47,15 +46,6 @@ class AShopSaysItsOwnNameTest extends TestCase
     private User $owner;
 
     private User $cashier;
-    private function order(): Order
-    {
-        return Order::create([
-            'business_id' => $this->business->id, 'number' => 'INV-0001',
-            'customer_name' => 'زبون', 'employee_name' => 'المالك',
-            'subtotal' => 10, 'discount' => 0, 'tax' => 0.5, 'total' => 10.5,
-            'status' => 'مكتمل', 'payment_method' => 'نقدي', 'payment_status' => 'مدفوع',
-        ]);
-    }
 
     // ————— ما الذي يُعدّ اسمًا —————
 
@@ -98,7 +88,11 @@ class AShopSaysItsOwnNameTest extends TestCase
          *
          * جرّبتُ التحويلَ أوّلًا فكسر اثنين وعشرين اختبارًا لا علاقةَ لها
          * بالتهيئة — وكشف ما هو أهمّ: من فتح لوحته ليرى بيعَ اليوم يُرمى إلى
-         * نموذجٍ بلا مخرج. والنداءُ يكون في كلّ شاشة، والمنعُ على الورق وحده.
+         * نموذجٍ بلا مخرج. والنداءُ يكون في كلّ شاشة.
+         *
+         * وكان المنعُ على الورق وحده: الفاتورةُ الضريبيّة للطلب تُردّ بـ409
+         * ما دام الاسمُ ممّا يكتبه النظام — وخرجت مع «المبيعات»، فخرجت
+         * اختباراتُها وزرُّها معها.
          */
         $this->actingAs($this->owner)->get('/admin/dashboard')
             ->assertOk()
@@ -117,6 +111,7 @@ class AShopSaysItsOwnNameTest extends TestCase
         $this->actingAs($this->owner)->get('/admin/dashboard')
             ->assertInertia(fn ($p) => $p->where('context.setup', null));
     }
+
     public function test_the_banner_names_what_is_missing(): void
     {
         $this->business->update(['name' => 'زهور مسقط', 'identity_confirmed_at' => null]);
@@ -164,82 +159,6 @@ class AShopSaysItsOwnNameTest extends TestCase
 
         $this->assertSame('زهور مسقط', $this->business->fresh()->name);
         $this->assertSame('99887766', $this->business->fresh()->phone);
-    }
-
-    // ————— الورق —————
-
-    public function test_a_tax_invoice_does_not_carry_a_name_the_system_wrote(): void
-    {
-        $order = $this->order();
-
-        $this->actingAs($this->owner)
-            ->get('/admin/orders/'.$order->number.'/tax-invoice')
-            ->assertStatus(409);
-    }
-
-    public function test_the_tax_invoice_opens_once_the_shop_is_named(): void
-    {
-        $this->business->update(['name' => 'زهور مسقط']);
-        $order = $this->order();
-
-        $this->actingAs($this->owner)
-            ->get('/admin/orders/'.$order->number.'/tax-invoice')
-            ->assertOk();
-    }
-
-    // ————— بابُ الورقة —————
-
-    public function test_the_shop_that_charges_vat_is_given_a_door_to_its_paper(): void
-    {
-        /*
-         * رُفع الزرّ مرّةً فبقيت الورقة بلا مدخل: مسارٌ وقالبٌ واختباراتٌ لا
-         * يقود إليها زرّ. والتاجر يجبي الضريبة ولا يجد بابًا يُخرج ورقتَها.
-         */
-        $this->business->update(['name' => 'زهور مسقط']);
-        Setting::create(['business_id' => $this->business->id, 'key' => 'vat_number', 'value' => 'OM1100']);
-        $order = $this->order();
-
-        $this->actingAs($this->owner)->get('/admin/orders/'.$order->number)
-            ->assertInertia(fn ($p) => $p->where('taxInvoice.registered', true)
-                ->where('taxInvoice.ready', true));
-    }
-
-    public function test_the_door_is_not_shown_to_a_shop_that_charges_no_vat(): void
-    {
-        // القالبُ يُسقط الرمز ولا يدّعي أنّها ضريبيّة — فزرٌّ بهذا الاسم يَعِد
-        // بورقةٍ لا تُنتَج
-        $this->business->update(['name' => 'زهور مسقط']);
-        $order = $this->order();
-
-        $this->actingAs($this->owner)->get('/admin/orders/'.$order->number)
-            ->assertInertia(fn ($p) => $p->where('taxInvoice.registered', false));
-    }
-
-    public function test_the_door_is_never_offered_open_when_the_server_would_refuse_it(): void
-    {
-        /*
-         * وهذا هو الحارس: «جاهز» في الشاشة تعني أنّ الخادم يقبل. ولو افترقا
-         * لضغط التاجر زرًّا يردّه الخادم — بابٌ معروضٌ لا يُفتح.
-         */
-        Setting::create(['business_id' => $this->business->id, 'key' => 'vat_number', 'value' => 'OM1100']);
-        $order = $this->order();
-
-        foreach (['متجري' => false, 'زهور مسقط' => true] as $name => $expected) {
-            $this->business->update(['name' => $name, 'identity_confirmed_at' => null]);
-
-            $screen = $this->actingAs($this->owner)->get('/admin/orders/'.$order->number);
-            $ready = $screen->viewData('page')['props']['taxInvoice']['ready'];
-            $this->assertSame($expected, $ready);
-
-            $paper = $this->actingAs($this->owner)
-                ->get('/admin/orders/'.$order->number.'/tax-invoice');
-
-            $this->assertSame(
-                $ready,
-                $paper->getStatusCode() === 200,
-                "الشاشة تقول ready={$screen->viewData('page')['props']['taxInvoice']['ready']} والخادم يقول {$paper->getStatusCode()}"
-            );
-        }
     }
 
     // ————— ما لا يُسأل عنه مرّتين —————

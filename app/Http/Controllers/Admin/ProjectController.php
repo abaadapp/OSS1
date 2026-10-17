@@ -97,8 +97,8 @@ class ProjectController extends Controller
             'operations_manage' => (bool) $user?->may(Permissions::OPERATIONS_MANAGE),
             /* والأداءُ الماليّ — المرحلة 11: لمن يقرأ ربحيّة المشاريع */
             'performance' => (bool) $user?->may(Permissions::ANALYTICS_PROJECTS),
-            /* والفوترةُ من صفحة المشروع لمن يفتح فواتيرَ العملاء — والإصدارُ فعلٌ يُحرس في شاشتها */
-            'invoice' => (bool) $user?->allows('orders'),
+            /* والفوترةُ من صفحة المشروع لمن يفتح فواتيرَ العملاء (قسمُها «المالية») — والإصدارُ فعلٌ يُحرس في شاشتها */
+            'invoice' => (bool) $user?->allows('finance'),
             /* والمشترياتُ — المرحلة 14: من يفتح قسمَ المشتريات يرى تبويبَها في المشروع وينشئ منه */
             'purchases' => (bool) $user?->allows('purchases'),
         ];
@@ -559,7 +559,7 @@ class ProjectController extends Controller
                 'invoices' => $finals->map(fn ($i) => ProjectBilling::row($i, $c))->values()->all(),
             ],
             'may' => [
-                'create' => (bool) $user?->allows('orders'),
+                'create' => (bool) $user?->allows('finance'),
                 'issue' => (bool) $user?->may(Permissions::CUSTOMER_INVOICE_ISSUE),
                 'waive' => (bool) $user?->may(Permissions::PROJECT_MANAGE),
             ],

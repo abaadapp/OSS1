@@ -7,6 +7,7 @@ use App\Models\User;
 use App\Support\Activity;
 use App\Support\BackupService;
 use App\Support\Demo;
+use App\Support\Permissions;
 use App\Support\TenantTables;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -185,6 +186,16 @@ class BackupController extends Controller
             }
 
             unset($row['password'], $row['remember_token'], $row['id']);
+
+            /*
+             * ونسخةٌ أقدمُ من خروج «المبيعات» تحمل مفتاحَها في القوائم المخصّصة
+             * — فيُنزع كما نزعته الهجرة (`Permissions::RETIRED`). والطلباتُ
+             * نفسُها تعود صفوفًا تاريخيّةً في جداولها، ولا شاشةَ تعود معها.
+             */
+            if (isset($row['permissions'])) {
+                $list = is_string($row['permissions']) ? json_decode($row['permissions'], true) : $row['permissions'];
+                $row['permissions'] = Permissions::withoutRetired(is_array($list) ? array_values($list) : null);
+            }
 
             $existing = User::where('email', $row['email'])->first();
 

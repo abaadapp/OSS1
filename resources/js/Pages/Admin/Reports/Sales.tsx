@@ -54,15 +54,15 @@ interface Props {
 
 /** عنوان المخطّط بحسب دقّة محوره — انظر Demo::salesTrend */
 const CHART_TITLE: Record<ReportRange, string> = {
-    today: 'مبيعات اليوم حسب الساعة',
-    week: 'مبيعات الأسبوع حسب اليوم',
-    month: 'مبيعات الشهر حسب اليوم',
-    year: 'مبيعات السنة حسب الشهر',
-    all: 'المبيعات في آخر ١٢ شهرًا',
+    today: 'الإيرادات اليوم حسب الساعة',
+    week: 'إيرادات الأسبوع حسب اليوم',
+    month: 'إيرادات الشهر حسب اليوم',
+    year: 'إيرادات السنة حسب الشهر',
+    all: 'الإيرادات في آخر ١٢ شهرًا',
 };
 
 /**
- * ملخّص المبيعات — كان هو صفحة «التقارير» كلّها قبل أن يصير الفهرس بابها.
+ * ملخّص الإيرادات (كان «ملخّص المبيعات») — كان هو صفحة «التقارير» كلّها قبل أن يصير الفهرس بابها.
  * لم يتغيّر من محتواه شيء: تغيّر مكانه فقط، وصار بطاقةً في الفهرس تقود إليه.
  */
 export default function ReportsSales() {
@@ -82,7 +82,7 @@ export default function ReportsSales() {
     const m = (v: number) => money(v, currency);
 
     const stats = [
-        { label: t('إجمالي المبيعات'), value: m(summary.sales), icon: 'wallet', color: 'primary' },
+        { label: t('إجمالي الفواتير (شامل الضريبة)'), value: m(summary.sales), icon: 'wallet', color: 'primary' },
         // التكلفة بجانب الربح لا في ورقةٍ أخرى: من يقرأ ربحًا يحتاج أن يرى ممّ طُرح
         { label: t('تكلفة البضاعة المباعة'), value: m(summary.cogs), icon: 'package', color: 'info' },
         {
@@ -105,10 +105,10 @@ export default function ReportsSales() {
 
 
     return (
-        <AdminLayout title="ملخّص المبيعات">
+        <AdminLayout title="ملخّص الإيرادات">
             <PageHeader
-                title="ملخّص المبيعات"
-                subtitle={t('ملخّص أداء الشركة: المبيعات والأرباح والمصروفات')}
+                title="ملخّص الإيرادات"
+                subtitle={t('ملخّص أداء الشركة: الإيرادات والأرباح والمصروفات')}
                 actions={
                     /* الملفّ يحمل الفترة المعروضة — لا فترته الخاصّة */
                     <ExportMenu
@@ -188,7 +188,7 @@ export default function ReportsSales() {
 
             <Card className="overflow-hidden">
                 <div className="border-b border-[var(--ui-border,#e8e8e8)] px-5 py-4">
-                    <h3 className="font-bold text-[#111]">{t('الأكثر مبيعًا')}</h3>
+                    <h3 className="font-bold text-[#111]">{t('الأعلى إيرادًا')}</h3>
                 </div>
                 <Table>
                     <TableHeader>
@@ -202,7 +202,7 @@ export default function ReportsSales() {
                     </TableHeader>
                     <TableBody>
                         {topSellingProducts.length === 0 ? (
-                            <TableEmpty colSpan={5}>{t('لا توجد مبيعات بعد')}</TableEmpty>
+                            <TableEmpty colSpan={5}>{t('لا توجد فواتير صادرة بعد')}</TableEmpty>
                         ) : (
                             topSellingProducts.map((p) => (
                                 <TableRow key={p.name}>

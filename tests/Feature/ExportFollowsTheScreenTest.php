@@ -7,10 +7,8 @@ use App\Models\Business;
 use App\Models\Category;
 use App\Models\Customer;
 use App\Models\Expense;
-use App\Models\Order;
 use App\Models\Product;
 use App\Models\User;
-use App\Support\OrderStatus;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Testing\TestResponse;
 use Tests\TestCase;
@@ -27,6 +25,8 @@ use Tests\TestCase;
  *   - ويبحث عن صنفٍ ويصدّر، فيخرج الجرد كلّه.
  *
  * وخطأٌ من هذا النوع لا يُكتشف عند التصدير: يُكتشف عند المحاسب.
+ *
+ * (وتصديرُ قائمة الطلبات خرج مع «المبيعات» — فخرجت اختباراتُه معه.)
  */
 class ExportFollowsTheScreenTest extends TestCase
 {
@@ -78,76 +78,6 @@ class ExportFollowsTheScreenTest extends TestCase
         $res->baseResponse->sendContent();
 
         return (string) ob_get_clean();
-    }
-
-    private function order(string $number, string $status, string $customer, ?string $at = null): Order
-    {
-        return Order::create([
-            'business_id' => $this->business->id, 'number' => $number,
-            'customer_name' => $customer, 'employee_name' => 'كاشير',
-            'status' => $status, 'payment_method' => 'نقدي',
-            'subtotal' => 10, 'tax' => 0, 'total' => 10,
-            'ordered_at' => $at ?? now()->toDateTimeString(),
-        ]);
-    }
-
-    /* ----------------------------- الفواتير ----------------------------- */
-
-    public function test_filtering_by_status_carries_into_the_file(): void
-    {
-        $this->order('INV-1', OrderStatus::COMPLETED, 'زبون مكتمل');
-        $this->order('INV-2', OrderStatus::CANCELLED, 'زبون ملغى');
-
-        $body = $this->csv('admin.export.orders', ['status' => OrderStatus::CANCELLED]);
-
-        $this->assertStringContainsString('زبون ملغى', $body);
-        $this->assertStringNotContainsString('زبون مكتمل', $body);
-    }
-
-    public function test_a_cancelled_order_can_reach_the_file_at_all(): void
-    {
-        /*
-         * أشدُّ من إهمال المُرشِّح: المصدر كان يستثني الملغى بـ`sold()`، فمن
-         * رشّح الملغاة وصدّر خرج بملفٍّ فارغ — لا ناقصٍ.
-         */
-        $this->order('INV-3', OrderStatus::CANCELLED, 'زبون ملغى');
-
-        $this->assertStringContainsString('زبون ملغى', $this->csv('admin.export.orders'));
-    }
-
-    public function test_a_date_range_carries_into_the_file(): void
-    {
-        $this->order('INV-4', OrderStatus::COMPLETED, 'زبون قديم', now()->subMonths(6)->toDateTimeString());
-        $this->order('INV-5', OrderStatus::COMPLETED, 'زبون اليوم');
-
-        $body = $this->csv('admin.export.orders', ['from' => now()->subDays(3)->toDateString()]);
-
-        $this->assertStringContainsString('زبون اليوم', $body);
-        $this->assertStringNotContainsString('زبون قديم', $body);
-    }
-
-    public function test_a_search_carries_into_the_file(): void
-    {
-        $this->order('INV-6', OrderStatus::COMPLETED, 'سالم');
-        $this->order('INV-7', OrderStatus::COMPLETED, 'خالد');
-
-        $body = $this->csv('admin.export.orders', ['q' => 'سالم']);
-
-        $this->assertStringContainsString('سالم', $body);
-        $this->assertStringNotContainsString('خالد', $body);
-    }
-
-    public function test_the_dashboard_still_sees_only_what_was_sold(): void
-    {
-        // بلا مُرشِّحٍ تبقى القاعدة القديمة: اللوحة تعرض ما بيع لا ما أُلغي
-        $this->order('INV-8', OrderStatus::CANCELLED, 'زبون ملغى');
-        $this->order('INV-9', OrderStatus::COMPLETED, 'زبون مكتمل');
-
-        $this->actingAs($this->owner);
-        $names = array_column(\App\Support\Demo::orders(), 'customer');
-
-        $this->assertContains('زبون مكتمل', $names);
-        $this->assertNotContains('زبون ملغى', $names);
     }
 
     /* ----------------------------- المنتجات ----------------------------- */

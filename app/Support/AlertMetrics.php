@@ -89,7 +89,7 @@ class AlertMetrics
                     'value' => $m['unit'] === 'money' ? Demo::money($value) : (string) (int) $value,
                     'icon' => $icons[$key] ?? 'activity',
                     'color' => $colors[$key] ?? 'primary',
-                    'url' => self::sectionUrl($m['section']),
+                    'url' => self::sectionUrl($m['section'], $m['route'] ?? null),
                 ];
             })
             ->values()->all();
@@ -102,9 +102,14 @@ class AlertMetrics
      * `Permissions::ROUTES` وهناك من خريطةٍ مكتوبةٍ بيدها — فبطاقةُ اللوحة
      * تفتح شاشةً ونقرةُ التنبيه على المقياس نفسِه تفتح أخرى.
      */
-    private static function sectionUrl(string $section): ?string
+    private static function sectionUrl(string $section, ?string $route = null): ?string
     {
-        return auth()->user()?->allows($section) ? CustomAlert::routeFor($section) : null;
+        if (! auth()->user()?->allows($section)) {
+            return null;
+        }
+
+        // ومقياسٌ يقود إلى شاشةٍ بعينها داخل قسمه — «فواتير متأخّرة» إلى الفواتير
+        return $route !== null ? route($route) : CustomAlert::routeFor($section);
     }
 
     /** القيمة الحالية لمقياس */

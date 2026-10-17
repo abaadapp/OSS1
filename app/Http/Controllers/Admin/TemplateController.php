@@ -157,7 +157,7 @@ class TemplateController extends Controller
             : (string) ($data['paper'] ?? PaperSize::A4);
 
         return response()->json([
-            'html' => DocumentRenderer::preview($this->bid(), $type, $data, $thermal),
+            'html' => DocumentRenderer::preview($this->bid(), $type, $data),
             'size' => $size,
         ]);
     }

@@ -66,7 +66,7 @@ abstract class OperationsTestCase extends TestCase
         $this->owner = $make('المالك', 'owner@hadath.om', 'admin');
         $this->manager = $make('المدير', 'manager@hadath.om', 'manager');
         $this->field = $make('المنفّذ', 'field@hadath.om', 'delivery', [
-            'dashboard', 'orders', 'projects', 'operations',
+            'dashboard', 'projects', 'operations',
             Permissions::OPERATIONS_STATUS, Permissions::OPERATIONS_INCIDENTS, Permissions::ASSETS_CHECKOUT, Permissions::ASSETS_RETURN,
         ]);
         $this->storekeeper = $make('أمين المخزن', 'store@hadath.om', 'inventory');

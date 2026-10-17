@@ -2,16 +2,16 @@
 
 namespace Tests\Feature;
 
+use App\Http\Controllers\Admin\CustomerInvoiceController;
 use App\Models\Branch;
 use App\Models\Business;
-use App\Models\Order;
-use App\Models\OrderItem;
+use App\Models\Customer;
+use App\Models\CustomerInvoice;
+use App\Models\CustomerInvoiceItem;
 use App\Models\Setting;
 use App\Models\User;
-use App\Support\Document\PaperSize;
 use App\Support\Document\Pdf\MpdfDriver;
-use App\Support\DocumentRenderer;
-use App\Support\DocumentTemplates;
+use App\Support\InvoiceBranding;
 use App\Support\Pdf;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -52,7 +52,7 @@ class ThePreviewAndThePrintShareAFontTest extends TestCase
 
     private Business $business;
 
-    private Order $order;
+    private CustomerInvoice $invoice;
 
     protected function setUp(): void
     {
@@ -70,24 +70,30 @@ class ThePreviewAndThePrintShareAFontTest extends TestCase
         Setting::create(['business_id' => $this->business->id, 'key' => 'paper', 'value' => 'A4']);
         $this->actingAs($user);
 
-        $this->order = Order::create([
-            'business_id' => $this->business->id, 'branch_id' => $branch->id, 'branch' => $branch->name,
-            'number' => 'INV-000001', 'status' => 'مكتمل', 'customer_name' => 'شركة الواحة',
-            'employee_name' => 'سالم', 'payment_method' => 'نقدي',
-            'subtotal' => 12.5, 'tax' => 0.625, 'total' => 13.125, 'ordered_at' => now(),
+        // كانت ورقةَ البيع — خرجت مع «المبيعات»؛ والقاعدةُ نفسُها على فاتورة العميل
+        $customer = Customer::create(['business_id' => $this->business->id, 'name' => 'شركة الواحة']);
+        $this->invoice = CustomerInvoice::create([
+            'business_id' => $this->business->id, 'customer_id' => $customer->id, 'branch_id' => $branch->id,
+            'number' => 'CINV-000001', 'status' => CustomerInvoice::ISSUED, 'issued_at' => now(),
+            'customer_name' => 'شركة الواحة',
+            'subtotal' => 12.5, 'discount_total' => 0, 'tax_total' => 0.625, 'total' => 13.125,
         ]);
-        OrderItem::create([
-            'order_id' => $this->order->id, 'name' => 'باقة ورد', 'price' => 12.5, 'quantity' => 1, 'total' => 12.5,
+        CustomerInvoiceItem::create([
+            'customer_invoice_id' => $this->invoice->id, 'description' => 'باقة ورد',
+            'quantity' => 1, 'unit_price' => 12.5, 'discount' => 0,
+            'tax_rate' => 5, 'tax_amount' => 0.625, 'line_total' => 13.125,
         ]);
-        $this->order->load('items');
+        $this->invoice->load('items');
     }
 
+    /** فاتورةُ العميل من باب طباعتها — كما يرسمها `PdfController::customerInvoice` */
     private function sheet(): string
     {
-        $v = DocumentTemplates::settings((int) $this->business->id, 'sale');
-        $v['paper'] = PaperSize::A4;
+        $bid = (int) $this->business->id;
 
-        return DocumentRenderer::saleSheet((int) $this->business->id, $this->order, $v);
+        return InvoiceBranding::render($bid, null, fn () => CustomerInvoiceController::paper(
+            $bid, $this->invoice, $this->invoice->paidTotal(), $this->invoice->outstanding(), null,
+        )->render());
     }
 
     /** الورقةُ تحمل إعلانَ الخطّ، وكلُّ ملفٍّ تشير إليه موجودٌ فعلًا */
@@ -105,6 +111,7 @@ class ThePreviewAndThePrintShareAFontTest extends TestCase
             $this->assertFileExists(public_path(ltrim($path, '/')), "ملفُّ الخطّ مفقود: {$path}");
         }
     }
+
     /**
      * وملفّا المحرّك قائمان — وفيهما ما تتّصل به الحروف.
      *
@@ -172,15 +179,5 @@ class ThePreviewAndThePrintShareAFontTest extends TestCase
         $fonts->setAccessible(true);
 
         return $fonts->invoke(null)['fontdata'];
-    }
-
-    /** والشريطُ الحراريُّ مثلُها — معاينتُه متصفّحٌ أيضًا */
-    public function test_the_thermal_strip_carries_it_too(): void
-    {
-        $v = DocumentTemplates::settings((int) $this->business->id, 'sale');
-        $html = DocumentRenderer::saleStrip((int) $this->business->id, $this->order, $v, 80);
-
-        $this->assertStringContainsString('@font-face', $html);
-        $this->assertStringContainsString('/fonts/ibmpsa-', $html);
     }
 }

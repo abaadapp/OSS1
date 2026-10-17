@@ -7,16 +7,14 @@ use App\Models\Branch;
 use App\Models\Business;
 use App\Models\Currency;
 use App\Models\Customer;
-use App\Models\Order;
-use App\Models\OrderItem;
+use App\Models\CustomerInvoice;
+use App\Models\CustomerInvoiceItem;
 use App\Models\Setting;
 use App\Models\User;
 use App\Support\CustomerInvoices;
 use App\Support\Demo;
-use App\Support\Document\PaperSize;
 use App\Support\Document\Snapshot;
-use App\Support\DocumentRenderer;
-use App\Support\DocumentTemplates;
+use App\Support\InvoiceBranding;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -45,6 +43,9 @@ use Tests\TestCase;
  * وهذا الملفّ يُثبت الفرقَ بين الحالين بالتنفيذ: ورقةٌ مختومةٌ لا تتحرّك،
  * وورقةٌ بلا ختمٍ تتحرّك — وكلتاهما تُطبع، ولا تُكتب لقطةٌ لواحدةٍ منهما
  * أثناء الرسم.
+ *
+ * والورقةُ المقيسة فاتورةُ العميل من باب طباعتها. وكانت ورقةَ البيع —
+ * وخرجت مع «المبيعات»؛ والقاعدةُ نفسُها تحكم فاتورةَ العميل.
  */
 class TheLegacyPaperIsNotGivenAPastTest extends TestCase
 {
@@ -55,6 +56,8 @@ class TheLegacyPaperIsNotGivenAPastTest extends TestCase
     private Branch $branch;
 
     private User $owner;
+
+    private Customer $customer;
 
     protected function setUp(): void
     {
@@ -73,42 +76,52 @@ class TheLegacyPaperIsNotGivenAPastTest extends TestCase
         Setting::create(['business_id' => $this->business->id, 'key' => 'paper', 'value' => 'A4']);
         Setting::create(['business_id' => $this->business->id, 'key' => 'vat_enabled', 'value' => '1']);
         Setting::create(['business_id' => $this->business->id, 'key' => 'vat_number', 'value' => 'OM1100234567']);
+        $this->customer = Customer::create(['business_id' => $this->business->id, 'name' => 'شركة الواحة']);
     }
 
-    private function order(string $number, bool $stamp): Order
+    /* كانت طلبَ بيعٍ — خرج مع «المبيعات»؛ والقاعدةُ نفسُها على فاتورة العميل */
+    private function invoice(string $number, bool $stamp): CustomerInvoice
     {
         $attrs = [
-            'business_id' => $this->business->id, 'branch_id' => $this->branch->id,
-            'branch' => $this->branch->name, 'number' => $number, 'status' => 'مكتمل',
-            'customer_name' => 'شركة الواحة', 'employee_name' => 'سالم', 'payment_method' => 'نقدي',
-            'subtotal' => 12.5, 'tax' => 0.625, 'total' => 13.125, 'ordered_at' => now(),
+            'business_id' => $this->business->id, 'customer_id' => $this->customer->id,
+            'branch_id' => $this->branch->id, 'number' => $number, 'status' => CustomerInvoice::ISSUED,
+            'issued_at' => now(), 'customer_name' => 'شركة الواحة',
+            'subtotal' => 12.5, 'discount_total' => 0, 'tax_total' => 0.625, 'total' => 13.125,
         ];
 
         if ($stamp) {
             $attrs[Snapshot::COLUMN] = Snapshot::capture((int) $this->business->id);
         }
 
-        $order = Order::create($attrs);
-        OrderItem::create([
-            'order_id' => $order->id, 'name' => 'باقة ورد', 'price' => 12.5, 'quantity' => 1, 'total' => 12.5,
+        $invoice = CustomerInvoice::create($attrs);
+        CustomerInvoiceItem::create([
+            'customer_invoice_id' => $invoice->id, 'description' => 'باقة ورد',
+            'quantity' => 1, 'unit_price' => 12.5, 'discount' => 0,
+            'tax_rate' => 5, 'tax_amount' => 0.625, 'line_total' => 13.125,
         ]);
 
-        return $order->load('items');
+        return $invoice->load('items');
     }
 
-    private function sheet(Order $order): string
+    /** الورقةُ من باب طباعتها — كما يرسمها `PdfController::customerInvoice` */
+    private function sheet(CustomerInvoice $invoice): string
     {
-        $v = DocumentTemplates::settings((int) $this->business->id, 'sale');
-        $v['paper'] = PaperSize::A4;
-        $v['show_vat_no'] = true;
+        $bid = (int) $this->business->id;
 
-        return DocumentRenderer::saleSheet((int) $this->business->id, $order, $v);
+        return InvoiceBranding::render($bid, null, fn () => CustomerInvoiceController::paper(
+            $bid, $invoice, $invoice->paidTotal(), $invoice->outstanding(), null, ['show_vat_no' => true],
+        )->render());
     }
 
-    /** كلُّ ما تقرؤه الورقةُ حيًّا يتبدّل — الاسمُ والرقمُ الضريبيُّ والعملة */
+    /**
+     * كلُّ ما تقرؤه الورقةُ حيًّا ويلقطه الختم يتبدّل — الهاتفُ والرقمُ الضريبيُّ والعملة.
+     *
+     * والاسمُ لا يُبدَّل هنا: على فاتورة العميل هو «الاسمُ المعروض» من
+     * `InvoiceBranding` حيًّا عمدًا، لا من اللقطة — انظر `CustomerInvoiceController::paper`.
+     */
     private function theShopChanges(): void
     {
-        $this->business->update(['name' => 'زهور الخليج الدولية', 'phone' => '+968 0000 0000']);
+        $this->business->update(['phone' => '+968 0000 0000']);
         Setting::where('business_id', $this->business->id)
             ->where('key', 'vat_number')->update(['value' => 'OM9999999999']);
         Currency::create([
@@ -130,8 +143,8 @@ class TheLegacyPaperIsNotGivenAPastTest extends TestCase
     {
         $this->actingAs($this->owner);
 
-        $stamped = $this->order('INV-000001', stamp: true);
-        $legacy = $this->order('INV-000002', stamp: false);
+        $stamped = $this->invoice('CINV-000001', stamp: true);
+        $legacy = $this->invoice('CINV-000002', stamp: false);
 
         $stampedBefore = $this->sheet($stamped);
         $legacyBefore = $this->sheet($legacy);
@@ -149,7 +162,8 @@ class TheLegacyPaperIsNotGivenAPastTest extends TestCase
         // وغيرُ المختومة: تتبع المتجر — وهو المعلوم لا المفاجئ
         $this->assertNotSame($legacyBefore, $legacyAfter, 'ورقةٌ بلا لقطةٍ يُدّعى لها ثبات');
         $this->assertStringContainsString('OM9999999999', $legacyAfter);
-        $this->assertStringContainsString('زهور الخليج الدولية', $legacyAfter);
+        $this->assertStringContainsString('+968 0000 0000', $legacyAfter);
+        $this->assertStringNotContainsString('+968 0000 0000', $stampedAfter);
     }
 
     /** وكلتاهما تُطبع — الورقةُ القديمة لا تسقط لأنّها بلا لقطة */
@@ -157,7 +171,7 @@ class TheLegacyPaperIsNotGivenAPastTest extends TestCase
     {
         $this->actingAs($this->owner);
 
-        $legacy = $this->order('INV-000003', stamp: false);
+        $legacy = $this->invoice('CINV-000003', stamp: false);
 
         $this->assertFalse(Snapshot::stamped($legacy));
         $this->assertStringContainsString('باقة ورد', $this->sheet($legacy));
@@ -173,7 +187,7 @@ class TheLegacyPaperIsNotGivenAPastTest extends TestCase
     {
         $this->actingAs($this->owner);
 
-        $legacy = $this->order('INV-000004', stamp: false);
+        $legacy = $this->invoice('CINV-000004', stamp: false);
 
         $this->sheet($legacy);
         $this->sheet($legacy->fresh('items'));
@@ -192,14 +206,14 @@ class TheLegacyPaperIsNotGivenAPastTest extends TestCase
      */
     public function test_the_marker_is_the_column_itself(): void
     {
-        $withNothing = $this->order('INV-000005', stamp: false);
+        $withNothing = $this->invoice('CINV-000005', stamp: false);
         $this->assertFalse(Snapshot::stamped($withNothing));
 
-        $withFuture = $this->order('INV-000006', stamp: true);
+        $withFuture = $this->invoice('CINV-000006', stamp: true);
         $withFuture->setAttribute(Snapshot::COLUMN, ['v' => Snapshot::VERSION + 99, 'seller' => ['name' => 'س']]);
         $this->assertFalse(Snapshot::stamped($withFuture), 'لقطةٌ بنسخةٍ مجهولة قُرئت');
 
-        $withStamp = $this->order('INV-000007', stamp: true);
+        $withStamp = $this->invoice('CINV-000007', stamp: true);
         $this->assertTrue(Snapshot::stamped($withStamp));
     }
 

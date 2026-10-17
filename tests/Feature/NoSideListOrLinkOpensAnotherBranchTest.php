@@ -135,15 +135,16 @@ class NoSideListOrLinkOpensAnotherBranchTest extends TestCase
         $this->assertSame(90.0, (float) $mine['statement']['closing']);
         $this->assertSame(90.0, (float) $mine['summary']['outstanding']);
 
-        // والورقتان المطبوعتان تُفتحان — والكشفُ نفسُه تحتهما
+        // والورقةُ المطبوعة تُفتح — والكشفُ نفسُه تحتها. (وكشفُ الطلبات القديم
+        // `admin.customers.statement` خرج مع «المبيعات».)
         $this->get(route('admin.finance.customerStatement.pdf', $this->customer->id))->assertOk();
-        $this->get(route('admin.customers.statement', $this->customer->id))->assertOk();
     }
 
     public function test_the_customer_file_and_list_count_only_their_branches(): void
     {
         $this->actingAs($this->clerk);
-        $this->assertSame(['INV-0', 'INV-M'], collect($this->props('admin.customers.show', $this->customer->id)['orders'])->pluck('id')->sort()->values()->all());
+        // كان سجلُّ الملفّ `orders` يحمل رقمَ الفاتورة في `id` — صار `invoices` برقمها في `number`
+        $this->assertSame(['INV-0', 'INV-M'], collect($this->props('admin.customers.show', $this->customer->id)['invoices'])->pluck('number')->sort()->values()->all());
         $row = collect($this->props('admin.customers.index')['customers'])->firstWhere('id', $this->customer->id);
         $this->assertSame([2, 150.0], [(int) $row['orders'], (float) $row['total_spent']]);
 

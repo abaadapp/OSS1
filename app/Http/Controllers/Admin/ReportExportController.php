@@ -5,7 +5,6 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Support\Activity;
 use App\Support\Demo;
-use App\Support\OrderStatus;
 use App\Support\Reports;
 use PhpOffice\PhpSpreadsheet\Cell\DataType;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
@@ -131,7 +130,7 @@ class ReportExportController extends Controller
         // الورقة تُبنى من حمولة الشاشة نفسها — انظر Support\Reports::salesReport
         $report = Reports::salesReport($range);
         $spreadsheet = new Spreadsheet;
-        [$sheet, $title, $head] = $this->sheet($spreadsheet, __('تقرير المبيعات'), $range);
+        [$sheet, $title, $head] = $this->sheet($spreadsheet, __('تقرير الإيرادات'), $range);
         $money = [];
 
         /*
@@ -156,8 +155,8 @@ class ReportExportController extends Controller
 
         // المبيعات على محور الفترة — ساعاتٍ أو أيّامًا أو أشهرًا، وبعدد الطلبات
         $series = $report['salesSeries'];
-        $title(__('المبيعات').' — '.Demo::rangeLabel($range));
-        $head([__('الفترة'), $this->moneyHead('المبيعات'), __('عدد الطلبات')]);
+        $title(__('الإيرادات').' — '.Demo::rangeLabel($range));
+        $head([__('الفترة'), $this->moneyHead('الإيرادات'), __('عدد الفواتير')]);
         foreach ($series['full'] as $i => $label) {
             // ما لم يأتِ بعدُ لا يُكتب: صفٌّ بصفرٍ عن يوم غدٍ رقمٌ لا واقعة
             if (($series['data'][$i] ?? null) === null) {
@@ -186,7 +185,7 @@ class ReportExportController extends Controller
         $this->row++;
 
         // أفضل المنتجات — بترتيب الإيراد كما في جدول الشاشة، لا بترتيب الكمية
-        $title(__('الأكثر مبيعًا'));
+        $title(__('الأعلى إيرادًا'));
         $head([__('المنتج'), __('القسم'), __('المُباع'), $this->moneyHead('الإيراد')]);
         foreach ($report['topSellingProducts'] as $p) {
             $r = $this->row;
@@ -198,9 +197,9 @@ class ReportExportController extends Controller
             $this->row++;
         }
 
-        Activity::log('report', 'صدّر تقرير المبيعات (Excel)');
+        Activity::log('report', 'صدّر تقرير الإيرادات (Excel)');
 
-        return $this->download($spreadsheet, $sheet, $money, 'sales-report-'.$range.'-'.now()->format('Y-m-d').'.xlsx');
+        return $this->download($spreadsheet, $sheet, $money, 'revenue-report-'.$range.'-'.now()->format('Y-m-d').'.xlsx');
     }
 
     public function productsXlsx()
@@ -329,65 +328,6 @@ class ReportExportController extends Controller
         Activity::log('report', 'صدّر المعاملات المالية (Excel)');
 
         return $this->download($spreadsheet, $sheet, $money, 'finance-'.now()->format('Y-m-d').'.xlsx');
-    }
-
-    /** تصدير قائمة الطلبات كملف Excel حقيقي (xlsx) */
-    public function ordersXlsx()
-    {
-        $spreadsheet = new Spreadsheet;
-        [$sheet, $title, $head] = $this->sheet($spreadsheet, __('الطلبات'), null, perBranch: true);
-        $money = [];
-
-        $orders = Demo::orders(request());
-
-        /*
-         * ملخّصٌ يقول ما تقوله الشاشة.
-         *
-         * والملغى خارج المجموع وداخل العدّ: الشاشة تعرضه في الجدول وتحسب
-         * إجماليّها بلا قيمته — وجمعُه هنا كان سيجعل الملفّ يقول مبيعاتٍ لم
-         * تقع، ويخالف الرقم الذي قرأه التاجر قبل أن يضغط «تصدير».
-         */
-        $cancelled = array_values(array_filter($orders, fn ($o) => $o['status'] === OrderStatus::CANCELLED));
-
-        $title(__('ملخّص الطلبات'));
-        $head([__('عدد الطلبات'), $this->moneyHead('إجمالي القيمة'), __('منها ملغاة')]);
-        $sheet->setCellValue('A'.$this->row, count($orders));
-        $sheet->setCellValue('B'.$this->row, round(array_sum(array_map(
-            fn ($o) => $o['status'] === OrderStatus::CANCELLED ? 0.0 : (float) $o['total'],
-            $orders,
-        )), 3));
-        $sheet->setCellValue('C'.$this->row, count($cancelled));
-        $money[] = 'B'.$this->row;
-        $this->row += 2;
-
-        // جدول الطلبات
-        $firstDataRow = $this->tableHead($sheet, [
-            __('رقم الطلب'), __('العميل'), __('الموظف'), __('الفرع'),
-            __('عدد الأصناف'), $this->moneyHead('الإجمالي'), __('الدفع'), __('الحالة'), __('التاريخ'),
-            __('موعد التسليم'), __('نوع التنفيذ'),
-        ]);
-        foreach ($orders as $o) {
-            $r = $this->row;
-            $sheet->setCellValueExplicit("A{$r}", (string) $o['id'], DataType::TYPE_STRING);
-            $sheet->setCellValue("B{$r}", $o['customer']);
-            $sheet->setCellValue("C{$r}", $o['employee']);
-            $sheet->setCellValue("D{$r}", $o['branch']);
-            $sheet->setCellValue("E{$r}", (int) $o['items_count']);
-            $sheet->setCellValue("F{$r}", round((float) $o['total'], 3));
-            $sheet->setCellValue("G{$r}", $o['payment']);
-            $sheet->setCellValue("H{$r}", $o['status']);
-            $sheet->setCellValue("I{$r}", $o['date']);
-            // والموعدُ ونوعُ التنفيذ: عليهما تقوم مُرشِّحاتُ الشاشة، والملفّ يتبعها
-            $sheet->setCellValue("J{$r}", $o['scheduled']);
-            $sheet->setCellValue("K{$r}", $o['fulfillment']);
-            $money[] = "F{$r}";
-            $this->row++;
-        }
-        $sheet->freezePane("A{$firstDataRow}");
-
-        Activity::log('report', 'صدّر قائمة الطلبات (Excel)');
-
-        return $this->download($spreadsheet, $sheet, $money, 'orders-'.now()->format('Y-m-d').'.xlsx');
     }
 
     /** تصدير المصروفات كملف Excel */

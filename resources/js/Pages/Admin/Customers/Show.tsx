@@ -33,7 +33,7 @@ import type { CustomerContact } from '@/lib/contacts';
 import { PROJECT_STATUS_LABEL, projectTone } from '@/lib/projects';
 import { STATE_LABEL, stateTone } from '@/lib/quotations';
 import type { PageProps } from '@/types';
-import type { Customer, Order } from '@/types/models';
+import type { Customer } from '@/types/models';
 import ContactsCard from './partials/ContactsCard';
 
 interface Address {
@@ -45,10 +45,22 @@ interface Address {
     is_default: boolean;
 }
 
+/** فاتورةُ العميل في سجلّه — والحالُ حالُ سداد (`CustomerInvoice::paymentState`) */
+interface InvoiceRow {
+    id: number;
+    number: string;
+    items_count: number;
+    total: number;
+    payment: string;
+    status: string;
+    date: string;
+}
+
 interface Props {
     customer: Customer & { address?: string | null; notes?: string | null; branch_id?: number | null };
     branches?: { id: number; name: string }[];
-    orders: Order[];
+    /* فواتيرُه لمن يفتح «فواتير العملاء» (قسمُها «المالية») — و`null` لمن لا يفتحها */
+    invoices: InvoiceRow[] | null;
     addresses: Address[];
     /* المرحلة 14: نوعُ الجهة وأشخاصُ اتصالها ومشاريعُها وعروضُها */
     profile?: { customer_type: string; legal_name: string | null; organization: boolean };
@@ -57,12 +69,12 @@ interface Props {
     quotations?: { id: number; label: string; title: string | null; status: string; issued_at: string | null; total: number }[];
 }
 
-type CustomerTab = 'orders' | 'addresses' | 'projects' | 'quotations';
+type CustomerTab = 'invoices' | 'addresses' | 'projects' | 'quotations';
 
 const BLANK = { address_id: '', label: '', city: '', area: '', street: '' };
 
 export default function CustomerShow() {
-    const { customer, orders, addresses, context, branches = [], profile, contacts = [], projects = [], quotations = [] } = usePage<PageProps<Props>>().props;
+    const { customer, invoices, addresses, context, branches = [], profile, contacts = [], projects = [], quotations = [] } = usePage<PageProps<Props>>().props;
     const t = useTranslate();
     // نافذةُ التأكيد من النظام لا من المتصفّح — انظر ConfirmDialog
     const [ask, confirmDialog] = useConfirm();
@@ -84,7 +96,7 @@ export default function CustomerShow() {
         email: customer.email ?? '',
         branch_id: customer.branch_id ? String(customer.branch_id) : '',
     });
-    const [tab, setTab] = useState<CustomerTab>('orders');
+    const [tab, setTab] = useState<CustomerTab>(invoices ? 'invoices' : 'projects');
 
     const notes = useForm({ notes: customer.notes ?? '' });
 
@@ -113,10 +125,11 @@ export default function CustomerShow() {
     };
 
     const stats = [
-        { label: t('عدد الطلبات'), value: String(customer.orders), icon: 'shopping-bag', color: 'primary' },
+        // من فواتيره الصادرة — والمفتاحُ `orders` اسمٌ قديمٌ للعدد نفسه (`Demo::customers`)
+        { label: t('عدد الفواتير'), value: String(customer.orders), icon: 'shopping-bag', color: 'primary' },
         { label: t('إجمالي المشتريات'), value: m(customer.total_spent), icon: 'wallet', color: 'success' },
         {
-            label: t('متوسط الطلب'),
+            label: t('متوسط الفاتورة'),
             value: m(customer.orders > 0 ? customer.total_spent / customer.orders : 0),
             icon: 'calculator', color: 'info',
         },
@@ -141,11 +154,18 @@ export default function CustomerShow() {
                 subtitle={t('سجل مشتريات العميل ونقاط ولائه')}
                 actions={
                     <>
-                        <Button variant="outline" asChild>
-                            <a href={route('admin.customers.statement', customer.id)} target="_blank" rel="noreferrer">
-                                <Receipt />{t('كشف حساب')}
-                            </a>
-                        </Button>
+                        {/*
+                            كشفُ الحساب من الذمم: فواتيرُه وتحصيلُه ورصيدُه — لمن يفتح
+                            «المالية». وكان يُطبع من الطلبات القديمة وحدها، فيقول
+                            «لا مشتريات» لعميلٍ عليه فواتيرُ مشاريعه كلُّها.
+                        */}
+                        {invoices && (
+                            <Button variant="outline" asChild>
+                                <SmartLink routeName="admin.finance.customerStatement" href={route('admin.finance.customerStatement', customer.id)}>
+                                    <Receipt />{t('كشف حساب')}
+                                </SmartLink>
+                            </Button>
+                        )}
                         {/*
                             التعديل والحذف تحت النقاط الثلاث كما في المورّدين.
                             خمسة أزرارٍ في الرأس تجعل «كشف حساب» — وهو ما
@@ -244,7 +264,7 @@ export default function CustomerShow() {
                     {/* داخل بطاقة: الحشو يُبعد التبويبات عن حدّها */}
                     <Tabs
                         tabs={[
-                            { key: 'orders', label: 'سجل الطلبات' },
+                            ...(invoices ? [{ key: 'invoices', label: 'الفواتير', count: invoices.length }] : []),
                             { key: 'projects', label: 'المشاريع', count: projects.length },
                             { key: 'quotations', label: 'عروض الأسعار', count: quotations.length },
                             { key: 'addresses', label: 'العناوين', count: addresses.length },
@@ -365,34 +385,34 @@ export default function CustomerShow() {
                                 </button>
                             </div>
                         </div>
-                    ) : (
+                    ) : invoices ? (
                     <Table>
                         <TableHeader>
                             <TableRow className="hover:bg-transparent">
-                                {['رقم الطلب', 'المنتجات', 'الإجمالي', 'الدفع', 'الحالة', 'التاريخ'].map((h) => (
+                                {['رقم الفاتورة', 'البنود', 'الإجمالي', 'المتبقي', 'الحالة', 'التاريخ'].map((h) => (
                                     <TableHead key={h}>{t(h)}</TableHead>
                                 ))}
                             </TableRow>
                         </TableHeader>
                         <TableBody>
-                            {orders.length === 0 ? (
-                                <TableEmpty colSpan={6}>{t('لا توجد طلبات لهذا العميل بعد')}</TableEmpty>
-                            ) : orders.map((o) => (
+                            {invoices.length === 0 ? (
+                                <TableEmpty colSpan={6}>{t('لا فواتير صادرة لهذا العميل بعد')}</TableEmpty>
+                            ) : invoices.map((o) => (
                                 <TableRow key={o.id}>
                                     <TableCell>
-                                        <SmartLink routeName="admin.orders.show" href={route('admin.orders.show', o.id)}
-                                            className="font-medium text-[#111] hover:underline">{o.id}</SmartLink>
+                                        <SmartLink routeName="admin.customerInvoices.show" href={route('admin.customerInvoices.show', o.id)}
+                                            className="font-medium text-[#111] hover:underline">{o.number}</SmartLink>
                                     </TableCell>
                                     <TableCell className="tabular-nums text-[#4b4b4b]">{number(o.items_count)}</TableCell>
                                     <TableCell className="tabular-nums font-medium">{m(o.total)}</TableCell>
-                                    <TableCell>{t(o.payment === 'بطاقة' ? 'فيزا' : o.payment)}</TableCell>
+                                    <TableCell className="tabular-nums">{o.payment}</TableCell>
                                     <TableCell><Badge status={o.status}>{t(o.status)}</Badge></TableCell>
                                     <TableCell className="text-[#6b7280]">{o.date}</TableCell>
                                 </TableRow>
                             ))}
                         </TableBody>
                     </Table>
-                    )}
+                    ) : null}
                 </Card>
             </div>
 

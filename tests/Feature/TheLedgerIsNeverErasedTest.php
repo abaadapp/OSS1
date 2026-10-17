@@ -12,8 +12,9 @@ use Tests\TestCase;
  * ولا يعرف أنّ رقمًا قرأه أمسِ تغيّر — ومن ألغى ومتى وكم كان المبلغ يذهب
  * كلُّه مع الصفّ المحذوف.
  *
- * وليس هذا خطرًا نظريًّا: `OrderCorrection::cancel` يُنادى من نقطة البيع
+ * ولم يكن خطرًا نظريًّا: `OrderCorrection::cancel` كان يُنادى من نقطة البيع
  * بلا حدٍّ زمنيّ ولا بوّابة صلاحية، فمن يبيع يستطيع أن يمحو أثرَ ما باع.
+ * (وخرج مع «المبيعات»، وبقي الحارسُ على ما بقي من الأبواب.)
  *
  * فصار الأصلُ يبقى ويُكتب مقابله عكسُه: الرصيدُ صفرٌ كما كان، والتاريخ
  * مقروء. وهذا الحارس يمنع عودةَ المحو — لا في البيع ولا في المصروف.
@@ -23,7 +24,7 @@ class TheLedgerIsNeverErasedTest extends TestCase
     /** المواضع التي كانت تمحو، ولا يجوز أن تعود */
     private const ERASERS = [
         'Support/Books.php',
-        'Support/OrderCorrection.php',
+        // و`Support/OrderCorrection.php` خرج مع «المبيعات» — لا ملفَّ يُفحص
         'Http/Controllers/Admin/ExpenseController.php',
         'Http/Controllers/Admin/TrashController.php',
     ];
@@ -51,7 +52,8 @@ class TheLedgerIsNeverErasedTest extends TestCase
 
         $this->assertStringNotContainsString('function forgetSale', $books);
         $this->assertStringNotContainsString('function forgetExpense', $books);
-        $this->assertStringContainsString('function unpostSale', $books);
+        // و`unpostSale` — عاكسُ البيعة — خرج مع «المبيعات» ولا بيعَ يُعكس؛
+        // والعاكسُ الباقي يبقى مكانَ الماحي
         $this->assertStringContainsString('function unpostExpense', $books);
     }
 

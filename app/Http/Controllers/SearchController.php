@@ -4,12 +4,14 @@ namespace App\Http\Controllers;
 
 use App\Models\Business;
 use App\Models\Customer;
+use App\Models\CustomerInvoice;
 use App\Models\Expense;
 use App\Models\GoodsReceiptNote;
 use App\Models\JournalEntry;
-use App\Models\Order;
 use App\Models\Product;
+use App\Models\Project;
 use App\Models\PurchaseOrder;
+use App\Models\Quotation;
 use App\Models\Supplier;
 use App\Models\SupplierInvoice;
 use App\Models\Transaction;
@@ -17,6 +19,7 @@ use App\Models\User;
 use App\Support\BranchAccess;
 use App\Support\Demo;
 use App\Support\Permissions;
+use App\Support\Quotations;
 use App\Support\Search;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -53,30 +56,36 @@ class SearchController extends Controller
             ]) : collect();
 
         /*
-         * والملغى يُوجَد.
+         * والطلباتُ القديمة لا تُبحث: خرجت «المبيعات» من النظام ولا صفحةَ لها
+         * تُفتح، فنتيجةٌ تقود إليها رابطٌ ميّت.
          *
-         * كان البحث يمرّ بـ`sold()` فيستثني الملغى، وشاشةُ المبيعات تعرضه
-         * وتعدّه وتفتح صفحته. وأكثرُ ما يُبحث عن رقم فاتورةٍ يقع عند
-         * الإرجاع والاعتراض — أي على فاتورةٍ أُلغيت. فمن معه ورقةٌ ملغاة
-         * كان يكتب رقمها فيُقال له «لا نتائج»، ويظنّ أنّ بيعَه ضاع من
-         * النظام. والمعلَّق وحده يخرج: سلّةٌ لم تُبَع بعد ولا رقم لها يُبحث.
+         * وما يحلّ محلّها ما تعمل عليه الشركة: المشاريعُ بكودها واسمها، وعروضُ
+         * الأسعار برقمها وعنوانها، وفواتيرُ العملاء برقمها واسمِ عميلها — كلٌّ
+         * لمن يفتح قسمَه. والفاتورةُ تُفتح من «المالية»، ولمن قُيّد بفروعٍ
+         * فواتيرُ فروعه وحدها كما في شاشتها (`BranchAccess::invoices`).
          */
-        /*
-         * والفاتورة يجدها الكاشير أيضًا — إلى بابه هو.
-         *
-         * صلاحية `orders` تفتح شاشة الطلبات في لوحة النشاط، والكاشير لا
-         * يملكها: له `pos` وحدها. فكان البحث يحجب الفواتير عنه كلَّها —
-         * وهو أكثرُ من يكتب رقم فاتورةٍ في يومه: عند الإرجاع، وعند إعادة
-         * الطباعة، وحين يسأل زبونٌ عن بيعةٍ سابقة. فيُقال له «لا نتائج»
-         */
-        $seesOrders = $user->allows('orders');
+        $projects = $user->allows('projects') ? Project::where('business_id', $bid)
+            ->where(fn ($w) => $w->where('code', $op, $like)->orWhere('name', $op, $like))
+            ->with('customer:id,name')->orderByDesc('id')->limit(5)->get()->map(fn ($p) => [
+                'label' => $p->code.' · '.$p->name, 'meta' => $p->customer?->name ?? '—',
+                'url' => route('admin.projects.show', $p->id),
+            ]) : collect();
 
-        // ومستنداتُ الفروع لمن قُيّد بفروعٍ من فروعه وحدها — انظر BranchAccess
-        $orders = $seesOrders ? BranchAccess::limit(Order::where('business_id', $bid))
-            ->where(fn ($w) => $w->where('number', $op, $like)->orWhere('customer_name', $op, $like))
-            ->orderByDesc('id')->limit(5)->get()->map(fn ($o) => [
-                'label' => $o->number, 'meta' => $o->customer_name ?? __('عميل نقدي'),
-                'url' => route('admin.orders.show', $o->number),
+        $quotations = $user->allows('quotations') ? Quotation::where('business_id', $bid)
+            ->whereNotNull('number')
+            ->where(fn ($w) => $w->where('number', $op, $like)->orWhere('title', $op, $like))
+            ->with('customer:id,name')->orderByDesc('id')->limit(5)->get()->map(fn ($qt) => [
+                'label' => Quotations::label($qt), 'meta' => $qt->title ?: ($qt->customer?->name ?? '—'),
+                'url' => route('admin.quotations.show', $qt->id),
+            ]) : collect();
+
+        $invoices = $user->allows('finance') ? BranchAccess::invoices(CustomerInvoice::where('business_id', $bid))
+            ->whereNotNull('number')
+            ->where(fn ($w) => $w->where('number', $op, $like)
+                ->orWhereHas('customer', fn ($c) => $c->where('name', $op, $like)))
+            ->with('customer:id,name')->orderByDesc('id')->limit(5)->get()->map(fn ($i) => [
+                'label' => $i->number, 'meta' => $i->customer?->name ?? '—',
+                'url' => route('admin.customerInvoices.show', $i->id),
             ]) : collect();
 
         $customers = $user->allows('customers') ? Customer::where('business_id', $bid)
@@ -107,8 +116,10 @@ class SearchController extends Controller
 
         return response()->json(['groups' => array_values(array_filter([
             $this->group(__('المنتجات'), 'package', $products),
-            $this->group(__('الطلبات'), 'shopping-cart', $orders),
+            $this->group(__('المشاريع'), 'briefcase', $projects),
             $this->group(__('العملاء'), 'users', $customers),
+            $this->group(__('عروض الأسعار'), 'file-text', $quotations),
+            $this->group(__('فواتير العملاء'), 'receipt', $invoices),
             $this->group(__('الموردين'), 'truck', $suppliers),
             $this->group(__('السندات والمعاملات'), 'receipt', $this->documents($user, $bid, $q, $op)),
         ]))]);

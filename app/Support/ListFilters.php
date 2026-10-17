@@ -22,60 +22,6 @@ use Illuminate\Support\Carbon;
  */
 class ListFilters
 {
-    /**
-     * فواتير المبيعات — كما ترشّحها شاشة «المبيعات».
-     *
-     * ولا `sold()` هنا: الشاشة تعرض الملغى وتعدّه، فالملفّ مثلها. ومن
-     * أراد المباع وحده رشّح بالحالة.
-     */
-    public static function orders(Builder $q, Request $request): Builder
-    {
-        if ($s = Search::term($request)) {
-            $like = Search::like();
-            $q->where(fn ($w) => $w->where('number', $like, "%{$s}%")
-                ->orWhere('customer_name', $like, "%{$s}%")
-                ->orWhere('employee_name', $like, "%{$s}%"));
-        }
-
-        if ($pm = $request->query('payment')) {
-            $q->where('payment_method', $pm);
-        }
-
-        if ($st = $request->query('status')) {
-            $q->where('status', $st);
-        }
-
-        if ($from = $request->query('from')) {
-            $q->whereDate('ordered_at', '>=', $from);
-        }
-
-        if ($to = $request->query('to')) {
-            $q->whereDate('ordered_at', '<=', $to);
-        }
-
-        /*
-         * مُرشِّح الموعد — على `scheduled_for` لا على `ordered_at`.
-         *
-         * «ما الذي يُسلَّم اليوم؟» غير «ما الذي سُجّل اليوم». وطلبٌ سُجّل
-         * الاثنين لتسليمه الجمعة يقع في يومين مختلفين بحسب أيّ عمودٍ يُقرأ.
-         */
-        if ($when = $request->query('when')) {
-            match ($when) {
-                'today' => $q->whereBetween('scheduled_for', [now()->startOfDay(), now()->endOfDay()]),
-                'tomorrow' => $q->whereBetween('scheduled_for', [
-                    now()->addDay()->startOfDay(), now()->addDay()->endOfDay(),
-                ]),
-                'upcoming' => $q->where('scheduled_for', '>', now()->addDay()->endOfDay()),
-                // و«المتأخّر» يستثني المغلق: طلبٌ سُلّم أمس ليس متأخّرًا اليوم
-                'overdue' => $q->where('scheduled_for', '<', now())
-                    ->whereNotIn('status', OrderStatus::CLOSED),
-                default => null,
-            };
-        }
-
-        return $q;
-    }
-
     /** المنتجات — كما ترشّحها شاشة «المنتجات» */
     public static function products(Builder $q, Request $request): Builder
     {

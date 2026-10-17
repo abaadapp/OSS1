@@ -24,7 +24,6 @@ import {
     Radar,
     Package,
     Settings,
-    ShoppingCart,
     Truck,
     UserCog,
     Wrench,
@@ -190,15 +189,18 @@ export const NAV: NavGroup[] = [
                 section: 'management',
                 covers: [...covers(MANAGEMENT_TABS), 'admin.management.reviews.show'],
             },
-            // «الطلبات» سابقًا: المتجر يبيع ولا يستقبل طلبات وحسب
-            { label: 'المبيعات', icon: ShoppingCart, route: 'admin.orders.index', section: 'orders' },
+            /*
+             * و«المبيعات» (`admin.orders.index`) خرجت من النظام بقسمها وأبوابها —
+             * الطلباتُ القديمة صفوفٌ تاريخيّة لا شاشة. ولا يحلّ اسمٌ آخر محلّها.
+             */
             // فواتيرُ العملاء بابٌ واحدٌ لا يتكرّر في «المالية»: ميزةٌ في
-            // موضعين تجعل التاجر يعدّل في أحدهما ويقرأ من الآخر
+            // موضعين تجعل التاجر يعدّل في أحدهما ويقرأ من الآخر. وقسمُها
+            // «المالية» نفسُها (`Permissions::ALIASES`) — والإصدارُ والتحصيلُ أفعال
             {
                 label: 'فواتير العملاء',
                 icon: FileText,
                 route: 'admin.customerInvoices.index',
-                section: 'orders',
+                section: 'finance',
                 covers: ['admin.customerInvoices.show', 'admin.customerInvoices.create'],
             },
             {

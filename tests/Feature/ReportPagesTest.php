@@ -423,7 +423,8 @@ class ReportPagesTest extends TestCase
 
     public function test_the_waste_export_is_measured_by_the_reports_section(): void
     {
-        $this->actingAs($this->staff(['orders']))
+        // قسمٌ آخرُ غيرُ التقارير — وكان «المبيعات» قبل أن يخرج من الكتالوج
+        $this->actingAs($this->staff(['customers']))
             ->get(route('admin.reports.export.csv', 'waste'))->assertForbidden();
 
         $this->actingAs($this->staff(['reports']))

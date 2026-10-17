@@ -96,11 +96,12 @@ class ReportsTellTheirScopeTest extends TestCase
         $this->assertStringContainsString('كل الفروع', $this->branchLine($res));
     }
 
-    public function test_the_orders_sheet_names_the_branch_it_actually_filtered(): void
+    // كانت ورقةَ الطلبات — خرجت مع «المبيعات»؛ وورقةُ الجرد هي التي ترشّح بالفرع فعلًا اليوم
+    public function test_the_stock_sheet_names_the_branch_it_actually_filtered(): void
     {
         $res = $this->actingAs($this->owner)
             ->withSession(['current_branch' => $this->muscat->id])
-            ->get(route('admin.orders.xlsx'));
+            ->get(route('admin.inventory.xlsx'));
 
         $this->assertStringContainsString('مسقط', $this->branchLine($res));
     }

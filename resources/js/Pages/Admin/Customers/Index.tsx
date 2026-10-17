@@ -126,8 +126,9 @@ export default function CustomersIndex() {
             cell: (c) => (c.email ? <span dir="ltr" className="text-[#6b7280]">{c.email}</span> : '—'),
         },
         {
+            // فواتيرُه الصادرة — والمفتاحُ `orders` اسمٌ قديمٌ للعدد نفسه (`Demo::customers`)
             key: 'orders',
-            header: 'عدد الطلبات',
+            header: 'عدد الفواتير',
             align: 'end',
             cell: (c) => <span className="tabular-nums">{number(c.orders)}</span>,
         },
@@ -139,7 +140,7 @@ export default function CustomersIndex() {
         },
         {
             key: 'last_order',
-            header: 'آخر طلب',
+            header: 'آخر فاتورة',
             cell: (c) => <span dir="ltr" className="text-[#6b7280]">{c.last_order}</span>,
         },
         {

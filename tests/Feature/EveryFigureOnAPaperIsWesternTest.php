@@ -2,22 +2,24 @@
 
 namespace Tests\Feature;
 
+use App\Http\Controllers\Admin\CustomerInvoiceController;
 use App\Models\Branch;
 use App\Models\Business;
+use App\Models\Customer;
+use App\Models\CustomerInvoice;
+use App\Models\CustomerInvoiceItem;
 use App\Models\GoodsReceiptNote;
 use App\Models\GoodsReceiptNoteItem;
-use App\Models\Order;
-use App\Models\OrderItem;
 use App\Models\PurchaseOrder;
 use App\Models\PurchaseOrderItem;
 use App\Models\Setting;
 use App\Models\Supplier;
 use App\Models\User;
 use App\Support\Digits;
-use App\Support\Document\PaperSize;
 use App\Support\DocumentPaper;
 use App\Support\DocumentRenderer;
 use App\Support\DocumentTemplates;
+use App\Support\InvoiceBranding;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -37,9 +39,10 @@ use Tests\TestCase;
  * وتذييلَ ورقةٍ في «قوالب الأوراق». وهذه تبلغ الورقةَ كما كُتبت.
  *
  * فالتحويلُ على النصّ المرسوم في مخرجٍ واحد لكلّ عائلة:
- * `DocumentRenderer::html` للأربع، و`InvoiceBranding::render` لفاتورة
- * العميل. وهذا الملفّ يقيس الخمسَ من أبوابها لا من المخرج — فحارسٌ يقيس
- * الدالّةَ التي كتبها يمرّ ولو لم تُستدعَ.
+ * `DocumentRenderer::html` لأوراق السجلّ، و`InvoiceBranding::render` لفاتورة
+ * العميل. وهذا الملفّ يقيسها من أبوابها لا من المخرج — فحارسٌ يقيس
+ * الدالّةَ التي كتبها يمرّ ولو لم تُستدعَ. (وكانت بينها ورقةُ البيع
+ * وشريطُها وسندُ التسليم — خرجت مع «المبيعات».)
  *
  * ولا يُمسّ المحفوظ: `Digits::western` تحوّل ما يُعرض. ومن كتب «٥٠٠»
  * يجدها كما كتبها في شاشة التعديل.
@@ -88,61 +91,49 @@ class EveryFigureOnAPaperIsWesternTest extends TestCase
         );
     }
 
-    private function order(): Order
+    /** فاتورةُ عميلٍ كتب التاجرُ بندَها وملاحظتَها بيده بخاناتٍ عربيّة */
+    private function invoice(): CustomerInvoice
     {
-        $order = Order::create([
-            'business_id' => $this->business->id, 'branch_id' => $this->branch->id,
-            'branch' => $this->branch->name, 'number' => 'INV-000001', 'status' => 'مكتمل',
-            'customer_name' => 'شركة الواحة', 'employee_name' => 'سالم', 'payment_method' => 'نقدي',
-            'notes' => self::NOTE,
-            'subtotal' => 12.5, 'tax' => 0.625, 'total' => 13.125, 'ordered_at' => now(),
+        $customer = Customer::create(['business_id' => $this->business->id, 'name' => 'شركة الواحة']);
+
+        $invoice = CustomerInvoice::create([
+            'business_id' => $this->business->id, 'customer_id' => $customer->id,
+            'branch_id' => $this->branch->id, 'number' => 'CINV-000001', 'status' => CustomerInvoice::ISSUED,
+            'issued_at' => now(), 'customer_name' => 'شركة الواحة', 'notes' => self::NOTE,
+            'subtotal' => 12.5, 'discount_total' => 0, 'tax_total' => 0.625, 'total' => 13.125,
         ]);
-        OrderItem::create([
-            'order_id' => $order->id, 'name' => self::TYPED,
-            'price' => 12.5, 'quantity' => 1, 'total' => 12.5,
+        CustomerInvoiceItem::create([
+            'customer_invoice_id' => $invoice->id, 'description' => self::TYPED,
+            'quantity' => 1, 'unit_price' => 12.5, 'discount' => 0,
+            'tax_rate' => 5, 'tax_amount' => 0.625, 'line_total' => 13.125,
         ]);
 
-        return $order->load('items');
+        return $invoice->load('items');
     }
 
-    /** فاتورةُ البيع على A4 */
-    public function test_the_sale_sheet_carries_no_eastern_figure(): void
+    /** فاتورةُ العميل من باب طباعتها — كما يرسمها `PdfController::customerInvoice` */
+    private function printed(CustomerInvoice $invoice): string
     {
-        $v = DocumentTemplates::settings((int) $this->business->id, 'sale');
-        $v['paper'] = PaperSize::A4;
+        $bid = (int) $this->business->id;
 
-        $this->assertWestern(
-            DocumentRenderer::saleSheet((int) $this->business->id, $this->order(), $v),
-            'فاتورة البيع',
-        );
+        return InvoiceBranding::render($bid, null, fn () => CustomerInvoiceController::paper(
+            $bid, $invoice, $invoice->paidTotal(), $invoice->outstanding(), null,
+        )->render());
     }
 
-    /** والشريطُ الحراريُّ — وهو ما يأخذه الزبون بيده */
-    public function test_the_thermal_strip_carries_no_eastern_figure(): void
+    /**
+     * فاتورةُ عميلٍ مكتوبةٌ بيد التاجر — من باب طباعتها.
+     *
+     * كانت ورقةَ البيع على A4 — خرجت مع «المبيعات»؛ والقاعدةُ نفسُها على
+     * فاتورة العميل، ببندٍ وملاحظةٍ فيهما خاناتٌ عربيّة.
+     */
+    public function test_a_typed_customer_invoice_carries_no_eastern_figure(): void
     {
-        $v = DocumentTemplates::settings((int) $this->business->id, 'sale');
+        $html = $this->printed($this->invoice());
 
-        $this->assertWestern(
-            DocumentRenderer::saleStrip((int) $this->business->id, $this->order(), $v, 80),
-            'الإيصال الحراري',
-        );
-    }
-
-    /** وسندُ التسليم — يمشي مع الشحنة بلا أسعار */
-    public function test_the_delivery_note_carries_no_eastern_figure(): void
-    {
-        $order = $this->order();
-
-        $this->assertWestern(
-            DocumentRenderer::generic(
-                (int) $this->business->id,
-                'delivery',
-                DocumentPaper::forDelivery($order),
-                null,
-                $order,
-            ),
-            'سند التسليم',
-        );
+        $this->assertStringContainsString('باقة ورد 500 جرام', $html, 'البندُ المكتوب لم يبلغ الورقة محوَّلًا');
+        $this->assertStringContainsString('2026-09-30', $html, 'الملاحظةُ المكتوبة لم تبلغ الورقة محوَّلةً');
+        $this->assertWestern($html, 'فاتورة العميل المطبوعة');
     }
 
     /** وأمرُ الشراء — يمضي إلى مورّدٍ خارج المتجر */
@@ -227,16 +218,13 @@ class EveryFigureOnAPaperIsWesternTest extends TestCase
      */
     public function test_the_stored_value_is_left_as_the_merchant_typed_it(): void
     {
-        $order = $this->order();
+        // كانت ورقةَ البيع — خرجت مع «المبيعات»؛ والقاعدةُ نفسُها على فاتورة العميل
+        $invoice = $this->invoice();
 
-        DocumentRenderer::saleSheet(
-            (int) $this->business->id,
-            $order,
-            DocumentTemplates::settings((int) $this->business->id, 'sale'),
-        );
+        $this->printed($invoice);
 
-        $this->assertSame(self::TYPED, $order->items->first()->fresh()->name);
-        $this->assertSame(self::NOTE, $order->fresh()->notes);
+        $this->assertSame(self::TYPED, $invoice->items->first()->fresh()->description);
+        $this->assertSame(self::NOTE, $invoice->fresh()->notes);
     }
 
     /** ولا يُفسد التحويلُ ما ليس نصًّا — عددٌ يبقى عددًا و`null` يبقى فراغًا */

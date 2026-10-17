@@ -50,7 +50,7 @@ interface Props {
 }
 
 const SECTION_LABEL: Record<string, string> = {
-    financial: 'المال', budget: 'الموازنة', forecast: 'التوقّع', cash: 'النقد', projects: 'المشاريع', sales: 'المبيعات', operations: 'العمليّات', risks: 'المخاطر', notes: 'ملاحظات',
+    financial: 'المال', budget: 'الموازنة', forecast: 'التوقّع', cash: 'النقد', projects: 'المشاريع', sales: 'القمع التجاري', operations: 'العمليّات', risks: 'المخاطر', notes: 'ملاحظات',
 };
 
 /** مراجعةٌ واحدة — اللقطةُ كما التُقطت، وأقسامٌ تكتبها الإدارة، وقراراتٌ بمالكٍ وموعد */

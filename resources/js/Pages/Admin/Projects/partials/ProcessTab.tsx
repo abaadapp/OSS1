@@ -567,7 +567,7 @@ export default function ProcessTab({
     return (
         <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
             {/* ─────────── المراحل ─────────── */}
-            <ol className="relative space-y-3">
+            <ol className="relative min-w-0 space-y-3">
                 <span className="absolute inset-y-4 start-[19px] w-px bg-[#e4e4e7]" aria-hidden />
                 {stages.map((s) => {
                     const isOpen = expanded.has(s.key);
@@ -635,18 +635,14 @@ export default function ProcessTab({
                 })}
             </ol>
 
-            {/* ─────────── الجانب: من وأين ومتى وكم ─────────── */}
-            <aside className="space-y-3">
+            {/*
+                ─────────── الجانب: من وأين وكم ───────────
+                والعميلُ والموعدُ والقيمةُ الحاليّة في رأس الصفحة — لا تُعاد هنا.
+            */}
+            <aside className="min-w-0 space-y-3">
                 <Side title="الفعاليّة">
                     <Facts single>
-                        <Fact label="العميل">{p.customer}</Fact>
                         {p.event_type && <Fact label="النوع">{p.event_type}</Fact>}
-                        <Fact label="الموعد">
-                            <span dir="ltr" className="tabular-nums">
-                                {p.starts_at ?? '—'}
-                                {p.ends_at && p.ends_at !== p.starts_at ? ` → ${p.ends_at}` : ''}
-                            </span>
-                        </Fact>
                         {p.location && <Fact label="المكان">{p.location}</Fact>}
                         <Fact label="المسؤول">{p.owner ?? '—'}</Fact>
                     </Facts>
@@ -675,9 +671,6 @@ export default function ProcessTab({
                 {b.value !== null && (
                     <Side title="المال">
                         <Facts single>
-                            <Fact label="القيمة الحاليّة">
-                                <span className="font-semibold tabular-nums">{m(b.value)}</span>
-                            </Fact>
                             <Fact label="فُوتر">{m(b.invoiced)}</Fact>
                             <Fact label="حُصّل">{m(b.collected)}</Fact>
                             <Fact label="باقٍ على العميل">{m(b.outstanding)}</Fact>

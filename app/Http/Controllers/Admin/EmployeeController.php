@@ -93,7 +93,6 @@ class EmployeeController extends Controller
         $this->refuseGrantingMoreThanIHave($title, $manual);
         $this->refuseBranchesBeyondMine(null, $data['branches'] ?? []);
 
-
         // ولا يُكتب راتبٌ بيد من لا يقرؤه — يبقى صفرًا حتى يكتبه صاحبُه
         $data = $this->withoutPayrollFields($data);
 
@@ -230,7 +229,7 @@ class EmployeeController extends Controller
          * لتغيير حقلٍ آخر.
          */
         if ($employee !== null) {
-            $current = array_values(array_unique($employee->permissions ?? []));
+            $current = array_values(array_unique(Permissions::withoutRetired($employee->permissions) ?? []));
             sort($current);
 
             if ($current === $wanted) {
@@ -452,8 +451,8 @@ class EmployeeController extends Controller
                  */
                 'basic_salary' => $this->readsPayroll() ? $employee->basic_salary : null,
                 'allowances' => $this->readsPayroll() ? $employee->allowances : null,
-                // null تعني «يتبع الوظيفة»؛ مصفوفة تعني قائمة مخصّصة — والعمودُ كما هو
-                'permissions' => $employee->permissions,
+                // null تعني «يتبع الوظيفة»؛ مصفوفة تعني قائمة مخصّصة — بلا ما خرج من الكتالوج
+                'permissions' => Permissions::withoutRetired($employee->permissions),
                 // ودورُه الآن: الشاشةُ تقول إن كان المسمّى المختار سيغيّره
                 'role' => $employee->role,
             ],

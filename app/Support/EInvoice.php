@@ -38,32 +38,4 @@ class EInvoice
 
         return chr($tag) . chr(strlen($value)) . $value;
     }
-
-    /**
-     * يبني محتوى QR مباشرة من طلب (Order) وإعدادات الضريبة والنشاط.
-     *
-     * وبلا رقمٍ ضريبي لا رمز: الوسم الثاني إلزاميّ في المعيار، ورمزٌ حقلُه
-     * الضريبي فارغ باطلٌ بالتأكيد — وأسوأ من غيابه، لأن تحته سطرًا يقول
-     * «رمز الفوترة الإلكترونية» فيظنّ التاجر نفسه ممتثلًا. والورقة نفسها لا
-     * تقول «فاتورة ضريبية» بلا رقم، فكان الشرط قائمًا للعنوان ومفقودًا
-     * للرمز. والقالبان يُخفيانه حين يعود فارغًا.
-     */
-    public static function forOrder($order, array $vat, array $business): string
-    {
-        if (trim((string) ($vat['number'] ?? '')) === '') {
-            return '';
-        }
-
-        $timestamp = $order->ordered_at
-            ? $order->ordered_at->toIso8601String()
-            : now()->toIso8601String();
-
-        return self::qrPayload(
-            $business['name'] ?? 'Event Plus OSS',
-            (string) ($vat['number'] ?? ''),
-            $timestamp,
-            number_format((float) $order->total, 3, '.', ''),
-            number_format((float) $order->tax, 3, '.', ''),
-        );
-    }
 }

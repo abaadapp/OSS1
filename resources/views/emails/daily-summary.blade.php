@@ -10,9 +10,9 @@
             <p style="margin:6px 0 0; font-size:13px; opacity:.9;">{{ $businessName }} — {{ $dateLabel }}</p>
         </div>
         <div style="padding:24px;">
-            {{-- المبيعات (البطاقة الأبرز) --}}
+            {{-- الإيرادات (البطاقة الأبرز) --}}
             <div style="background:#f0fdf4; border:1px solid #bbf7d0; border-radius:12px; padding:16px; text-align:center; margin-bottom:16px;">
-                <div style="font-size:13px; color:#15803d;">{{ __('مبيعات اليوم') }}</div>
+                <div style="font-size:13px; color:#15803d;">{{ __('إيرادات اليوم') }}</div>
                 <div style="font-size:26px; font-weight:bold; color:#166534; margin-top:4px;">{{ $money($summary['sales']) }}</div>
                 @php $t = $summary['trend']; $tc = $t['up'] ? '#16a34a' : '#dc2626'; @endphp
                 <div style="font-size:12px; color:{{ $tc }}; margin-top:4px;">
@@ -24,11 +24,11 @@
             <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:separate; border-spacing:8px;">
                 <tr>
                     <td width="50%" style="background:#f9fafb; border-radius:10px; padding:12px;">
-                        <div style="font-size:12px; color:#6b7280;">{{ __('عدد الطلبات') }}</div>
+                        <div style="font-size:12px; color:#6b7280;">{{ __('عدد الفواتير') }}</div>
                         <div style="font-size:18px; font-weight:bold;">{{ $summary['orders'] }}</div>
                     </td>
                     <td width="50%" style="background:#f9fafb; border-radius:10px; padding:12px;">
-                        <div style="font-size:12px; color:#6b7280;">{{ __('متوسط قيمة الطلب') }}</div>
+                        <div style="font-size:12px; color:#6b7280;">{{ __('متوسط قيمة الفاتورة') }}</div>
                         <div style="font-size:18px; font-weight:bold;">{{ $money($summary['avg']) }}</div>
                     </td>
                 </tr>
@@ -48,7 +48,7 @@
                         <div style="font-size:18px; font-weight:bold; color:#1e40af;">{{ $money($summary['net']) }}</div>
                     </td>
                     <td style="background:#f9fafb; border-radius:10px; padding:12px;">
-                        <div style="font-size:12px; color:#6b7280;">{{ __('الأكثر مبيعًا') }}</div>
+                        <div style="font-size:12px; color:#6b7280;">{{ __('البند الأكثر فوترة') }}</div>
                         <div style="font-size:14px; font-weight:bold;">
                             {{ $summary['top_product'] ?? '—' }}
                             @if ($summary['top_product'])<span style="color:#6b7280; font-weight:normal;">({{ $summary['top_qty'] }})</span>@endif

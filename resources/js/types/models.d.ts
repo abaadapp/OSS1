@@ -246,28 +246,9 @@ export interface Branch {
     name: string;
     phone: string | null;
     address: string | null;
-    /** ما يتعلّق بالفرع — يُعرض في تأكيد الحذف ليعرف الضاغط ما يُخفيه */
+    /** ما يتعلّق بالفرع — يُعرض في تأكيد الحذف ليعرف الضاغط ما يُخفيه. و`orders` عددُ فواتيره الصادرة */
     orders?: number;
     devices?: number;
-}
-
-export interface Order {
-    /** رقم الفاتورة لا معرّف الصف — وهو ما تستقبله مسارات الطلب */
-    id: string;
-    customer: string;
-    employee: string;
-    branch: string | null;
-    items_count: number;
-    total: number;
-    payment: string;
-    status: string;
-    date: string;
-    /** موعد التسليم كما يُعرض، و'—' لبيعة المنضدة التي لا موعد لها */
-    scheduled?: string;
-    /** أفات موعدُه وهو حيّ؟ — يُقاس في الخادم بقاعدة مُرشِّح «متأخّر» نفسِها */
-    late?: boolean;
-    /** نوع التنفيذ باسمه المقروء — لا برمزه المخزَّن */
-    fulfillment?: string | null;
 }
 
 export interface Expense {

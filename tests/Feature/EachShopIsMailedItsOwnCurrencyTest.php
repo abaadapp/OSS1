@@ -7,8 +7,9 @@ use App\Mail\MonthlyReportMail;
 use App\Models\Branch;
 use App\Models\Business;
 use App\Models\Currency;
-use App\Models\Order;
-use App\Models\OrderItem;
+use App\Models\Customer;
+use App\Models\CustomerInvoice;
+use App\Models\CustomerInvoiceItem;
 use App\Models\User;
 use App\Support\Demo;
 use App\Support\Money;
@@ -59,19 +60,25 @@ class EachShopIsMailedItsOwnCurrencyTest extends TestCase
         return [$b, $branch];
     }
 
-    private function sale(Business $b, Branch $branch, float $total, string $number): Order
+    /**
+     * بيعةٌ = فاتورةُ عميلٍ صادرة: منها يقرأ الملخّصان (`Revenue`) — والطلباتُ
+     * القديمة خرجت مع «المبيعات».
+     */
+    private function sale(Business $b, Branch $branch, float $total, string $number): CustomerInvoice
     {
-        $order = Order::create([
-            'business_id' => $b->id, 'branch_id' => $branch->id, 'branch' => $branch->name,
-            'number' => $number, 'status' => 'مكتمل', 'customer_name' => 'زبون',
-            'employee_name' => 'كاشير', 'payment_method' => 'نقدي',
-            'subtotal' => $total, 'tax' => 0, 'total' => $total, 'ordered_at' => now(),
+        $customer = Customer::create(['business_id' => $b->id, 'name' => 'زبون']);
+        $invoice = CustomerInvoice::create([
+            'business_id' => $b->id, 'branch_id' => $branch->id, 'customer_id' => $customer->id,
+            'number' => $number, 'status' => CustomerInvoice::ISSUED, 'issued_at' => now()->toDateString(),
+            'subtotal' => $total, 'tax_total' => 0, 'total' => $total,
         ]);
-        OrderItem::create([
-            'order_id' => $order->id, 'name' => 'باقة', 'price' => $total, 'quantity' => 1, 'total' => $total,
+        CustomerInvoiceItem::create([
+            'customer_invoice_id' => $invoice->id, 'description' => 'باقة', 'quantity' => 1,
+            'unit_price' => $total, 'discount' => 0, 'tax_rate' => 0, 'tax_amount' => 0,
+            'line_total' => $total, 'sort_order' => 0,
         ]);
 
-        return $order->load('items');
+        return $invoice;
     }
 
     /**
@@ -88,8 +95,8 @@ class EachShopIsMailedItsOwnCurrencyTest extends TestCase
         [$muscat, $mb] = $this->shop('متجر مسقط', 'muscat@x.om', 'OMR', 'ر.ع');
         [$dubai, $db] = $this->shop('متجر دبي', 'dubai@x.ae', 'AED', 'د.إ');
 
-        $this->sale($muscat, $mb, 120.5, 'INV-000001')->update(['ordered_at' => now()->subMonthNoOverflow()]);
-        $this->sale($dubai, $db, 120.5, 'INV-000002')->update(['ordered_at' => now()->subMonthNoOverflow()]);
+        $this->sale($muscat, $mb, 120.5, 'INV-000001')->update(['issued_at' => now()->subMonthNoOverflow()->toDateString()]);
+        $this->sale($dubai, $db, 120.5, 'INV-000002')->update(['issued_at' => now()->subMonthNoOverflow()->toDateString()]);
 
         $this->artisan('reports:email')->assertSuccessful();
 

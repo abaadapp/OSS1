@@ -50,17 +50,17 @@ export default function ReportsStaff() {
     const m = (v: number) => money(v, context!.currency);
 
     const stats = [
-        { label: t('إجمالي المبيعات'), value: m(summary.total), icon: 'wallet', color: 'primary' },
+        { label: t('إجمالي الإيرادات'), value: m(summary.total), icon: 'wallet', color: 'primary' },
         {
             /* «من باع» لا «كم موظفًا»: العدد الأوّل يقول حجم الفريق، وهذا يقول كم منه يبيع */
-            label: t('من باع في الفترة'),
+            label: t('من أصدر فواتير في الفترة'),
             value: `${number(summary.sellers)} / ${number(summary.staff)}`,
             icon: 'users',
             color: 'info',
         },
         { label: t('متوسّط البائع'), value: m(summary.average), icon: 'calculator', color: 'success' },
         {
-            label: t('الأعلى مبيعًا'),
+            label: t('الأعلى إيرادًا'),
             value: summary.topName ? `${summary.topName} · ${m(summary.topSales)}` : '—',
             icon: 'star',
             color: 'warning',
@@ -81,7 +81,7 @@ export default function ReportsStaff() {
 
                 <PageHeader
                     title="أداء الموظفين"
-                    subtitle={t('مبيعات كل موظف في الفترة المختارة وفرعه وحالته')}
+                    subtitle={t('إيرادات الفواتير التي أصدرها كل موظف في الفترة المختارة وفرعه وحالته')}
                     actions={
                         <ExportMenu
                             xlsx={route('admin.reports.export.xlsx', 'staff')}
@@ -114,7 +114,7 @@ export default function ReportsStaff() {
                                 <TableHead>{t('الوظيفة')}</TableHead>
                                 <TableHead>{t('الفرع')}</TableHead>
                                 <TableHead className="text-end">{t('الفواتير')}</TableHead>
-                                <TableHead className="text-end">{t('المبيعات')}</TableHead>
+                                <TableHead className="text-end">{t('الإيرادات')}</TableHead>
                                 <TableHead>{t('الحالة')}</TableHead>
                             </TableRow>
                         </TableHeader>

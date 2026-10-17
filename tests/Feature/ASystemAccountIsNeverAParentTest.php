@@ -10,7 +10,6 @@ use App\Models\Product;
 use App\Models\Setting;
 use App\Models\User;
 use App\Support\Ledger;
-use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -199,21 +198,5 @@ class ASystemAccountIsNeverAParentTest extends TestCase
 
         // ‏٢ × ٤ خرجت من المخزون إلى «مصروفات أخرى»
         $this->assertSame(8.0, Ledger::balance($this->business->id, 'other_expenses'));
-    }
-
-    /* ==================== والاستدراكُ يُنادى ==================== */
-
-    public function test_the_catch_up_command_is_actually_scheduled(): void
-    {
-        /*
-         * أمرُ استدراكٍ لا يُنادى ليس استدراكًا: كان بيد من يفتح سطر أوامر
-         * الخادم وحدَه، ولا يفتحه صاحبُ المتجر — فتبقى بيعةٌ أخفق ترحيلُها
-         * خارج الدفتر إلى الأبد.
-         */
-        $commands = collect(app(Schedule::class)->events())
-            ->map(fn ($e) => (string) $e->command)
-            ->filter(fn ($c) => str_contains($c, 'finance:post-missing-sales'));
-
-        $this->assertCount(1, $commands, 'أمرُ استدراك المبيعات غيرُ مجدول');
     }
 }

@@ -116,7 +116,7 @@ export default function Dashboard() {
             <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
                 <Card className="lg:col-span-2">
                     <CardHeader>
-                        <CardTitle>{t('مبيعات هذه السنة حسب الشهر')}</CardTitle>
+                        <CardTitle>{t('الإيرادات هذه السنة حسب الشهر')}</CardTitle>
                     </CardHeader>
                     <CardContent>
                         <AreaChart
@@ -217,7 +217,7 @@ export default function Dashboard() {
                                             </span>
                                             {/* الكميّة تقول لماذا تصدّر — والسعر لا يقول شيئًا عن البيع */}
                                             <span className="block text-[11px] text-[#9ca3af]">
-                                                {t(':n مبيعًا', { n: product.sold })}
+                                                {t('الكمية: :n', { n: product.sold })}
                                             </span>
                                         </span>
                                         <span className="shrink-0 text-[12px] tabular-nums text-[#6b7280]">

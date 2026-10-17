@@ -4,9 +4,8 @@ namespace App\Console\Commands;
 
 use App\Mail\MonthlyReportMail;
 use App\Models\Business;
-use App\Models\Order;
-use App\Models\OrderItem;
 use App\Support\Money;
+use App\Support\Revenue;
 use Illuminate\Console\Command;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Mail;
@@ -27,30 +26,38 @@ class EmailMonthlyReports extends Command
             ? Carbon::createFromFormat('Y-m', $this->option('month'))->startOfMonth()
             : now()->subMonthNoOverflow()->startOfMonth();
         $start = $ref->copy()->startOfMonth();
-        $end = $ref->copy()->endOfMonth();
         $period = $start->locale('ar')->translatedFormat('F Y');
 
         $sent = 0;
-        Business::whereNotNull('email')->each(function (Business $b) use ($start, $end, $period, &$sent) {
-            $q = Order::where('business_id', $b->id)->sold()->whereBetween('ordered_at', [$start, $end]);
-            $sales = (float) (clone $q)->sum('total');
-            $orders = (clone $q)->count();
+        Business::whereNotNull('email')->each(function (Business $b) use ($start, $period, &$sent) {
+            /*
+             * من فواتير العملاء الصادرة (`Revenue`) — كالملخّص اليوميّ.
+             *
+             * وكان يقرأ الطلبات القديمة: جدولٌ لا يُكتب فيه منذ رُفعت نقطة
+             * البيع، فلا يصل التقرير أحدًا مهما أصدرت الشركةُ من فواتير.
+             */
+            $next = $start->copy()->addMonthNoOverflow();
+            $summary = Revenue::summary((int) $b->id, $start, $next);
+            $sales = (float) $summary['total'];
+            $invoices = (int) $summary['count'];
 
-            if ($orders === 0 && $sales <= 0) {
+            if ($invoices === 0 && $sales <= 0) {
                 return; // لا نرسل لمتجر بلا نشاط
             }
 
-            $topItem = OrderItem::whereHas('order', fn ($w) => $w->where('business_id', $b->id)->sold()->whereBetween('ordered_at', [$start, $end]))
-                ->selectRaw('name, SUM(quantity) as q')->groupBy('name')->orderByDesc('q')->first();
+            // وأكثرُ ما بيع بالوصف: بندُ الفاتورة نصٌّ حرٌّ قد لا يُنسب إلى صنف
+            $topItem = Revenue::items((int) $b->id, $start, $next)
+                ->selectRaw('customer_invoice_items.description as name, SUM(customer_invoice_items.quantity) as q')
+                ->groupBy('customer_invoice_items.description')->orderByDesc('q')->first();
 
             // وعملةُ صاحب التقرير لا عملةُ من يشغّل الأمر — لا جلسةَ هنا
             $cur = Money::of((int) $b->id);
             $money = fn ($v) => Money::format((float) $v, $cur);
             $stats = [
-                ['label' => __('إجمالي المبيعات'), 'value' => $money($sales)],
-                ['label' => __('عدد الطلبات'), 'value' => (string) $orders],
-                ['label' => __('متوسط قيمة الطلب'), 'value' => $money($orders ? $sales / $orders : 0)],
-                ['label' => __('المنتج الأكثر مبيعًا'), 'value' => $topItem->name ?? '—'],
+                ['label' => __('إجمالي الإيرادات'), 'value' => $money($sales)],
+                ['label' => __('عدد الفواتير'), 'value' => (string) $invoices],
+                ['label' => __('متوسط قيمة الفاتورة'), 'value' => $money($invoices ? $sales / $invoices : 0)],
+                ['label' => __('البند الأكثر فوترة'), 'value' => $topItem->name ?? '—'],
             ];
 
             Mail::to($b->email)->send(new MonthlyReportMail($b->name, $period, $stats, $cur));

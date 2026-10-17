@@ -202,7 +202,8 @@ class APaperCarriesItsDocumentsTest extends TestCase
         $blind = User::create([
             'business_id' => $this->business->id, 'name' => 'موظّف', 'email' => 'b@eventplus.om',
             'password' => bcrypt('password'), 'role' => 'employee', 'status' => 'نشط',
-            'permissions' => ['orders'],
+            // كانت «المبيعات» (`orders`) — خرجت، وفواتيرُ العملاء تُفتح الآن من «المالية»
+            'permissions' => ['finance'],
         ]);
 
         $this->actingAs($blind)->get(route('admin.customerInvoices.show', $invoice->id))
@@ -279,7 +280,8 @@ class APaperCarriesItsDocumentsTest extends TestCase
     /** والصلاحيةُ فعلٌ يُمنح باسمه: من لا يملكه لا يقرأ */
     public function test_reading_documents_is_a_named_permission(): void
     {
-        $this->assertContains('orders', Permissions::SECTIONS);
+        // قسمُ الشاشة غيرُ فعل القراءة — وقسمُ فواتير العملاء «المالية» بعد خروج «المبيعات»
+        $this->assertContains('finance', Permissions::SECTIONS);
         $this->assertNotNull(Permissions::ATTACHMENT_VIEW);
     }
 }

@@ -173,7 +173,7 @@ const ROLE_LABEL: Record<string, string> = {
     manager: 'مدير',
     accountant: 'محاسب',
     inventory: 'أمين مخزن',
-    sales: 'مبيعات',
+    sales: 'موظف عروض ومشاريع',
     delivery: 'تنفيذ ميداني',
 };
 

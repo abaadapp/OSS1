@@ -26,7 +26,7 @@ class CustomAlert extends Model
      * `unit` تُستعمل في الواجهة لتعرف هل الحدّ مبلغٌ أم عدد أيام أم عدد.
      */
     public const METRICS = [
-        'daily_sales' => ['label' => 'مبيعات اليوم', 'unit' => 'money', 'section' => 'reports'],
+        'daily_sales' => ['label' => 'إيرادات اليوم', 'unit' => 'money', 'section' => 'reports'],
         'monthly_expenses' => ['label' => 'مصروفات الشهر', 'unit' => 'money', 'section' => 'expenses'],
         /*
          * وكان مكانَه «الطلبات المعلّقة».
@@ -36,8 +36,11 @@ class CustomAlert extends Model
          * أسوأ من تنبيهٍ لا يُكتب — صاحبُه يظنّ أنّ لا شيءَ يستحقّ الانتباه.
          *
          * وحلّ محلَّه ما يُتابَع فعلًا: فاتورةٌ مضى استحقاقُها وعليها باقٍ.
+         *
+         * وقسمُه «المالية» — بابُ فواتير العملاء منذ خرجت «المبيعات» — وبطاقتُه
+         * تفتح الفواتيرَ نفسَها لا ملخّصَ المالية (`route`).
          */
-        'overdue_invoices' => ['label' => 'فواتير متأخّرة', 'unit' => 'count', 'section' => 'orders'],
+        'overdue_invoices' => ['label' => 'فواتير متأخّرة', 'unit' => 'count', 'section' => 'finance', 'route' => 'admin.customerInvoices.index'],
         'low_stock_products' => ['label' => 'المنتجات تحت حد التنبيه', 'unit' => 'count', 'section' => 'inventory'],
         'dormant_customers' => ['label' => 'العملاء الراكدون', 'unit' => 'count', 'section' => 'customers'],
         'open_purchase_orders' => ['label' => 'أوامر شراء لم تُستلم', 'unit' => 'count', 'section' => 'purchases'],
@@ -87,7 +90,6 @@ class CustomAlert extends Model
             // ومن نقر «مبيعات اليوم تجاوزت كذا» لا يريد قائمةً يختار منها
             'reports' => 'admin.reports.sales',
             'expenses' => 'admin.expenses.index',
-            'orders' => 'admin.customerInvoices.index',
             'inventory' => 'admin.inventory.index',
             'customers' => 'admin.customers.index',
             'purchases' => 'admin.purchases.index',

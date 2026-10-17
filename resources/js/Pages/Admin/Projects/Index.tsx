@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { router, usePage } from '@inertiajs/react';
-import { AlertTriangle, ArrowLeft, CalendarDays, ListChecks, MapPin, MoreHorizontal, Plus, UserRound } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, CalendarDays, Check, ListChecks, MoreHorizontal, Plus, UserRound, X } from 'lucide-react';
 import AdminLayout from '@/Layouts/AdminLayout';
 import PageHeader from '@/Components/PageHeader';
 import SmartLink from '@/Components/SmartLink';
@@ -15,7 +15,6 @@ import { PROJECT_STATUS_LABEL } from '@/lib/projects';
 import { STATE_LABEL } from '@/lib/quotations';
 import { cn } from '@/lib/utils';
 import { quoteStages, STAGE_LABEL, toStages, type Stage, type Workflow } from '@/lib/projectStages';
-import ProjectStepper from '@/Components/ProjectStepper';
 import type { PageProps } from '@/types';
 
 interface Row {
@@ -78,8 +77,9 @@ interface Props {
  *
  * المشروعُ يبدأ عرضَ سعر: فما لم يُقبل بعدُ بطاقةٌ في مرحلتها الأولى، وما
  * قُبل مشروعٌ يمضي في مراحله — تأكيدٌ فتنفيذٌ فتسليمٌ فإغلاق. وعلى كلّ
- * بطاقةٍ شريطُ مراحلها وزرُّ خطوتها التالية، فيُعرف أين هو وما يُنتظر منه
- * دون أن يُفتح. و«مشروع جديد» يبدأ بعرض سعر — انظر `Projects::fromQuotation`.
+ * بطاقةٍ مرحلتُها الحاليّة وأهمُّ تنبيهين وزرُّ خطوتها التالية، فيُعرف أين
+ * هو وما يُنتظر منه دون أن يُفتح — والمسارُ كاملًا في صفحته. و«مشروع جديد»
+ * يبدأ بعرض سعر — انظر `Projects::fromQuotation`.
  */
 export default function ProjectsIndex({ projects, quotes, me, pagination, filters, statuses, customers, totals, may }: Props) {
     const { context } = usePage<PageProps>().props;
@@ -242,6 +242,11 @@ function quoteNext(q: QuoteRow): Next | null {
     return null;
 }
 
+/**
+ * البطاقة — سطرٌ لما هو (الاسمُ والحال)، وسطرٌ لمن ومتى وكم، وسطرٌ للمرحلة
+ * الحاليّة وأهمِّ تنبيهين وزرِّ خطوتها. ولا شريطَ مراحل كاملًا ولا شرحَ ما
+ * ينقص: ذلك في صفحة المشروع، والبطاقةُ كلُّها رابطٌ إليها.
+ */
 function Card({
     edge,
     title,
@@ -249,9 +254,9 @@ function Card({
     pill,
     pillLabel,
     mine,
-    created,
     meta,
-    steps,
+    stage,
+    alerts,
     next,
     menu,
     hint,
@@ -262,26 +267,26 @@ function Card({
     pill: string;
     pillLabel: string;
     mine: boolean;
-    created: string | null;
     meta: ReactNode;
-    steps: Stage[];
+    stage: Stage;
+    /** أهمُّ تنبيهين — والبقيّةُ في صفحة المشروع */
+    alerts: ReactNode[];
     next: Next | null;
     menu: { label: string; routeName: string; href: string }[];
-    /** ما ينقص المرحلةَ الحاليّة — سطرٌ تحت الشريط */
+    /** ما ينقص المرحلةَ الحاليّة — تلميحٌ على شارتها لا سطرٌ تحتها */
     hint?: string | null;
 }) {
     const t = useTranslate();
-    const { locale } = usePage<PageProps>().props;
-    const date = created ? new Intl.DateTimeFormat(locale === 'en' ? 'en-GB' : 'ar-u-nu-latn', { day: 'numeric', month: 'long', year: 'numeric' }).format(new Date(created + 'T00:00:00')) : null;
 
     return (
         <article className="relative overflow-hidden rounded-[14px] border border-[var(--ui-border,#e8e8e8)] bg-white transition-shadow hover:shadow-[0_4px_18px_rgba(0,0,0,0.05)]">
             <span className="absolute inset-y-0 start-0 w-[3px]" style={{ backgroundColor: edge }} />
 
-            <div className="flex items-start justify-between gap-3 px-5 pt-4">
+            <div className="flex items-start justify-between gap-3 px-4 pt-3 sm:px-5">
                 <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
-                        <SmartLink routeName={titleLink.routeName} href={titleLink.href} className="truncate text-[16px] font-semibold text-[#18181b] hover:underline">
+                        {/* الرابطُ يمتدّ على البطاقة كلِّها (after:inset-0) — والأزرارُ فوقه بـ z-10 */}
+                        <SmartLink routeName={titleLink.routeName} href={titleLink.href} className="min-w-0 break-words text-[15.5px] font-semibold text-[#18181b] after:absolute after:inset-0 hover:underline">
                             {title}
                         </SmartLink>
                         <span className={cn('inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11.5px] font-medium', pill)}>
@@ -295,48 +300,38 @@ function Card({
                             </span>
                         )}
                     </div>
-                    <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[12.5px] text-[#52525b]">{meta}</div>
+                    <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[12.5px] text-[#52525b]">{meta}</div>
                 </div>
 
-                <div className="flex shrink-0 items-center gap-2">
-                    {date && (
-                        <span className="hidden text-[12px] text-[#71717a] sm:inline">
-                            {t('أُنشئ في')} <span className="font-semibold text-[#27272a]">{date}</span>
-                        </span>
-                    )}
-                    <span className="hidden h-4 w-px bg-[#e4e4e7] sm:block" />
-                    <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                            <button type="button" aria-label={t('خيارات')} className="flex size-8 items-center justify-center rounded-full text-[#3f3f46] hover:bg-[#f4f4f5]">
-                                <MoreHorizontal className="size-4" />
-                            </button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                            {menu.map((it) => (
-                                <DropdownMenuItem key={it.href} onSelect={() => router.visit(it.href)}>
-                                    {t(it.label)}
-                                </DropdownMenuItem>
-                            ))}
-                        </DropdownMenuContent>
-                    </DropdownMenu>
-                </div>
+                <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                        <button type="button" aria-label={t('خيارات')} className="relative z-10 flex size-8 shrink-0 items-center justify-center rounded-full text-[#3f3f46] hover:bg-[#f4f4f5]">
+                            <MoreHorizontal className="size-4" />
+                        </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                        {menu.map((it) => (
+                            <DropdownMenuItem key={it.href} onSelect={() => router.visit(it.href)}>
+                                {t(it.label)}
+                            </DropdownMenuItem>
+                        ))}
+                    </DropdownMenuContent>
+                </DropdownMenu>
             </div>
 
-            <div className="mx-5 my-3 h-px bg-[#f0f0f0]" />
-
-            <div className="flex flex-col gap-3 px-5 pb-4 sm:flex-row sm:items-center sm:justify-between">
-                <div className="min-w-0">
-                    <ProjectStepper stages={steps} />
-                    {hint && <p className="mt-1.5 truncate text-[12px] text-[#71717a]">{hint}</p>}
+            <div className="flex flex-wrap items-center justify-between gap-2 px-4 pb-3 pt-2 sm:px-5">
+                <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                    <StageChip stage={stage} hint={hint} />
+                    {alerts.slice(0, 2)}
                 </div>
                 {next &&
                     (next.run ? (
-                        <Button variant="primary" className="shrink-0" onClick={next.run}>
+                        <Button size="sm" variant="primary" className="relative z-10 shrink-0" onClick={next.run}>
                             {t(next.label, next.params)}
                             <ArrowLeft className="ltr:rotate-180" />
                         </Button>
                     ) : (
-                        <Button variant="outline" asChild className="shrink-0">
+                        <Button size="sm" variant="outline" asChild className="relative z-10 shrink-0">
                             <SmartLink routeName={next.routeName ?? 'admin.projects.show'} href={next.href ?? '#'}>
                                 {t(next.label, next.params)}
                             </SmartLink>
@@ -347,40 +342,55 @@ function Card({
     );
 }
 
+/**
+ * المرحلةُ الحاليّة وحدَها — اسمُها وأيقونتُها، و✓ إن تمّت تنتظر الانتقال،
+ * و✕ إن وقفت. وما ينقصها في التلميح لا في سطرٍ تحت البطاقة.
+ */
+function StageChip({ stage, hint }: { stage: Stage; hint?: string | null }) {
+    const t = useTranslate();
+    const Icon = stage.state === 'done' ? Check : stage.state === 'failed' ? X : stage.icon;
+
+    return (
+        <span
+            data-stage={stage.key}
+            title={hint ?? undefined}
+            className={cn(
+                'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[12px] font-medium',
+                stage.state === 'failed' ? 'bg-[#fef2f2] text-[#b91c1c]' : 'bg-[#f5f3ff] text-[#6d28d9]',
+            )}
+        >
+            <Icon className="size-3.5 shrink-0" />
+            {t(stage.label)}
+            {stage.note && <span className="font-normal opacity-80">· {t(stage.note)}</span>}
+        </span>
+    );
+}
+
 const Dot = () => <span className="text-[#d4d4d8]">·</span>;
 
-function Meta({ code, customer, starts, location, value }: { code: string | null; customer: string; starts: string | null; location: string | null; value: string | null }) {
+function Meta({ code, customer, starts, created, value }: { code: string | null; customer: string; starts: string | null; created: string | null; value: string | null }) {
     const t = useTranslate();
 
     return (
         <>
             {code && (
                 <>
-                    <span>
-                        {t('رقم')}: <span className="font-semibold tabular-nums text-[#27272a]" dir="ltr">#{code}</span>
-                    </span>
-                    <span className="h-3 w-px bg-[#e4e4e7]" />
+                    <span className="font-semibold tabular-nums text-[#27272a]" dir="ltr">#{code}</span>
+                    <Dot />
                 </>
             )}
-            <span className="inline-flex items-center gap-1">
-                <UserRound className="size-3.5 text-[#71717a]" />
-                {customer}
+            <span className="inline-flex min-w-0 items-center gap-1">
+                <UserRound className="size-3.5 shrink-0 text-[#71717a]" />
+                <span className="break-words">{customer}</span>
             </span>
-            {starts && (
+            {/* موعدُ الفعاليّة — وإلّا فيومُ الإنشاء باسمه */}
+            {(starts || created) && (
                 <>
                     <Dot />
                     <span className="inline-flex items-center gap-1">
                         <CalendarDays className="size-3.5 text-[#71717a]" />
-                        <span className="tabular-nums" dir="ltr">{starts}</span>
-                    </span>
-                </>
-            )}
-            {location && (
-                <>
-                    <Dot />
-                    <span className="inline-flex min-w-0 items-center gap-1">
-                        <MapPin className="size-3.5 shrink-0 text-[#71717a]" />
-                        <span className="max-w-[16rem] truncate">{location}</span>
+                        {!starts && <span>{t('أُنشئ في')}</span>}
+                        <span className="tabular-nums" dir="ltr">{starts ?? created}</span>
                     </span>
                 </>
             )}
@@ -394,6 +404,19 @@ function Meta({ code, customer, starts, location, value }: { code: string | null
     );
 }
 
+/** شارةُ تنبيهٍ صغيرة على البطاقة */
+function Flag({ icon: Icon, children }: { icon: typeof AlertTriangle; children: ReactNode }) {
+    return (
+        <span className="inline-flex items-center gap-1 rounded-full bg-[#fef2f2] px-2 py-0.5 text-[11.5px] font-medium text-[#b91c1c]">
+            <Icon className="size-3" />
+            {children}
+        </span>
+    );
+}
+
+/** المرحلةُ التي يقف عليها الفريق — من `ProjectWorkflow` كما وصلت */
+const focusOf = (steps: Stage[]): Stage => steps.find((s) => s.focus) ?? steps.find((s) => s.state === 'current') ?? steps[0];
+
 function ProjectCard({ p, mine, money: m, manage }: { p: Row; mine: boolean; money: (v: number | null) => string; manage: boolean }) {
     const t = useTranslate();
     const show = { routeName: 'admin.projects.show', href: route('admin.projects.show', p.id) };
@@ -405,6 +428,11 @@ function ProjectCard({ p, mine, money: m, manage }: { p: Row; mine: boolean; mon
         ...(p.operation ? [{ label: 'الفعاليّة', routeName: 'admin.operations.show', href: route('admin.operations.show', p.operation.id) }] : []),
         ...(p.delivery ? [{ label: 'حزمة التسليم', routeName: 'admin.deliveries.show', href: route('admin.deliveries.show', p.delivery.id) }] : []),
     ];
+    const alerts: ReactNode[] = [
+        ...(p.late_tasks > 0 ? [<Flag key="late" icon={ListChecks}>{t(':n متأخّرة', { n: String(p.late_tasks) })}</Flag>] : []),
+        ...((p.inventory_shortages ?? 0) > 0 ? [<Flag key="stock" icon={AlertTriangle}>{t('نقص مخزون: :n بنود', { n: String(p.inventory_shortages) })}</Flag>] : []),
+    ];
+    const stage = focusOf(toStages(p.workflow));
 
     return (
         <Card
@@ -414,25 +442,9 @@ function ProjectCard({ p, mine, money: m, manage }: { p: Row; mine: boolean; mon
             pill={PILL[p.status] ?? PILL.draft}
             pillLabel={PROJECT_STATUS_LABEL[p.status] ?? p.status}
             mine={mine}
-            created={p.created_at}
-            meta={
-                <>
-                    <Meta code={p.code} customer={p.customer} starts={p.starts_at} location={p.location} value={p.current_value !== null ? m(p.current_value) : null} />
-                    {p.late_tasks > 0 && (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-[#fef2f2] px-2 py-0.5 text-[11.5px] font-medium text-[#b91c1c]">
-                            <ListChecks className="size-3" />
-                            {t(':n متأخّرة', { n: String(p.late_tasks) })}
-                        </span>
-                    )}
-                    {(p.inventory_shortages ?? 0) > 0 && (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-[#fef2f2] px-2 py-0.5 text-[11.5px] font-medium text-[#b91c1c]">
-                            <AlertTriangle className="size-3" />
-                            {t('نقص مخزون: :n بنود', { n: String(p.inventory_shortages) })}
-                        </span>
-                    )}
-                </>
-            }
-            steps={toStages(p.workflow)}
+            meta={<Meta code={p.code} customer={p.customer} starts={p.starts_at} created={p.created_at} value={p.current_value !== null ? m(p.current_value) : null} />}
+            stage={{ ...stage, note: stage.state === 'failed' ? stage.note : undefined }}
+            alerts={alerts}
             next={projectNext(p, manage)}
             menu={menu}
             hint={p.workflow.can_advance ? null : (p.workflow.pending?.[0] ?? null)}
@@ -451,9 +463,9 @@ function QuoteCard({ q, mine, money: m }: { q: QuoteRow; mine: boolean; money: (
             pill={PILL[q.status === 'rejected' ? 'rejected' : 'quote']}
             pillLabel={q.status === 'rejected' ? 'مرفوض' : 'عرض سعر'}
             mine={mine}
-            created={q.created_at}
-            meta={<Meta code={q.number} customer={q.customer} starts={q.starts_at} location={q.location} value={q.total !== null ? m(q.total) : null} />}
-            steps={quoteStages(q.status, STATE_LABEL[q.status])}
+            meta={<Meta code={q.number} customer={q.customer} starts={q.starts_at} created={q.created_at} value={q.total !== null ? m(q.total) : null} />}
+            stage={quoteStages(q.status, STATE_LABEL[q.status])[0]}
+            alerts={[]}
             next={quoteNext(q)}
             menu={[{ label: 'فتح العرض', ...show }]}
         />

@@ -31,8 +31,8 @@ class ExportController extends Controller
             $rows[] = [$s['label'], $s['money'] ? number_format((float) $s['value'], 3, '.', '') : $s['value'], ''];
         }
         $rows[] = ['', '', ''];
-        $rows[] = [__('— المبيعات —'), '', ''];
-        $rows[] = [__('الفترة'), __('المبيعات'), __('عدد الطلبات')];
+        $rows[] = [__('— الإيرادات —'), '', ''];
+        $rows[] = [__('الفترة'), __('الإيرادات'), __('عدد الفواتير')];
         $series = $report['salesSeries'];
         foreach ($series['full'] as $i => $label) {
             // ما لم يأتِ بعدُ لا يُكتب: صفٌّ بصفرٍ عن يوم غدٍ رقمٌ لا واقعة
@@ -48,13 +48,13 @@ class ExportController extends Controller
             $rows[] = [$m['name'], number_format((float) $m['total'], 3, '.', ''), $m['count']];
         }
         $rows[] = ['', '', ''];
-        $rows[] = [__('— الأكثر مبيعًا —'), '', ''];
+        $rows[] = [__('— الأعلى إيرادًا —'), '', ''];
         $rows[] = [__('المنتج'), __('المُباع'), __('الإيراد')];
         foreach ($report['topSellingProducts'] as $p) {
             $rows[] = [$p['name'], $p['sold'], number_format((float) $p['revenue'], 3, '.', '')];
         }
 
-        return $this->stream('sales-report-'.$range, [__('العنصر'), __('القيمة 1'), __('القيمة 2')], $rows);
+        return $this->stream('revenue-report-'.$range, [__('العنصر'), __('القيمة 1'), __('القيمة 2')], $rows);
     }
 
     public function products()
@@ -68,20 +68,6 @@ class ExportController extends Controller
         return $this->stream('products', [__('المعرّف'), __('الاسم'), __('القسم'), 'SKU', __('الباركود'), __('السعر'), __('التكلفة'), __('الكمية'), __('حد التنبيه'), __('حالة المخزون'), __('الحالة')], $rows);
     }
 
-    public function orders()
-    {
-        $rows = array_map(fn ($o) => [
-            $o['id'], $o['customer'], $o['employee'], $o['branch'], $o['items_count'],
-            number_format($o['total'], 3, '.', ''),
-            $o['payment'] === 'بطاقة' ? __('فيزا') : __($o['payment']),
-            __($o['status']), $o['date'],
-            // والموعدُ ونوعُ التنفيذ: عليهما تقوم مُرشِّحاتُ الشاشة، والملفّ يتبعها
-            $o['scheduled'], $o['fulfillment'],
-        ], Demo::orders(request()));
-
-        return $this->stream('orders', [__('رقم الطلب'), __('العميل'), __('الموظف'), __('الفرع'), __('عدد الأصناف'), __('الإجمالي'), __('الدفع'), __('الحالة'), __('التاريخ'), __('موعد التسليم'), __('نوع التنفيذ')], $rows);
-    }
-
     public function customers()
     {
         $rows = array_map(fn ($c) => [
@@ -89,7 +75,8 @@ class ExportController extends Controller
             number_format($c['total_spent'], 3, '.', ''), $c['last_order'],
         ], Demo::customers(request()));
 
-        return $this->stream('customers', [__('المعرّف'), __('الاسم'), __('الهاتف'), __('البريد'), __('عدد الطلبات'), __('إجمالي الإنفاق'), __('آخر طلب')], $rows);
+        // العددُ والإنفاقُ والأخيرُ من فواتيره الصادرة (`Demo::customers`) — فتُسمّى بها
+        return $this->stream('customers', [__('المعرّف'), __('الاسم'), __('الهاتف'), __('البريد'), __('عدد الفواتير'), __('إجمالي الإنفاق'), __('آخر فاتورة')], $rows);
     }
 
     /**

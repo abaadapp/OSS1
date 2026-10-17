@@ -64,7 +64,7 @@ class SellingOpensTheScreenIssuingMakesTheDebtTest extends TestCase
             'password' => bcrypt('password'), 'role' => 'admin', 'status' => 'نشط',
         ]);
 
-        /** بائعٌ يفتح «المبيعات» ولا يملك فعلًا ماليًّا */
+        /** بائعٌ يفتح فواتيرَ العملاء ولا يملك فعلًا ماليًّا — وبابُها «المالية» منذ خرجت «المبيعات» */
         $this->seller = User::create([
             'business_id' => $this->business->id, 'name' => 'بائع', 'email' => 's@eventplus.om',
             'password' => bcrypt('password'), 'role' => 'employee', 'status' => 'نشط',
@@ -75,7 +75,7 @@ class SellingOpensTheScreenIssuingMakesTheDebtTest extends TestCase
              * البائعُ عند القسم — ويمرّ الاختبارُ خضراءَ ولو رُفع حارسُ
              * الفعل كلُّه. فيُمنح القسمان ليُسأل الحارسُ وحدَه.
              */
-            'permissions' => ['orders', 'customers', 'finance'],
+            'permissions' => ['customers', 'finance'],
         ]);
 
         $this->ministry = Customer::create([
@@ -274,12 +274,13 @@ class SellingOpensTheScreenIssuingMakesTheDebtTest extends TestCase
     /* ═══════════════ ومن كان يفعلها أمس لا يُقطع ═══════════════ */
 
     /**
-     * الترقيةُ تمنح الأربعةَ لمن كانت له قائمةٌ يدويّة فيها «المبيعات».
+     * الترقيةُ منحت الأربعةَ لمن كانت له قائمةٌ يدويّة فيها «المبيعات».
      *
-     * وهي تُشغَّل في هذه الاختبارات على قاعدةٍ جديدة، فيُحاكى هنا: تُكتب
-     * قائمةٌ قديمة كما كانت، ويُقرأ ما تمنحه الترقية.
+     * ثمّ خرجت «المبيعات» من النظام وانتقلت فواتيرُ العملاء إلى «المالية»:
+     * الأفعالُ تبقى في القائمة كما منحتها الترقية، لكنّ القسمَ القديم لا يفتح
+     * الفاتورة. فلا يُصدر حتى يُمنح «المالية» — ويُصدر يومَ يُمنحها.
      */
-    public function test_a_hand_written_list_is_not_cut_off_by_the_upgrade(): void
+    public function test_a_hand_written_list_keeps_its_actions_and_waits_for_finance(): void
     {
         $legacy = ['orders', 'customers'];
 
@@ -293,14 +294,18 @@ class SellingOpensTheScreenIssuingMakesTheDebtTest extends TestCase
         $user = User::create([
             'business_id' => $this->business->id, 'name' => 'قديم', 'email' => 'l@eventplus.om',
             'password' => bcrypt('password'), 'role' => 'employee', 'status' => 'نشط',
-            'permissions' => $upgraded,
+            'permissions' => Permissions::withoutRetired($upgraded),
         ]);
 
         $draft = $this->draft();
 
-        $this->actingAs($user)->post(route('admin.customerInvoices.issue', $draft->id))
-            ->assertSessionHasNoErrors();
+        $this->actingAs($user)->post(route('admin.customerInvoices.issue', $draft->id))->assertForbidden();
+        $this->assertSame(CustomerInvoice::DRAFT, $draft->fresh()->status);
 
+        $user->update(['permissions' => [...$user->permissions, 'finance']]);
+
+        $this->actingAs($user->fresh())->post(route('admin.customerInvoices.issue', $draft->id))
+            ->assertSessionHasNoErrors();
         $this->assertSame(CustomerInvoice::ISSUED, $draft->fresh()->status);
     }
 

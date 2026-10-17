@@ -5,8 +5,6 @@ namespace App\Support;
 use App\Models\Expense;
 use App\Models\ExpenseType;
 use App\Models\JournalEntry;
-use App\Models\Order;
-use App\Models\Product;
 use App\Models\Transaction;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -38,157 +36,18 @@ use Illuminate\Support\Facades\DB;
  */
 class Books
 {
-    /** مصدرُ القيود المكتوبة من هنا — به تُعرَف وتُحذف */
+    /**
+     * مصدرُ القيود المكتوبة من هنا — به تُعرَف.
+     *
+     * وقيدا البيعة (`recordSale`) وعكسُهما خرجا مع «المبيعات»: لا طلبَ يُنشأ
+     * ليُقيَّد. وما قُيّد من الطلبات القديمة باقٍ في الدفتر بمصدره (`SALE` و
+     * `SALE_COST`) — لا يُعكس ولا يُمحى بخروج الشاشة.
+     */
     public const SALE = 'مبيعات';
 
     public const SALE_COST = 'تكلفة مبيعات';
 
     public const EXPENSE = 'مصروف';
-
-    /**
-     * قيدا البيعة: الإيراد وتكلفتُه.
-     *
-     * ولا يُكتبان مرّتين — `sourceable` هو الشاهد، فإعادةُ النداء (من أمر
-     * الاستدراك، أو من محاولةٍ ثانية) لا تُضاعف الدفتر.
-     */
-    public static function recordSale(Order $order): void
-    {
-        if (self::hasEntry($order)) {
-            return;
-        }
-
-        $subtotal = round((float) $order->subtotal - (float) $order->discount + (float) $order->delivery_fee, 3);
-        $tax = round((float) $order->tax, 3);
-        $total = round((float) $order->total, 3);
-
-        $at = Carbon::parse($order->ordered_at ?? $order->created_at);
-        $cost = round(self::costOf($order), 3);
-
-        /*
-         * ═══ وبيعةٌ بلا ثمن تُخرج بضاعةً ═══
-         *
-         * كان الصفرُ يُنهي الدالّة كلَّها: `if ($total <= 0) return`. وبيعةٌ
-         * بكوبون «١٠٠٪» أو بنقاطٍ تغطّي ثمنَها كلَّه إجماليُّها صفر — فتخرج
-         * الباقةُ من الرفّ، ويُنقص المخزونُ الفعليّ، ولا يُكتب في الدفتر
-         * حرفٌ واحد. فيبقى المخزونُ في الميزانية بتكلفة بضاعةٍ لم تعد فيه،
-         * وتُقرأ الأرباحُ أعلى ممّا هي بكلّ هديّةٍ وُزّعت.
-         *
-         * ولا يُكتشف بالنظر: الميزان متوازن (لأنّ ما لم يُكتب لا يُخلّ به)،
-         * والحملةُ التي وُضعت لتجلب زبائن تُظهر ربحًا لا نقصان.
-         *
-         * فصار الصفرُ يمنع قيدَ الإيراد وحدَه — وتكلفةُ ما خرج تُكتب.
-         */
-        if ($total <= 0 && $cost <= 0) {
-            return;
-        }
-
-        /*
-         * الطرف المدين يتبع ما وقع فعلًا.
-         *
-         * فاتورةٌ لم تُدفع ليست نقدًا في الدرج بل ذمّةً على العميل. وبطاقةٌ
-         * أو تحويلٌ يدخلان البنك لا الصندوق — وخلطُهما يجعل تسوية كشف البنك
-         * مستحيلة، وهي شاشةٌ قائمة في النظام.
-         */
-        $debit = match (true) {
-            (string) $order->payment_status === 'غير مدفوع' => 'receivable',
-            in_array((string) $order->payment_method, ['نقدي', 'كاش'], true) => 'cash',
-            default => 'bank',
-        };
-
-        DB::transaction(function () use ($order, $debit, $total, $subtotal, $tax, $cost, $at) {
-            // ‏ولا قيدَ إيرادٍ بصفر: طرفاه صفران، وهو سطرٌ يقول لا شيء
-            if ($total > 0) {
-                $lines = [['account' => $debit, 'debit' => $total]];
-
-                if ($subtotal > 0) {
-                    $lines[] = ['account' => 'sales', 'credit' => $subtotal];
-                }
-                if ($tax > 0) {
-                    $lines[] = ['account' => 'tax_payable', 'credit' => $tax];
-                }
-
-                Ledger::post(
-                    $order->business_id,
-                    __('بيع — فاتورة ').$order->number,
-                    $lines,
-                    $at,
-                    self::SALE,
-                    $order->branch_id,
-                    $order->user_id,
-                    $order,
-                );
-            }
-
-            // البضاعة تخرج من المخزون بتكلفتها لا بثمنها — وبلا هذا القيد
-            // ينتفخ المخزون في الميزانية بكلّ ما بيع منه
-            if ($cost > 0) {
-                Ledger::post(
-                    $order->business_id,
-                    __('تكلفة بيع — فاتورة ').$order->number,
-                    [
-                        ['account' => 'cogs', 'debit' => $cost],
-                        ['account' => 'inventory', 'credit' => $cost],
-                    ],
-                    $at,
-                    self::SALE_COST,
-                    $order->branch_id,
-                    $order->user_id,
-                    $order,
-                );
-            }
-        });
-    }
-
-    /**
-     * إلغاءُ بيعةٍ رُحّلت: عكسٌ لا محو.
-     *
-     * كان الإلغاء يحذف قيدَي البيعة من الدفتر، فتصير بيعةٌ وقعت كأنّها لم
-     * تقع: يقرأ المحاسب الميزان فلا يجد أثرًا لها ولا لإلغائها، ولا يعرف
-     * أنّ رقمًا قرأه أمسِ تغيّر. ومن ألغى ومتى وكم كان المبلغ — كلُّه يذهب
-     * مع الصفّ المحذوف.
-     *
-     * فصار الأصلُ يبقى ويُكتب مقابله عكسُه. والأثر صفرٌ في الرصيد كما كان،
-     * والتاريخ مقروء.
-     *
-     * ولا يُعكس ما عُكس: `liveEntryFor` تتخطّى المعكوس، فنداءان لا يكتبان
-     * عكسين.
-     */
-    public static function unpostSale(Order $order, ?int $userId = null, ?string $reason = null): void
-    {
-        self::liveEntriesFor($order)->each(
-            fn (JournalEntry $e) => Ledger::reverse($e, null, $userId, $reason)
-        );
-    }
-
-    /**
-     * تكلفة البضاعة المباعة في هذه الفاتورة.
-     *
-     * بالقاعدة نفسها التي تحتسب بها التقارير: اللقطةُ أوّلًا وبطاقةُ المنتج
-     * لما بيع قبل وجودها، وتكلفةُ الإضافات معها. وقاعدتان لرقمٍ واحد تعنيان
-     * دفترًا يخالف تقريره.
-     *
-     * @see Demo::reportSummary
-     */
-    public static function costOf(Order $order): float
-    {
-        $order->loadMissing('items.addons');
-        $cards = Product::where('business_id', $order->business_id)->pluck('cost', 'id');
-        $cost = 0.0;
-
-        foreach ($order->items as $item) {
-            $unit = (float) $item->cost;
-            if ($unit <= 0) {
-                $unit = (float) ($cards[$item->product_id] ?? 0);
-            }
-            $cost += $unit * (int) $item->quantity;
-
-            foreach ($item->addons as $addon) {
-                $cost += (float) $addon->cost * (int) $addon->quantity;
-            }
-        }
-
-        return $cost;
-    }
 
     /* ------------------------------ المصروف ------------------------------ */
 
@@ -376,8 +235,8 @@ class Books
             'credit' => '@side',
         ],
         'other_income' => [
-            'label' => 'دخل آخر (غير المبيعات)',
-            'hint' => 'مالٌ دخل من غير البيع — تعويض، إيجار محلٍّ تملكه، فرق عملة',
+            'label' => 'دخل آخر (غير الفواتير)',
+            'hint' => 'مالٌ دخل من غير فواتير العملاء — تعويض، إيجار محلٍّ تملكه، فرق عملة',
             'direction' => 'دخل',
             'asks' => 'أين دخل المال؟',
             'debit' => '@side',
@@ -423,7 +282,8 @@ class Books
      * البيع تكتبه نقطة البيع. وتسجيلُه يدويًّا يعني الحدث مرّتين في الدفتر.
      */
     public const AUTOMATIC = [
-        Transaction::SALE => 'مبيعات',
+        // حركاتُ الطلبات القديمة باقيةٌ في الدفتر بنوعها `sale` — تُقرأ باسمٍ يقول إنّها من النظام القديم
+        Transaction::SALE => 'طلب قديم',
     ];
 
     /**

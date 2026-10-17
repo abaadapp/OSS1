@@ -111,7 +111,7 @@ export default function ReportsVat() {
     const canEdit = (auth?.abilities ?? []).includes('settings');
 
     const stats = [
-        { label: t('المبيعات الخاضعة'), value: m(summary.taxable), icon: 'wallet', color: 'info' },
+        { label: t('الإيرادات الخاضعة للضريبة'), value: m(summary.taxable), icon: 'wallet', color: 'info' },
         { label: t('ضريبة المخرجات'), value: m(summary.output), icon: 'receipt', color: 'primary' },
         { label: t('ضريبة المدخلات'), value: m(summary.input), icon: 'arrow-down-circle', color: 'success' },
         {
@@ -186,7 +186,7 @@ export default function ReportsVat() {
                     <TableHeader>
                         <TableRow className="hover:bg-transparent">
                             <TableHead>{t('الشهر')}</TableHead>
-                            <TableHead className="text-end">{t('المبيعات الخاضعة')}</TableHead>
+                            <TableHead className="text-end">{t('الإيرادات الخاضعة للضريبة')}</TableHead>
                             <TableHead className="text-end">{t('ضريبة المخرجات')}</TableHead>
                             <TableHead className="text-end">{t('المشتريات')}</TableHead>
                             <TableHead className="text-end">{t('ضريبة المدخلات')}</TableHead>

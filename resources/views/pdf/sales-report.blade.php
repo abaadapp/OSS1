@@ -11,7 +11,7 @@
     $maxSales = max(1, max(array_filter($salesSeries['data'], fn ($v) => $v !== null) ?: [1]));
 @endphp
 
-@section('title', __('تقرير المبيعات'))
+@section('title', __('تقرير الإيرادات'))
 
 @section('meta')
     <div>{{ $branch }}</div>
@@ -33,7 +33,7 @@
         @endforeach
     </table>
 
-    <h2>{{ __('حركة المبيعات') }} — {{ $rangeLabel ?? '' }}</h2>
+    <h2>{{ __('حركة الإيرادات') }} — {{ $rangeLabel ?? '' }}</h2>
     <table class="grid">
         @foreach (($salesSeries['full'] ?? $salesSeries['labels']) as $i => $label)
             {{-- ما لم يأتِ بعدُ لا يُطبع: سطرٌ بصفرٍ عن يوم غدٍ رقمٌ لا واقعة --}}
@@ -64,13 +64,13 @@
     </table>
 
     {{-- الجدول نفسه الذي على الشاشة: مرتَّبٌ بالإيراد، وبقسم كل منتج ونسبته --}}
-    <h2>{{ __('الأكثر مبيعًا') }}</h2>
+    <h2>{{ __('الأعلى إيرادًا') }}</h2>
     <table class="grid">
         <tr><th>{{ __('المنتج') }}</th><th>{{ __('القسم') }}</th><th>{{ __('المُباع') }}</th><th>{{ __('الإيراد') }}</th><th>{{ __('النسبة') }}</th></tr>
         @forelse ($topProducts as $p)
             <tr><td>{{ $p['name'] }}</td><td>{{ $p['cat'] }}</td><td>{{ __(':n وحدة', ['n' => $p['sold']]) }}</td><td>{{ \App\Support\Demo::moneyBase($p['revenue']) }}</td><td>{{ $p['pct'] }}</td></tr>
         @empty
-            <tr><td colspan="5" class="empty">{{ __('لا توجد بيانات مبيعات بعد') }}</td></tr>
+            <tr><td colspan="5" class="empty">{{ __('لا توجد فواتير صادرة بعد') }}</td></tr>
         @endforelse
     </table>
 @endsection

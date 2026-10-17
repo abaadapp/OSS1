@@ -8,6 +8,8 @@ import { Card } from '@/Components/ui/card';
 import { Input } from '@/Components/ui/input';
 import { useTranslate } from '@/lib/i18n';
 import { receiptMode } from '@/lib/receipts';
+import TabHead from '@/Components/project/TabHead';
+import MoreDetails from '@/Components/project/MoreDetails';
 
 export interface ProjectPurchases {
     summary: {
@@ -42,6 +44,9 @@ const RECEIPT_TONE: Record<string, 'neutral' | 'warning' | 'info' | 'success'> =
  *
  * تبويبٌ مساند لا مرحلةٌ من مراحل المسار. و«+ إضافة شراء» يفتح شاشةَ أمر الشراء
  * الحاليّة والمشروعُ مختارٌ فيها، ويعود إلى هنا بعد الحفظ — مستندٌ واحد لا نسختان.
+ *
+ * وترتيبُه كبقيّة تبويبات المشروع: سطرُ خلاصة («أوامر الشراء ٣ · بانتظار
+ * الاستلام ١») ثمّ الزرّ ثمّ الأوامر. والتصفيةُ والأرقامُ المفصّلة مطويّتان.
  */
 export default function PurchasesTab({ projectId, data, m }: { projectId: number; data: ProjectPurchases; m: (v: number | null) => string }) {
     const t = useTranslate();
@@ -66,48 +71,48 @@ export default function PurchasesTab({ projectId, data, m }: { projectId: number
 
     return (
         <div className="space-y-4">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="text-[12.5px] text-[#6b7280]">{t('أوامر الشراء المرتبطة بالمشروع — هي نفسها في قسم المشتريات.')}</p>
-                {data.may.create && (
-                    <Button asChild>
-                        <SmartLink routeName="admin.purchases.create" href={route('admin.purchases.create', { project_id: projectId })}>
-                            <Plus />{t('إضافة شراء')}
-                        </SmartLink>
-                    </Button>
-                )}
-            </div>
+            <TabHead
+                facts={[
+                    { label: 'أوامر الشراء', n: s.orders },
+                    { label: 'بانتظار الاستلام', n: s.pending },
+                    s.orders > 0 && { label: 'الإجمالي', value: m(s.total) },
+                ]}
+                empty="لا أوامر شراء على هذا المشروع بعد"
+                action={
+                    data.may.create && (
+                        <Button size="sm" asChild>
+                            <SmartLink routeName="admin.purchases.create" href={route('admin.purchases.create', { project_id: projectId })}>
+                                <Plus />{t('إضافة شراء')}
+                            </SmartLink>
+                        </Button>
+                    )
+                }
+            />
 
-            <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-7">
-                {cards.map((c) => (
-                    <div key={c.label} className="rounded-[12px] border border-[var(--ui-border,#e8e8e8)] bg-white p-3">
-                        <span className="block text-[11.5px] text-[#6b7280]">{t(c.label)}</span>
-                        <span className="mt-1 block text-[15px] font-bold tabular-nums text-[#111]">{c.value}</span>
+            {data.orders.length > 0 && (
+                <MoreDetails label="تصفية">
+                    <div className="flex flex-wrap items-end gap-3">
+                        <Field label="المورد" className="min-w-[160px]">
+                            <Select value={filters.supplier} placeholder="الكلّ" onChange={(e) => setFilters({ ...filters, supplier: e.target.value })}
+                                options={data.suppliers.filter((x) => x.id !== null).map((x) => ({ value: String(x.id), label: x.name ?? '—' }))} />
+                        </Field>
+                        <Field label="الحالة" className="min-w-[140px]">
+                            <Select value={filters.status} placeholder="الكلّ" onChange={(e) => setFilters({ ...filters, status: e.target.value })}
+                                options={data.statuses.map((x) => ({ value: x, label: x }))} />
+                        </Field>
+                        <Field label="نوع البند" className="min-w-[130px]">
+                            <Select value={filters.kind} placeholder="الكلّ" onChange={(e) => setFilters({ ...filters, kind: e.target.value })}
+                                options={data.kinds.map((x) => ({ value: x, label: LINE_KIND_LABEL[x] ?? x }))} />
+                        </Field>
+                        <Field label="من" className="min-w-[140px]">
+                            <Input type="date" value={filters.from} onChange={(e) => setFilters({ ...filters, from: e.target.value })} />
+                        </Field>
+                        <Field label="إلى" className="min-w-[140px]">
+                            <Input type="date" value={filters.until} onChange={(e) => setFilters({ ...filters, until: e.target.value })} />
+                        </Field>
                     </div>
-                ))}
-            </div>
-
-            <Card className="p-4">
-                <div className="flex flex-wrap items-end gap-3">
-                    <Field label="المورد" className="min-w-[160px]">
-                        <Select value={filters.supplier} placeholder="الكلّ" onChange={(e) => setFilters({ ...filters, supplier: e.target.value })}
-                            options={data.suppliers.filter((x) => x.id !== null).map((x) => ({ value: String(x.id), label: x.name ?? '—' }))} />
-                    </Field>
-                    <Field label="الحالة" className="min-w-[140px]">
-                        <Select value={filters.status} placeholder="الكلّ" onChange={(e) => setFilters({ ...filters, status: e.target.value })}
-                            options={data.statuses.map((x) => ({ value: x, label: x }))} />
-                    </Field>
-                    <Field label="نوع البند" className="min-w-[130px]">
-                        <Select value={filters.kind} placeholder="الكلّ" onChange={(e) => setFilters({ ...filters, kind: e.target.value })}
-                            options={data.kinds.map((x) => ({ value: x, label: LINE_KIND_LABEL[x] ?? x }))} />
-                    </Field>
-                    <Field label="من" className="min-w-[140px]">
-                        <Input type="date" value={filters.from} onChange={(e) => setFilters({ ...filters, from: e.target.value })} />
-                    </Field>
-                    <Field label="إلى" className="min-w-[140px]">
-                        <Input type="date" value={filters.until} onChange={(e) => setFilters({ ...filters, until: e.target.value })} />
-                    </Field>
-                </div>
-            </Card>
+                </MoreDetails>
+            )}
 
             <Card className="overflow-hidden">
                 <h3 className="flex items-center gap-2 border-b border-[#f4f4f5] px-5 py-3 text-sm font-bold"><ClipboardList className="size-4 text-[#6d28d9]" />{t('أوامر الشراء')}</h3>
@@ -147,22 +152,24 @@ export default function PurchasesTab({ projectId, data, m }: { projectId: number
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
                 <Card className="overflow-hidden lg:col-span-2">
                     <h3 className="flex items-center gap-2 border-b border-[#f4f4f5] px-5 py-3 text-sm font-bold"><Receipt className="size-4 text-[#6d28d9]" />{t('فواتير الموردين المرتبطة')}</h3>
-                    <table className="w-full text-[13px]">
-                        <tbody>
-                            {data.invoices.length === 0 && <tr><td className="px-4 py-6 text-center text-[#9ca3af]">{t('لا سندات موردين على المشروع')}</td></tr>}
-                            {data.invoices.map((i) => (
-                                <tr key={i.id} className="border-t border-[#f4f4f5] first:border-t-0">
-                                    <td className="px-4 py-2 font-mono text-[12px]">
-                                        <SmartLink routeName="admin.purchases.invoices.show" href={route('admin.purchases.invoices.show', i.id)} className="text-[#1d4ed8]">{i.ref}</SmartLink>
-                                    </td>
-                                    <td className="px-4 py-2">{i.supplier ?? '—'}</td>
-                                    <td className="px-4 py-2 text-center"><Badge status={i.approval_status}>{t(i.approval_status)}</Badge></td>
-                                    {data.money && <td className="px-4 py-2 text-end tabular-nums">{m(i.total)}</td>}
-                                    {data.money && <td className="px-4 py-2 text-end tabular-nums text-[#6b7280]">{t('المتبقي')}: {m(i.outstanding)}</td>}
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-[13px]">
+                            <tbody>
+                                {data.invoices.length === 0 && <tr><td className="px-4 py-6 text-center text-[#9ca3af]">{t('لا سندات موردين على المشروع')}</td></tr>}
+                                {data.invoices.map((i) => (
+                                    <tr key={i.id} className="border-t border-[#f4f4f5] first:border-t-0">
+                                        <td className="px-4 py-2 font-mono text-[12px]">
+                                            <SmartLink routeName="admin.purchases.invoices.show" href={route('admin.purchases.invoices.show', i.id)} className="text-[#1d4ed8]">{i.ref}</SmartLink>
+                                        </td>
+                                        <td className="px-4 py-2">{i.supplier ?? '—'}</td>
+                                        <td className="px-4 py-2 text-center"><Badge status={i.approval_status}>{t(i.approval_status)}</Badge></td>
+                                        {data.money && <td className="px-4 py-2 text-end tabular-nums">{m(i.total)}</td>}
+                                        {data.money && <td className="px-4 py-2 text-end tabular-nums text-[#6b7280]">{t('المتبقي')}: {m(i.outstanding)}</td>}
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
                 </Card>
                 <Card className="overflow-hidden">
                     <h3 className="flex items-center gap-2 border-b border-[#f4f4f5] px-5 py-3 text-sm font-bold"><Truck className="size-4 text-[#6d28d9]" />{t('الموردون في المشروع')}</h3>
@@ -180,6 +187,18 @@ export default function PurchasesTab({ projectId, data, m }: { projectId: number
                     </ul>
                 </Card>
             </div>
+
+            {/* الأرقامُ المفصّلة — الاستلامُ والفواتيرُ والمدفوعُ والمتبقّي — مطويّةٌ تحت البيانات */}
+            <MoreDetails>
+                <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-7">
+                    {cards.map((c) => (
+                        <div key={c.label} className="rounded-[12px] border border-[var(--ui-border,#e8e8e8)] bg-white p-3">
+                            <span className="block text-[11.5px] text-[#6b7280]">{t(c.label)}</span>
+                            <span className="mt-1 block text-[15px] font-bold tabular-nums text-[#111]">{c.value}</span>
+                        </div>
+                    ))}
+                </div>
+            </MoreDetails>
         </div>
     );
 }

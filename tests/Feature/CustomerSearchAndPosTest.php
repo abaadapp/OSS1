@@ -8,7 +8,6 @@ use App\Models\Customer;
 use App\Models\Order;
 use App\Models\Product;
 use App\Models\User;
-use App\Support\OrderStatus;
 use App\Support\Search;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;

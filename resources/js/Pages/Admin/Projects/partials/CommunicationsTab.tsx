@@ -22,6 +22,7 @@ import SmartLink from '@/Components/SmartLink';
 import SendMessageDialog from '@/Components/SendMessageDialog';
 import { Button } from '@/Components/ui/button';
 import { Card } from '@/Components/ui/card';
+import TabHead from '@/Components/project/TabHead';
 import { useTranslate } from '@/lib/i18n';
 import { CHANNEL_LABEL, clock, day, STATUS_LABEL, statusTone, type TimelineRow } from '@/lib/communications';
 
@@ -107,18 +108,18 @@ export default function CommunicationsTab({ projectId, open }: { projectId: numb
 
     return (
         <Card className="p-4">
-            <div className="mb-3 flex items-center justify-between gap-2">
-                <div>
-                    <h2 className="font-bold text-[#111]">{t('المراسلات')}</h2>
-                    <p className="text-[12px] text-[#9ca3af]">{t('ما جرى في المشروع وما قيل للعميل — بترتيب وقوعه')}</p>
-                </div>
-                {data?.may.send && open && (
-                    <Button size="sm" onClick={() => setSending(true)}>
-                        <Send />
-                        {t('إرسال للعميل')}
-                    </Button>
-                )}
-            </div>
+            {/* سطرُ خلاصةٍ ثمّ الفعل — وما التبويبُ إلّا ما جرى وما قيل للعميل بترتيب وقوعه */}
+            <TabHead
+                facts={data === null ? [] : [{ label: 'الوقائع', n: rows.length }]}
+                action={
+                    data?.may.send && open && (
+                        <Button size="sm" onClick={() => setSending(true)}>
+                            <Send />
+                            {t('إرسال للعميل')}
+                        </Button>
+                    )
+                }
+            />
 
             {data === null ? (
                 <p className="text-[13px] text-[#9ca3af]">{t('جارٍ التحميل…')}</p>

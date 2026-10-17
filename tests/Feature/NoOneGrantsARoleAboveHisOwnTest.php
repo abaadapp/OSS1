@@ -5,10 +5,8 @@ namespace Tests\Feature;
 use App\Models\Branch;
 use App\Models\Business;
 use App\Models\JobTitle;
-use App\Models\Order;
 use App\Models\User;
 use App\Support\Demo;
-use App\Support\OrderStatus;
 use App\Support\Permissions;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -86,7 +84,8 @@ class NoOneGrantsARoleAboveHisOwnTest extends TestCase
         $this->actingAs($this->accountant)
             ->post(route('admin.employees.store'), $this->form([
                 'job_title' => 'صاحب النشاط',
-                'permissions' => ['employees', 'orders'],
+                // و«المالية» لا «المبيعات»: قسمٌ يملكه المحاسب — والمبيعاتُ خرجت من الكتالوج
+                'permissions' => ['employees', 'finance'],
             ]))->assertForbidden();
 
         $this->assertNull(User::where('email', 'newone@eventplusapp.om')->first());
@@ -108,7 +107,8 @@ class NoOneGrantsARoleAboveHisOwnTest extends TestCase
     {
         $this->actingAs($this->owner)
             ->post(route('admin.employees.store'), $this->form([
-                'job_title' => 'مدير فرع', 'permissions' => ['dashboard', 'orders'],
+                // كانت `orders` — خرجت من الكتالوج فيردّها التحقّق قبل أن يُسأل الحدّ
+                'job_title' => 'مدير فرع', 'permissions' => ['dashboard', 'finance'],
             ]))->assertRedirect();
 
         $this->assertSame('manager', User::where('email', 'newone@eventplusapp.om')->firstOrFail()->role);
@@ -127,7 +127,7 @@ class NoOneGrantsARoleAboveHisOwnTest extends TestCase
             'business_id' => $this->shop->id, 'name' => 'شريك مُضيَّق', 'email' => 'p@eventplus.om',
             'password' => bcrypt('password12345'), 'role' => 'admin',
             'job_title' => 'صاحب النشاط', 'status' => 'نشط',
-            'permissions' => ['employees', 'orders'],
+            'permissions' => ['employees', 'finance'],
         ]);
 
         $this->assertFalse(Permissions::mayTouch($narrowed, $this->owner));
@@ -271,8 +271,9 @@ class NoOneGrantsARoleAboveHisOwnTest extends TestCase
             $res = $this->post(route('admin.employees.store'), $this->form([
                 'job_title' => $title,
                 'login_username' => 'try'.$i,
-                // ولا يُؤشَّر إلا ما يملكه المحاسب — فالردُّ إن وقع فمن الدور
-                'permissions' => ['orders'],
+                // ولا يُؤشَّر إلا ما يملكه المحاسب — فالردُّ إن وقع فمن الدور.
+                // (كانت `orders`، وخرجت من الكتالوج فصار التحقّقُ يردّها قبل الدور.)
+                'permissions' => ['finance'],
             ]));
 
             $this->assertSame(

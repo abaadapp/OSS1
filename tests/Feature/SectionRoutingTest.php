@@ -71,7 +71,6 @@ class SectionRoutingTest extends TestCase
         $this->assertSame([], $orphans, 'مسارات تسقط على أقسام لا تُمنح: '.implode(', ', $orphans));
     }
 
-
     /** ومن لم يُمنحها لا تنفتح له — الإصلاح لم يفتح البابَ للجميع */
     public function test_not_granting_branches_still_closes_them(): void
     {
@@ -82,8 +81,9 @@ class SectionRoutingTest extends TestCase
     /** والتصدير يتبع ما يُصدَّر لا كلمة «تصدير» */
     public function test_export_follows_what_is_exported(): void
     {
-        $this->assertSame('orders', Permissions::sectionFromRoute('admin.export.orders'));
         $this->assertSame('customers', Permissions::sectionFromRoute('admin.export.customers'));
+        // وتصديرُ الطلبات خرج مع «المبيعات» — فما لا يُعرف يسقط إلى أضيق ما يُمنح
+        $this->assertSame('settings', Permissions::sectionFromRoute('admin.export.orders'));
         $this->assertSame('finance', Permissions::sectionFromRoute('admin.export.transactions'));
     }
 

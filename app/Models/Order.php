@@ -2,12 +2,26 @@
 
 namespace App\Models;
 
-use App\Support\OrderStatus;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
+/**
+ * الطلبُ القديم — بيعةُ صندوقٍ من أيّام متجر التجزئة. **تاريخٌ يُقرأ، لا بابٌ يُكتب.**
+ *
+ * خرجت «المبيعات» من النظام بقسمها وشاشاتها وتصحيحها وأوراقها وتصديرها
+ * وأوامر ترحيلها: لا مسارَ يُنشئ طلبًا ولا يعدّله ولا يطبعه، ولا يُرحَّل منه
+ * قيدٌ ولا تتحرّك به كميّة.
+ *
+ * ويبقى النموذجُ وجدولُه لأنّ ما وقع لا يُمحى:
+ *  • قيودُه في الدفتر وحركاتُ صندوقه (`Transaction::order`) — تُقرأ في المالية والضريبة.
+ *  • والبيعُ الآجلُ الذي لم يُفوتَر ذمّةٌ قائمة: يُعدّ في مطابقة الذمم
+ *    (`Receivables::uninvoicedOrders`) ويُفوتَر من «الذمم» (`CustomerInvoices::consolidate`).
+ *  • والفاتورةُ المولودةُ منه تذكره (`CustomerInvoice::orders`).
+ *  • وبنودُه تحمي المنتجَ الذي بيع من المحو النهائيّ (`Product::orderItems`).
+ *  • وصفوفُه في النسخة الاحتياطيّة تُستعاد كما هي (`TenantTables`) — بلا شاشةٍ تعود معها.
+ */
 class Order extends Model
 {
     protected $guarded = [];
@@ -31,11 +45,12 @@ class Order extends Model
     /**
      * الحالة التي تعني أن البيعة رُدَّت ولم تعد بيعًا.
      *
-     * تبقى هنا وتُشير إلى `OrderStatus`: هذا الثابت مقروءٌ في نطاق `sold`
-     * وفي مواضع كثيرة سواه، وحذفُه ليس تنظيمًا بل كسرٌ لِما يعمل. والمصدر
-     * واحد — القيمة تُقرأ من هناك لا تُكتب هنا مرّةً ثانية.
+     * مقروءةٌ في نطاق `sold` وفي الذمم (`Receivables`) والصندوق
+     * (`Transaction::scopeNotCancelled`). وكانت تُشير إلى `OrderStatus` —
+     * سجلِّ حالات الطلب وانتقالاتها — وخرج مع شاشة الطلبات: لا طلبَ تُنقل
+     * حالتُه، ويبقى معنى «الملغى» لقراءة ما مضى.
      */
-    public const CANCELLED = OrderStatus::CANCELLED;
+    public const CANCELLED = 'ملغي';
 
     public function business(): BelongsTo
     {
@@ -93,44 +108,5 @@ class Order extends Model
     public function scopeSold($query)
     {
         return $query->where('status', '!=', self::CANCELLED);
-    }
-
-    /**
-     * أفات موعدُ هذا الطلب وهو حيّ؟
-     *
-     * والقاعدة هي قاعدةُ مُرشِّح «متأخّر» في `ListFilters::orders` نفسِها:
-     * موعدٌ مضى، وحالةٌ لم تُغلق. وهما موضعان يقولان الشيء نفسه — أحدهما
-     * يرشّح صفوفًا والآخر يسم الصفَّ المعروض — فيُحرَس اتّفاقُهما باختبارٍ
-     * يقارن المجموعتين، لا بالثقة. (انظر `TheSalesListShowsWhatItFiltersBy`)
-     */
-    public function isLate(): bool
-    {
-        return $this->scheduled_for !== null
-            && ! in_array($this->status, OrderStatus::CLOSED, true)
-            && $this->scheduled_for->isPast();
-    }
-
-    /**
-     * ما ينتظر التجهيز: طلبٌ حيّ له موعد.
-     *
-     * المغلق يخرج (سُلّم أو استُلم أو اكتمل أو أُلغي)، والطلب بلا موعد يخرج
-     * أيضًا — دُفع وأُخذ في اللحظة نفسها، ولا شيء فيه يُجهَّز. ولولا ذلك
-     * لَامتلأت اللوحة بمئات الفواتير التي أُغلقت منذ شهور.
-     */
-    public function scopeAwaitingPreparation($query)
-    {
-        return $query->whereNotNull('scheduled_for')
-            ->whereNotIn('status', OrderStatus::CLOSED);
-    }
-
-    /**
-     * ما فات موعده ولم يُغلق — يتصدّر لوحة التجهيز.
-     *
-     * يُقاس بـ`scheduled_for` لا بـ`ordered_at`: طلبٌ سُجّل الاثنين لتسليمه
-     * الجمعة ليس متأخّرًا يوم الثلاثاء.
-     */
-    public function scopeOverdue($query)
-    {
-        return $query->awaitingPreparation()->where('scheduled_for', '<', now());
     }
 }

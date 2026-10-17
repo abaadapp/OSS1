@@ -318,13 +318,13 @@ export default function AreaChart({
                         ) : (
                             <>
                                 {format(points[hover].value as number)}
-                                {/* عددُ الطلبات يفصل بيعةً كبيرة عن يومٍ مزدحم — والمبلغ وحده لا يفعل */}
+                                {/* عددُ الفواتير يفصل فاتورةً كبيرة عن يومٍ مزدحم — والمبلغ وحده لا يفعل (`Revenue::series`) */}
                                 {points[hover].count != null && (
                                     <>
                                         {' · '}
                                         {points[hover].count === 0
-                                            ? t('لا طلبات')
-                                            : `${points[hover].count} ${t('طلب')}`}
+                                            ? t('لا فواتير')
+                                            : `${points[hover].count} ${t('فاتورة')}`}
                                     </>
                                 )}
                             </>

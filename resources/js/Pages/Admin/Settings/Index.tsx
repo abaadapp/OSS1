@@ -466,7 +466,7 @@ export default function SettingsIndex() {
             ) : tab === 'notifications-log' ? (
                 <SettingsSection
                     title="التنبيهات المرسلة"
-                    description="جميع التنبيهات التي أُرسلت إليك — مخزون منخفض وطلبات بانتظار التجهيز."
+                    description="جميع التنبيهات التي أُرسلت إليك — مخزون منخفض وسندات تنتظر الاعتماد وغيرها."
                     icon={BellRing}
                     status={
                         <span className="inline-flex items-center gap-1.5 rounded-full bg-[#f3f4f6] px-3 py-1 text-[12px] font-medium text-[#374151]">
@@ -500,7 +500,7 @@ export default function SettingsIndex() {
                             <BellOff className="mx-auto mb-3 size-8 text-[#d1d5db]" />
                             <p className="font-medium text-[#374151]">{t('لا توجد تنبيهات')}</p>
                             <p className="mt-1 text-[13px] text-[#9ca3af]">
-                                {t('ستظهر هنا عند انخفاض المخزون أو ورود طلبات جديدة.')}
+                                {t('ستظهر هنا عند انخفاض المخزون أو وصول ما يحتاج انتباهك.')}
                             </p>
                         </div>
                     ) : (
@@ -575,7 +575,7 @@ export default function SettingsIndex() {
                 <div className="space-y-6">
                     <SettingsSection
                         title="تنزيل نسخة احتياطية"
-                        description="يشمل الملف كامل بيانات شركتك: المنتجات، الأقسام، العملاء، الطلبات، المصروفات وغيرها."
+                        description="يشمل الملف كامل بيانات شركتك: المنتجات، الأقسام، العملاء، المشاريع، الفواتير، المصروفات وغيرها."
                         icon={Download}
                     >
                         <PageActions>
@@ -668,7 +668,7 @@ export default function SettingsIndex() {
                                 */}
                                 <SettingsSection
                                     title="الشعار"
-                                    description="يظهر في الفواتير والإيصالات — وقالب فاتورة البيع يُظهره أو يُخفيه."
+                                    description="يظهر في الفواتير والإيصالات — وقالبُ كلّ ورقةٍ يُظهره أو يُخفيه."
                                     icon={ImageIcon}
                                 >
                                     <div className="flex flex-wrap items-center gap-5">
@@ -819,7 +819,7 @@ export default function SettingsIndex() {
                                     on={form.data.vat_enabled}
                                     onChange={(v) => form.setData('vat_enabled', v)}
                                     label="تفعيل ضريبة القيمة المضافة"
-                                    hint="تُحتسب على كل فاتورة بيع"
+                                    hint="تُحتسب على كل فاتورة عميل"
                                 />
                                 <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
                                     <Field label="نسبة الضريبة (%)" error={form.errors.vat_rate}>
@@ -977,7 +977,7 @@ export default function SettingsIndex() {
                                     on={form.data.staff_sees_performance}
                                     onChange={(v) => form.setData('staff_sees_performance', v)}
                                     label="أظهِر للموظّف أداءه في «حسابي»"
-                                    hint="مبيعاتُه اليوم والشهر وإجمالي طلباته. وراتبه يراه دائمًا."
+                                    hint="إيراداتُ فواتيره اليوم والشهر وعددُها. وراتبه يراه دائمًا."
                                 />
 
                                 {/*
@@ -1123,7 +1123,7 @@ export default function SettingsIndex() {
                                     on={form.data.notify_daily_summary}
                                     onChange={(v) => form.setData('notify_daily_summary', v)}
                                     label="ملخّص الأداء اليومي"
-                                    hint="يصل آخر اليوم بمبيعات اليوم وأبرز أرقامه."
+                                    hint="يصل آخر اليوم بإيرادات اليوم وأبرز أرقامه."
                                 />
 
                                 {saveBar}

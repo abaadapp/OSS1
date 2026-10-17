@@ -2,13 +2,14 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { router } from '@inertiajs/react';
 import type { LucideIcon } from 'lucide-react';
 import {
+    Briefcase,
     Building2,
+    FileText,
     LayoutGrid,
     LoaderCircle,
     Package,
     Receipt,
     Search,
-    ShoppingCart,
     Truck,
     Users,
 } from 'lucide-react';
@@ -32,7 +33,9 @@ interface SearchGroup {
 /** أيقونات المجموعات كما يسمّيها SearchController */
 const ICONS: Record<string, LucideIcon> = {
     package: Package,
-    'shopping-cart': ShoppingCart,
+    // المشاريعُ وعروضُ الأسعار — حلّت محلّ «الطلبات» القديمة (`shopping-cart`)
+    briefcase: Briefcase,
+    'file-text': FileText,
     users: Users,
     truck: Truck,
     // بحث المنصّة يُرسل هذه منذ البداية، وكانت تسقط إلى أيقونة الصندوق

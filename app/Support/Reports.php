@@ -49,8 +49,8 @@ class Reports
             'key' => 'sales',
             'category' => 'financial',
             'section' => 'reports',
-            'title' => 'ملخّص المبيعات',
-            'desc' => 'المبيعات والأرباح والمصروفات والضريبة، ومنحنى السنة والأكثر مبيعًا.',
+            'title' => 'ملخّص الإيرادات',
+            'desc' => 'الإيرادات والأرباح والمصروفات والضريبة، ومنحنى السنة والأعلى إيرادًا.',
             'icon' => 'trending-up',
             'route' => 'admin.reports.sales',
         ],
@@ -112,9 +112,9 @@ class Reports
         [
             'key' => 'invoices',
             'category' => 'operational',
-            // وقسمُها `orders`: هو القسمُ الذي يحكم شاشاتِ فواتير العملاء
+            // وقسمُها `finance`: هو القسمُ الذي يحكم شاشاتِ فواتير العملاء
             // أصلًا — انظر `Permissions::ALIASES['customerInvoices']`
-            'section' => 'orders',
+            'section' => 'finance',
             'title' => 'فواتير العملاء',
             'desc' => 'كل فاتورةٍ بحال سدادها وفرعها وقيمتها وما بقي عليها.',
             'icon' => 'file-text',
@@ -170,7 +170,7 @@ class Reports
             'category' => 'operational',
             'section' => 'employees',
             'title' => 'أداء الموظفين',
-            'desc' => 'مبيعات كل موظف هذا الشهر وفرعه وحالته.',
+            'desc' => 'إيرادات الفواتير التي أصدرها كل موظف هذا الشهر وفرعه وحالته.',
             'icon' => 'users',
             'route' => 'admin.reports.staff',
         ],
@@ -336,7 +336,7 @@ class Reports
     public static function summaryRows(array $summary): array
     {
         $rows = [
-            ['إجمالي المبيعات', 'sales', true],
+            ['إجمالي الفواتير (شامل الضريبة)', 'sales', true],
             // التكلفة تُقال صراحةً: بطاقةُ ربحٍ بلا سطر تكلفةٍ فوقها لا
             // يستطيع قارئها أن يتحقّق من الطرح ولا أن يعرف أنه وقع أصلًا
             ['تكلفة البضاعة المباعة', 'cogs', true],

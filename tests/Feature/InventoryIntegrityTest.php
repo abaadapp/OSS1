@@ -9,14 +9,11 @@ use App\Models\Currency;
 use App\Models\Expense;
 use App\Models\InventoryMovement;
 use App\Models\JobTitle;
-use App\Models\Order;
-use App\Models\OrderItem;
 use App\Models\Product;
 use App\Models\PurchaseOrder;
 use App\Models\PurchaseOrderItem;
 use App\Models\Setting;
 use App\Models\User;
-use App\Support\Demo;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -175,12 +172,7 @@ class InventoryIntegrityTest extends TestCase
         $this->assertSame(15, $row['qty']);
     }
 
-
     // ————— ٥· التحويل —————
-
-
-
-
 
     // ————— ٦· فاقد الجرد —————
 
@@ -241,55 +233,13 @@ class InventoryIntegrityTest extends TestCase
         $this->assertSame(20, (int) $this->product->fresh()->quantity);
     }
 
-    public function test_past_profit_does_not_move_when_the_cost_changes(): void
-    {
-        /*
-         * أهمّ ما في الملفّ: بيعةٌ وقعت بتكلفة أربعة تبقى بأربعة. وكان الربح
-         * يُحسب بتكلفة اليوم، فرفعُ المورّد سعره ينقص ربح الشهر الماضي —
-         * تقريرٌ ماليّ يتغيّر بأثرٍ رجعيّ كلّما اشتريتَ، ولا يُرى لأن الأرقام
-         * تبقى معقولة.
-         */
-        $order = Order::create([
-            'business_id' => $this->business->id, 'branch_id' => $this->muscat->id,
-            'number' => 'ORD-1', 'status' => 'مكتمل', 'payment_method' => 'نقدي',
-            'subtotal' => 20, 'tax' => 0, 'total' => 20, 'ordered_at' => now(),
-        ]);
-        OrderItem::create([
-            'order_id' => $order->id, 'product_id' => $this->product->id,
-            'name' => $this->product->name, 'price' => 10, 'cost' => 4, 'quantity' => 2, 'total' => 20,
-        ]);
-
-        $this->actingAs($this->owner);
-        $before = Demo::profitSummary()['profit'];
-
-        // ارتفع سعر المورّد بعد البيعة
-        $this->product->update(['cost' => 9]);
-
-        $this->assertSame($before, Demo::profitSummary()['profit'], 'ربح ما مضى تغيّر بتغيّر التكلفة');
-        $this->assertSame(12.0, $before);
-    }
-
-    public function test_a_sale_before_the_snapshot_still_uses_the_product_card(): void
-    {
-        // بيعةٌ قديمة بلا لقطة (cost=0) — لا تنقلب أرقام ما مضى بهجرةٍ واحدة
-        $order = Order::create([
-            'business_id' => $this->business->id, 'branch_id' => $this->muscat->id,
-            'number' => 'ORD-2', 'status' => 'مكتمل', 'payment_method' => 'نقدي',
-            'subtotal' => 20, 'tax' => 0, 'total' => 20, 'ordered_at' => now(),
-        ]);
-        OrderItem::create([
-            'order_id' => $order->id, 'product_id' => $this->product->id,
-            'name' => $this->product->name, 'price' => 10, 'cost' => 0, 'quantity' => 2, 'total' => 20,
-        ]);
-
-        $this->actingAs($this->owner);
-
-        // 20 − (4 × 2) = 12
-        $this->assertSame(12.0, Demo::profitSummary()['profit']);
-    }
+    /*
+     * وكان هنا حارسان على «ربحِ ما مضى» من لقطةِ التكلفة في بنود الطلبات
+     * (`Demo::profitSummary`) — خرجا مع «المبيعات». والربحُ اليوم من فواتير
+     * العملاء، وتكلفتُها تقديرٌ من بطاقة الصنف مشروحٌ في `Revenue::cogs`.
+     */
 
     // ————— ٧· الحدّ والباركود —————
-
 
     public function test_two_products_cannot_share_a_barcode(): void
     {

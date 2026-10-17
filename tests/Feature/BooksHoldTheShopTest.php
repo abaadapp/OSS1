@@ -6,13 +6,11 @@ use App\Models\Branch;
 use App\Models\Business;
 use App\Models\Expense;
 use App\Models\JournalEntry;
-use App\Models\Order;
 use App\Models\Product;
 use App\Models\Transaction;
 use App\Models\User;
 use App\Support\Books;
 use App\Support\Ledger;
-use App\Support\OrderCorrection;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -67,20 +65,6 @@ class BooksHoldTheShopTest extends TestCase
             ->firstWhere('id', $account->id);
 
         return (float) ($row['balance'] ?? 0);
-    }
-    /**
-     * محوُ قيود فاتورةٍ من الجدول مباشرةً — لا عبر `Books`.
-     *
-     * أمرُ الاستدراك يعالج فاتورةً **لا قيد لها أصلًا**: بيعت قبل أن يصير
-     * البيع يُرحَّل. و`unpostSale` تعكس ولا تمحو، فالمعكوسة لها قيود —
-     * ولا يُعيد الأمرُ ترحيلها عمدًا. فالمُعطى هنا يُبنى بالمحو المباشر
-     * ليصف الحال التي كُتب لها الأمر.
-     */
-    private function wipeEntries(Order $order): void
-    {
-        JournalEntry::where('sourceable_type', Order::class)
-            ->where('sourceable_id', $order->id)->get()
-            ->each(fn (JournalEntry $e) => $e->delete());
     }
     /* ------------------- المصروف كذلك ------------------- */
 

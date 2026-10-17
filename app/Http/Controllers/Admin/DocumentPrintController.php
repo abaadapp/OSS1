@@ -6,7 +6,6 @@ use App\Http\Controllers\Controller;
 use App\Models\CustomerCreditNote;
 use App\Models\CustomerPayment;
 use App\Models\GoodsReceiptNote;
-use App\Models\Order;
 use App\Models\PurchaseOrder;
 use App\Models\SupplierInvoice;
 use App\Support\Activity;
@@ -19,8 +18,9 @@ use App\Support\DocumentRenderer;
  * أوراقُ النظام تخرج على ورق.
  *
  * وكانت تُنشأ ولا تُطبع: أمرُ شراءٍ يُرسل إلى مورّد بالهاتف، وسندُ استلامٍ
- * يُوقَّع على ورقةٍ تُكتب باليد، وشحنةٌ تمشي بلا سندٍ يُوقّعه مستلمها. فما
- * في النظام لا يُثبت شيئًا عند خلاف.
+ * يُوقَّع على ورقةٍ تُكتب باليد. فما في النظام لا يُثبت شيئًا عند خلاف.
+ *
+ * وسندُ تسليم الطلب خرج مع «المبيعات»: كان يُطبع من الطلب القديم وحده.
  *
  * والقيدُ في كلّ دالّة واحد: `business_id` في الاستعلام لا في الشاشة. ورقمٌ
  * مُخمَّن في العنوان يفتح ورقةَ جارٍ إن غاب — ولا يظهر ذلك في أيّ سجلّ.
@@ -30,29 +30,6 @@ class DocumentPrintController extends Controller
     private function bid(): int
     {
         return auth()->user()->business_id ?? Demo::bid();
-    }
-
-    /** سند تسليم لطلب — يمشي مع الشحنة ويُوقَّع عند الاستلام */
-    public function delivery(string $number)
-    {
-        $bid = $this->bid();
-        // ولمن قُيّد بفروعٍ: ورقةُ فرعٍ ليس من فروعه لا تُطبع — انظر BranchAccess
-        $order = BranchAccess::limit(Order::where('business_id', $bid))->where('number', $number)
-            ->with('items')->firstOrFail();
-
-        Activity::log('report', 'طبع سند تسليم للطلب: '.$order->number, ['subject_id' => $order->id]);
-
-        /*
-         * والطلبُ يُمرَّر لا بيانُه وحده: منه يُبنى رمزُ الورقة أونلاين.
-         *
-         * سندُ التسليم يمشي مع الشحنة إلى يد المستلِم، فيحمل أسفلَه طريقَه
-         * إلى نسخةٍ لا تبهت ولا تُبلَّل.
-         */
-        return DocumentRenderer::pdf(
-            DocumentRenderer::generic($bid, 'delivery', DocumentPaper::forDelivery($order), null, $order),
-            'delivery-'.$order->number,
-            __('سند تسليم').' '.$order->number,
-        );
     }
 
     public function purchase(int $id)

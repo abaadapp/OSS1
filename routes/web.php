@@ -43,9 +43,6 @@ use App\Http\Controllers\Admin\JobTitleController;
 use App\Http\Controllers\Admin\LanguageController;
 use App\Http\Controllers\Admin\ManagementController;
 use App\Http\Controllers\Admin\ManagementReviewController;
-use App\Http\Controllers\Admin\OrderController;
-use App\Http\Controllers\Admin\OrderDetailController;
-use App\Http\Controllers\Admin\OrderEditController;
 use App\Http\Controllers\Admin\OrganizerController;
 use App\Http\Controllers\Admin\PageController;
 use App\Http\Controllers\Admin\Payroll\PayrollPaymentController;
@@ -260,8 +257,8 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'tenant', 'business'
     /*
      * وصورُ المنتج وتركيبُه (المقاسات والوصفة والإضافات) خرجت من تجربة المنتج
      * بأبوابها: بقايا متجر التجزئة لا كتالوجُ معارضَ وفعاليّات. وصفوفُها
-     * وملفّاتُها القديمة باقيةٌ لا تُمحى — والمبيعاتُ المتقاعدة تقرؤها
-     * (`OrderCorrection`).
+     * وملفّاتُها القديمة باقيةٌ لا تُمحى — تاريخٌ تحمله بنودُ الطلبات
+     * القديمة (`order_item_addons`)، لا شاشة.
      *
      * وقسمٌ يُنشأ من جانب حقله في نموذج المنتج — تحت `/products/` كي يقيسه
      * الحارس بصلاحية «المنتجات» بلا صلاحيةٍ جديدة.
@@ -284,37 +281,12 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'tenant', 'business'
 
     // الإضافات
 
-    // الطلبات
-    Route::get('/orders', [OrderController::class, 'index'])->name('orders.index');
-    // تصدير قائمة الطلبات (قبل /orders/{id} حتى لا يبتلعها نمط المعرّف)
-    Route::get('/orders/export-xlsx', [ReportExportController::class, 'ordersXlsx'])->name('orders.xlsx');
-    Route::get('/orders/export-pdf', [PdfController::class, 'ordersReport'])->name('orders.exportPdf');
-    Route::get('/orders/{number}', [PageController::class, 'ordersShow'])->name('orders.show');
     /*
-     * تعديل بيانات التنفيذ ونقل الحالة — قسمُهما «المبيعات» يُشتقّ من الاسم.
-     *
-     * وبابُهما غيرُ باب تصحيح الفاتورة تحته: ذاك يُحرّك المخزون والمال
-     * ويشترط سببًا وصلاحيةً باسمها، وهذا يُصحّح رقم هاتفٍ أو موعدًا.
+     * «المبيعات» — الطلباتُ القديمة بقائمتها وصفحتها وتصحيحها وأوراقها
+     * وتصديرها — خرجت من النظام بأبوابها: لا مسارَ يُفتح باليد فيعيد الشاشة.
+     * وصفوفُها باقيةٌ في جداولها تاريخًا ماليًّا (قيودٌ وضريبةٌ وحركةُ مخزون)
+     * لا تُمحى — انظر `Order`.
      */
-    Route::put('/orders/{number}/details', [OrderDetailController::class, 'update'])->name('orders.details.update');
-    /* تصحيح فاتورةٍ صدرت — الحكم على الفعل `order.edit` لا على الشاشة */
-    Route::put('/orders/{number}/items/{item}', [OrderEditController::class, 'update'])->name('orders.items.update');
-    Route::put('/orders/{number}/payment', [OrderEditController::class, 'payment'])->name('orders.payment.update');
-    Route::post('/orders/{number}/status', [OrderDetailController::class, 'status'])->name('orders.status');
-
-    // إرسالُ الفاتورة إلى الزبون — نصٌّ يُكتب في الخادم ويُفتح على واتساب التاجر
-    /* إبلاغُ الزبون بحالة طلبه يدويًّا — لا يمرّ بميتا، فيعمل والحظرُ قائم */
-    /* طلبُ تقييمٍ على Google — بملفّ فرع الطلب، وبعد التسليم وحده */
-    /*
-     * ورقتا البيع — فاتورةٌ مقصوصة وإيصالُ صندوق.
-     *
-     * و`pdf` هي الفاتورة: المستندُ الأساسيّ للبيعة، على A4 بلا شرط. وكانت
-     * تُخرج ما يقوله مقاسُ القالب، فمن ضبط صندوقَه على ٨٠مم لم تكن له
-     * فاتورةٌ أصلًا — انظر `PdfController::orderReceipt`.
-     */
-    Route::get('/orders/{number}/pdf', [PdfController::class, 'orderReceipt'])->name('orders.pdf');
-    Route::get('/orders/{number}/receipt', [PdfController::class, 'orderThermal'])->name('orders.receipt');
-    Route::get('/orders/{number}/delivery-note', [DocumentPrintController::class, 'delivery'])->name('orders.deliveryNote');
 
     // العملات وأسعار الصرف
     Route::get('/currency/{code}/switch', [CurrencyController::class, 'switch'])->name('currency.switch');
@@ -341,7 +313,11 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'tenant', 'business'
     Route::post('/customers/{id}/addresses', [CustomerController::class, 'saveAddress'])->name('customers.addresses.save');
     Route::post('/customers/{id}/addresses/{addressId}/default', [CustomerController::class, 'defaultAddress'])->name('customers.addresses.default');
     Route::delete('/customers/{id}/addresses/{addressId}', [CustomerController::class, 'deleteAddress'])->name('customers.addresses.delete');
-    Route::get('/customers/{id}/statement', [PdfController::class, 'customerStatement'])->name('customers.statement');
+    /*
+     * و«كشف حساب» العميل من الذمم (`admin.finance.customerStatement`) — فواتيرُه
+     * وتحصيلُه ورصيدُه. والكشفُ الذي كان هنا يُطبع من الطلبات القديمة وحدها،
+     * فخرج معها.
+     */
     /* أشخاصُ اتصال الجهة — صفٌّ لكلّ شخص وأساسيٌّ واحد (المرحلة 14) */
     Route::post('/customers/{id}/contacts', [CustomerContactController::class, 'store'])->whereNumber('id')->name('customers.contacts.store');
     Route::put('/customers/{id}/contacts/{contactId}', [CustomerContactController::class, 'update'])->whereNumber('id')->whereNumber('contactId')->name('customers.contacts.update');
@@ -572,9 +548,6 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'tenant', 'business'
      */
     Route::post('/settings/recovery-email', [RecoveryEmailController::class, 'start'])->name('settings.recovery.start');
     Route::post('/settings/recovery-email/confirm', [RecoveryEmailController::class, 'confirm'])->name('settings.recovery.confirm');
-
-    // ضريبة القيمة المضافة
-    Route::get('/orders/{number}/tax-invoice', [PdfController::class, 'taxInvoice'])->name('orders.taxInvoice');
 
     /*
      * المالية — خمس شاشات على دفترٍ واحد.
@@ -862,7 +835,6 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'tenant', 'business'
     // تصدير CSV
     Route::get('/export/reports', [ExportController::class, 'reports'])->name('export.reports');
     Route::get('/export/products', [ExportController::class, 'products'])->name('export.products');
-    Route::get('/export/orders', [ExportController::class, 'orders'])->name('export.orders');
     Route::get('/export/customers', [ExportController::class, 'customers'])->name('export.customers');
     Route::get('/export/suppliers', [ExportController::class, 'suppliers'])->name('export.suppliers');
     Route::get('/export/transactions', [ExportController::class, 'transactions'])->name('export.transactions');

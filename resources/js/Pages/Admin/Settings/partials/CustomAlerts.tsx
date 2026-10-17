@@ -174,7 +174,7 @@ export default function CustomAlerts({ alerts, metrics, sections }: Props) {
                         <Input
                             value={form.data.message}
                             onChange={(e) => form.setData('message', e.target.value)}
-                            placeholder={t('مثال: مبيعات اليوم أقل من المعتاد')}
+                            placeholder={t('مثال: إيرادات اليوم أقل من المعتاد')}
                         />
                     </Field>
 
