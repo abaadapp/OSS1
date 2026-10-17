@@ -213,7 +213,13 @@ export const NAV: NavGroup[] = [
             {
                 label: 'المالية',
                 icon: Wallet,
-                route: 'admin.finance.index',
+                /*
+                 * يفتح الملخّصَ المالي — الشاشةَ الأولى في المالية. كان يفتح
+                 * «الحسابات البنكية» (`admin.finance.index`)، فيسأل التاجرُ «كم معي
+                 * وكم لي وكم عليّ؟» ويقع على قائمة حسابات. والحساباتُ تبويبٌ في
+                 * الشريط، والقسمُ يبقى مضيئًا في صفحاته كلّها من `covers`.
+                 */
+                route: 'admin.finance.summary',
                 section: 'finance',
                 covers: [...covers(FINANCE_TABS), 'admin.finance.statement'],
             },

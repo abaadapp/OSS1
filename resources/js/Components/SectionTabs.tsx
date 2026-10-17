@@ -1,5 +1,7 @@
 import { usePage } from '@inertiajs/react';
+import { Check, ChevronDown } from 'lucide-react';
 import SmartLink from '@/Components/SmartLink';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/Components/ui/dropdown-menu';
 import { useTranslate } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import type { PageProps } from '@/types';
@@ -26,6 +28,17 @@ export interface SectionTab {
      * التبويب ويُردّ بـ403.
      */
     action?: string;
+    /**
+     * اسمُ قائمةٍ تُطوى فيها التبويبات التي تحمله — تجميعٌ في الواجهة لا صلاحية.
+     *
+     * المالية عشرُ شاشاتٍ في شريطٍ واحد، أربعٌ منها أدواتُ محاسب (اليوميّة
+     * والشجرة والأصول ومصاريف الشهر) لا يسأل عنها من يفتح القسم ليعرف كم معه.
+     * فتُجمع في زرٍّ واحد، وكلُّ تبويبٍ فيه يبقى بقسمه وفعله: ما لا يملكه
+     * المستخدم لا يظهر في القائمة كما لا يظهر في الشريط. وإن لم يبقَ في
+     * القائمة إلّا تبويبٌ واحد عُرض تبويبًا عاديًّا — قائمةٌ لعنصرٍ واحد
+     * نقرةٌ زائدة.
+     */
+    group?: string;
 }
 
 interface Props {
@@ -81,6 +94,25 @@ export default function SectionTabs({ tabs: all, current, className }: Props) {
             .filter((tb) => current.startsWith(tb.routeName.replace(/\.[^.]+$/, '') + '.'))
             .sort((a, b) => b.routeName.length - a.routeName.length)[0]?.routeName;
 
+    // قائمةٌ لا يبقى فيها إلّا تبويبٌ واحد تُفرَد في الشريط — انظر SectionTab.group
+    const groups = new Map<string, SectionTab[]>();
+    for (const tb of tabs) {
+        if (tb.group) {
+            groups.set(tb.group, [...(groups.get(tb.group) ?? []), tb]);
+        }
+    }
+    const folded = (tb: SectionTab) => !!tb.group && (groups.get(tb.group)?.length ?? 0) > 1;
+
+    const tabClass = (active: boolean) =>
+        cn(
+            'whitespace-nowrap text-sm font-medium transition-colors',
+            // ‏-mb-px يرفع حدّ التبويب فوق حدّ الشريط فيحلّ محلّه،
+            // ولولاه لظهر خطّان متجاوران تحت النشط
+            '-mb-px border-b-2 px-4 py-3',
+            // النشط يتبدّل لونًا لا حجمًا — فلا يقفز ما تحته
+            active ? 'border-[#111] text-[#111]' : 'border-transparent text-[#6b7280] hover:text-[#374151]',
+        );
+
     return (
         <div
             className={cn(
@@ -88,27 +120,51 @@ export default function SectionTabs({ tabs: all, current, className }: Props) {
                 className,
             )}
         >
-            {tabs.map((tab) => {
-                const active = tab.routeName === activeRoute;
-
-                return (
+            {tabs
+                .filter((tab) => !folded(tab))
+                .map((tab) => (
                     <SmartLink
                         key={tab.routeName}
                         routeName={tab.routeName}
                         href={route(tab.routeName, tab.args as never)}
-                        className={cn(
-                            'whitespace-nowrap text-sm font-medium transition-colors',
-                            // ‏-mb-px يرفع حدّ التبويب فوق حدّ الشريط فيحلّ محلّه،
-                            // ولولاه لظهر خطّان متجاوران تحت النشط
-                            '-mb-px border-b-2 px-4 py-3',
-                            // النشط يتبدّل لونًا لا حجمًا — فلا يقفز ما تحته
-                            active
-                                ? 'border-[#111] text-[#111]'
-                                : 'border-transparent text-[#6b7280] hover:text-[#374151]',
-                        )}
+                        aria-current={tab.routeName === activeRoute ? 'page' : undefined}
+                        className={tabClass(tab.routeName === activeRoute)}
                     >
                         {t(tab.label)}
                     </SmartLink>
+                ))}
+
+            {[...groups].filter(([, items]) => items.length > 1).map(([label, items]) => {
+                const inside = items.some((tb) => tb.routeName === activeRoute);
+
+                return (
+                    <DropdownMenu key={label}>
+                        <DropdownMenuTrigger
+                            className={cn(tabClass(inside), 'flex items-center gap-1 outline-none focus-visible:text-[#111]')}
+                        >
+                            {t(label)}
+                            <ChevronDown className="size-3.5" aria-hidden />
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="start" className="w-56">
+                            {items.map((tab) => {
+                                const active = tab.routeName === activeRoute;
+
+                                return (
+                                    <DropdownMenuItem key={tab.routeName} asChild>
+                                        <SmartLink
+                                            routeName={tab.routeName}
+                                            href={route(tab.routeName, tab.args as never)}
+                                            aria-current={active ? 'page' : undefined}
+                                            className={cn('justify-between', active && 'font-semibold text-[#111]')}
+                                        >
+                                            {t(tab.label)}
+                                            {active && <Check aria-hidden />}
+                                        </SmartLink>
+                                    </DropdownMenuItem>
+                                );
+                            })}
+                        </DropdownMenuContent>
+                    </DropdownMenu>
                 );
             })}
         </div>
@@ -162,21 +218,31 @@ export const PRODUCT_TABS: SectionTab[] = [
  *
  * وكشف الحساب البنكي ليس تبويبًا: هو صفحةُ حسابٍ بعينه تُفتح من قائمة
  * الحسابات، فبقاؤه تبويبًا كان يعني بابًا يقود إلى «أوّل حساب» أيًّا كان.
+ *
+ * وستّةٌ في الشريط تجيب ما يُسأل كلَّ يوم: كم عندي، وماذا دخل وخرج، وكم لي،
+ * وكم عليّ، وأين مالي في البنك، وما الشيكات في يدي. وأدواتُ المحاسب الأربع في
+ * «المحاسبة والمزيد» (`group`) — باقيةٌ بمساراتها وصلاحياتها، مطويّةٌ لا محذوفة.
+ *
+ * و«لك عند العملاء» و«عليك الدفع» اسمان للشريط بلغة من يسأل؛ والاسمُ
+ * المحاسبيّ («الذمم المدينة» و«المبالغ المستحقة») سطرٌ تحت عنوان صفحتيهما.
  */
+const ACCOUNTING = 'المحاسبة والمزيد';
+
 export const FINANCE_TABS: SectionTab[] = [
     { label: 'الملخّص المالي', routeName: 'admin.finance.summary', section: 'finance' },
     { label: 'الحركة المالية', routeName: 'admin.finance.transactions', section: 'finance' },
     /* «ما لك» و«ما عليك» تبويبان متجاوران ولا يُجمعان في واحد: رقمان
        في شاشةٍ واحدة بلا فصل يجعل التاجر لا يعرف أدائنٌ هو أم مدين */
-    { label: 'الذمم المدينة', routeName: 'admin.finance.receivables', section: 'finance' },
+    { label: 'لك عند العملاء', routeName: 'admin.finance.receivables', section: 'finance' },
+    { label: 'عليك الدفع', routeName: 'admin.finance.dues', section: 'finance' },
+    { label: 'الحسابات البنكية', routeName: 'admin.finance.index', section: 'finance' },
     /* والشيكاتُ تبويبٌ مستقلّ: ورقةٌ في اليد ليست ذمّةً على عميلٍ ولا مالًا في بنك */
     { label: 'الشيكات', routeName: 'admin.finance.cheques', section: 'finance' },
-    { label: 'المبالغ المستحقة', routeName: 'admin.finance.dues', section: 'finance' },
-    { label: 'مصاريف شهرية', routeName: 'admin.expenses.index', section: 'expenses' },
-    { label: 'الحسابات البنكية', routeName: 'admin.finance.index', section: 'finance' },
-    { label: 'القيود اليومية', routeName: 'admin.finance.journal', section: 'finance' },
-    { label: 'شجرة الحسابات', routeName: 'admin.finance.chart', section: 'finance' },
-    { label: 'أصول ثابتة', routeName: 'admin.finance.assets', section: 'finance' },
+    /* سجلُّ المصروفات بقسمه «المصروفات» — من لا يملكه لا يراه في القائمة */
+    { label: 'مصاريف شهرية', routeName: 'admin.expenses.index', section: 'expenses', group: ACCOUNTING },
+    { label: 'القيود اليومية', routeName: 'admin.finance.journal', section: 'finance', group: ACCOUNTING },
+    { label: 'شجرة الحسابات', routeName: 'admin.finance.chart', section: 'finance', group: ACCOUNTING },
+    { label: 'الأصول الثابتة', routeName: 'admin.finance.assets', section: 'finance', group: ACCOUNTING },
 ];
 
 /*
