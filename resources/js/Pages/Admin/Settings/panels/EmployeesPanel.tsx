@@ -239,7 +239,7 @@ export default function EmployeesPanel({
         },
         {
             key: 'sales',
-            header: 'المبيعات',
+            header: 'الإيرادات',
             align: 'end',
             sortable: true,
             value: (e) => e.sales,

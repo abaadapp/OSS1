@@ -36,7 +36,7 @@ export default function Maintenance() {
                 <h1 className="text-[20px] font-bold text-[#111]">{t('النظام تحت الصيانة')}</h1>
                 <p className="mt-2 text-[14px] leading-relaxed text-[#4b4b4b]">{t(message)}</p>
                 <p className="mt-3 text-[13px] leading-relaxed text-[#6b7280]">
-                    {t('بياناتك ومبيعاتك محفوظة كما هي — لا شيء يضيع بالوقفة.')}
+                    {t('بياناتك وفواتيرك محفوظة كما هي — لا شيء يضيع بالوقفة.')}
                 </p>
 
                 <Button className="mt-6 w-full rounded-full" onClick={() => router.reload()}>

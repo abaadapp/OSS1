@@ -128,7 +128,7 @@ export default function EmployeeShow() {
     const active = employee.status === 'نشط';
 
     const stats = [
-        { label: t('إجمالي المبيعات'), value: m(employee.sales), icon: 'trending-up', color: 'success' },
+        { label: t('إجمالي الإيرادات'), value: m(employee.sales), icon: 'trending-up', color: 'success' },
         // فواتيرُه الصادرة (`Demo::employeeOrderCount` من فواتير العملاء) — والاسمُ القديم للعدد نفسه
         { label: t('عدد الفواتير'), value: String(orderCount), icon: 'shopping-bag', color: 'primary' },
         {
@@ -305,7 +305,7 @@ export default function EmployeeShow() {
                         {/* داخل بطاقة: الحشو يُبعد التبويبات عن حدّها */}
                         <Tabs
                             tabs={[
-                                { key: 'sales', label: 'المبيعات' },
+                                { key: 'sales', label: 'الإيرادات' },
                                 { key: 'activity', label: 'سجل النشاط' },
                                 { key: 'permissions', label: 'الصلاحيات' },
                             ]}
@@ -317,7 +317,7 @@ export default function EmployeeShow() {
                         {tab === 'sales' && (
                             <div className="p-6">
                                 <h4 className="mb-4 font-bold text-[#111]">
-                                    {t('مبيعات الموظف هذه السنة')}
+                                    {t('إيرادات فواتير الموظف هذه السنة')}
                                 </h4>
                                 <AreaChart labels={salesSeries.labels} data={salesSeries.data} format={m} />
                             </div>

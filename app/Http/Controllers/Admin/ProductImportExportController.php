@@ -557,7 +557,7 @@ class ProductImportExportController extends Controller
 
         $msg = __('تم التراجع: حُذف :removed منتجًا وأُعيد :restored', ['removed' => $removed, 'restored' => $restored]);
         if ($blocked) {
-            $msg .= ' · ' . __('بقي :n لوجود مبيعات عليه:', ['n' => count($blocked)]) . ' ' . implode('، ', array_slice($blocked, 0, 3));
+            $msg .= ' · ' . __('بقي :n لارتباطه بطلباتٍ قديمة:', ['n' => count($blocked)]) . ' ' . implode('، ', array_slice($blocked, 0, 3));
         }
 
         return redirect()->route('admin.products.index')

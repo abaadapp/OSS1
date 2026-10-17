@@ -598,8 +598,8 @@ class Demo
         $expTrend['up'] = ! $expTrend['up'];
 
         return [
-            array_merge(['label' => __('مبيعات اليوم'), 'value' => self::money($salesToday), 'icon' => 'shopping-bag', 'color' => 'primary'], self::trend($salesToday, $salesYesterday)),
-            array_merge(['label' => __('مبيعات الشهر'), 'value' => self::money($salesMonth), 'icon' => 'trending-up', 'color' => 'success'], self::trend($salesMonth, $salesLastMonth)),
+            array_merge(['label' => __('إيرادات اليوم'), 'value' => self::money($salesToday), 'icon' => 'shopping-bag', 'color' => 'primary'], self::trend($salesToday, $salesYesterday)),
+            array_merge(['label' => __('إيرادات الشهر'), 'value' => self::money($salesMonth), 'icon' => 'trending-up', 'color' => 'success'], self::trend($salesMonth, $salesLastMonth)),
             array_merge(['label' => __('عدد الفواتير'), 'value' => (string) $invoicesTotal, 'icon' => 'receipt', 'color' => 'info'], self::trend($invoicesMonth, $invoicesLastMonth)),
             array_merge(['label' => __('متوسط قيمة الفاتورة'), 'value' => self::money($avg), 'icon' => 'calculator', 'color' => 'secondary'], self::trend($avg, $avgLast)),
             array_merge(['label' => __('عدد العملاء'), 'value' => (string) $customersTotal, 'icon' => 'users', 'color' => 'primary'], self::trend($customersMonth, $customersLastMonth)),
@@ -1511,7 +1511,7 @@ class Demo
         }
 
         return [
-            array_merge(['label' => __('إجمالي المبيعات (شامل الضريبة)'), 'value' => self::money($now['total']), 'icon' => 'wallet', 'color' => 'primary'], self::trend($now['total'], $was['total'])),
+            array_merge(['label' => __('إجمالي الفواتير (شامل الضريبة)'), 'value' => self::money($now['total']), 'icon' => 'wallet', 'color' => 'primary'], self::trend($now['total'], $was['total'])),
             array_merge(['label' => __('صافي الإيرادات (بلا ضريبة)'), 'value' => self::money($now['net']), 'icon' => 'trending-up', 'color' => 'success'], self::trend($now['net'], $was['net'])),
             array_merge(['label' => __('ضريبة القيمة المضافة المستحقّة'), 'value' => self::money($now['netTax']), 'icon' => 'receipt', 'color' => 'warning'], self::trend($now['netTax'], $was['netTax'])),
             array_merge(['label' => __('المحصَّل نقدًا'), 'value' => self::money($cash), 'icon' => 'banknote', 'color' => 'info'], self::trend($cash, $pCash)),
@@ -2067,7 +2067,7 @@ class Demo
     {
         $alerts = [];
 
-        // تراجع المبيعات: هذا الشهر مقابل السابق
+        // تراجع الإيرادات: هذا الشهر مقابل السابق
         $sum = fn ($start, $end) => Revenue::total($bid, $start, $end);
         $cur = $sum(now()->startOfMonth(), now()->startOfMonth()->addMonthNoOverflow());
         $prev = $sum(now()->subMonthNoOverflow()->startOfMonth(), now()->startOfMonth());
@@ -2075,7 +2075,7 @@ class Demo
             $delta = round(($cur - $prev) / $prev * 100, 1);
             if ($delta < 0) {
                 // الرقمُ من فواتير العملاء الصادرة (`Revenue`) — فالنقرةُ تفتحها، لا «المبيعات» التي خرجت
-                $alerts[] = ['type' => __('تراجع المبيعات'), 'text' => __('انخفضت مبيعات هذا الشهر بنسبة :pct% مقارنةً بالشهر السابق', ['pct' => abs($delta)]), 'icon' => 'trending-down', 'color' => 'danger', 'url' => route('admin.customerInvoices.index')];
+                $alerts[] = ['type' => __('تراجع الإيرادات'), 'text' => __('انخفضت إيرادات هذا الشهر بنسبة :pct% مقارنةً بالشهر السابق', ['pct' => abs($delta)]), 'icon' => 'trending-down', 'color' => 'danger', 'url' => route('admin.customerInvoices.index')];
             }
         }
 

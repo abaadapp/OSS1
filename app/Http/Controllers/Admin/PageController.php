@@ -72,7 +72,7 @@ class PageController extends Controller
             'product' => $product,
             'stats' => [
                 ['label' => __('الكمية المتوفرة'), 'value' => __(':n قطعة', ['n' => $product['qty']]), 'icon' => 'package', 'color' => 'primary'],
-                ['label' => __('إجمالي المبيعات'), 'value' => __(':n قطعة', ['n' => Demo::productSold($id)]), 'icon' => 'shopping-cart', 'color' => 'success'],
+                ['label' => __('الكمية المفوترة'), 'value' => __(':n قطعة', ['n' => Demo::productSold($id)]), 'icon' => 'shopping-cart', 'color' => 'success'],
                 ['label' => __('سعر التكلفة'), 'value' => Demo::money($product['cost']), 'icon' => 'wallet', 'color' => 'info'],
                 ['label' => __('هامش الربح'), 'value' => $marginPct.'%', 'icon' => 'trending-up', 'color' => 'primary',
                     'trend' => Demo::money($margin), 'up' => true],

@@ -173,7 +173,7 @@ class TheSystemSeesItsOwnRevenueTest extends TestCase
     {
         $this->issue(net: 1000, tax: 50);
 
-        $card = collect(Demo::adminStats())->firstWhere('label', __('مبيعات اليوم'))['value'];
+        $card = collect(Demo::adminStats())->firstWhere('label', __('إيرادات اليوم'))['value'];
         $report = Demo::reportSummary('month')['sales'];
         $vat = ReportData::vat($this->business->id, ['range' => 'month'])['summary'];
 

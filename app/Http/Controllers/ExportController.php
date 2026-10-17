@@ -31,8 +31,8 @@ class ExportController extends Controller
             $rows[] = [$s['label'], $s['money'] ? number_format((float) $s['value'], 3, '.', '') : $s['value'], ''];
         }
         $rows[] = ['', '', ''];
-        $rows[] = [__('— المبيعات —'), '', ''];
-        $rows[] = [__('الفترة'), __('المبيعات'), __('عدد الطلبات')];
+        $rows[] = [__('— الإيرادات —'), '', ''];
+        $rows[] = [__('الفترة'), __('الإيرادات'), __('عدد الفواتير')];
         $series = $report['salesSeries'];
         foreach ($series['full'] as $i => $label) {
             // ما لم يأتِ بعدُ لا يُكتب: صفٌّ بصفرٍ عن يوم غدٍ رقمٌ لا واقعة
@@ -48,13 +48,13 @@ class ExportController extends Controller
             $rows[] = [$m['name'], number_format((float) $m['total'], 3, '.', ''), $m['count']];
         }
         $rows[] = ['', '', ''];
-        $rows[] = [__('— الأكثر مبيعًا —'), '', ''];
+        $rows[] = [__('— الأعلى إيرادًا —'), '', ''];
         $rows[] = [__('المنتج'), __('المُباع'), __('الإيراد')];
         foreach ($report['topSellingProducts'] as $p) {
             $rows[] = [$p['name'], $p['sold'], number_format((float) $p['revenue'], 3, '.', '')];
         }
 
-        return $this->stream('sales-report-'.$range, [__('العنصر'), __('القيمة 1'), __('القيمة 2')], $rows);
+        return $this->stream('revenue-report-'.$range, [__('العنصر'), __('القيمة 1'), __('القيمة 2')], $rows);
     }
 
     public function products()

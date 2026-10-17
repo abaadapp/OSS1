@@ -65,7 +65,7 @@ class ReportColumns
             ['action', 'الإجراء', 'text'], ['description', 'التفصيل', 'text'],
         ],
         'vat' => [
-            ['month', 'الشهر', 'text'], ['taxable', 'المبيعات الخاضعة', 'money'],
+            ['month', 'الشهر', 'text'], ['taxable', 'الإيرادات الخاضعة للضريبة', 'money'],
             ['output', 'ضريبة المخرجات', 'money'], ['purchases', 'المشتريات', 'money'],
             ['input', 'ضريبة المدخلات', 'money'], ['returns', 'المردودات', 'money'],
             ['due', 'الصافي المستحقّ', 'money'],
@@ -76,7 +76,7 @@ class ReportColumns
         ],
         'staff' => [
             ['name', 'الموظف', 'text'], ['role', 'الوظيفة', 'text'], ['branch', 'الفرع', 'text'],
-            ['invoices', 'الفواتير', 'number'], ['sales', 'المبيعات', 'money'], ['status', 'الحالة', 'text'],
+            ['invoices', 'الفواتير', 'number'], ['sales', 'الإيرادات', 'money'], ['status', 'الحالة', 'text'],
         ],
         'customers' => [
             ['name', 'العميل', 'text'], ['invoices', 'عدد الفواتير', 'number'], ['total', 'إجمالي الإنفاق', 'money'],

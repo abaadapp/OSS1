@@ -130,7 +130,7 @@ class ReportExportController extends Controller
         // الورقة تُبنى من حمولة الشاشة نفسها — انظر Support\Reports::salesReport
         $report = Reports::salesReport($range);
         $spreadsheet = new Spreadsheet;
-        [$sheet, $title, $head] = $this->sheet($spreadsheet, __('تقرير المبيعات'), $range);
+        [$sheet, $title, $head] = $this->sheet($spreadsheet, __('تقرير الإيرادات'), $range);
         $money = [];
 
         /*
@@ -155,8 +155,8 @@ class ReportExportController extends Controller
 
         // المبيعات على محور الفترة — ساعاتٍ أو أيّامًا أو أشهرًا، وبعدد الطلبات
         $series = $report['salesSeries'];
-        $title(__('المبيعات').' — '.Demo::rangeLabel($range));
-        $head([__('الفترة'), $this->moneyHead('المبيعات'), __('عدد الطلبات')]);
+        $title(__('الإيرادات').' — '.Demo::rangeLabel($range));
+        $head([__('الفترة'), $this->moneyHead('الإيرادات'), __('عدد الفواتير')]);
         foreach ($series['full'] as $i => $label) {
             // ما لم يأتِ بعدُ لا يُكتب: صفٌّ بصفرٍ عن يوم غدٍ رقمٌ لا واقعة
             if (($series['data'][$i] ?? null) === null) {
@@ -185,7 +185,7 @@ class ReportExportController extends Controller
         $this->row++;
 
         // أفضل المنتجات — بترتيب الإيراد كما في جدول الشاشة، لا بترتيب الكمية
-        $title(__('الأكثر مبيعًا'));
+        $title(__('الأعلى إيرادًا'));
         $head([__('المنتج'), __('القسم'), __('المُباع'), $this->moneyHead('الإيراد')]);
         foreach ($report['topSellingProducts'] as $p) {
             $r = $this->row;
@@ -197,9 +197,9 @@ class ReportExportController extends Controller
             $this->row++;
         }
 
-        Activity::log('report', 'صدّر تقرير المبيعات (Excel)');
+        Activity::log('report', 'صدّر تقرير الإيرادات (Excel)');
 
-        return $this->download($spreadsheet, $sheet, $money, 'sales-report-'.$range.'-'.now()->format('Y-m-d').'.xlsx');
+        return $this->download($spreadsheet, $sheet, $money, 'revenue-report-'.$range.'-'.now()->format('Y-m-d').'.xlsx');
     }
 
     public function productsXlsx()

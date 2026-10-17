@@ -819,7 +819,7 @@ export default function SettingsIndex() {
                                     on={form.data.vat_enabled}
                                     onChange={(v) => form.setData('vat_enabled', v)}
                                     label="تفعيل ضريبة القيمة المضافة"
-                                    hint="تُحتسب على كل فاتورة بيع"
+                                    hint="تُحتسب على كل فاتورة عميل"
                                 />
                                 <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
                                     <Field label="نسبة الضريبة (%)" error={form.errors.vat_rate}>
@@ -977,7 +977,7 @@ export default function SettingsIndex() {
                                     on={form.data.staff_sees_performance}
                                     onChange={(v) => form.setData('staff_sees_performance', v)}
                                     label="أظهِر للموظّف أداءه في «حسابي»"
-                                    hint="مبيعاتُه اليوم والشهر وعددُ فواتيره. وراتبه يراه دائمًا."
+                                    hint="إيراداتُ فواتيره اليوم والشهر وعددُها. وراتبه يراه دائمًا."
                                 />
 
                                 {/*
@@ -1123,7 +1123,7 @@ export default function SettingsIndex() {
                                     on={form.data.notify_daily_summary}
                                     onChange={(v) => form.setData('notify_daily_summary', v)}
                                     label="ملخّص الأداء اليومي"
-                                    hint="يصل آخر اليوم بمبيعات اليوم وأبرز أرقامه."
+                                    hint="يصل آخر اليوم بإيرادات اليوم وأبرز أرقامه."
                                 />
 
                                 {saveBar}

@@ -109,7 +109,7 @@ class ReportDownloadController extends Controller
         'users' => 'المستخدمون', 'topAction' => 'أكثر إجراء', 'topCount' => 'مرّاته',
         'used' => 'المستخدَم', 'uses' => 'مرات الاستخدام', 'discount' => 'الخصومات',
         'operations' => 'عمليات الجرد', 'shortage' => 'قيمة النقص', 'surplus' => 'قيمة الزيادة',
-        'staff' => 'الموظفون', 'sellers' => 'من باع', 'topName' => 'الأعلى', 'topSales' => 'مبيعاته',
+        'staff' => 'الموظفون', 'sellers' => 'من أصدر فواتير', 'topName' => 'الأعلى', 'topSales' => 'إيراداته',
         'customers' => 'العملاء',
         // فواتير العملاء
         'outstanding' => 'الباقي', 'overdue' => 'المتأخّرة', 'drafts' => 'المسودّات',

@@ -780,7 +780,7 @@ class DocumentPaper
             'status' => __($stamps[$type] ?? ''),
             'date' => now()->format('Y-m-d H:i'),
             'branch' => __('الفرع الرئيسي'),
-            'employee' => __('موظف المبيعات'),
+            'employee' => __('موظف عروض ومشاريع'),
             'meta' => $meta,
             'parties' => $parties,
             'items' => $items,

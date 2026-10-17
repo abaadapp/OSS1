@@ -26,7 +26,7 @@ class CustomAlert extends Model
      * `unit` تُستعمل في الواجهة لتعرف هل الحدّ مبلغٌ أم عدد أيام أم عدد.
      */
     public const METRICS = [
-        'daily_sales' => ['label' => 'مبيعات اليوم', 'unit' => 'money', 'section' => 'reports'],
+        'daily_sales' => ['label' => 'إيرادات اليوم', 'unit' => 'money', 'section' => 'reports'],
         'monthly_expenses' => ['label' => 'مصروفات الشهر', 'unit' => 'money', 'section' => 'expenses'],
         /*
          * وكان مكانَه «الطلبات المعلّقة».

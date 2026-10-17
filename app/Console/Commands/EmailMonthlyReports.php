@@ -54,10 +54,10 @@ class EmailMonthlyReports extends Command
             $cur = Money::of((int) $b->id);
             $money = fn ($v) => Money::format((float) $v, $cur);
             $stats = [
-                ['label' => __('إجمالي المبيعات'), 'value' => $money($sales)],
+                ['label' => __('إجمالي الإيرادات'), 'value' => $money($sales)],
                 ['label' => __('عدد الفواتير'), 'value' => (string) $invoices],
                 ['label' => __('متوسط قيمة الفاتورة'), 'value' => $money($invoices ? $sales / $invoices : 0)],
-                ['label' => __('المنتج الأكثر مبيعًا'), 'value' => $topItem->name ?? '—'],
+                ['label' => __('البند الأكثر فوترة'), 'value' => $topItem->name ?? '—'],
             ];
 
             Mail::to($b->email)->send(new MonthlyReportMail($b->name, $period, $stats, $cur));

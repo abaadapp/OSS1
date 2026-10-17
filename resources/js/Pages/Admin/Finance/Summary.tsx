@@ -168,7 +168,7 @@ export default function Summary() {
             <RangeTabs current={range} />
 
             <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                <StatCard stat={{ label: t('المبيعات'), value: m(period.sales), icon: 'shopping-cart', color: 'primary' }} index={0} />
+                <StatCard stat={{ label: t('إجمالي الفواتير (شامل الضريبة)'), value: m(period.sales), icon: 'shopping-cart', color: 'primary' }} index={0} />
                 {/* المسدَّدُ من سجلّ المصروفات وحده — لا الرواتبُ ولا السنداتُ ولا التكلفة؛ وكاملُ الشهر من الدفتر في البطاقة أعلاه */}
                 <StatCard stat={{ label: t('المصروفات المدفوعة في المدة'), value: m(period.expenses), icon: 'arrow-down-circle', color: 'danger', hint: t('المسدَّدة من سجل المصروفات فقط') }} index={1} />
                 <StatCard stat={{ label: t('صافي الربح'), value: m(period.profit), icon: 'trending-up', color: 'success' }} index={2} />

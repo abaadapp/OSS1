@@ -32,7 +32,7 @@ const item = (key: string, label: string, kind: 'section' | 'action' = 'section'
 const catalog: PermissionGroup[] = [
     { key: 'basics', label: 'الأساسيات', sensitive: false, items: [item('dashboard', 'الملخص')] },
     {
-        key: 'sales', label: 'العملاء والمبيعات', sensitive: false,
+        key: 'sales', label: 'العملاء وعروض الأسعار', sensitive: false,
         items: [item('customers', 'العملاء'), item('quotations', 'عروض الأسعار'), item('quotation.create', 'كتابة عرض سعر', 'action', { parents: ['quotations'] })],
     },
     {
@@ -50,7 +50,7 @@ const catalog: PermissionGroup[] = [
 ];
 
 const profiles: Record<string, RoleProfile> = {
-    sales: { label: 'موظف مبيعات', grants: ['dashboard', 'customers', 'quotations', 'quotation.create'] },
+    sales: { label: 'موظف عروض ومشاريع', grants: ['dashboard', 'customers', 'quotations', 'quotation.create'] },
     inventory: { label: 'مسؤول مخزون', grants: ['dashboard', 'inventory', 'purchases'] },
 };
 
@@ -86,7 +86,7 @@ describe('EmployeePermissions', () => {
 
         expect(screen.getByRole('radio', { name: /صلاحيات الوظيفة الافتراضية/ })).toBeChecked();
         const preview = screen.getByTestId('inherited-preview');
-        expect(preview).toHaveTextContent('صلاحيات وظيفة «مسؤول مبيعات» — ملف «موظف مبيعات»:');
+        expect(preview).toHaveTextContent('صلاحيات وظيفة «مسؤول مبيعات» — ملف «موظف عروض ومشاريع»:');
         for (const label of ['الملخص', 'العملاء', 'عروض الأسعار', 'كتابة عرض سعر']) {
             expect(within(preview).getByText(label)).toBeInTheDocument();
         }
@@ -213,7 +213,7 @@ describe('EmployeePermissions', () => {
 });
 
 const titles: JobTitleOption[] = [
-    { name: 'مسؤول مبيعات', role: 'sales', role_label: 'موظف مبيعات', blocked: false },
+    { name: 'مسؤول مبيعات', role: 'sales', role_label: 'موظف عروض ومشاريع', blocked: false },
     { name: 'مشرف مخزن', role: 'inventory', role_label: 'مسؤول مخزون', blocked: false },
     { name: 'مدير فرع', role: 'manager', role_label: 'مدير فرع', blocked: true },
 ];
@@ -225,7 +225,7 @@ const formProps = {
     roleProfiles: profiles,
     roleOptions: [
         { value: 'manager', label: 'مدير فرع', assignable: false },
-        { value: 'sales', label: 'موظف مبيعات', assignable: true },
+        { value: 'sales', label: 'موظف عروض ومشاريع', assignable: true },
         { value: 'inventory', label: 'مسؤول مخزون', assignable: true },
     ],
     grantable: ALL,
@@ -297,7 +297,7 @@ describe('EmployeeForm', () => {
         expect(screen.queryByTestId('role-change')).not.toBeInTheDocument();
         await user.click(screen.getByRole('combobox', { name: /المسمى الوظيفي/ }));
         await user.click(screen.getByRole('option', { name: 'مشرف مخزن' }));
-        expect(screen.getByTestId('role-change')).toHaveTextContent('سيتغيّر ملف الصلاحيات الأساسي من «موظف مبيعات» إلى «مسؤول مخزون» عند الحفظ.');
+        expect(screen.getByTestId('role-change')).toHaveTextContent('سيتغيّر ملف الصلاحيات الأساسي من «موظف عروض ومشاريع» إلى «مسؤول مخزون» عند الحفظ.');
     });
 
     it('opens a custom employee on his own list and does not wipe it when the job title changes', async () => {
@@ -339,7 +339,7 @@ describe('EmployeeForm', () => {
 const employee = (over: Partial<Employee>): Employee => ({
     id: 1, name: 'سارة', avatar: null, role: 'مسؤول مبيعات', branch: 'الرئيسي', phone: '', email: 'sara@eventplusapp.om',
     sales: 0, status: 'نشط', joined: '2026-10-01', achieved: 0, target: 0, target_pct: null,
-    is_owner: false, job_title: 'مسؤول مبيعات', access_role: 'sales', access_role_label: 'موظف مبيعات',
+    is_owner: false, job_title: 'مسؤول مبيعات', access_role: 'sales', access_role_label: 'موظف عروض ومشاريع',
     permissions_mode: 'inherited', permissions_summary: null, work_branches: [], ...over,
 });
 
@@ -363,7 +363,7 @@ describe('EmployeesPanel', () => {
         expect(within(table).queryByText('المالك')).not.toBeInTheDocument();
         expect(within(table).getByText('يتبع الوظيفة')).toBeInTheDocument();
         expect(within(table).getByText('صلاحيات مخصصة · 7 أقسام · 3 أفعال حساسة')).toBeInTheDocument();
-        expect(within(table).getAllByText('ملف: موظف مبيعات')).toHaveLength(2);
+        expect(within(table).getAllByText('ملف: موظف عروض ومشاريع')).toHaveLength(2);
         expect(within(table).getByText('الخوير')).toBeInTheDocument();
         expect(within(table).getByText('كل الفروع')).toBeInTheDocument();
     });

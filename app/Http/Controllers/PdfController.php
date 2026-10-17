@@ -41,9 +41,9 @@ class PdfController extends Controller
             'generatedAt' => now()->format('Y-m-d H:i'),
         ])->render();
 
-        Activity::log('report', 'صدّر تقرير المبيعات (PDF)');
+        Activity::log('report', 'صدّر تقرير الإيرادات (PDF)');
 
-        return $this->pdf($html, 'sales-report-'.$range.'-'.now()->format('Y-m-d'));
+        return $this->pdf($html, 'revenue-report-'.$range.'-'.now()->format('Y-m-d'));
     }
 
     /** تقرير المنتجات (PDF) */
