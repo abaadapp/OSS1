@@ -9,13 +9,10 @@ use App\Models\CustomerCreditNote;
 use App\Models\CustomerInvoice;
 use App\Models\CustomerPayment;
 use App\Models\GoodsReceiptNote;
-use App\Models\Order;
-use App\Models\OrderItem;
 use App\Models\PurchaseOrder;
 use App\Models\SupplierInvoice;
 use App\Support\Document\Branding;
 use App\Support\Document\PaperSize;
-use App\Support\Document\Snapshot;
 use App\Support\Document\Version;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Model;
@@ -42,30 +39,6 @@ class DocumentRenderer
         return match ($font) {
             'صغير' => 0.9, 'كبير' => 1.14, default => 1.0
         };
-    }
-
-    /**
-     * إعداداتُ ورقة البيع بالأسماء التي تقرؤها قوالبُها القديمة.
-     *
-     * قوالبُ الإيصال والفاتورة والفاتورة الضريبية تقرأ `tpl_show_logo`
-     * و`tpl_header`، والسجلُّ يسمّيها `show_logo` و`header`. والتحويلُ هنا
-     * في دالّةٍ واحدة: نسختان من الخريطة تفترقان عند أوّل حقلٍ يُضاف.
-     *
-     * @param  array<string,mixed>  $values
-     * @return array<string,mixed>
-     */
-    public static function legacy(int $businessId, array $values): array
-    {
-        $out = [];
-
-        foreach ($values as $field => $value) {
-            $out[$field === 'paper' ? 'paper' : 'tpl_'.$field] = $value;
-        }
-
-        // الرقم الضريبي يُقرأ في الورقة ولا يُضبط من «قوالب» — ومن موضعٍ واحد
-        $out['vat_number'] = Paper::vatNumber($businessId);
-
-        return $out;
     }
 
     /**
@@ -107,12 +80,12 @@ class DocumentRenderer
             'scale' => $scale,
             'vatNumber' => Paper::vatNumber($businessId),
             /*
-             * ورمزُ الورقة لسند التسليم وحده — انظر PublicDocument.
-             *
-             * أمرُ الشراء وسندُ الاستلام يحملان تكلفةَ البضاعة ويمضيان إلى
-             * المورّد، فلا يُفتح لهما بابٌ عامّ.
+             * ولا رمزَ ورقةٍ أونلاين في الأوراق العامّة: أمرُ الشراء وسندُ
+             * الاستلام يحملان تكلفةَ البضاعة ويمضيان إلى المورّد، فلا يُفتح
+             * لهما بابٌ عامّ. وكان سندُ تسليم الطلب وحدَه يحمله — وخرج مع
+             * «المبيعات».
              */
-            'paperUrl' => $type === 'delivery' ? (PublicDocument::url($source) ?? '') : '',
+            'paperUrl' => '',
             /*
              * والسعرُ علمٌ واحد يحكم العمودين والمجموع معًا: لو حُسب في كلٍّ
              * منها لخرجت ورقةٌ بلا أسعارٍ في السطور وبمجموعٍ في أسفلها.
@@ -159,175 +132,24 @@ class DocumentRenderer
     private static function template(string $type): string
     {
         return match ($type) {
-            'sale' => 'sale',
             'customer_invoice' => 'customer-invoice',
             'quotation' => 'quotation',
-            'delivery' => 'delivery',
             'purchase' => 'purchase',
             'grn' => 'grn',
             'supplier_invoice' => 'supplier-invoice',
             'credit_note' => 'credit-note',
             'customer_receipt' => 'customer-receipt',
-            default => 'sale',
         };
-    }
-
-    /**
-     * ورقةُ البيع مرسومةً — بالقالب الذي يُطبع فعلًا.
-     *
-     * وبطلبٍ حقيقيّ من دفتر المتجر إن وُجد: التاجر يحكم على قالبه بما يراه،
-     * وأسماءُ أصنافه وأطوالُ سطوره تُظهر له الورقة كما ستخرج. فإن لم يبِع
-     * بعدُ رُسمت بمثال.
-     */
-    public static function sale(int $businessId, ?array $override = null, bool $thermal = false): string
-    {
-        $values = DocumentTemplates::settings($businessId, 'sale', $override);
-
-        // والمثالُ من فروع من قُيّد بفروعٍ: معاينةُ القالب لا تكشف بيعَ فرعٍ آخر
-        $order = BranchAccess::limit(Order::where('business_id', $businessId))
-            ->with('items', 'customerInvoices')
-            ->latest('id')
-            ->first() ?? self::sampleOrder($businessId);
-
-        if (! $thermal) {
-            return self::saleSheet($businessId, $order, $values, [
-                'paper' => (string) ($values['paper'] ?? PaperSize::A4),
-            ]);
-        }
-
-        $paper = (string) ($values['strip'] ?? PaperSize::T80);
-
-        /*
-         * ولا رمزَ ولا رابطَ في المعاينة.
-         *
-         * الطلبُ المعروض قد يكون مُخترعًا، ورمزٌ له يقود إلى ٤٠٤ في يد
-         * التاجر. و`EInvoice` تبني رمزًا يحمل رقمَ المتجر الضريبيّ والمبلغ،
-         * ورسمُه لطلبٍ مُخترع يضع في يده صورةَ رمزٍ لا تُقابله فاتورة.
-         */
-        return self::saleStrip($businessId, $order, $values, self::stripWidth($paper));
-    }
-
-    /**
-     * فاتورةُ البيع على A4 — الورقةُ التي تُرسَل إلى منشأةٍ تطلب فاتورة.
-     *
-     * وليست شريطَ الإيصال مُمدَّدًا: كانت تُرسم بقالبه نفسه فتخرج بمحتوًى
-     * منكمشٍ في أعلى الصفحة وثلثيها بياض — وهي الورقة التي تصل جهةً
-     * تحكم على المتجر بما تراه.
-     *
-     * @param  array<string,mixed>  $values  إعداداتُ القالب محلولةً
-     * @param  array<string,mixed>  $extra  ما يخصّ الطباعة لا المعاينة
-     */
-    public static function saleSheet(int $businessId, Order $order, array $values, array $extra = []): string
-    {
-        $scale = self::scale((string) $values['font']);
-        $snapshot = Snapshot::of($order, $businessId);
-
-        return self::html(view(Version::views($extra['version'] ?? null).'.sale', [
-            'doc' => DocumentPaper::forSale($order, ['customerTax' => $extra['customerTax'] ?? null]),
-            'tpl' => $values,
-            /* ومقاسُ الورقة يبلغ القالبَ ليكتب `@page` وصندوقَها — انظر PaperSize */
-            'paper' => $extra['paper'] ?? ($values['paper'] ?? PaperSize::A4),
-            'tokens' => Branding::tokens($businessId, $scale),
-            'coverImage' => Branding::cover($businessId),
-            /*
-             * وهويّةُ البائع من لقطة الورقة إن كانت مختومة.
-             *
-             * أصدرتُ فاتورةً ثمّ غيّرتُ اسمَ المتجر وعنوانَه ورقمَه الضريبيّ،
-             * وأعدتُ رسمَها: تبدّلت كلُّها — وظهر على ورقةٍ صدرت في يناير
-             * رقمٌ ضريبيٌّ لم يكن قائمًا يومَها. انظر `Document\Snapshot`.
-             *
-             * و`Paper::brand` تقبل المصفوفةَ كما تقبل الصفَّ، فتُمرَّر اللقطةُ
-             * إليها بلا فرعٍ ثانٍ في الشفرة يبني منها ما تبنيه هي.
-             */
-            'business' => Snapshot::seller($snapshot) ?: DocumentPaper::business($businessId),
-            'headerNote' => trim((string) ($values['header'] ?? '')),
-            'scale' => $scale,
-            'vatNumber' => Snapshot::stamped($order) ? Snapshot::vat($snapshot) : Paper::vatNumber($businessId),
-            /*
-             * ولا رمزَ ولا رابطَ في المعاينة.
-             *
-             * `EInvoice` تبني رمزًا يحمل رقمَ المتجر الضريبيّ والمبلغ، ورسمُه
-             * لطلبٍ مُخترع يضع في يد التاجر صورةَ رمزٍ لا تُقابله فاتورة.
-             * والرابطُ يقود إلى ٤٠٤ — أو أسوأ: يصنع صفًّا يتيمًا في جدول
-             * الروابط عند كلّ فتحةٍ للمحرّر.
-             */
-            'qr' => $extra['qr'] ?? null,
-            'paperUrl' => $extra['paperUrl'] ?? '',
-            'googleReview' => $extra['googleReview'] ?? null,
-            /* والوجهُ الثالث: الرقمُ الضريبيّ بلا مقبض — انظر رأس القالب */
-            'taxInvoice' => (bool) ($extra['taxInvoice'] ?? false),
-            'generatedAt' => $extra['generatedAt'] ?? null,
-        ]));
-    }
-
-    /**
-     * شريطُ الإيصال الحراريّ مرسومًا — بالقالب الذي يُطبع.
-     *
-     * ═══ ولمَ هنا لا في متحكّم الطباعة ═══
-     *
-     * الإيصالُ يُرسم من بابين: معاينةُ محرّر القوالب، وزرُّ الطباعة في
-     * الصندوق. وكان الثاني يبني القائمةَ بيده، فما يُضاف لأحدهما لا يبلغ
-     * الآخر — يُضبط شيءٌ فيُرى في المعاينة ويغيب عن الطابعة، وهو خلافٌ لا
-     * يُكتشف إلّا بعد أن يأخذ الزبون ورقته.
-     *
-     * @param  array<string,mixed>  $values  إعداداتُ القالب محلولةً
-     * @param  array<string,mixed>  $extra  ما يخصّ الطباعة لا المعاينة
-     */
-    public static function saleStrip(int $businessId, Order $order, array $values, int $width, array $extra = []): string
-    {
-        $snapshot = Snapshot::of($order, $businessId);
-
-        return self::html(view(Version::views($extra['version'] ?? null).'.thermal', [
-            'order' => $order,
-            /* وعملةُ الورقة من لقطتها إن كانت مختومة — انظر `Document\Snapshot` */
-            'currency' => Snapshot::currency($snapshot) ?: Money::of($businessId),
-            'seller' => Snapshot::seller($snapshot),
-            'paper' => $width <= 60 ? PaperSize::T58 : PaperSize::T80,
-            'tpl' => self::legacy($businessId, $values),
-            'tokens' => Branding::tokens($businessId, self::scale((string) $values['font'])),
-            'width' => $width,
-            'qr' => $extra['qr'] ?? null,
-            'paperUrl' => $extra['paperUrl'] ?? '',
-            'customerTax' => $extra['customerTax'] ?? null,
-            'googleReview' => $extra['googleReview'] ?? null,
-        ]));
-    }
-
-    /** طلبٌ للمعاينة وحدها — لا يُحفظ ولا يُعدّ في بيع */
-    private static function sampleOrder(int $businessId): Order
-    {
-        $order = new Order([
-            'business_id' => $businessId,
-            'number' => 'INV-000123',
-            'customer_name' => __('زبون تجريبي'),
-            'employee_name' => __('موظف المبيعات'),
-            'branch' => __('الفرع الرئيسي'),
-            'payment_method' => 'نقدي',
-            'subtotal' => 13.500, 'discount' => 0, 'tax' => 0, 'delivery_fee' => 0, 'total' => 13.500,
-            'ordered_at' => now(),
-        ]);
-
-        $order->setRelation('items', collect([
-            new OrderItem(['name' => __('باقة ورد'), 'price' => 4.500, 'quantity' => 1, 'total' => 4.500]),
-            new OrderItem(['name' => __('صندوق هدايا'), 'price' => 4.500, 'quantity' => 2, 'total' => 9.000]),
-        ]));
-        $order->setRelation('business', DocumentPaper::business($businessId));
-
-        return $order;
     }
 
     /**
      * الورقة كما تُعاين في المحرّر — أيًّا كان نوعها.
      *
-     * و`$thermal` لورقة البيع وحدها: لها وجهان يُطبعان معًا — فاتورةٌ
-     * مقصوصة وإيصالُ صندوق — فلا يُعاين أحدُهما بإلغاء الآخر.
+     * وكانت لورقة البيع وجهان يُعاينان (فاتورةٌ مقصوصة وإيصالُ صندوق) —
+     * وخرجت مع «المبيعات»: كانت تُطبع من الطلب القديم وحده.
      */
-    public static function preview(int $businessId, string $type, ?array $override = null, bool $thermal = false): string
+    public static function preview(int $businessId, string $type, ?array $override = null): string
     {
-        if ($type === 'sale') {
-            return self::sale($businessId, $override, $thermal);
-        }
-
         if ($type === CustomerInvoiceController::PAPER_TYPE) {
             return self::customerInvoice($businessId, $override);
         }
@@ -388,8 +210,6 @@ class DocumentRenderer
     {
         $record = match ($type) {
             // والمثالُ من فروع من قُيّد بفروع — انظر BranchAccess
-            'delivery' => BranchAccess::limit(Order::where('business_id', $businessId))
-                ->with('items')->latest('id')->first(),
             'purchase' => BranchAccess::limit(PurchaseOrder::where('business_id', $businessId))
                 ->with('items', 'supplier')->latest('id')->first(),
             'grn' => BranchAccess::limit(GoodsReceiptNote::where('business_id', $businessId))
@@ -408,19 +228,12 @@ class DocumentRenderer
         }
 
         return match ($type) {
-            'delivery' => DocumentPaper::forDelivery($record),
             'purchase' => DocumentPaper::forPurchase($record),
             'grn' => DocumentPaper::forGrn($record),
             'supplier_invoice' => DocumentPaper::forSupplierInvoice($record),
             'credit_note' => DocumentPaper::forCreditNote($record),
             'customer_receipt' => DocumentPaper::forCustomerReceipt($record),
         };
-    }
-
-    /** عرضُ الشريط بالمليمتر من اسم المقاس في القالب */
-    public static function stripWidth(string $paper): int
-    {
-        return $paper === '58mm' ? 58 : 80;
     }
 
     /**

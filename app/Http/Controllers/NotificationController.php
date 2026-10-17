@@ -4,34 +4,22 @@ namespace App\Http\Controllers;
 
 use App\Models\DismissedNotification;
 use App\Models\InternalNotification;
-use App\Models\Order;
-use App\Support\BranchAccess;
 use App\Support\Demo;
 use Illuminate\Http\Request;
 
 /**
- * تغذية الإشعارات (JSON) لاستطلاعها من المتصفح وإظهار إشعارات فورية للطلبات الجديدة.
+ * تغذية الإشعارات (JSON) يستطلعها الجرس من المتصفح.
+ *
+ * وكانت تحمل معها «آخرَ طلب» ليُعلَن البيعُ الجديد فورًا — ولا يقرؤه الجرسُ
+ * منذ زمن، وخرجت «المبيعات» من النظام فخرج معها.
  */
 class NotificationController extends Controller
 {
     public function feed()
     {
-        $bid = auth()->user()->business_id ?? Demo::bid();
-
-        $latest = Order::where('business_id', $bid)->sold()
-            ->tap(fn ($q) => BranchAccess::scope($q))
-            ->orderByDesc('id')->first();
-
         return response()->json([
             'count' => Demo::notificationsCount(),
             'items' => Demo::notifications(),
-            'latest_order' => $latest ? [
-                'id' => $latest->id,
-                'number' => $latest->number,
-                'customer' => \App\Support\Demo::customerLabel($latest->customer_name),
-                'total' => (float) $latest->total,
-                'url' => route('admin.orders.show', $latest->number),
-            ] : null,
         ]);
     }
 

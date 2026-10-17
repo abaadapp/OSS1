@@ -5,13 +5,9 @@ namespace Tests\Feature;
 use App\Models\Branch;
 use App\Models\Business;
 use App\Models\CustomerInvoice;
-use App\Models\Order;
 use App\Models\Setting;
 use App\Models\User;
 use App\Support\CustomerInvoices;
-use App\Support\OrderCorrection;
-use App\Support\OrderStatus;
-use App\Support\OrderTransition;
 use App\Support\ReportData;
 use App\Support\Vat;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -26,8 +22,9 @@ use Tests\TestCase;
  * الشركة تقريرَه بعد شهرين فيجد رقمًا غير الذي قدّمه، ولا شيء يقول لماذا.
  * ولم يكن في النظام قفلُ فترةٍ إطلاقًا.
  *
- * والقفلُ في بابين: `OrderCorrection::cancel` للطلب المتقاعد، و
- * `CustomerInvoices::cancel` للفاتورة — وهذه هي التي يقرؤها الإقرارُ اليوم.
+ * والقفلُ في `CustomerInvoices::cancel` — البابِ الذي يقرؤه الإقرارُ اليوم.
+ * وكان له بابٌ ثانٍ للطلب المتقاعد (`OrderCorrection::cancel`) خرج مع
+ * «المبيعات»، فصارت حراسُه هنا على الفاتورة.
  *
  * والحدُّ يقوله التاجرُ بنفسه ولا يُخمَّن: الرُّبعُ عند من تبدأ سنتُه المالية في
  * يوليو غيرُه عند سواه.
@@ -60,23 +57,6 @@ class AFiledReturnIsNotRewrittenTest extends TestCase
         return $this->business->id;
     }
 
-    /**
-     * فاتورةٌ مفتوحةُ الحال — وهي التي تُلغى فعلًا.
-     *
-     * و«مكتمل» نهايةٌ لا يُنتقل منها (`OrderStatus::NEXT`)، فالإلغاءُ لا يبلغها
-     * من باب الحالات أصلًا.
-     */
-    private function sale(string $when, float $tax = 5): Order
-    {
-        return Order::create([
-            'business_id' => $this->bid(), 'number' => 'S'.uniqid(),
-            'status' => OrderStatus::READY, 'payment_status' => 'مدفوع',
-            'subtotal' => 100, 'discount' => 0, 'tax' => $tax, 'delivery_fee' => 0,
-            'total' => 100 + $tax, 'payment_method' => 'نقدي',
-            'ordered_at' => now()->parse($when),
-        ]);
-    }
-
     /** فاتورةُ عميلٍ صادرة — وهي ما يقرؤه الإقرار */
     private function invoice(string $when, float $tax = 5): CustomerInvoice
     {
@@ -96,16 +76,6 @@ class AFiledReturnIsNotRewrittenTest extends TestCase
     }
 
     /* ============================== القفل ============================== */
-
-    public function test_an_invoice_inside_a_filed_period_is_not_cancelled(): void
-    {
-        $order = $this->sale(now()->subMonths(4)->toDateTimeString());
-        $this->filedThrough(now()->subMonths(2)->toDateString());
-
-        $this->expectException(RuntimeException::class);
-
-        OrderCorrection::cancel($order);
-    }
 
     public function test_the_return_keeps_the_number_that_was_filed(): void
     {
@@ -142,7 +112,10 @@ class AFiledReturnIsNotRewrittenTest extends TestCase
         CustomerInvoices::cancel($invoice, 'محاولةُ إلغاء');
     }
 
-    /** والقفلُ لا يمتدّ إلى ما لم يُقدَّم: فاتورةُ اليوم تُلغى */
+    /**
+     * والقفلُ لا يمتدّ إلى ما لم يُقدَّم: فاتورةُ اليوم أولى ما يُلغى،
+     * وقفلٌ يبتلعها يترك التاجر بلا وسيلة إصلاحٍ أصلًا.
+     */
     public function test_an_issued_invoice_after_the_filed_day_is_still_cancelled(): void
     {
         $invoice = $this->invoice(now()->toDateTimeString());
@@ -153,41 +126,29 @@ class AFiledReturnIsNotRewrittenTest extends TestCase
         $this->assertSame(CustomerInvoice::CANCELLED, $invoice->fresh()->status);
     }
 
-    public function test_an_invoice_after_the_filed_day_is_still_cancelled(): void
-    {
-        /*
-         * والقفلُ لا يمتدّ إلى ما لم يُقدَّم: فاتورةُ اليوم أولى ما يُلغى،
-         * وقفلٌ يبتلعها يترك التاجر بلا وسيلة إصلاحٍ أصلًا.
-         */
-        $order = $this->sale(now()->toDateTimeString());
-        $this->filedThrough(now()->subMonth()->toDateString());
-
-        OrderCorrection::cancel($order);
-
-        $this->assertSame(OrderStatus::CANCELLED, $order->fresh()->status);
-    }
-
     public function test_the_day_itself_is_inside_the_filed_period(): void
     {
         // «قُدِّم حتّى ٣١ مارس» تشمل الحادي والثلاثين، لا ما قبله وحده
+        // كانت على طلبٍ متقاعد — خرج مع «المبيعات»؛ والحدُّ نفسُه على فاتورة العميل
         $day = now()->subMonths(2)->startOfDay();
-        $order = $this->sale($day->copy()->addHours(14)->toDateTimeString());
+        $invoice = $this->invoice($day->toDateString());
         $this->filedThrough($day->toDateString());
 
         $this->expectException(RuntimeException::class);
 
-        OrderCorrection::cancel($order);
+        CustomerInvoices::cancel($invoice, 'محاولةُ إلغاء');
     }
 
     public function test_a_shop_that_filed_nothing_locks_nothing(): void
     {
-        $order = $this->sale(now()->subYear()->toDateTimeString());
+        // كانت على طلبٍ متقاعد — خرج مع «المبيعات»؛ والقاعدةُ نفسُها على فاتورة العميل
+        $invoice = $this->invoice(now()->subYear()->toDateTimeString());
 
         $this->assertNull(Vat::filedThrough($this->bid()));
 
-        OrderCorrection::cancel($order);
+        CustomerInvoices::cancel($invoice, 'إلغاءٌ مشروع');
 
-        $this->assertSame(OrderStatus::CANCELLED, $order->fresh()->status);
+        $this->assertSame(CustomerInvoice::CANCELLED, $invoice->fresh()->status);
     }
 
     public function test_a_neighbours_lock_does_not_close_this_shop(): void
@@ -198,11 +159,12 @@ class AFiledReturnIsNotRewrittenTest extends TestCase
             'value' => now()->toDateString(),
         ]);
 
-        $order = $this->sale(now()->subMonths(6)->toDateTimeString());
+        // كانت على طلبٍ متقاعد — خرج مع «المبيعات»؛ والعزلُ نفسُه على فاتورة العميل
+        $invoice = $this->invoice(now()->subMonths(6)->toDateTimeString());
 
-        OrderCorrection::cancel($order);
+        CustomerInvoices::cancel($invoice, 'إلغاءٌ مشروع');
 
-        $this->assertSame(OrderStatus::CANCELLED, $order->fresh()->status);
+        $this->assertSame(CustomerInvoice::CANCELLED, $invoice->fresh()->status);
     }
 
     /* ========================== الطريقُ من الشاشة ========================== */
@@ -210,15 +172,22 @@ class AFiledReturnIsNotRewrittenTest extends TestCase
     public function test_the_screen_says_why_instead_of_five_hundred(): void
     {
         /*
-         * `OrderTransition::apply` تردّ رسالةً تُعرض. واستثناءٌ يخرج منها
-         * يصير خمسمئةً على موظّفٍ ضغط زرًّا مشروعًا.
+         * زرُّ الإلغاء في شاشة الفاتورة يردّ رسالةً تُعرض. واستثناءٌ يخرج من
+         * `CustomerInvoices::cancel` بلا التقاط يصير خمسمئةً على موظّفٍ ضغط
+         * زرًّا مشروعًا.
+         *
+         * كانت على باب حالات الطلب (`OrderTransition::apply`) — خرج مع
+         * «المبيعات»؛ والقاعدةُ نفسُها على باب الفاتورة في الشاشة.
          */
-        $order = $this->sale(now()->subMonths(4)->toDateTimeString());
+        $invoice = $this->invoice(now()->subMonths(4)->toDateTimeString());
         $this->filedThrough(now()->subMonths(2)->toDateString());
 
-        $error = OrderTransition::apply($order, OrderStatus::CANCELLED);
+        $this->actingAs($this->owner)
+            ->post(route('admin.customerInvoices.cancel', $invoice->id), ['reason' => 'محاولةُ إلغاء'])
+            ->assertRedirect()
+            ->assertSessionHasErrors('invoice');
 
-        $this->assertNotNull($error, 'مرّ الإلغاء من باب الحالات');
+        $error = (string) session('errors')->first('invoice');
 
         // والرسالةُ تقول أيَّ فترةٍ أُقفلت — لا «تعذّر» وحدها. والتاريخُ لا يُترجَم
         $this->assertStringContainsString(
@@ -226,23 +195,7 @@ class AFiledReturnIsNotRewrittenTest extends TestCase
             $error,
             'رسالةٌ لا تقول أيُّ إقرارٍ يمنع',
         );
-        $this->assertSame(OrderStatus::READY, $order->fresh()->status);
-    }
-
-    public function test_a_completed_invoice_never_reaches_cancellation_by_status(): void
-    {
-        /*
-         * «مكتمل» نهايةٌ في `OrderStatus::NEXT`. فبابُ الحالات لا يبلغه، وما
-         * بعده تصحيحُ فاتورةٍ لا انتقالُ حال — والتصحيحُ محدودٌ بيومه أصلًا
-         * (انظر AnIssuedInvoiceClosesTest).
-         */
-        $order = $this->sale(now()->toDateTimeString());
-        $order->update(['status' => OrderStatus::COMPLETED]);
-
-        $error = OrderTransition::apply($order, OrderStatus::CANCELLED);
-
-        $this->assertNotNull($error);
-        $this->assertSame(OrderStatus::COMPLETED, $order->fresh()->status);
+        $this->assertSame(CustomerInvoice::ISSUED, $invoice->fresh()->status);
     }
 
     /* ============================ ضبطُ الحدّ ============================ */

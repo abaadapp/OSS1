@@ -466,7 +466,7 @@ export default function SettingsIndex() {
             ) : tab === 'notifications-log' ? (
                 <SettingsSection
                     title="التنبيهات المرسلة"
-                    description="جميع التنبيهات التي أُرسلت إليك — مخزون منخفض وطلبات بانتظار التجهيز."
+                    description="جميع التنبيهات التي أُرسلت إليك — مخزون منخفض وسندات تنتظر الاعتماد وغيرها."
                     icon={BellRing}
                     status={
                         <span className="inline-flex items-center gap-1.5 rounded-full bg-[#f3f4f6] px-3 py-1 text-[12px] font-medium text-[#374151]">
@@ -500,7 +500,7 @@ export default function SettingsIndex() {
                             <BellOff className="mx-auto mb-3 size-8 text-[#d1d5db]" />
                             <p className="font-medium text-[#374151]">{t('لا توجد تنبيهات')}</p>
                             <p className="mt-1 text-[13px] text-[#9ca3af]">
-                                {t('ستظهر هنا عند انخفاض المخزون أو ورود طلبات جديدة.')}
+                                {t('ستظهر هنا عند انخفاض المخزون أو وصول ما يحتاج انتباهك.')}
                             </p>
                         </div>
                     ) : (
@@ -575,7 +575,7 @@ export default function SettingsIndex() {
                 <div className="space-y-6">
                     <SettingsSection
                         title="تنزيل نسخة احتياطية"
-                        description="يشمل الملف كامل بيانات شركتك: المنتجات، الأقسام، العملاء، الطلبات، المصروفات وغيرها."
+                        description="يشمل الملف كامل بيانات شركتك: المنتجات، الأقسام، العملاء، المشاريع، الفواتير، المصروفات وغيرها."
                         icon={Download}
                     >
                         <PageActions>
@@ -668,7 +668,7 @@ export default function SettingsIndex() {
                                 */}
                                 <SettingsSection
                                     title="الشعار"
-                                    description="يظهر في الفواتير والإيصالات — وقالب فاتورة البيع يُظهره أو يُخفيه."
+                                    description="يظهر في الفواتير والإيصالات — وقالبُ كلّ ورقةٍ يُظهره أو يُخفيه."
                                     icon={ImageIcon}
                                 >
                                     <div className="flex flex-wrap items-center gap-5">
@@ -977,7 +977,7 @@ export default function SettingsIndex() {
                                     on={form.data.staff_sees_performance}
                                     onChange={(v) => form.setData('staff_sees_performance', v)}
                                     label="أظهِر للموظّف أداءه في «حسابي»"
-                                    hint="مبيعاتُه اليوم والشهر وإجمالي طلباته. وراتبه يراه دائمًا."
+                                    hint="مبيعاتُه اليوم والشهر وعددُ فواتيره. وراتبه يراه دائمًا."
                                 />
 
                                 {/*

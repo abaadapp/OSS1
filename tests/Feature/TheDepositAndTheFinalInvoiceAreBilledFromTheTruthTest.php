@@ -175,7 +175,8 @@ class TheDepositAndTheFinalInvoiceAreBilledFromTheTruthTest extends TestCase
     public function test_who_cannot_issue_saves_the_deposit_as_a_draft_and_the_stage_waits_for_it(): void
     {
         $project = $this->signedProject();
-        $seller = $this->user('sales');
+        // يفتح فواتيرَ العملاء («المالية») ولا يملك فعلَ الإصدار
+        $seller = $this->user('sales', ['projects', 'finance']);
 
         $this->actingAs($seller)->post(route('admin.projects.billing.deposit', $project->id), ['method' => 'percent', 'percent' => 50, 'issue' => '1'])
             ->assertSessionHasErrors('billing');
@@ -197,6 +198,13 @@ class TheDepositAndTheFinalInvoiceAreBilledFromTheTruthTest extends TestCase
     public function test_billing_from_the_project_belongs_to_who_opens_customer_invoices(): void
     {
         $project = $this->signedProject();
+
+        /*
+         * والبائعُ بدوره لا يفوتر: كان يبلغ فواتيرَ العملاء من «المبيعات»، وخرجت
+         * المبيعاتُ وصار بابُ الفاتورة «المالية» — ولا يرثها لأنّ دورَه `sales`.
+         */
+        $this->actingAs($this->user('sales'))->post(route('admin.projects.billing.deposit', $project->id), ['method' => 'percent', 'percent' => 50])
+            ->assertForbidden();
 
         $this->actingAs($this->user('inventory'))->post(route('admin.projects.billing.deposit', $project->id), ['method' => 'percent', 'percent' => 50])
             ->assertForbidden();

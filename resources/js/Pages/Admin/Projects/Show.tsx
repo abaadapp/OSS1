@@ -1,9 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { router, usePage } from '@inertiajs/react';
-import { AlertTriangle, ArrowLeft, CalendarCheck, Check, CheckCircle2, FileText, Lock, MoreHorizontal, PackageCheck, Pause, Play, Plus, Receipt, ShieldCheck, Slash, Smartphone, Trash2, Unlock, Wallet } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, CalendarCheck, Check, CheckCircle2, FileText, Lock, MoreHorizontal, PackageCheck, Pause, Pencil, Play, Plus, Receipt, ShieldCheck, Slash, Smartphone, Trash2, Unlock, Wallet } from 'lucide-react';
 import AdminLayout from '@/Layouts/AdminLayout';
 import BackLink from '@/Components/BackLink';
-import PageHeader from '@/Components/PageHeader';
 import SmartLink from '@/Components/SmartLink';
 import Field, { Select } from '@/Components/Field';
 import Tabs from '@/Components/Tabs';
@@ -31,6 +30,9 @@ import ContactPicker from '@/Components/ContactPicker';
 import type { CustomerContact } from '@/lib/contacts';
 import ProcessTab, { type Billing, type BillingInvoice, type QuotationInfo, type ScopeInfo } from './partials/ProcessTab';
 import ProjectStepper from '@/Components/ProjectStepper';
+import TabHead from '@/Components/project/TabHead';
+import MoreDetails from '@/Components/project/MoreDetails';
+import { isLate, isUnready, projectSignals, SignalBadges, type Signal } from '@/Components/project/ProjectSignals';
 import { STAGE_LABEL, toStages, type StageKey, type Workflow } from '@/lib/projectStages';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/Components/ui/dropdown-menu';
 import type { PageProps } from '@/types';
@@ -227,8 +229,19 @@ interface Performance {
     timeline: { at: string; kind: string; label: string; amount: number; direction: 'in' | 'out' | 'cash'; url: string | null }[];
 }
 
+/** المبلغُ كما يُرسم — وشرطةٌ لما لم يُرسَل لمن لا يملك رؤيته */
+type Money = (v: number | null | undefined) => string;
+
 /**
  * المشروعُ — نطاقُه ومتطلّباتُه وفريقُه ومهامُّه وأوامرُ تغييره ومالُه.
+ *
+ * ═══ رأسٌ هادئ ═══
+ *
+ * الرأسُ يقول الأساسيَّ وحده: الاسمُ والرمزُ والعميلُ والحالُ والموعدُ
+ * والقيمةُ الحاليّة، وفعلٌ أساسيٌّ واحد هو خطوةُ المرحلة الحاليّة — والبقيّةُ
+ * في قائمة «⋯». وتحته شريطُ المراحل مضغوطًا، وشاراتٌ قصيرةٌ لما يُنتبه إليه
+ * تفتح تبويبَها. والحرِجُ وحده يُقال كاملًا بالأحمر. وما سوى ذلك من تفصيلٍ
+ * في «البيانات» و«المسار».
  *
  * ═══ ثلاثةُ أسئلةٍ يجيبها تبويبُ النطاق ═══
  *
@@ -267,30 +280,6 @@ export default function ProjectShow({ project: p, scope, requirements, members, 
     const post = (name: string, data: Record<string, string> = {}) =>
         router.post(route(name, p.id), data, { preserveScroll: true });
 
-    const tabs = [
-        /* المسارُ أوّلًا: من عرض السعر إلى الإقفال، وكلُّ مرحلةٍ بزرّها */
-        { key: 'process', label: 'المسار' },
-        { key: 'overview', label: 'البيانات' },
-        { key: 'scope', label: 'النطاق', count: scope.current.items.length },
-        { key: 'requirements', label: 'المتطلّبات', count: requirements.filter((r) => r.active).length, alert: !p.baselined && open },
-        { key: 'team', label: 'الفريق', count: members.length },
-        { key: 'tasks', label: 'المهامّ', count: tasks.filter((x) => x.status !== 'done').length },
-        { key: 'change_orders', label: 'أوامر التغيير', count: change_orders.length },
-        { key: 'delivery', label: 'التسليم', count: delivery.packages.length, alert: open && !delivery.readiness.ready && delivery.packages.length > 0 },
-        /* المراسلات — المرحلة 6: ما قيل للعميل وما جرى، بترتيبه */
-        { key: 'communications', label: 'المراسلات' },
-        /* العمليات — المرحلة 10: التنفيذُ على الأرض؛ لمن يفتح القسم */
-        ...(operations !== null ? [{ key: 'operations', label: 'العمليات', count: operations.filter((o) => !['completed', 'cancelled'].includes(o.status)).length, alert: operations.some((o) => !o.ready && !['completed', 'cancelled', 'ready', 'live', 'teardown'].includes(o.status)) }] : []),
-        /* المشتريات — المرحلة 14: تبويبٌ مساند لا مرحلة؛ أوامرُ الشراء الحقيقيّة على المشروع */
-        ...(purchases ? [{ key: 'purchases', label: 'المشتريات', count: purchases.summary.orders, alert: purchases.summary.pending > 0 }] : []),
-        ...(inventory_forecast ? [{ key: 'inventory', label: 'المخزون', count: inventory_forecast.shortages, alert: inventory_forecast.shortages > 0 }] : []),
-        ...(may.budget ? [{ key: 'financials', label: 'المال' }] : []),
-        /* الأداء — المرحلة 11 */
-        ...(performance !== null ? [{ key: 'performance', label: 'الأداء', alert: performance.contribution < 0 }] : []),
-    ];
-    /* وتبويبٌ في الرابط لا يملكه الناظر (المالُ مثلًا) يرجع إلى النظرة العامّة */
-    const current = tabs.some((x) => x.key === tab) ? tab : 'process';
-
     /*
      * والمراحلُ من مصدرها الواحد في الخادم (`ProjectWorkflow`) — كما على بطاقة
      * القائمة. الشاشةُ ترسمها ولا تحسبها.
@@ -304,6 +293,61 @@ export default function ProjectShow({ project: p, scope, requirements, members, 
         setFocus(null);
         window.setTimeout(() => setFocus(key), 0);
     };
+
+    /*
+     * وما يُنتبه إليه — شاراتٌ تفتح تبويبَها، ونقطةٌ حمراء على التبويب نفسِه.
+     * والشروطُ هي التي كانت تُضيء التبويبات؛ لا رقمَ يُخترع هنا.
+     */
+    const today = new Date().toISOString().slice(0, 10);
+    const signals = projectSignals({ open, baselined: p.baselined, requirements, tasks, inventory_forecast, billing, invoices, operations, delivery, performance, today });
+    const flagged = (key: string) => signals.some((s) => s.tab === key);
+    const openSignal = (s: Signal) => (s.stage ? pick(s.stage) : setTab(s.tab));
+
+    /*
+     * والعدّادُ حيث يفيد عددُ ما في التبويب قبل فتحه — والصفرُ لا يُكتب
+     * (`Tabs`). والنقطةُ الحمراءُ لما يحتاج انتباهًا وحده: أمرُ شراءٍ ينتظر
+     * الاستلام مجرى عملٍ لا مشكلة.
+     */
+    const tabs = [
+        /* المسارُ أوّلًا: من عرض السعر إلى الإقفال، وكلُّ مرحلةٍ بزرّها */
+        { key: 'process', label: 'المسار', alert: flagged('process') },
+        { key: 'overview', label: 'البيانات' },
+        { key: 'scope', label: 'النطاق' },
+        { key: 'requirements', label: 'المتطلّبات', count: requirements.filter((r) => r.active).length, alert: flagged('requirements') },
+        { key: 'team', label: 'الفريق', count: members.length },
+        { key: 'tasks', label: 'المهامّ', count: tasks.filter((x) => x.status !== 'done').length, alert: flagged('tasks') },
+        { key: 'change_orders', label: 'أوامر التغيير', count: change_orders.length },
+        { key: 'delivery', label: 'التسليم', count: delivery.packages.length, alert: flagged('delivery') },
+        /* المراسلات — المرحلة 6: ما قيل للعميل وما جرى، بترتيبه */
+        { key: 'communications', label: 'المراسلات' },
+        /* العمليات — المرحلة 10: التنفيذُ على الأرض؛ لمن يفتح القسم */
+        ...(operations !== null ? [{ key: 'operations', label: 'العمليات', count: operations.filter((o) => !['completed', 'cancelled'].includes(o.status)).length, alert: flagged('operations') }] : []),
+        /* المشتريات — المرحلة 14: تبويبٌ مساند لا مرحلة؛ أوامرُ الشراء الحقيقيّة على المشروع */
+        ...(purchases ? [{ key: 'purchases', label: 'المشتريات', count: purchases.summary.orders }] : []),
+        ...(inventory_forecast ? [{ key: 'inventory', label: 'المخزون', alert: flagged('inventory') }] : []),
+        ...(may.budget ? [{ key: 'financials', label: 'المال' }] : []),
+        /* الأداء — المرحلة 11 */
+        ...(performance !== null ? [{ key: 'performance', label: 'الأداء', alert: flagged('performance') }] : []),
+    ];
+    /* وتبويبٌ في الرابط لا يملكه الناظر (المالُ مثلًا) يرجع إلى المسار */
+    const current = tabs.some((x) => x.key === tab) ? tab : 'process';
+
+    /*
+     * والتبويبُ النشط يُرى في شريطه: شارةٌ تفتح «الأداء» على الجوّال تُبقيه
+     * خارج الشريط الضيّق لولا هذا. والشريطُ وحده يمرّ أفقيًّا — لا الصفحة،
+     * ولا رأسيًّا كما تفعل `scrollIntoView`. والفرقُ يُضاف إلى `scrollLeft`
+     * فيصدق في الاتّجاهين.
+     */
+    const strip = useRef<HTMLDivElement>(null);
+    useEffect(() => {
+        const bar = strip.current?.querySelector<HTMLElement>('[role="tablist"]');
+        const active = bar?.querySelector<HTMLElement>('[aria-selected="true"]');
+        if (!bar || !active) return;
+        const b = bar.getBoundingClientRect();
+        const a = active.getBoundingClientRect();
+        if (a.left < b.left) bar.scrollLeft -= b.left - a.left + 16;
+        else if (a.right > b.right) bar.scrollLeft += a.right - b.right + 16;
+    }, [current]);
 
     /* الخطوةُ التالية — زرٌّ واحدٌ في الرأس: «تم — الانتقال» إن تمّت المرحلة، وإلّا ما تنتظره */
     const next: { label: string; params?: Record<string, string>; icon: React.ReactNode; run?: () => void; href?: string; routeName?: string } | null = (() => {
@@ -322,178 +366,153 @@ export default function ProjectShow({ project: p, scope, requirements, members, 
         return null;
     })();
 
+    /* وبقيّةُ الأفعال في قائمة «⋯» — لا صفَّ أزرارٍ يتنافس على العين، ولا قائمةَ فارغة */
+    const actions: { key: string; label: string; icon: React.ReactNode; run: () => void; destructive?: boolean }[] = [
+        ...(open && may.change_order ? [{ key: 'change_order', label: 'أمر تغيير', icon: <Plus />, run: () => router.visit(route('admin.changeOrders.create', p.id)) }] : []),
+        ...(open && !p.baselined && may.manage ? [{ key: 'baseline', label: 'تثبيت المتطلّبات', icon: <Lock />, run: () => setBaselining(true) }] : []),
+        ...((p.status === 'confirmed' || p.status === 'on_hold') && may.manage ? [{ key: 'start', label: 'بدء التنفيذ', icon: <Play />, run: () => post('admin.projects.transition', { status: 'in_progress' }) }] : []),
+        ...(p.status === 'in_progress' && may.manage ? [{ key: 'hold', label: 'تأجيل', icon: <Pause />, run: () => post('admin.projects.transition', { status: 'on_hold' }) }] : []),
+        ...(open && may.close ? [{ key: 'close', label: 'إقفال', icon: <Lock />, run: () => post('admin.projects.close') }] : []),
+        ...(p.status === 'closed' && may.reopen ? [{ key: 'reopen', label: 'إعادة فتح', icon: <Unlock />, run: () => post('admin.projects.reopen') }] : []),
+        ...(open && may.manage ? [{ key: 'cancel', label: 'إلغاء المشروع', icon: <Slash />, run: () => setCancelling(true), destructive: true }] : []),
+    ];
+
     return (
         <AdminLayout title={p.code}>
-            <BackLink routeName="admin.projects.index" href={route('admin.projects.index')} label="المشاريع والمعارض" />
+            {/* ‏min-w-0: لا شيءَ هنا يمدّ الصفحة عرضًا — ما يطول يمرّ داخل شريطه (التبويبات، المراحل، الجداول) */}
+            <div data-project-page className="min-w-0">
+                <BackLink routeName="admin.projects.index" href={route('admin.projects.index')} label="المشاريع والمعارض" />
 
-            <PageHeader
-                title={p.name}
-                subtitle={`${p.code} · ${p.customer}`}
-                actions={
-                    <div className="flex flex-wrap items-center gap-2">
-                        {next &&
-                            (next.href ? (
-                                <Button asChild>
-                                    <SmartLink routeName={next.routeName ?? 'admin.operations.show'} href={next.href}>
-                                        {next.icon}
+                <header className="mb-4 min-w-0">
+                    {/* على الجوّال: الاسمُ بعرض الشاشة والأفعالُ تحته — لا عمودٌ ضيّقٌ بجانب الأزرار */}
+                    <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between sm:gap-x-4">
+                        <div className="min-w-0 flex-1">
+                            <h1 className="break-words text-[20px] font-bold leading-snug tracking-tight text-[#111] sm:text-[22px]">{p.name}</h1>
+                            <div data-project-meta className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-[#6b7280]">
+                                <span className="font-mono text-[12.5px] text-[#3f3f46]" dir="ltr">{p.code}</span>
+                                <Sep />
+                                <span className="min-w-0 break-words">{p.customer}</span>
+                                {p.starts_at && (
+                                    <>
+                                        <Sep />
+                                        <span className="tabular-nums" dir="ltr">
+                                            {p.starts_at}
+                                            {p.ends_at && p.ends_at !== p.starts_at ? ` → ${p.ends_at}` : ''}
+                                        </span>
+                                    </>
+                                )}
+                                <span className={'rounded-full px-2 py-0.5 text-[12px] ' + projectTone(p.status)}>{t(PROJECT_STATUS_LABEL[p.status] ?? p.status)}</span>
+                                {p.current_value !== null && <span className="text-[14px] font-semibold tabular-nums text-[#111]">{m(p.current_value)}</span>}
+                            </div>
+                        </div>
+
+                        <div className="flex shrink-0 items-center gap-2">
+                            {next &&
+                                (next.href ? (
+                                    <Button asChild>
+                                        <SmartLink routeName={next.routeName ?? 'admin.operations.show'} href={next.href}>
+                                            {next.icon}
+                                            {t(next.label, next.params)}
+                                        </SmartLink>
+                                    </Button>
+                                ) : (
+                                    <Button onClick={next.run}>
                                         {t(next.label, next.params)}
-                                    </SmartLink>
-                                </Button>
-                            ) : (
-                                <Button onClick={next.run}>
-                                    {t(next.label, next.params)}
-                                    {next.icon}
-                                </Button>
-                            ))}
-                        {/* وبقيّةُ الأفعال في قائمةٍ واحدة — لا صفَّ أزرارٍ يتنافس على العين */}
-                        <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                                <Button variant="outline" size="icon" aria-label={t('خيارات')}>
-                                    <MoreHorizontal />
-                                </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                                {open && may.change_order && (
-                                    <DropdownMenuItem onSelect={() => router.visit(route('admin.changeOrders.create', p.id))}>
-                                        <Plus />
-                                        {t('أمر تغيير')}
-                                    </DropdownMenuItem>
-                                )}
-                                {open && !p.baselined && may.manage && (
-                                    <DropdownMenuItem onSelect={() => setBaselining(true)}>
-                                        <Lock />
-                                        {t('تثبيت المتطلّبات')}
-                                    </DropdownMenuItem>
-                                )}
-                                {(p.status === 'confirmed' || p.status === 'on_hold') && may.manage && (
-                                    <DropdownMenuItem onSelect={() => post('admin.projects.transition', { status: 'in_progress' })}>
-                                        <Play />
-                                        {t('بدء التنفيذ')}
-                                    </DropdownMenuItem>
-                                )}
-                                {p.status === 'in_progress' && may.manage && (
-                                    <DropdownMenuItem onSelect={() => post('admin.projects.transition', { status: 'on_hold' })}>
-                                        <Pause />
-                                        {t('تأجيل')}
-                                    </DropdownMenuItem>
-                                )}
-                                {open && may.close && (
-                                    <DropdownMenuItem onSelect={() => post('admin.projects.close')}>
-                                        <Lock />
-                                        {t('إقفال')}
-                                    </DropdownMenuItem>
-                                )}
-                                {p.status === 'closed' && may.reopen && (
-                                    <DropdownMenuItem onSelect={() => post('admin.projects.reopen')}>
-                                        <Unlock />
-                                        {t('إعادة فتح')}
-                                    </DropdownMenuItem>
-                                )}
-                                {open && may.manage && (
-                                    <DropdownMenuItem onSelect={() => setCancelling(true)} className="text-[#b91c1c]">
-                                        <Slash />
-                                        {t('إلغاء المشروع')}
-                                    </DropdownMenuItem>
-                                )}
-                            </DropdownMenuContent>
-                        </DropdownMenu>
+                                        {next.icon}
+                                    </Button>
+                                ))}
+                            {actions.length > 0 && (
+                                <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                        <Button variant="outline" size="icon" aria-label={t('خيارات')}>
+                                            <MoreHorizontal />
+                                        </Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent align="end">
+                                        {actions.map((a) => (
+                                            <DropdownMenuItem key={a.key} onSelect={a.run} destructive={a.destructive}>
+                                                {a.icon}
+                                                {t(a.label)}
+                                            </DropdownMenuItem>
+                                        ))}
+                                    </DropdownMenuContent>
+                                </DropdownMenu>
+                            )}
+                        </div>
                     </div>
-                }
-            />
 
-            {errors?.project && <Alert tone="danger">{errors.project}</Alert>}
-            {errors?.workflow && <Alert tone="danger">{errors.workflow}</Alert>}
-            {errors?.billing && <Alert tone="danger">{errors.billing}</Alert>}
-            {errors?.scope && <Alert tone="danger">{errors.scope}</Alert>}
-            {errors?.requirement && <Alert tone="danger">{errors.requirement}</Alert>}
-            {errors?.task && <Alert tone="danger">{errors.task}</Alert>}
-            {errors?.member && <Alert tone="danger">{errors.member}</Alert>}
-            {/* والحارسُ يُقال بالأحمر لا يُخفى: كميّةٌ كُتبت من غير بابها */}
-            {p.scope_broken.length > 0 && (
-                <Alert tone="danger">
-                    {t('كميّةُ بندٍ لا توافق الأصلَ وأوامرَ التغيير المقبولة')}: {p.scope_broken.join(' · ')}
-                </Alert>
-            )}
-            {open && !p.baselined && at === 'scope' && (
-                <Alert tone="warning">{t('المتطلّبات لم تُثبَّت بعد — تُثبَّت حين يُرسَل نطاق العمل للتوقيع، وبعدها لا تتغيّر إلّا بأمر تغيير يقبله العميل.')}</Alert>
-            )}
-            {financials && financials.invoiced_above_approved === true && (
-                <Alert tone="danger">{t('المفوتَر على هذا المشروع فوق قيمته المعتمَدة الحاليّة — راجع الحاجة إلى إشعار دائن.')}</Alert>
-            )}
+                    <SignalBadges signals={signals} onOpen={openSignal} className="mt-3" />
+                </header>
 
-            <div className="mb-4 flex flex-wrap items-center gap-2">
-                <span className={'rounded-full px-2 py-1 text-[12px] ' + projectTone(p.status)}>{t(PROJECT_STATUS_LABEL[p.status] ?? p.status)}</span>
-                <span className="text-[15px] font-semibold tabular-nums">{m(p.current_value)}</span>
-                {p.current_value !== null && p.approved_value !== null && Math.abs(p.current_value - p.approved_value) > 0.0005 && (
-                    <span className="text-[12px] text-[#9ca3af]">
-                        {t('الأصل')}: {m(p.approved_value)}
-                    </span>
+                {/* الحرِجُ وحده يُقال كاملًا: خطأٌ ردّه الخادم، أو رقمٌ افترق عن حقيقته */}
+                {errors?.project && <Alert tone="danger">{errors.project}</Alert>}
+                {errors?.workflow && <Alert tone="danger">{errors.workflow}</Alert>}
+                {errors?.billing && <Alert tone="danger">{errors.billing}</Alert>}
+                {errors?.scope && <Alert tone="danger">{errors.scope}</Alert>}
+                {errors?.requirement && <Alert tone="danger">{errors.requirement}</Alert>}
+                {errors?.task && <Alert tone="danger">{errors.task}</Alert>}
+                {errors?.member && <Alert tone="danger">{errors.member}</Alert>}
+                {/* والحارسُ يُقال بالأحمر لا يُخفى: كميّةٌ كُتبت من غير بابها */}
+                {p.scope_broken.length > 0 && (
+                    <Alert tone="danger">
+                        {t('كميّةُ بندٍ لا توافق الأصلَ وأوامرَ التغيير المقبولة')}: {p.scope_broken.join(' · ')}
+                    </Alert>
                 )}
-                {p.baselined && (
-                    <span className="inline-flex items-center gap-1 rounded-full bg-[#ecfdf5] px-2 py-1 text-[11px] text-[#065f46]">
-                        <ShieldCheck className="size-3" />
-                        {t('متطلّبات مثبَّتة')} · {p.requirements_baselined_at}
-                    </span>
+                {financials && financials.invoiced_above_approved === true && (
+                    <Alert tone="danger">{t('المفوتَر على هذا المشروع فوق قيمته المعتمَدة الحاليّة — راجع الحاجة إلى إشعار دائن.')}</Alert>
                 )}
+
+                <ProjectStepper stages={stages} onPick={pick} className="mb-3" />
+
+                {/*
+                    الأسماءُ كما هي، والشريطُ أخفّ: حشوٌ أصغر ونصٌّ أصغر، ويمرّ أفقيًّا
+                    داخل نفسه (`overflow-x-auto` في `Tabs`) — لا تمرّ الصفحةُ كلُّها.
+                */}
+                <div ref={strip} className="mb-4 min-w-0">
+                    <Tabs tabs={tabs} current={current} onChange={setTab} className="[&>button]:gap-1.5 [&>button]:px-3 [&>button]:py-2.5 [&>button]:text-[13px]" />
+                </div>
+
+                {current === 'process' && (
+                    <ProcessTab
+                        p={p}
+                        d={{
+                            workflow,
+                            quotation,
+                            scope: scope_of_work,
+                            requirements: { active: requirements.filter((r) => r.active).length },
+                            members,
+                            tasks,
+                            change_orders,
+                            operations,
+                            delivery,
+                            billing,
+                            invoices,
+                            close_blockers,
+                            channels,
+                            users,
+                        }}
+                        stages={stages}
+                        may={may}
+                        m={m}
+                        focus={focus}
+                        onTab={setTab}
+                    />
+                )}
+
+                {current === 'overview' && <Overview p={p} users={users} may={may} scope={scope} contacts={contacts} m={m} />}
+                {current === 'scope' && <ScopeTab scope={scope} m={m} />}
+                {current === 'requirements' && <RequirementsTab p={p} requirements={requirements} items={scope.current.items} may={may} open={open} error={errors?.requirement} />}
+                {current === 'team' && <TeamTab p={p} members={members} users={users} may={may} open={open} error={errors?.member} />}
+                {current === 'tasks' && <TasksTab p={p} tasks={tasks} users={users} may={may} events={task_operations} today={today} error={errors?.task} />}
+                {current === 'change_orders' && <ChangeOrdersTab p={p} rows={change_orders} m={m} may={may} open={open} />}
+                {current === 'delivery' && <DeliveryTab p={p} delivery={delivery} may={may} open={open} />}
+                {current === 'communications' && <CommunicationsTab projectId={p.id} open={open} />}
+                {current === 'operations' && operations !== null && <OperationsTab p={p} rows={operations} may={may} open={open} />}
+                {current === 'inventory' && inventory_forecast && <InventoryTab data={inventory_forecast} projectId={p.id} />}
+                {current === 'purchases' && purchases && <PurchasesTab projectId={p.id} data={purchases} m={m} />}
+                {current === 'financials' && financials && <FinancialsTab f={financials} m={m} frozen={p.financials_frozen} />}
+                {current === 'performance' && performance !== null && <PerformanceTab perf={performance} m={m} />}
             </div>
-
-            <ProjectStepper stages={stages} onPick={pick} size="lg" className="mb-4" />
-
-            {/* ونقصُ المخزون المتوقَّع يُقال فوق التبويبات — والتفصيلُ في تبويب «المخزون» */}
-            {inventory_forecast && inventory_forecast.shortages > 0 && current !== 'inventory' && (
-                <button type="button" onClick={() => setTab('inventory')} className="mb-3 flex w-full items-center gap-2 rounded-[12px] border border-[#fecaca] bg-[#fef2f2] px-4 py-2 text-start text-[13px] text-[#b91c1c]">
-                    {t('نقص مخزون: :n بنود', { n: String(inventory_forecast.shortages) })} — {t('افتح تبويب المخزون')}
-                </button>
-            )}
-
-            <Tabs tabs={tabs} current={current} onChange={setTab} className="mb-4" />
-
-            {current === 'process' && (
-                <ProcessTab
-                    p={p}
-                    d={{
-                        workflow,
-                        quotation,
-                        scope: scope_of_work,
-                        requirements: { active: requirements.filter((r) => r.active).length },
-                        members,
-                        tasks,
-                        change_orders,
-                        operations,
-                        delivery,
-                        billing,
-                        invoices,
-                        close_blockers,
-                        channels,
-                        users,
-                    }}
-                    stages={stages}
-                    may={may}
-                    m={m}
-                    focus={focus}
-                    onTab={setTab}
-                />
-            )}
-
-            {current === 'overview' && <Overview p={p} users={users} may={may} scope={scope} contacts={contacts} />}
-            {current === 'scope' && <ScopeTab scope={scope} m={m} />}
-            {current === 'requirements' && <RequirementsTab p={p} requirements={requirements} items={scope.current.items} may={may} open={open} />}
-            {current === 'team' && <TeamTab p={p} members={members} users={users} may={may} open={open} />}
-            {current === 'tasks' && <TasksTab p={p} tasks={tasks} users={users} may={may} events={task_operations} />}
-            {current === 'change_orders' && <ChangeOrdersTab p={p} rows={change_orders} m={m} may={may} open={open} />}
-            {current === 'delivery' && <DeliveryTab p={p} delivery={delivery} may={may} open={open} />}
-            {current === 'communications' && <CommunicationsTab projectId={p.id} open={open} />}
-            {current === 'operations' && operations !== null && <OperationsTab p={p} rows={operations} may={may} open={open} />}
-            {current === 'inventory' && inventory_forecast && (
-                <Card className="p-4">
-                    <h2 className="mb-1 text-[15px] font-semibold">{t('توقّع المخزون')}</h2>
-                    <p className="mb-3 text-[12px] text-[#9ca3af]">{t('لكل منتج مخزّن: المتوفر الآن، وما تحتاجه مشاريع قبله في الجدول، واحتياج هذا المشروع، والمتوقع بعده.')}</p>
-                    <ProjectInventoryForecast data={inventory_forecast} projectId={p.id} />
-                </Card>
-            )}
-            {current === 'purchases' && purchases && <PurchasesTab projectId={p.id} data={purchases} m={m} />}
-            {current === 'financials' && financials && <FinancialsTab f={financials} m={m} frozen={p.financials_frozen} />}
-            {current === 'performance' && performance !== null && <PerformanceTab perf={performance} m={m} />}
 
             <Dialog open={baselining} onOpenChange={setBaselining}>
                 <DialogContent className="max-w-md">
@@ -564,9 +583,12 @@ export default function ProjectShow({ project: p, scope, requirements, members, 
     );
 }
 
+/* فاصلُ الرأس — وعلى الجوّال يلتفّ السطرُ فلا يبدأ سطرٌ بنقطةٍ معلّقة */
+const Sep = () => <span aria-hidden className="hidden text-[#d4d4d8] sm:inline">·</span>;
+
 function Alert({ tone, children }: { tone: 'danger' | 'warning'; children: React.ReactNode }) {
     return (
-        <div className={'mb-4 rounded-lg px-4 py-3 text-[13px] ' + (tone === 'danger' ? 'bg-[#fef2f2] text-[#b91c1c]' : 'bg-[#fffbeb] text-[#b45309]')}>
+        <div role="alert" className={'mb-3 rounded-lg px-4 py-3 text-[13px] ' + (tone === 'danger' ? 'bg-[#fef2f2] text-[#b91c1c]' : 'bg-[#fffbeb] text-[#b45309]')}>
             {children}
         </div>
     );
@@ -585,7 +607,11 @@ function Row({ label, value, ltr }: { label: string; value: string | null | unde
 
 /* ─────────────────────────── نظرة عامة ─────────────────────────── */
 
-function Overview({ p, users, may, scope, contacts }: { p: Project; users: { id: number; name: string }[]; may: Props['may']; scope: Scope; contacts: CustomerContact[] }) {
+/**
+ * البيانات — ما خرج من الرأس ليهدأ: تثبيتُ المتطلّبات والقيمةُ الأصليّة في
+ * سطر الخلاصة، ثمّ سجلُّ الفعاليّة كاملًا وما وافق عليه العميل.
+ */
+function Overview({ p, users, may, scope, contacts, m }: { p: Project; users: { id: number; name: string }[]; may: Props['may']; scope: Scope; contacts: CustomerContact[]; m: Money }) {
     const t = useTranslate();
     const [editing, setEditing] = useState(false);
     const [form, setForm] = useState({
@@ -595,118 +621,143 @@ function Overview({ p, users, may, scope, contacts }: { p: Project; users: { id:
         owner_id: p.owner_id ? String(p.owner_id) : '', notes: p.notes ?? '', internal_notes: p.internal_notes ?? '',
     });
     const set = (k: keyof typeof form) => (e: { target: { value: string } }) => setForm({ ...form, [k]: e.target.value });
+    /* والأصلُ يُذكر حين افترق عن الحاليّ بأمر تغيير — وإلّا فهو هو */
+    const changed = p.current_value !== null && p.approved_value !== null && Math.abs(p.current_value - p.approved_value) > 0.0005;
 
     return (
-        <div className="grid gap-4 lg:grid-cols-2">
-            <Card className="p-4">
-                <div className="mb-3 flex items-center justify-between">
-                    <h2 className="text-[15px] font-semibold">{t('الفعالية')}</h2>
-                    {may.manage && p.status !== 'closed' && p.status !== 'cancelled' && (
-                        <Button variant="outline" size="sm" onClick={() => setEditing(!editing)}>{editing ? t('تراجع') : t('تعديل')}</Button>
-                    )}
-                </div>
-                {!editing ? (
-                    <dl className="grid gap-x-6 gap-y-2 text-[13px] sm:grid-cols-2">
-                        <Row label="الاسم" value={p.name} />
-                        <Row label="العميل" value={p.customer} />
-                        <Row label="النوع" value={p.event_type} />
-                        <Row label="الموقع" value={p.location} />
-                        <Row label="الموعد" value={p.starts_at ? `${p.starts_at}${p.ends_at && p.ends_at !== p.starts_at ? ` → ${p.ends_at}` : ''}` : null} ltr />
-                        <Row label="المسؤول" value={p.owner} />
-                        <Row label="جهة الاتصال" value={p.contact_person} />
-                        <Row label="الهاتف" value={p.contact_phone} ltr />
-                        <Row label="البريد" value={p.contact_email} ltr />
-                        <Row label="العرض المقبول" value={scope.original.quotation?.label} />
-                        <Row label="أُقفل في" value={p.closed_at} ltr />
-                        <Row label="سبب الإلغاء" value={p.cancellation_reason} />
-                        <Row label="رسم الإلغاء" value={p.cancellation_fee_invoice ? `${p.cancellation_fee_invoice.number ?? '#' + p.cancellation_fee_invoice.id}` : null} />
-                        <Row label="سياسة الإلغاء" value={p.cancellation_policy ? String(p.cancellation_policy.message ?? '') : null} />
-                    </dl>
-                ) : (
-                    <div className="grid gap-3 sm:grid-cols-2">
-                        <Field label="اسم المشروع" required className="sm:col-span-2"><Input value={form.name} onChange={set('name')} /></Field>
-                        <Field label="النوع"><Input value={form.event_type} onChange={set('event_type')} /></Field>
-                        <Field label="الموقع"><Input value={form.location} onChange={set('location')} /></Field>
-                        <Field label="المسؤول">
-                            <Select placeholder="بلا مسؤول" value={form.owner_id} onChange={set('owner_id')} options={users.map((u) => ({ label: u.name, value: u.id }))} />
-                        </Field>
-                        {contacts.length > 0 && (
-                            <Field label="من أشخاص اتصال الجهة" hint="يملأ الاسم والهاتف والبريد — وتبقى تُعدَّل بيد" className="sm:col-span-2">
-                                <ContactPicker
-                                    contacts={contacts}
-                                    value={form.customer_contact_id}
-                                    onPick={(c) => setForm({
-                                        ...form,
-                                        customer_contact_id: c ? String(c.id) : '',
-                                        contact_person: c ? c.name : form.contact_person,
-                                        contact_phone: c ? (c.phone ?? '') : form.contact_phone,
-                                        contact_email: c ? (c.email ?? '') : form.contact_email,
-                                    })}
-                                />
+        <div>
+            <TabHead
+                facts={[
+                    /* وغيرُ المثبَّتة شارةٌ فوق التبويبات — لا تُعاد هنا */
+                    p.baselined && { label: 'متطلّبات مثبَّتة', value: p.requirements_baselined_at ?? undefined, tone: 'ok' },
+                    changed && { label: 'القيمة الأصلية', value: m(p.approved_value) },
+                ]}
+                action={
+                    may.manage && p.status !== 'closed' && p.status !== 'cancelled' && (
+                        <Button variant="outline" size="sm" onClick={() => setEditing(!editing)}>
+                            {!editing && <Pencil />}
+                            {editing ? t('تراجع') : t('تعديل')}
+                        </Button>
+                    )
+                }
+            />
+            <div className="grid gap-4 lg:grid-cols-2">
+                <Card className="p-4">
+                    <h2 className="mb-3 text-[15px] font-semibold">{t('الفعالية')}</h2>
+                    {!editing ? (
+                        <dl className="grid gap-x-6 gap-y-2 text-[13px] sm:grid-cols-2">
+                            <Row label="الاسم" value={p.name} />
+                            <Row label="العميل" value={p.customer} />
+                            <Row label="النوع" value={p.event_type} />
+                            <Row label="الموقع" value={p.location} />
+                            <Row label="الموعد" value={p.starts_at ? `${p.starts_at}${p.ends_at && p.ends_at !== p.starts_at ? ` → ${p.ends_at}` : ''}` : null} ltr />
+                            <Row label="المسؤول" value={p.owner} />
+                            <Row label="جهة الاتصال" value={p.contact_person} />
+                            <Row label="الهاتف" value={p.contact_phone} ltr />
+                            <Row label="البريد" value={p.contact_email} ltr />
+                            <Row label="العرض المقبول" value={scope.original.quotation?.label} />
+                            <Row label="أُقفل في" value={p.closed_at} ltr />
+                            <Row label="سبب الإلغاء" value={p.cancellation_reason} />
+                            <Row label="رسم الإلغاء" value={p.cancellation_fee_invoice ? `${p.cancellation_fee_invoice.number ?? '#' + p.cancellation_fee_invoice.id}` : null} />
+                            <Row label="سياسة الإلغاء" value={p.cancellation_policy ? String(p.cancellation_policy.message ?? '') : null} />
+                        </dl>
+                    ) : (
+                        <div className="grid gap-3 sm:grid-cols-2">
+                            <Field label="اسم المشروع" required className="sm:col-span-2"><Input value={form.name} onChange={set('name')} /></Field>
+                            <Field label="النوع"><Input value={form.event_type} onChange={set('event_type')} /></Field>
+                            <Field label="الموقع"><Input value={form.location} onChange={set('location')} /></Field>
+                            <Field label="المسؤول">
+                                <Select placeholder="بلا مسؤول" value={form.owner_id} onChange={set('owner_id')} options={users.map((u) => ({ label: u.name, value: u.id }))} />
                             </Field>
-                        )}
-                        <Field label="جهة الاتصال"><Input value={form.contact_person} onChange={set('contact_person')} /></Field>
-                        <Field label="الهاتف"><Input dir="ltr" value={form.contact_phone} onChange={set('contact_phone')} /></Field>
-                        <Field label="البريد"><Input dir="ltr" type="email" value={form.contact_email} onChange={set('contact_email')} /></Field>
-                        <Field label="ملاحظات" className="sm:col-span-2"><Textarea rows={3} value={form.notes} onChange={set('notes')} /></Field>
-                        <Field label="ملاحظات داخلية" hint="لا تبلغ العميل" className="sm:col-span-2"><Textarea rows={2} value={form.internal_notes} onChange={set('internal_notes')} /></Field>
-                        <div className="sm:col-span-2">
-                            <Button onClick={() => router.put(route('admin.projects.update', p.id), form, { preserveScroll: true, onSuccess: () => setEditing(false) })}>
-                                <Check />
-                                {t('حفظ')}
-                            </Button>
-                        </div>
-                    </div>
-                )}
-                {p.starts_at && !editing && (
-                    <p className="mt-3 text-[12px] text-[#9ca3af]">{t('الموعدُ من النطاق المعتمَد — يتغيّر بأمر تغيير لا من هنا.')}</p>
-                )}
-            </Card>
-
-            <Card className="p-4">
-                <h2 className="mb-3 text-[15px] font-semibold">{t('ما وافق عليه العميل')}</h2>
-                {scope.original.quotation ? (
-                    <dl className="grid gap-x-6 gap-y-2 text-[13px] sm:grid-cols-2">
-                        <div className="flex justify-between gap-3 sm:block">
-                            <dt className="text-[#9ca3af]">{t('العرض')}</dt>
-                            <dd className="font-medium">
-                                <SmartLink routeName="admin.quotations.show" href={route('admin.quotations.show', scope.original.quotation.id)} className="text-[#1d4ed8]">
-                                    {scope.original.quotation.label}
-                                </SmartLink>
-                            </dd>
-                        </div>
-                        <Row label="قُبل في" value={scope.original.quotation.decided_at} ltr />
-                        <Row label="قَبِله" value={scope.original.quotation.evidence?.signer_name ?? scope.original.quotation.decided_by_name} />
-                        <Row label="الموعد الأصلي" value={scope.original.quotation.event_starts_at} ltr />
-                        {scope.original.quotation.evidence && (
+                            {contacts.length > 0 && (
+                                <Field label="من أشخاص اتصال الجهة" hint="يملأ الاسم والهاتف والبريد — وتبقى تُعدَّل بيد" className="sm:col-span-2">
+                                    <ContactPicker
+                                        contacts={contacts}
+                                        value={form.customer_contact_id}
+                                        onPick={(c) => setForm({
+                                            ...form,
+                                            customer_contact_id: c ? String(c.id) : '',
+                                            contact_person: c ? c.name : form.contact_person,
+                                            contact_phone: c ? (c.phone ?? '') : form.contact_phone,
+                                            contact_email: c ? (c.email ?? '') : form.contact_email,
+                                        })}
+                                    />
+                                </Field>
+                            )}
+                            <Field label="جهة الاتصال"><Input value={form.contact_person} onChange={set('contact_person')} /></Field>
+                            <Field label="الهاتف"><Input dir="ltr" value={form.contact_phone} onChange={set('contact_phone')} /></Field>
+                            <Field label="البريد"><Input dir="ltr" type="email" value={form.contact_email} onChange={set('contact_email')} /></Field>
+                            <Field label="ملاحظات" className="sm:col-span-2"><Textarea rows={3} value={form.notes} onChange={set('notes')} /></Field>
+                            <Field label="ملاحظات داخلية" hint="لا تبلغ العميل" className="sm:col-span-2"><Textarea rows={2} value={form.internal_notes} onChange={set('internal_notes')} /></Field>
                             <div className="sm:col-span-2">
-                                <span className={'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] ' + (scope.original.quotation.evidence.verified ? 'bg-[#ecfdf5] text-[#065f46]' : 'bg-[#fef2f2] text-[#b91c1c]')}>
-                                    <ShieldCheck className="size-3" />
-                                    {scope.original.quotation.evidence.verified ? t('البصمة تطابق') : t('البصمة لا تطابق — تغيّر المستند بعد القرار')}
-                                </span>
+                                <Button onClick={() => router.put(route('admin.projects.update', p.id), form, { preserveScroll: true, onSuccess: () => setEditing(false) })}>
+                                    <Check />
+                                    {t('حفظ')}
+                                </Button>
                             </div>
-                        )}
-                    </dl>
-                ) : (
-                    <p className="text-[13px] text-[#9ca3af]">{t('مشروع بلا عرض سعر مقبول')}</p>
-                )}
-                {p.notes && <p className="mt-3 whitespace-pre-line text-[13px] text-[#52525b]">{p.notes}</p>}
-            </Card>
+                        </div>
+                    )}
+                    {p.starts_at && !editing && (
+                        <p className="mt-3 text-[12px] text-[#9ca3af]">{t('الموعدُ من النطاق المعتمَد — يتغيّر بأمر تغيير لا من هنا.')}</p>
+                    )}
+                </Card>
+
+                <Card className="p-4">
+                    <h2 className="mb-3 text-[15px] font-semibold">{t('ما وافق عليه العميل')}</h2>
+                    {scope.original.quotation ? (
+                        <dl className="grid gap-x-6 gap-y-2 text-[13px] sm:grid-cols-2">
+                            <div className="flex justify-between gap-3 sm:block">
+                                <dt className="text-[#9ca3af]">{t('العرض')}</dt>
+                                <dd className="font-medium">
+                                    <SmartLink routeName="admin.quotations.show" href={route('admin.quotations.show', scope.original.quotation.id)} className="text-[#1d4ed8]">
+                                        {scope.original.quotation.label}
+                                    </SmartLink>
+                                </dd>
+                            </div>
+                            <Row label="قُبل في" value={scope.original.quotation.decided_at} ltr />
+                            <Row label="قَبِله" value={scope.original.quotation.evidence?.signer_name ?? scope.original.quotation.decided_by_name} />
+                            <Row label="الموعد الأصلي" value={scope.original.quotation.event_starts_at} ltr />
+                            {scope.original.quotation.evidence && (
+                                <div className="sm:col-span-2">
+                                    <span className={'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] ' + (scope.original.quotation.evidence.verified ? 'bg-[#ecfdf5] text-[#065f46]' : 'bg-[#fef2f2] text-[#b91c1c]')}>
+                                        <ShieldCheck className="size-3" />
+                                        {scope.original.quotation.evidence.verified ? t('البصمة تطابق') : t('البصمة لا تطابق — تغيّر المستند بعد القرار')}
+                                    </span>
+                                </div>
+                            )}
+                        </dl>
+                    ) : (
+                        <p className="text-[13px] text-[#9ca3af]">{t('مشروع بلا عرض سعر مقبول')}</p>
+                    )}
+                    {p.notes && <p className="mt-3 whitespace-pre-line text-[13px] text-[#52525b]">{p.notes}</p>}
+                </Card>
+            </div>
         </div>
     );
 }
 
 /* ─────────────────────────── النطاق ─────────────────────────── */
 
-function ScopeTab({ scope, m }: { scope: Scope; m: (v: number | null | undefined) => string }) {
+/**
+ * النطاق — الحاليُّ أوّلًا (ما يُنفَّذ الآن)، والأصلُ وما تغيّر مطويّان
+ * تحته: يُقرآن حين يُسأل «من أين جاء هذا البند؟» لا في كلّ زيارة.
+ */
+function ScopeTab({ scope, m }: { scope: Scope; m: Money }) {
     const t = useTranslate();
     const q = (v: number) => number(v);
 
     return (
         <div className="space-y-4">
+            <TabHead
+                facts={[
+                    { label: 'البنود', n: scope.current.items.filter((i) => i.quantity > 0).length },
+                    scope.current.current_value !== null && { label: 'القيمة المعتمَدة الحالية', value: m(scope.current.current_value) },
+                    { label: 'أوامر تغيير مقبولة', n: scope.changes.length },
+                ]}
+            />
+
             <Card className="p-4">
-                <h2 className="mb-1 text-[15px] font-semibold">{t('النطاق الحالي')}</h2>
-                <p className="mb-3 text-[12px] text-[#9ca3af]">{t('ما يجب على الفريق تنفيذه الآن — الأصل بعد أوامر التغيير المقبولة.')}</p>
+                <h2 className="mb-3 text-[15px] font-semibold">{t('النطاق الحالي')}</h2>
                 <div className="overflow-x-auto">
                     <table className="w-full text-[13px]">
                         <thead className="text-[12px] text-[#6b7280]">
@@ -739,83 +790,121 @@ function ScopeTab({ scope, m }: { scope: Scope; m: (v: number | null | undefined
                 </div>
             </Card>
 
-            <div className="grid gap-4 lg:grid-cols-2">
-                <Card className="p-4">
-                    <h2 className="mb-1 text-[15px] font-semibold">{t('الأصل')}</h2>
-                    <p className="mb-3 text-[12px] text-[#9ca3af]">{t('كما قُبل في العرض — لا يُكتب فيه بعدها.')}</p>
-                    <ul className="space-y-1 text-[13px]">
-                        {scope.original.items.map((i) => (
-                            <li key={i.id} className="flex justify-between gap-3">
-                                <span>{i.description}</span>
-                                <span className="tabular-nums text-[#6b7280]">{q(i.quantity)} {i.unit ?? ''} · {m(i.line_total)}</span>
-                            </li>
-                        ))}
-                    </ul>
-                    <div className="mt-3 text-[13px] font-semibold tabular-nums">{t('القيمة الأصلية')}: {m(scope.original.approved_value)}</div>
-                    {scope.original.requirements.length > 0 && (
-                        <div className="mt-3 text-[12px] text-[#6b7280]">
-                            {t('متطلّبات الأصل')}: {scope.original.requirements.map((r) => r.title).join(' · ')}
-                        </div>
-                    )}
-                </Card>
-
-                <Card className="p-4">
-                    <h2 className="mb-1 text-[15px] font-semibold">{t('ما تغيّر')}</h2>
-                    <p className="mb-3 text-[12px] text-[#9ca3af]">{t('أوامر التغيير المقبولة بترتيبها.')}</p>
-                    {scope.changes.length === 0 ? (
-                        <p className="text-[13px] text-[#9ca3af]">{t('لا تغيير مقبول بعد')}</p>
-                    ) : (
-                        <ul className="space-y-3 text-[13px]">
-                            {scope.changes.map((c) => (
-                                <li key={c.id} className="rounded-lg border border-[#f4f4f5] p-3">
-                                    <div className="flex flex-wrap items-center justify-between gap-2">
-                                        <SmartLink routeName="admin.changeOrders.show" href={route('admin.changeOrders.show', c.id)} className="font-medium text-[#1d4ed8]">
-                                            {c.number} — {c.title}
-                                        </SmartLink>
-                                        <span className={'tabular-nums font-semibold ' + ((c.total_delta ?? 0) < 0 ? 'text-[#b91c1c]' : 'text-[#047857]')}>
-                                            {(c.total_delta ?? 0) >= 0 && c.total_delta !== null ? '+' : ''}{m(c.total_delta)}
-                                        </span>
-                                    </div>
-                                    <div className="mt-1 text-[12px] text-[#6b7280]">
-                                        {t('طلبه')}: {t(PARTY_LABEL[c.requested_by_party] ?? c.requested_by_party)} · {t('قَبِله')}: {c.decided_by_name ?? '—'} · {c.decided_at}
-                                    </div>
-                                    <div className="mt-1 text-[12px] text-[#52525b]">
-                                        {c.items.map((i, k) => <span key={k}>{i.quantity >= 0 ? '+' : ''}{q(i.quantity)} {i.description} · </span>)}
-                                        {c.added.map((r, k) => <span key={'a' + k}>+ {r.title} · </span>)}
-                                        {c.removed.map((r, k) => <span key={'r' + k}>− {r.title} · </span>)}
-                                        {c.new_starts_at && <span dir="ltr">→ {c.new_starts_at}</span>}
-                                    </div>
+            {/* الأصلُ وما تغيّر — مطويّان لا مخفيّان */}
+            <MoreDetails label="الأصل وما تغيّر">
+                <p className="mb-3 text-[12px] text-[#9ca3af]">{t('ما يجب على الفريق تنفيذه الآن — الأصل بعد أوامر التغيير المقبولة.')}</p>
+                <div className="grid gap-4 lg:grid-cols-2">
+                    <section>
+                        <h2 className="mb-1 text-[14px] font-semibold">{t('الأصل')}</h2>
+                        <p className="mb-3 text-[12px] text-[#9ca3af]">{t('كما قُبل في العرض — لا يُكتب فيه بعدها.')}</p>
+                        <ul className="space-y-1 text-[13px]">
+                            {scope.original.items.map((i) => (
+                                <li key={i.id} className="flex justify-between gap-3">
+                                    <span className="min-w-0 break-words">{i.description}</span>
+                                    <span className="shrink-0 tabular-nums text-[#6b7280]">{q(i.quantity)} {i.unit ?? ''} · {m(i.line_total)}</span>
                                 </li>
                             ))}
                         </ul>
-                    )}
-                </Card>
-            </div>
+                        <div className="mt-3 text-[13px] font-semibold tabular-nums">{t('القيمة الأصلية')}: {m(scope.original.approved_value)}</div>
+                        {scope.original.requirements.length > 0 && (
+                            <div className="mt-3 text-[12px] text-[#6b7280]">
+                                {t('متطلّبات الأصل')}: {scope.original.requirements.map((r) => r.title).join(' · ')}
+                            </div>
+                        )}
+                    </section>
+
+                    <section>
+                        <h2 className="mb-1 text-[14px] font-semibold">{t('ما تغيّر')}</h2>
+                        <p className="mb-3 text-[12px] text-[#9ca3af]">{t('أوامر التغيير المقبولة بترتيبها.')}</p>
+                        {scope.changes.length === 0 ? (
+                            <p className="text-[13px] text-[#9ca3af]">{t('لا تغيير مقبول بعد')}</p>
+                        ) : (
+                            <ul className="space-y-3 text-[13px]">
+                                {scope.changes.map((c) => (
+                                    <li key={c.id} className="rounded-lg border border-[#f4f4f5] p-3">
+                                        <div className="flex flex-wrap items-center justify-between gap-2">
+                                            <SmartLink routeName="admin.changeOrders.show" href={route('admin.changeOrders.show', c.id)} className="font-medium text-[#1d4ed8]">
+                                                {c.number} — {c.title}
+                                            </SmartLink>
+                                            <span className={'tabular-nums font-semibold ' + ((c.total_delta ?? 0) < 0 ? 'text-[#b91c1c]' : 'text-[#047857]')}>
+                                                {(c.total_delta ?? 0) >= 0 && c.total_delta !== null ? '+' : ''}{m(c.total_delta)}
+                                            </span>
+                                        </div>
+                                        <div className="mt-1 text-[12px] text-[#6b7280]">
+                                            {t('طلبه')}: {t(PARTY_LABEL[c.requested_by_party] ?? c.requested_by_party)} · {t('قَبِله')}: {c.decided_by_name ?? '—'} · {c.decided_at}
+                                        </div>
+                                        <div className="mt-1 text-[12px] text-[#52525b]">
+                                            {c.items.map((i, k) => <span key={k}>{i.quantity >= 0 ? '+' : ''}{q(i.quantity)} {i.description} · </span>)}
+                                            {c.added.map((r, k) => <span key={'a' + k}>+ {r.title} · </span>)}
+                                            {c.removed.map((r, k) => <span key={'r' + k}>− {r.title} · </span>)}
+                                            {c.new_starts_at && <span dir="ltr">→ {c.new_starts_at}</span>}
+                                        </div>
+                                    </li>
+                                ))}
+                            </ul>
+                        )}
+                    </section>
+                </div>
+            </MoreDetails>
         </div>
     );
 }
 
 /* ─────────────────────────── المتطلّبات ─────────────────────────── */
 
-function RequirementsTab({ p, requirements, items, may, open }: { p: Project; requirements: Requirement[]; items: ScopeItem[]; may: Props['may']; open: boolean }) {
+/**
+ * المتطلّبات — شروطٌ تصدق عند التسليم بلا سعرٍ ولا كميّة، وما أُزيل يبقى
+ * مكتوبًا مع الأمر الذي أزاله.
+ *
+ * القائمةُ بعرضها كلِّه، و«إضافة متطلّب» نافذةٌ — هي نفسُها للتعديل. فلا
+ * نموذجٌ مفتوحٌ بجانب القائمة في كلّ زيارة.
+ */
+function RequirementsTab({ p, requirements, items, may, open, error }: { p: Project; requirements: Requirement[]; items: ScopeItem[]; may: Props['may']; open: boolean; error?: string }) {
     const t = useTranslate();
     const editable = may.manage && open && !p.baselined;
-    const [form, setForm] = useState({ title: '', details: '', project_item_id: '' });
+    const blank = { title: '', details: '', project_item_id: '' };
+    const [form, setForm] = useState(blank);
     const [editingId, setEditingId] = useState<number | null>(null);
+    const [dialog, setDialog] = useState(false);
+    const active = requirements.filter((r) => r.active).length;
 
+    const start = (r?: Requirement) => {
+        setEditingId(r?.id ?? null);
+        setForm(r ? { title: r.title, details: r.details ?? '', project_item_id: r.project_item_id ? String(r.project_item_id) : '' } : blank);
+        setDialog(true);
+    };
+    const finish = () => {
+        setDialog(false);
+        setEditingId(null);
+        setForm(blank);
+    };
     const submit = () => {
         if (editingId) {
-            router.put(route('admin.projects.requirements.update', [p.id, editingId]), form, { preserveScroll: true, onSuccess: () => { setEditingId(null); setForm({ title: '', details: '', project_item_id: '' }); } });
+            router.put(route('admin.projects.requirements.update', [p.id, editingId]), form, { preserveScroll: true, onSuccess: finish });
         } else {
-            router.post(route('admin.projects.requirements.store', p.id), form, { preserveScroll: true, onSuccess: () => setForm({ title: '', details: '', project_item_id: '' }) });
+            router.post(route('admin.projects.requirements.store', p.id), form, { preserveScroll: true, onSuccess: finish });
         }
     };
 
     return (
-        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
+        <div>
+            <TabHead
+                facts={[
+                    { label: 'الفعّالة', n: active },
+                    { label: 'أُزيلت', n: requirements.length - active },
+                    p.baselined ? { label: 'مثبَّتة', value: p.requirements_baselined_at ?? undefined, tone: 'ok' } : open && { label: 'غير مثبَّتة بعد' },
+                ]}
+                action={
+                    editable && (
+                        <Button size="sm" onClick={() => start()}>
+                            <Plus />
+                            {t('إضافة متطلّب')}
+                        </Button>
+                    )
+                }
+            />
+
             <Card className="p-4">
-                <h2 className="mb-1 text-[15px] font-semibold">{t('المتطلّبات')}</h2>
-                <p className="mb-3 text-[12px] text-[#9ca3af]">{t('شروطٌ يجب أن تصدق عند التسليم — بلا سعر ولا كميّة. وما أُزيل يبقى مكتوبًا مع الأمر الذي أزاله.')}</p>
                 {requirements.length === 0 ? (
                     <p className="text-[13px] text-[#9ca3af]">{t('لا متطلّبات بعد')}</p>
                 ) : (
@@ -823,7 +912,7 @@ function RequirementsTab({ p, requirements, items, may, open }: { p: Project; re
                         {requirements.map((r) => (
                             <li key={r.id} className={'rounded-lg border p-3 ' + (r.active ? 'border-[#f4f4f5]' : 'border-dashed border-[#e8e8e8] text-[#9ca3af]')}>
                                 <div className="flex flex-wrap items-start justify-between gap-2">
-                                    <div>
+                                    <div className="min-w-0">
                                         <div className={'font-medium ' + (r.active ? '' : 'line-through')}>{r.title}</div>
                                         {r.details && <div className="mt-0.5 whitespace-pre-line text-[12px] text-[#6b7280]">{r.details}</div>}
                                         <div className="mt-1 flex flex-wrap gap-2 text-[11px] text-[#9ca3af]">
@@ -843,8 +932,8 @@ function RequirementsTab({ p, requirements, items, may, open }: { p: Project; re
                                     </div>
                                     {editable && (
                                         <div className="flex gap-1">
-                                            <Button variant="outline" size="sm" onClick={() => { setEditingId(r.id); setForm({ title: r.title, details: r.details ?? '', project_item_id: r.project_item_id ? String(r.project_item_id) : '' }); }}>{t('تعديل')}</Button>
-                                            <Button variant="outline" size="sm" onClick={() => router.delete(route('admin.projects.requirements.destroy', [p.id, r.id]), { preserveScroll: true })}><Trash2 /></Button>
+                                            <Button variant="outline" size="sm" onClick={() => start(r)}>{t('تعديل')}</Button>
+                                            <Button variant="outline" size="sm" aria-label={t('حذف')} onClick={() => router.delete(route('admin.projects.requirements.destroy', [p.id, r.id]), { preserveScroll: true })}><Trash2 /></Button>
                                         </div>
                                     )}
                                 </div>
@@ -852,95 +941,163 @@ function RequirementsTab({ p, requirements, items, may, open }: { p: Project; re
                         ))}
                     </ul>
                 )}
-            </Card>
-
-            <Card className="p-4">
-                {editable ? (
-                    <>
-                        <h2 className="mb-3 text-[15px] font-semibold">{editingId ? t('تعديل متطلّب') : t('متطلّب جديد')}</h2>
-                        <div className="space-y-3">
-                            <Field label="المتطلّب" required><Input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} /></Field>
-                            <Field label="التفاصيل"><Textarea rows={3} value={form.details} onChange={(e) => setForm({ ...form, details: e.target.value })} /></Field>
-                            <Field label="على بند" hint="اختياري — شرطٌ على بندٍ بعينه">
-                                <Select placeholder="المشروع كلّه" value={form.project_item_id} onChange={(e) => setForm({ ...form, project_item_id: e.target.value })} options={items.map((i) => ({ label: i.description, value: i.id }))} />
-                            </Field>
-                            <div className="flex gap-2">
-                                <Button disabled={form.title.trim() === ''} onClick={submit}><Plus />{editingId ? t('حفظ') : t('إضافة')}</Button>
-                                {editingId && <Button variant="outline" onClick={() => { setEditingId(null); setForm({ title: '', details: '', project_item_id: '' }); }}>{t('تراجع')}</Button>}
-                            </div>
-                        </div>
-                    </>
-                ) : (
-                    <p className="text-[13px] text-[#6b7280]">
+                {/* متى تُثبَّت ولماذا لا تُعدَّل — سطرٌ تحت القائمة لا فوقها */}
+                {(p.baselined || open) && (
+                    <p className="mt-3 text-[12px] text-[#9ca3af]">
                         {p.baselined
                             ? t('ثُبّتت المتطلّبات في :at — والتغيير بأمر تغيير يقبله العميل.', { at: p.requirements_baselined_at ?? '' })
-                            : t('لا تملك تعديل المتطلّبات.')}
+                            : editable
+                              ? t('المتطلّبات لم تُثبَّت بعد — تُثبَّت حين يُرسَل نطاق العمل للتوقيع، وبعدها لا تتغيّر إلّا بأمر تغيير يقبله العميل.')
+                              : t('لا تملك تعديل المتطلّبات.')}
                     </p>
                 )}
             </Card>
+
+            <Dialog open={dialog} onOpenChange={(v) => (v ? setDialog(true) : finish())}>
+                <DialogContent className="max-w-md">
+                    <DialogHeader>
+                        <DialogTitle>{editingId ? t('تعديل متطلّب') : t('متطلّب جديد')}</DialogTitle>
+                        <DialogDescription>{t('شروطٌ يجب أن تصدق عند التسليم — بلا سعر ولا كميّة. وما أُزيل يبقى مكتوبًا مع الأمر الذي أزاله.')}</DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-3 px-5">
+                        {error && <p className="text-[12.5px] text-[#b91c1c]">{error}</p>}
+                        <Field label="المتطلّب" required><Input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} /></Field>
+                        <Field label="التفاصيل"><Textarea rows={3} value={form.details} onChange={(e) => setForm({ ...form, details: e.target.value })} /></Field>
+                        <Field label="على بند" hint="اختياري — شرطٌ على بندٍ بعينه">
+                            <Select placeholder="المشروع كلّه" value={form.project_item_id} onChange={(e) => setForm({ ...form, project_item_id: e.target.value })} options={items.map((i) => ({ label: i.description, value: i.id }))} />
+                        </Field>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={finish}>{t('تراجع')}</Button>
+                        <Button disabled={form.title.trim() === ''} onClick={submit}>
+                            {editingId ? <Check /> : <Plus />}
+                            {editingId ? t('حفظ') : t('إضافة')}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }
 
 /* ─────────────────────────── الفريق ─────────────────────────── */
 
-function TeamTab({ p, members, users, may, open }: { p: Project; members: Member[]; users: { id: number; name: string }[]; may: Props['may']; open: boolean }) {
+/** الفريق — «الأعضاء ٥» ثمّ «إضافة عضو» ثمّ القائمة */
+function TeamTab({ p, members, users, may, open, error }: { p: Project; members: Member[]; users: { id: number; name: string }[]; may: Props['may']; open: boolean; error?: string }) {
     const t = useTranslate();
+    const [adding, setAdding] = useState(false);
     const [userId, setUserId] = useState('');
     const [role, setRole] = useState('');
+    const finish = () => {
+        setAdding(false);
+        setUserId('');
+        setRole('');
+    };
 
     return (
-        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
-            <Card className="p-4">
-                <h2 className="mb-3 text-[15px] font-semibold">{t('الفريق')}</h2>
-                {members.length === 0 ? <p className="text-[13px] text-[#9ca3af]">{t('لا أعضاء بعد')}</p> : (
+        <div>
+            <TabHead
+                facts={[{ label: 'الأعضاء', n: members.length }]}
+                empty="لا أعضاء بعد"
+                action={
+                    may.manage && open && (
+                        <Button size="sm" onClick={() => setAdding(true)}>
+                            <Plus />
+                            {t('إضافة عضو')}
+                        </Button>
+                    )
+                }
+            />
+
+            {members.length > 0 && (
+                <Card className="p-4">
                     <ul className="divide-y divide-[#f4f4f5] text-[13px]">
                         {members.map((mb) => (
-                            <li key={mb.id} className="flex items-center justify-between py-2">
-                                <span><span className="font-medium">{mb.name}</span>{mb.role && <span className="text-[#9ca3af]"> — {mb.role}</span>}</span>
-                                {may.manage && open && <Button variant="outline" size="sm" onClick={() => router.delete(route('admin.projects.members.destroy', [p.id, mb.id]), { preserveScroll: true })}><Trash2 /></Button>}
+                            <li key={mb.id} className="flex items-center justify-between gap-3 py-2">
+                                <span className="min-w-0"><span className="font-medium">{mb.name}</span>{mb.role && <span className="text-[#9ca3af]"> — {mb.role}</span>}</span>
+                                {may.manage && open && <Button variant="outline" size="sm" aria-label={t('حذف')} onClick={() => router.delete(route('admin.projects.members.destroy', [p.id, mb.id]), { preserveScroll: true })}><Trash2 /></Button>}
                             </li>
                         ))}
                     </ul>
-                )}
-            </Card>
-            {may.manage && open && (
-                <Card className="p-4">
-                    <h2 className="mb-3 text-[15px] font-semibold">{t('إضافة عضو')}</h2>
-                    <div className="space-y-3">
+                </Card>
+            )}
+
+            <Dialog open={adding} onOpenChange={(v) => (v ? setAdding(true) : finish())}>
+                <DialogContent className="max-w-md" aria-describedby={undefined}>
+                    <DialogHeader>
+                        <DialogTitle>{t('إضافة عضو')}</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-3 px-5">
+                        {error && <p className="text-[12.5px] text-[#b91c1c]">{error}</p>}
                         <Field label="الموظّف" required>
                             <Select placeholder="اختر" value={userId} onChange={(e) => setUserId(e.target.value)} options={users.filter((u) => !members.some((mb) => mb.user_id === u.id)).map((u) => ({ label: u.name, value: u.id }))} />
                         </Field>
                         <Field label="دوره في المشروع"><Input value={role} onChange={(e) => setRole(e.target.value)} placeholder="منسّق ميداني" /></Field>
-                        <Button disabled={userId === ''} onClick={() => router.post(route('admin.projects.members.store', p.id), { user_id: userId, role }, { preserveScroll: true, onSuccess: () => { setUserId(''); setRole(''); } })}><Plus />{t('إضافة')}</Button>
                     </div>
-                </Card>
-            )}
+                    <DialogFooter>
+                        <Button variant="outline" onClick={finish}>{t('تراجع')}</Button>
+                        <Button disabled={userId === ''} onClick={() => router.post(route('admin.projects.members.store', p.id), { user_id: userId, role }, { preserveScroll: true, onSuccess: finish })}><Plus />{t('إضافة')}</Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }
 
 /* ─────────────────────────── المهامّ ─────────────────────────── */
 
-function TasksTab({ p, tasks, users, may, events }: { p: Project; tasks: Task[]; users: { id: number; name: string }[]; may: Props['may']; events: TaskOperation[] }) {
+/**
+ * المهامّ — عملٌ داخليّ لشخصٍ وموعد، لا نطاقٌ يوافق عليه العميل.
+ *
+ * «المفتوحة ٤ · المتأخّرة ١ · المكتملة ٧» ثمّ «إضافة مهمّة» ثمّ القائمة.
+ * والمتأخّرةُ كما يعدّها الخادم على بطاقة القائمة: مفتوحةٌ فات موعدُها.
+ */
+function TasksTab({ p, tasks, users, may, events, today, error }: { p: Project; tasks: Task[]; users: { id: number; name: string }[]; may: Props['may']; events: TaskOperation[]; today: string; error?: string }) {
     const t = useTranslate();
     const blank = { title: '', description: '', assignee_id: '', due_at: '', priority: 'normal', event_operation_id: '' };
     const [form, setForm] = useState(blank);
+    const [adding, setAdding] = useState(false);
     const eventOf = (id: number | null | undefined) => events.find((e) => e.id === id);
+    const pending = tasks.filter((x) => x.status !== 'done');
+    const finish = () => {
+        setAdding(false);
+        setForm(blank);
+    };
 
     return (
-        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
-            <Card className="p-4">
-                <h2 className="mb-1 text-[15px] font-semibold">{t('المهامّ')}</h2>
-                <p className="mb-3 text-[12px] text-[#9ca3af]">{t('عملٌ داخلي لشخص وموعد — ليس نطاقًا يوافق عليه العميل.')}</p>
-                {tasks.length === 0 ? <p className="text-[13px] text-[#9ca3af]">{t('لا مهامّ بعد')}</p> : (
+        <div>
+            <TabHead
+                facts={[
+                    { label: 'المفتوحة', n: pending.length },
+                    { label: 'المتأخّرة', n: pending.filter((x) => isLate(x, today)).length, tone: 'danger' },
+                    { label: 'المكتملة', n: tasks.length - pending.length },
+                ]}
+                empty="لا مهامّ بعد"
+                action={
+                    may.manage && (
+                        <Button size="sm" onClick={() => setAdding(true)}>
+                            <Plus />
+                            {t('إضافة مهمّة')}
+                        </Button>
+                    )
+                }
+            />
+
+            {tasks.length > 0 && (
+                <Card className="p-4">
                     <ul className="divide-y divide-[#f4f4f5] text-[13px]">
                         {tasks.map((task) => (
-                            <li key={task.id} className="flex items-start justify-between gap-3 py-2">
-                                <div className={task.status === 'done' ? 'text-[#9ca3af] line-through' : ''}>
+                            <li key={task.id} className="flex flex-wrap items-start justify-between gap-3 py-2">
+                                <div className={'min-w-0 ' + (task.status === 'done' ? 'text-[#9ca3af] line-through' : '')}>
                                     <div className="font-medium">{task.title}{task.priority === 'high' && <span className="ms-2 rounded-full bg-[#fef2f2] px-2 py-0.5 text-[11px] text-[#b91c1c] no-underline">{t('عاجل')}</span>}</div>
                                     <div className="text-[12px] text-[#6b7280]">
-                                        {task.assignee ?? t('بلا منفّذ')}{task.due_at && <span dir="ltr"> · {task.due_at}</span>}
+                                        {task.assignee ?? t('بلا منفّذ')}
+                                        {task.due_at && (
+                                            <>
+                                                {' · '}
+                                                <span dir="ltr" className={isLate(task, today) ? 'font-medium text-[#b91c1c]' : undefined}>{task.due_at}</span>
+                                            </>
+                                        )}
                                         {eventOf(task.event_operation_id) && <span className="ms-2 rounded-full bg-[#f5f3ff] px-2 py-0.5 text-[11px] text-[#6d28d9] no-underline">{t('فعالية')}: {eventOf(task.event_operation_id)!.code}</span>}
                                     </div>
                                     {task.description && <div className="mt-0.5 text-[12px] text-[#6b7280]">{task.description}</div>}
@@ -950,18 +1107,23 @@ function TasksTab({ p, tasks, users, may, events }: { p: Project; tasks: Task[];
                                         <Button variant="outline" size="sm" onClick={() => router.put(route('admin.projects.tasks.update', [p.id, task.id]), { title: task.title, status: task.status === 'done' ? 'open' : 'done' }, { preserveScroll: true })}>
                                             <Check />{task.status === 'done' ? t('إعادة فتح') : t('تمّ')}
                                         </Button>
-                                        <Button variant="outline" size="sm" onClick={() => router.delete(route('admin.projects.tasks.destroy', [p.id, task.id]), { preserveScroll: true })}><Trash2 /></Button>
+                                        <Button variant="outline" size="sm" aria-label={t('حذف')} onClick={() => router.delete(route('admin.projects.tasks.destroy', [p.id, task.id]), { preserveScroll: true })}><Trash2 /></Button>
                                     </div>
                                 )}
                             </li>
                         ))}
                     </ul>
-                )}
-            </Card>
-            {may.manage && (
-                <Card className="p-4">
-                    <h2 className="mb-3 text-[15px] font-semibold">{t('مهمّة جديدة')}</h2>
-                    <div className="space-y-3">
+                </Card>
+            )}
+
+            <Dialog open={adding} onOpenChange={(v) => (v ? setAdding(true) : finish())}>
+                <DialogContent className="max-w-md">
+                    <DialogHeader>
+                        <DialogTitle>{t('مهمّة جديدة')}</DialogTitle>
+                        <DialogDescription>{t('عملٌ داخلي لشخص وموعد — ليس نطاقًا يوافق عليه العميل.')}</DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-3 px-5">
+                        {error && <p className="text-[12.5px] text-[#b91c1c]">{error}</p>}
                         <Field label="المهمّة" required><Input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} /></Field>
                         <Field label="التفاصيل"><Textarea rows={2} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /></Field>
                         <Field label="المنفّذ"><Select placeholder="بلا منفّذ" value={form.assignee_id} onChange={(e) => setForm({ ...form, assignee_id: e.target.value })} options={users.map((u) => ({ label: u.name, value: u.id }))} /></Field>
@@ -973,7 +1135,67 @@ function TasksTab({ p, tasks, users, may, events }: { p: Project; tasks: Task[];
                                     options={events.map((e) => ({ label: `${e.code} — ${e.name}`, value: e.id }))} />
                             </Field>
                         )}
-                        <Button disabled={form.title.trim() === ''} onClick={() => router.post(route('admin.projects.tasks.store', p.id), form, { preserveScroll: true, onSuccess: () => setForm(blank) })}><Plus />{t('إضافة')}</Button>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={finish}>{t('تراجع')}</Button>
+                        <Button disabled={form.title.trim() === ''} onClick={() => router.post(route('admin.projects.tasks.store', p.id), form, { preserveScroll: true, onSuccess: finish })}><Plus />{t('إضافة')}</Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+        </div>
+    );
+}
+
+/* ─────────────────────────── أوامر التغيير ─────────────────────────── */
+
+function ChangeOrdersTab({ p, rows, m, may, open }: { p: Project; rows: ChangeOrderRow[]; m: Money; may: Props['may']; open: boolean }) {
+    const t = useTranslate();
+
+    return (
+        <div>
+            <TabHead
+                facts={[
+                    { label: 'الأوامر', n: rows.length },
+                    { label: 'بانتظار القرار', n: rows.filter((c) => c.status === 'pending_approval' || c.status === 'sent').length },
+                    { label: 'المقبولة', n: rows.filter((c) => c.status === 'accepted').length },
+                ]}
+                empty="لا أوامر تغيير — النطاق كما قُبل."
+                action={
+                    open && may.change_order && (
+                        <Button size="sm" asChild>
+                            <SmartLink routeName="admin.changeOrders.create" href={route('admin.changeOrders.create', p.id)}><Plus />{t('أمر تغيير')}</SmartLink>
+                        </Button>
+                    )
+                }
+            />
+            {rows.length > 0 && (
+                <Card className="p-4">
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-[13px]">
+                            <thead className="text-[12px] text-[#6b7280]">
+                                <tr className="border-b border-[#e8e8e8]">
+                                    <th className="py-2 text-start">{t('الأمر')}</th>
+                                    <th className="py-2 text-start">{t('طلبه')}</th>
+                                    <th className="py-2 text-end">{t('فرق القيمة')}</th>
+                                    <th className="py-2 text-center">{t('موعد جديد')}</th>
+                                    <th className="py-2 text-center">{t('الحالة')}</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {rows.map((c) => (
+                                    <tr key={c.id} className="border-b border-[#f4f4f5]">
+                                        <td className="py-2">
+                                            <SmartLink routeName="admin.changeOrders.show" href={route('admin.changeOrders.show', c.id)} className="font-medium text-[#1d4ed8]">{c.label}</SmartLink>
+                                            <div className="text-[11px] text-[#9ca3af]">{c.title}</div>
+                                        </td>
+                                        <td className="py-2">{t(PARTY_LABEL[c.requested_by_party] ?? c.requested_by_party)}</td>
+                                        <td className={'py-2 text-end tabular-nums font-semibold ' + ((c.total_delta ?? 0) < 0 ? 'text-[#b91c1c]' : (c.total_delta ?? 0) > 0 ? 'text-[#047857]' : '')}>{c.total_delta !== null && c.total_delta >= 0 ? '+' : ''}{m(c.total_delta)}</td>
+                                        <td className="py-2 text-center" dir="ltr">{c.new_starts_at ?? '—'}</td>
+                                        <td className="py-2 text-center"><span className={'rounded-full px-2 py-1 text-[11px] ' + coTone(c.state)}>{t(CO_STATE_LABEL[c.state] ?? c.state)}</span></td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
                     </div>
                 </Card>
             )}
@@ -981,55 +1203,7 @@ function TasksTab({ p, tasks, users, may, events }: { p: Project; tasks: Task[];
     );
 }
 
-/* ─────────────────────────── أوامر التغيير ─────────────────────────── */
-
-function ChangeOrdersTab({ p, rows, m, may, open }: { p: Project; rows: ChangeOrderRow[]; m: (v: number | null | undefined) => string; may: Props['may']; open: boolean }) {
-    const t = useTranslate();
-
-    return (
-        <Card className="p-4">
-            <div className="mb-3 flex items-center justify-between">
-                <h2 className="text-[15px] font-semibold">{t('أوامر التغيير')}</h2>
-                {open && may.change_order && (
-                    <Button size="sm" asChild>
-                        <SmartLink routeName="admin.changeOrders.create" href={route('admin.changeOrders.create', p.id)}><Plus />{t('أمر تغيير')}</SmartLink>
-                    </Button>
-                )}
-            </div>
-            {rows.length === 0 ? <p className="text-[13px] text-[#9ca3af]">{t('لا أوامر تغيير — النطاق كما قُبل.')}</p> : (
-                <div className="overflow-x-auto">
-                    <table className="w-full text-[13px]">
-                        <thead className="text-[12px] text-[#6b7280]">
-                            <tr className="border-b border-[#e8e8e8]">
-                                <th className="py-2 text-start">{t('الأمر')}</th>
-                                <th className="py-2 text-start">{t('طلبه')}</th>
-                                <th className="py-2 text-end">{t('فرق القيمة')}</th>
-                                <th className="py-2 text-center">{t('موعد جديد')}</th>
-                                <th className="py-2 text-center">{t('الحالة')}</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {rows.map((c) => (
-                                <tr key={c.id} className="border-b border-[#f4f4f5]">
-                                    <td className="py-2">
-                                        <SmartLink routeName="admin.changeOrders.show" href={route('admin.changeOrders.show', c.id)} className="font-medium text-[#1d4ed8]">{c.label}</SmartLink>
-                                        <div className="text-[11px] text-[#9ca3af]">{c.title}</div>
-                                    </td>
-                                    <td className="py-2">{t(PARTY_LABEL[c.requested_by_party] ?? c.requested_by_party)}</td>
-                                    <td className={'py-2 text-end tabular-nums font-semibold ' + ((c.total_delta ?? 0) < 0 ? 'text-[#b91c1c]' : (c.total_delta ?? 0) > 0 ? 'text-[#047857]' : '')}>{c.total_delta !== null && c.total_delta >= 0 ? '+' : ''}{m(c.total_delta)}</td>
-                                    <td className="py-2 text-center" dir="ltr">{c.new_starts_at ?? '—'}</td>
-                                    <td className="py-2 text-center"><span className={'rounded-full px-2 py-1 text-[11px] ' + coTone(c.state)}>{t(CO_STATE_LABEL[c.state] ?? c.state)}</span></td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                </div>
-            )}
-        </Card>
-    );
-}
-
-/* ─────────────────────────── المال ─────────────────────────── */
+/* ─────────────────────────── العمليات ─────────────────────────── */
 
 /**
  * العمليات — المرحلة 10: فعاليّاتُ المشروع بجاهزيّتها.
@@ -1043,14 +1217,21 @@ function OperationsTab({ p, rows, may, open }: { p: Project; rows: OperationRow[
 
     return (
         <div className="space-y-3">
-            {may.operations_manage && open && (
-                <div className="flex justify-end">
-                    <Button onClick={() => router.post(route('admin.operations.store'), { project_id: p.id })}>
-                        <Plus />
-                        {t('فعاليّة جديدة')}
-                    </Button>
-                </div>
-            )}
+            <TabHead
+                facts={[
+                    { label: 'الفعاليّات', n: rows.length },
+                    { label: 'الجارية', n: rows.filter((o) => !['completed', 'cancelled'].includes(o.status)).length },
+                    { label: 'غير جاهزة', n: rows.filter(isUnready).length, tone: 'danger' },
+                ]}
+                action={
+                    may.operations_manage && open && (
+                        <Button size="sm" onClick={() => router.post(route('admin.operations.store'), { project_id: p.id })}>
+                            <Plus />
+                            {t('فعاليّة جديدة')}
+                        </Button>
+                    )
+                }
+            />
             {rows.length === 0 && (
                 <Card className="p-8 text-center text-[13px] text-[#9ca3af]">
                     <CalendarCheck className="mx-auto mb-2 size-6" />
@@ -1114,7 +1295,36 @@ function Figure({ label, value, tone }: { label: string; value: string; tone?: '
     );
 }
 
-function FinancialsTab({ f, m, frozen }: { f: Record<string, number | boolean>; m: (v: number | null | undefined) => string; frozen: Record<string, number> | null }) {
+/* ─────────────────────────── المخزون ─────────────────────────── */
+
+/**
+ * المخزون — «بنود فيها نقص ٢» ثمّ التوقّعُ نفسُه. قراءةٌ لا خصم
+ * (`InventoryForecast`)؛ وشرحُ الأعمدة سطرٌ تحت الجدول لا فقرةٌ فوقه.
+ */
+function InventoryTab({ data, projectId }: { data: ProjectForecast; projectId: number }) {
+    const t = useTranslate();
+    const known = data.in_window && data.lines.length > 0;
+
+    return (
+        <div>
+            <TabHead
+                facts={
+                    known
+                        ? [data.shortages > 0 ? { label: 'بنود فيها نقص', n: data.shortages, tone: 'danger' } : { label: 'لا نقص في المخزون', tone: 'ok' }, { label: 'المنتجات', n: data.lines.length }]
+                        : []
+                }
+            />
+            <Card className="p-4">
+                <ProjectInventoryForecast data={data} projectId={projectId} />
+                {known && <p className="mt-1 text-[11.5px] text-[#9ca3af]">{t('لكل منتج مخزّن: المتوفر الآن، وما تحتاجه مشاريع قبله في الجدول، واحتياج هذا المشروع، والمتوقع بعده.')}</p>}
+            </Card>
+        </div>
+    );
+}
+
+/* ─────────────────────────── المال ─────────────────────────── */
+
+function FinancialsTab({ f, m, frozen }: { f: Record<string, number | boolean>; m: Money; frozen: Record<string, number> | null }) {
     const t = useTranslate();
     const n = (k: string) => Number(f[k] ?? 0);
     const Line = ({ label, k, strong, tone }: { label: string; k: string; strong?: boolean; tone?: string }) => (
@@ -1125,49 +1335,61 @@ function FinancialsTab({ f, m, frozen }: { f: Record<string, number | boolean>; 
     );
 
     return (
-        <div className="grid gap-4 lg:grid-cols-3">
-            <Card className="p-4 text-[13px]">
-                <h2 className="mb-2 flex items-center gap-2 text-[15px] font-semibold"><Wallet className="size-4" />{t('الإيراد')}</h2>
-                <Line label="القيمة المعروضة" k="quoted_value" />
-                <Line label="القيمة المعتمَدة الأصلية" k="approved_value" />
-                <Line label="القيمة المعتمَدة الحالية" k="current_value" strong />
-                <Line label="المفوتَر" k="invoiced" />
-                {n('credited') > 0 && <Line label="إشعارات دائن" k="credited" />}
-                {n('credited') > 0 && <Line label="صافي المفوتَر" k="net_invoiced" strong tone={f.invoiced_above_approved ? 'text-[#b91c1c]' : ''} />}
-                <Line label="المحصَّل" k="collected" />
-                <Line label="الباقي على العميل" k="customer_outstanding" />
-            </Card>
-            <Card className="p-4 text-[13px]">
-                <h2 className="mb-2 text-[15px] font-semibold">{t('التكلفة')}</h2>
-                <p className="mb-2 text-[12px] text-[#9ca3af]">{t('ثلاثة أوعية لا تتداخل: ما صار تكلفةً في الدفتر، وما وُعد به ولم يصر قيدًا بعد، وما لم يُسدَّد من الأوّل.')}</p>
-                <Line label="سندات موردين معتمَدة" k="supplier_actual" />
-                <Line label="مصروفات مدفوعة" k="expenses_paid" />
-                <Line label="عتاد مستهلَك" k="stock_consumed" />
-                <Line label="التكلفة الفعلية" k="actual" strong />
-                <div className="my-2 border-t border-[#f4f4f5]" />
-                <Line label="أوامر شراء مفتوحة" k="open_purchase_orders" />
-                <Line label="سندات معلَّقة بلا أمر" k="pending_supplier_invoices" />
-                <Line label="مصروفات غير مدفوعة" k="expenses_unpaid" />
-                <Line label="الملتزَم" k="committed" strong tone={n('committed') > 0 ? 'text-[#b45309]' : ''} />
-                <div className="my-2 border-t border-[#f4f4f5]" />
-                <Line label="المستحقّ للموردين" k="supplier_outstanding" />
-            </Card>
-            <Card className="p-4 text-[13px]">
-                <h2 className="mb-2 text-[15px] font-semibold">{t('الربحية')}</h2>
-                <Line label="التكلفة المتوقَّعة عند الإتمام" k="expected_cost" />
-                <Line label="الربح المحقَّق" k="realized_gross_profit" strong tone={n('realized_gross_profit') < 0 ? 'text-[#b91c1c]' : 'text-[#047857]'} />
-                <div className="flex justify-between gap-3 py-1"><span className="text-[#6b7280]">{t('نسبة الربح المحقَّق')}</span><span className="tabular-nums">{number(n('realized_margin_percent'))}%</span></div>
-                <Line label="الهامش المتوقَّع" k="forecast_margin" strong tone={n('forecast_margin') < 0 ? 'text-[#b91c1c]' : 'text-[#047857]'} />
-                <div className="flex justify-between gap-3 py-1"><span className="text-[#6b7280]">{t('نسبة الهامش المتوقَّع')}</span><span className="tabular-nums">{number(n('forecast_margin_percent'))}%</span></div>
-                {frozen && (
-                    <p className="mt-3 rounded-md bg-[#fafafa] px-3 py-2 text-[12px] text-[#6b7280]">
-                        {t('لقطة الإقفال')}: {t('الربح المحقَّق')} {m(Number(frozen.realized_gross_profit ?? 0))} · {t('التكلفة الفعلية')} {m(Number(frozen.actual ?? 0))}
-                    </p>
-                )}
-            </Card>
+        <div>
+            <TabHead
+                facts={[
+                    { label: 'المفوتَر', value: m(n('invoiced')) },
+                    { label: 'المحصَّل', value: m(n('collected')) },
+                    { label: 'الباقي على العميل', value: m(n('customer_outstanding')) },
+                ]}
+            />
+            <div className="grid gap-4 lg:grid-cols-3">
+                <Card className="p-4 text-[13px]">
+                    <h2 className="mb-2 flex items-center gap-2 text-[15px] font-semibold"><Wallet className="size-4" />{t('الإيراد')}</h2>
+                    <Line label="القيمة المعروضة" k="quoted_value" />
+                    <Line label="القيمة المعتمَدة الأصلية" k="approved_value" />
+                    <Line label="القيمة المعتمَدة الحالية" k="current_value" strong />
+                    <Line label="المفوتَر" k="invoiced" />
+                    {n('credited') > 0 && <Line label="إشعارات دائن" k="credited" />}
+                    {n('credited') > 0 && <Line label="صافي المفوتَر" k="net_invoiced" strong tone={f.invoiced_above_approved ? 'text-[#b91c1c]' : ''} />}
+                    <Line label="المحصَّل" k="collected" />
+                    <Line label="الباقي على العميل" k="customer_outstanding" />
+                </Card>
+                <Card className="p-4 text-[13px]">
+                    <h2 className="mb-2 text-[15px] font-semibold">{t('التكلفة')}</h2>
+                    <Line label="سندات موردين معتمَدة" k="supplier_actual" />
+                    <Line label="مصروفات مدفوعة" k="expenses_paid" />
+                    <Line label="عتاد مستهلَك" k="stock_consumed" />
+                    <Line label="التكلفة الفعلية" k="actual" strong />
+                    <div className="my-2 border-t border-[#f4f4f5]" />
+                    <Line label="أوامر شراء مفتوحة" k="open_purchase_orders" />
+                    <Line label="سندات معلَّقة بلا أمر" k="pending_supplier_invoices" />
+                    <Line label="مصروفات غير مدفوعة" k="expenses_unpaid" />
+                    <Line label="الملتزَم" k="committed" strong tone={n('committed') > 0 ? 'text-[#b45309]' : ''} />
+                    <div className="my-2 border-t border-[#f4f4f5]" />
+                    <Line label="المستحقّ للموردين" k="supplier_outstanding" />
+                    {/* والشرحُ تحت الأرقام لا فوقها */}
+                    <p className="mt-2 text-[11.5px] text-[#9ca3af]">{t('ثلاثة أوعية لا تتداخل: ما صار تكلفةً في الدفتر، وما وُعد به ولم يصر قيدًا بعد، وما لم يُسدَّد من الأوّل.')}</p>
+                </Card>
+                <Card className="p-4 text-[13px]">
+                    <h2 className="mb-2 text-[15px] font-semibold">{t('الربحية')}</h2>
+                    <Line label="التكلفة المتوقَّعة عند الإتمام" k="expected_cost" />
+                    <Line label="الربح المحقَّق" k="realized_gross_profit" strong tone={n('realized_gross_profit') < 0 ? 'text-[#b91c1c]' : 'text-[#047857]'} />
+                    <div className="flex justify-between gap-3 py-1"><span className="text-[#6b7280]">{t('نسبة الربح المحقَّق')}</span><span className="tabular-nums">{number(n('realized_margin_percent'))}%</span></div>
+                    <Line label="الهامش المتوقَّع" k="forecast_margin" strong tone={n('forecast_margin') < 0 ? 'text-[#b91c1c]' : 'text-[#047857]'} />
+                    <div className="flex justify-between gap-3 py-1"><span className="text-[#6b7280]">{t('نسبة الهامش المتوقَّع')}</span><span className="tabular-nums">{number(n('forecast_margin_percent'))}%</span></div>
+                    {frozen && (
+                        <p className="mt-3 rounded-md bg-[#fafafa] px-3 py-2 text-[12px] text-[#6b7280]">
+                            {t('لقطة الإقفال')}: {t('الربح المحقَّق')} {m(Number(frozen.realized_gross_profit ?? 0))} · {t('التكلفة الفعلية')} {m(Number(frozen.actual ?? 0))}
+                        </p>
+                    )}
+                </Card>
+            </div>
         </div>
     );
 }
+
+/* ─────────────────────────── التسليم ─────────────────────────── */
 
 /**
  * التسليم — حزمُ المشروع وجاهزيّةُ إقفاله من جهتها.
@@ -1179,69 +1401,79 @@ function DeliveryTab({ p, delivery, may, open }: { p: Project; delivery: Deliver
     const t = useTranslate();
 
     return (
-        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
-            <Card className="p-4">
-                <div className="mb-3 flex items-center justify-between gap-2">
-                    <h2 className="font-bold text-[#111]">{t('حزم التسليم')}</h2>
-                    {open && may.delivery && (
+        <div>
+            <TabHead
+                facts={[
+                    { label: 'الحزم', n: delivery.packages.length },
+                    { label: 'المقبولة', n: delivery.readiness.accepted_count },
+                    { label: 'بانتظار العميل', n: delivery.readiness.awaiting_count },
+                ]}
+                empty="لا حزم تسليم بعد"
+                action={
+                    open && may.delivery && (
                         <Button size="sm" asChild>
                             <SmartLink routeName="admin.deliveries.create" href={route('admin.deliveries.create', { project_id: p.id })}>
                                 <PackageCheck />
                                 {t('حزمة تسليم جديدة')}
                             </SmartLink>
                         </Button>
-                    )}
-                </div>
-                {delivery.packages.length === 0 ? (
-                    <p className="text-[13px] text-[#9ca3af]">{t('لا حزم تسليم بعد')}</p>
-                ) : (
-                    <ul className="divide-y divide-[#f3f4f6] text-[13px]">
-                        {delivery.packages.map((d) => (
-                            <li key={d.id} className="flex items-center justify-between gap-3 py-2">
-                                <div className="min-w-0">
-                                    <SmartLink routeName="admin.deliveries.show" href={route('admin.deliveries.show', d.id)} className="font-medium text-[#1d4ed8]">
-                                        {d.label}
-                                    </SmartLink>
-                                    <div className="truncate text-[12px] text-[#6b7280]">{d.title}</div>
-                                </div>
-                                <div className="text-end">
-                                    <span className={'rounded-full px-2 py-1 text-[11px] ' + deliveryTone(d.status)}>
-                                        {t(DELIVERY_STATE_LABEL[d.status] ?? d.status)}
-                                    </span>
-                                    <div className="text-[11px] text-[#9ca3af]" dir="ltr">{d.decided_at ?? d.sent_at ?? ''}</div>
-                                </div>
-                            </li>
-                        ))}
-                    </ul>
+                    )
+                }
+            />
+            <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
+                {delivery.packages.length > 0 && (
+                    <Card className="p-4">
+                        <ul className="divide-y divide-[#f3f4f6] text-[13px]">
+                            {delivery.packages.map((d) => (
+                                <li key={d.id} className="flex items-center justify-between gap-3 py-2">
+                                    <div className="min-w-0">
+                                        <SmartLink routeName="admin.deliveries.show" href={route('admin.deliveries.show', d.id)} className="font-medium text-[#1d4ed8]">
+                                            {d.label}
+                                        </SmartLink>
+                                        <div className="truncate text-[12px] text-[#6b7280]">{d.title}</div>
+                                    </div>
+                                    <div className="shrink-0 text-end">
+                                        <span className={'rounded-full px-2 py-1 text-[11px] ' + deliveryTone(d.status)}>
+                                            {t(DELIVERY_STATE_LABEL[d.status] ?? d.status)}
+                                        </span>
+                                        <div className="text-[11px] text-[#9ca3af]" dir="ltr">{d.decided_at ?? d.sent_at ?? ''}</div>
+                                    </div>
+                                </li>
+                            ))}
+                        </ul>
+                    </Card>
                 )}
-            </Card>
 
-            <Card className="p-4">
-                <h2 className="mb-2 font-bold text-[#111]">{t('جاهزية الإتمام')}</h2>
-                {delivery.readiness.ready ? (
-                    <p className="flex items-center gap-2 text-[13px] text-[#047857]">
-                        <Check className="size-4" />
-                        {t('التسليم مكتمل ومقبول — جاهز للفوترة النهائية.')}
-                    </p>
-                ) : (
-                    <ul className="list-disc space-y-1 ps-5 text-[13px] text-[#92400e]">
-                        {delivery.readiness.blockers.map((b) => (
-                            <li key={b}>{b}</li>
-                        ))}
-                    </ul>
-                )}
-            </Card>
+                <Card className={'p-4 ' + (delivery.packages.length === 0 ? 'lg:col-span-2' : '')}>
+                    <h2 className="mb-2 text-[14px] font-semibold text-[#111]">{t('جاهزية الإتمام')}</h2>
+                    {delivery.readiness.ready ? (
+                        <p className="flex items-center gap-2 text-[13px] text-[#047857]">
+                            <Check className="size-4" />
+                            {t('التسليم مكتمل ومقبول — جاهز للفوترة النهائية.')}
+                        </p>
+                    ) : (
+                        <ul className="list-disc space-y-1 ps-5 text-[13px] text-[#92400e]">
+                            {delivery.readiness.blockers.map((b) => (
+                                <li key={b}>{b}</li>
+                            ))}
+                        </ul>
+                    )}
+                </Card>
+            </div>
         </div>
     );
 }
+
+/* ─────────────────────────── الأداء ─────────────────────────── */
 
 /**
  * تبويبُ الأداء — المرحلة 11.
  *
  * الصيغةُ واحدة (`ProjectProfitability` فوق `ProjectFinancials`): إيرادٌ صافٍ
- * وتكلفةٌ مباشرة ومساهمةٌ وهامش — والاكتمالُ مكتوبٌ فوقها لا مخفيٌّ تحتها.
+ * وتكلفةٌ مباشرة ومساهمةٌ وهامش — والاكتمالُ مكتوبٌ بجانب الخلاصة لا مخفيٌّ
+ * تحتها. وخطُّ الزمن الماليّ مطويٌّ تحت الأرقام.
  */
-function PerformanceTab({ perf, m }: { perf: Performance; m: (v: number | null | undefined) => string }) {
+function PerformanceTab({ perf, m }: { perf: Performance; m: Money }) {
     const t = useTranslate();
     const Line = ({ label, v, strong, tone, hint }: { label: string; v: number | null; strong?: boolean; tone?: string; hint?: string }) => (
         <div className={'flex justify-between gap-3 py-1 ' + (strong ? 'font-semibold' : '')} title={hint}>
@@ -1254,10 +1486,13 @@ function PerformanceTab({ perf, m }: { perf: Performance; m: (v: number | null |
 
     return (
         <div className="space-y-4">
-            <div className="flex flex-wrap items-center gap-2">
-                <CompletenessBadge completeness={perf.completeness} />
-                <span className="text-[12px] text-[#9ca3af]">{perf.basis}</span>
-            </div>
+            <TabHead
+                facts={[
+                    { label: 'المساهمة المحقَّقة', value: m(perf.contribution), tone: perf.contribution < 0 ? 'danger' : 'ok' },
+                    { label: 'الهامش', value: pct(perf.margin_percent) },
+                ]}
+                action={<CompletenessBadge completeness={perf.completeness} />}
+            />
             <div className="grid gap-4 lg:grid-cols-3">
                 <Card className="p-4 text-[13px]">
                     <h2 className="mb-2 text-[15px] font-semibold">{t('الإيراد')}</h2>
@@ -1291,22 +1526,24 @@ function PerformanceTab({ perf, m }: { perf: Performance; m: (v: number | null |
                     {perf.completeness.status !== 'complete' && <p className="mt-2 text-[11px] text-[#b45309]">{perf.completeness.reasons.join(' · ')}</p>}
                 </Card>
             </div>
-            <Card className="overflow-hidden">
-                <h2 className="px-4 pt-3 text-[15px] font-semibold">{t('خطّ الزمن الماليّ')}</h2>
-                <table className="w-full text-[12px]">
-                    <thead className="text-[11px] text-[#6b7280]"><tr><th className="px-3 py-2 text-start">{t('التاريخ')}</th><th className="px-3 py-2 text-start">{t('الواقعة')}</th><th className="px-3 py-2 text-end">{t('المبلغ')}</th></tr></thead>
-                    <tbody>
-                        {perf.timeline.length === 0 && <tr><td colSpan={3} className="px-3 py-6 text-center text-[#9ca3af]">{t('لا وقائعَ ماليّة بعد')}</td></tr>}
-                        {perf.timeline.map((row, i) => (
-                            <tr key={i} className="border-t border-[#f4f4f5]">
-                                <td className="px-3 py-1.5" dir="ltr">{row.at || '—'}</td>
-                                <td className="px-3 py-1.5"><span className={'me-1 rounded-full px-1.5 text-[10px] ' + (KIND_TONE[row.kind] ?? 'bg-[#f4f4f5]')}>{t(KIND_LABEL[row.kind] ?? row.kind)}</span>{row.url ? <a href={row.url} className="hover:text-[#1d4ed8]">{row.label}</a> : row.label}</td>
-                                <td className={'px-3 py-1.5 text-end tabular-nums ' + (row.direction === 'out' ? 'text-[#b91c1c]' : row.direction === 'cash' ? 'text-[#047857]' : '')} dir="ltr">{row.direction === 'out' ? '−' : ''}{m(row.amount)}</td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
-            </Card>
+            {perf.basis && <p className="text-[11.5px] text-[#9ca3af]">{perf.basis}</p>}
+            <MoreDetails label="خطّ الزمن الماليّ">
+                <div className="overflow-x-auto">
+                    <table className="w-full text-[12px]">
+                        <thead className="text-[11px] text-[#6b7280]"><tr><th className="px-3 py-2 text-start">{t('التاريخ')}</th><th className="px-3 py-2 text-start">{t('الواقعة')}</th><th className="px-3 py-2 text-end">{t('المبلغ')}</th></tr></thead>
+                        <tbody>
+                            {perf.timeline.length === 0 && <tr><td colSpan={3} className="px-3 py-6 text-center text-[#9ca3af]">{t('لا وقائعَ ماليّة بعد')}</td></tr>}
+                            {perf.timeline.map((row, i) => (
+                                <tr key={i} className="border-t border-[#f4f4f5]">
+                                    <td className="px-3 py-1.5" dir="ltr">{row.at || '—'}</td>
+                                    <td className="px-3 py-1.5"><span className={'me-1 rounded-full px-1.5 text-[10px] ' + (KIND_TONE[row.kind] ?? 'bg-[#f4f4f5]')}>{t(KIND_LABEL[row.kind] ?? row.kind)}</span>{row.url ? <a href={row.url} className="hover:text-[#1d4ed8]">{row.label}</a> : row.label}</td>
+                                    <td className={'px-3 py-1.5 text-end tabular-nums ' + (row.direction === 'out' ? 'text-[#b91c1c]' : row.direction === 'cash' ? 'text-[#047857]' : '')} dir="ltr">{row.direction === 'out' ? '−' : ''}{m(row.amount)}</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            </MoreDetails>
         </div>
     );
 }

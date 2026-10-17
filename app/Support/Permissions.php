@@ -6,7 +6,7 @@ use App\Models\User;
 
 /**
  * صلاحيات الأقسام حسب الدور داخل لوحة النشاط.
- * '*' = كل الأقسام. dashboard و pos متاحة دائمًا لأي موظف يصل للوحة.
+ * '*' = كل الأقسام.
  */
 class Permissions
 {
@@ -41,7 +41,12 @@ class Permissions
          * وربحيّةَ المشاريع والعملاءَ والموازناتِ والتوقّعاتِ — قراءةً. والقسمُ
          * يفتح الشاشة؛ والإعدادُ والاعتمادُ والسيناريوهاتُ أفعالٌ تُمنح بالاسم.
          */
-        'accountant' => ['dashboard', 'orders', 'customers', 'finance', 'expenses',
+        /*
+         * و«فواتير العملاء» تُفتح له من «المالية» — لا من قسمٍ ثانٍ: كانت
+         * محسوبةً على «المبيعات» (`orders`) يوم كانت الطلباتُ والفواتيرُ بابًا
+         * واحدًا. خرجت المبيعاتُ من النظام وبقيت الفاتورةُ مستندًا ماليًّا.
+         */
+        'accountant' => ['dashboard', 'customers', 'finance', 'expenses',
             'employees', 'reports', 'suppliers', 'purchases', 'projects', 'management'],
         /*
          * وأمينُ المخزن يفتح «المعدّات» — المرحلة 10: القطعُ ذاتُ الهويّة
@@ -53,8 +58,12 @@ class Permissions
          * والبائعُ يفتح «عروض الأسعار»: هي بابُ عمله الأوّل في Event Plus —
          * يعرض قبل أن يُفوتر. ولا يفتحها المحاسب: مستندٌ تجاريٌّ قبل البيع
          * لا أثرَ له في الدفتر.
+         *
+         * ولا «فواتير العملاء» له بدوره: كان يبلغها من «المبيعات» (`orders`)،
+         * وخرجت المبيعاتُ وانتقلت الفاتورةُ إلى «المالية». ومن احتاجها منهم
+         * يُمنح «المالية» بالاسم — لا يرثها لأنّ دورَه `sales`.
          */
-        'sales' => ['dashboard', 'quotations', 'projects', 'orders', 'customers', 'products'],
+        'sales' => ['dashboard', 'quotations', 'projects', 'customers', 'products'],
         // والسائق يقرأ ما سيحمله: العنوان والموعد والمستلِم
         /*
          * ولا يُمنح «العمليات» بالدور — المرحلة 10: المنفّذُ الميدانيّ دورُه
@@ -63,7 +72,8 @@ class Permissions
          * وشاشةُ الموقع تُمنح له بالاسم: القسمُ `operations` مع `operations.status`
          * و`operations.incidents` و`assets.checkout` و`assets.return`.
          */
-        'delivery' => ['dashboard', 'orders', 'projects'],
+        // و«المبيعات» خرجت من دوره مع خروجها من النظام — كان يقرأ منها عنوانَ الطلب
+        'delivery' => ['dashboard', 'projects'],
     ];
 
     /**
@@ -391,7 +401,6 @@ class Permissions
     public const CHANGE_ORDER_CANCEL = 'changeOrder.cancel';
 
     public const ACTIONS = [
-        'order.edit' => 'تصحيح فاتورة مكتملة',
         /*
          * ائتمانُ العميل: وضعُ حدّه وتجاوزُه — فعلٌ واحدٌ لا فعلان.
          *
@@ -523,7 +532,6 @@ class Permissions
      * أنّ كلّ فعلٍ يقع تحت `*` صامتًا يوم يُضاف. فما لا يُذكر هنا لا يُمنح.
      */
     public const ACTION_ROLES = [
-        'order.edit' => ['admin', 'manager'],
         // والموظّف لا يتجاوز حدًّا وضعه صاحبُ العمل: يطلبه ممّن وضعه
         'credit.override' => ['admin', 'manager'],
         /*
@@ -669,6 +677,9 @@ class Permissions
      * وقائمتان تُكتبان باليد تفترقان يومًا، فيمرّ الاختبارُ ويُردّ الموظّف.
      *
      * والاعتمادُ والرفضُ والتجاوزُ ليست فيها: لم تكن تُملَك بقسمٍ يومًا.
+     *
+     * وهي سجلٌّ تاريخيّ لا كتالوج: مفتاحُ `orders` فيها قسمٌ خرج من النظام،
+     * ويبقى لأنّ هجرةَ 2026_09_08 تقرؤه — ولا يقرؤه الحارسُ ولا الشاشة.
      */
     public const LEGACY_SECTION_ACTIONS = [
         'inventory' => [self::RECEIPT_VIEW, self::ATTACHMENT_VIEW],
@@ -843,7 +854,7 @@ class Permissions
 
     /** كل الأقسام التي تظهر في لوحة النشاط — مصدر واحد تقرأ منه الواجهة */
     public const SECTIONS = [
-        'dashboard', 'customers', 'products', 'quotations', 'projects', 'orders',
+        'dashboard', 'customers', 'products', 'quotations', 'projects',
         'inventory', 'finance', 'expenses', 'settings',
         'suppliers', 'purchases', 'employees', 'reports',
         // سجلُّ المراسلات وقوالبُها — المرحلة 6. للمالك والمدير بـ`*`، ويُمنح بالاسم لغيرهما
@@ -865,6 +876,28 @@ class Permissions
         // مستنداتُ الشركة الداخليّة وانتهاؤها. للمالك والمدير بـ`*`، ويُمنح بالاسم
         'documents',
     ];
+
+    /**
+     * مفاتيحُ خرجت من الكتالوج — تُنزع من كلّ قائمةٍ تحملها.
+     *
+     * `orders` قسمُ «المبيعات» القديمة، و`order.edit` تصحيحُ فاتورةِ طلبٍ صدرت.
+     * نزعتهما الهجرةُ من القوائم القائمة (2026_10_17_133000)، وتعود مع نسخةٍ
+     * احتياطيّةٍ أقدمَ منها — فتُنزع عند الاستعادة وعند عرض القائمة لنموذج
+     * الموظّف: التحقّقُ يقبل ما في الكتالوج وحده، ومفتاحٌ لا يراه أحد كان
+     * سيردّ كلَّ حفظٍ لذلك الموظّف.
+     */
+    public const RETIRED = ['orders', 'order.edit'];
+
+    /**
+     * القائمةُ بلا ما خرج من الكتالوج — و`null` («يتبع الوظيفة») تبقى `null`.
+     *
+     * @param  list<string>|null  $list
+     * @return list<string>|null
+     */
+    public static function withoutRetired(?array $list): ?array
+    {
+        return $list === null ? null : array_values(array_diff($list, self::RETIRED));
+    }
 
     /**
      * الأدوار التي تدخل اللوحة.
@@ -952,7 +985,7 @@ class Permissions
     /** القسم → مساره. مصدرٌ واحد يقرؤه التوجيه بعد الدخول وروابط التنبيهات */
     public const ROUTES = [
         'dashboard' => 'admin.dashboard', 'customers' => 'admin.customers.index',
-        'products' => 'admin.products.index', 'orders' => 'admin.orders.index',
+        'products' => 'admin.products.index',
         'inventory' => 'admin.inventory.index',
         'finance' => 'admin.finance.index', 'expenses' => 'admin.expenses.index',
         'settings' => 'admin.settings.index', 'suppliers' => 'admin.suppliers.index',
@@ -1013,7 +1046,7 @@ class Permissions
     {
         $labels = [
             'dashboard' => 'الملخص', 'customers' => 'العملاء', 'products' => 'المنتجات والخدمات',
-            'orders' => 'المبيعات', 'inventory' => 'المخزون',
+            'inventory' => 'المخزون',
             'finance' => 'المالية', 'expenses' => 'مصاريف شهرية', 'settings' => 'الإعدادات',
             'suppliers' => 'الموردين', 'purchases' => 'المشتريات',
             /*
@@ -1123,8 +1156,15 @@ class Permissions
         'goals' => 'dashboard',
         'alerts' => 'settings',
         'backup' => 'settings',
-        // فواتيرُ العملاء مستندُ بيع: من يرى الطلبات يراها
-        'customerInvoices' => 'orders',
+        /*
+         * فواتيرُ العملاء مستندٌ ماليّ: ذمّةٌ وقيدٌ وتحصيل — بابُها «المالية».
+         *
+         * كانت تتبع «المبيعات» (`orders`) يوم كانت الطلباتُ والفواتيرُ بابًا
+         * واحدًا، فبقيت تحت «المالية» في القائمة وقسمُها غيرُه. وخرجت المبيعاتُ
+         * فصار القسمُ ما تقوله القائمة. والقسمُ يفتح الشاشة فقط: الإصدارُ
+         * والإلغاءُ والإشعارُ الدائن والتحصيل أفعالٌ تُمنح بأسمائها.
+         */
+        'customerInvoices' => 'finance',
         // والتحصيلُ مالٌ يدخل الصندوق: بابُه المالية
         'customerPayments' => 'finance',
         // وحزمُ التسليم تتبع عروضَ الأسعار: من يعرض على العميل يسلّمه — المرحلة 5
@@ -1141,7 +1181,7 @@ class Permissions
     ];
 
     /**
-     * التصدير يتبع قسم ما يُصدَّر: admin.export.orders → orders.
+     * التصدير يتبع قسم ما يُصدَّر: admin.export.customers → customers.
      *
      * وما ليس هنا يسقط إلى «الإعدادات» — أضيقُ ما يُمنح. و`reports` كانت
      * ساقطةً فيه: زرّ «CSV» في ملخّص المبيعات يُرسم لكل من يفتح الصفحة،
@@ -1149,7 +1189,7 @@ class Permissions
      * يُصدّر — يفتح تقريرًا مأذونًا له ويُردّ بـ٤٠٣ عن ملفّه.
      */
     public const EXPORT_ALIASES = [
-        'products' => 'products', 'orders' => 'orders', 'customers' => 'customers',
+        'products' => 'products', 'customers' => 'customers',
         'transactions' => 'finance', 'expenses' => 'expenses', 'inventory' => 'inventory',
         'reports' => 'reports',
         // و«الموردون» كانت ساقطةً مثلها: زرّ CSV في شاشة المورّدين يُرسم لمن

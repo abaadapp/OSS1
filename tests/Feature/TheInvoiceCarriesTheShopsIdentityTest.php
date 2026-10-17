@@ -72,9 +72,10 @@ class TheInvoiceCarriesTheShopsIdentityTest extends TestCase
             'password' => bcrypt('password'), 'role' => 'admin', 'status' => 'نشط',
         ]);
 
+        // يكتب الفواتير («المالية») ولا يملك إعدادات الشركة
         $this->seller = User::create([
-            'business_id' => $this->business->id, 'name' => 'البائع', 'email' => 's@eventplus.om',
-            'password' => bcrypt('password'), 'role' => 'sales', 'status' => 'نشط',
+            'business_id' => $this->business->id, 'name' => 'المحاسب', 'email' => 's@eventplus.om',
+            'password' => bcrypt('password'), 'role' => 'accountant', 'status' => 'نشط',
         ]);
 
         $this->customer = Customer::create([

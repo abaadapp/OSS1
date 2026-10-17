@@ -23,10 +23,10 @@ use RuntimeException;
  *
  * لكلّ حدثٍ اقتصاديٍّ مالكُ ترحيلٍ **واحد**:
  *
- *  • بيعةُ نقطة البيع → `Books::recordSale($order)`. تكتب قيدَ الإيراد
- *    وقيدَ التكلفة لحظةَ البيع، وتُدين `receivable` من نفسها حين تكون
- *    الفاتورة غير مدفوعة. فالبيعُ الآجل من نقطة البيع **لا يحتاج قيدًا
- *    ثانيًا** — يحتاج أن يُقال للطلب إنّه غير مدفوع.
+ *  • بيعةُ نقطة البيع (تاريخًا) → كانت `Books::recordSale($order)` تكتب
+ *    قيدَ الإيراد وقيدَ التكلفة لحظةَ البيع، وتُدين `receivable` حين لا
+ *    تُدفع. وخرجت «المبيعات» فلا طلبَ يُنشأ ولا يُقيَّد — وما قُيّد باقٍ،
+ *    والفاتورةُ المولودةُ منه تبقى تُقرأ بقاعدتها أدناه.
  *
  *  • فاتورةٌ يدويّةٌ بلا طلب → تُرحَّل من هنا عند الإصدار:
  *    مدين ذمم العملاء / دائن المبيعات + الضريبة المستحقّة.
@@ -669,106 +669,5 @@ final class CustomerInvoices
 
             return self::issue($invoice->fresh('items'), $userId);
         });
-    }
-
-    /**
-     * إلغاءُ طلبٍ مفوتَر — الورقةُ تعرف بذلك.
-     *
-     * وكان الإلغاء يُنقص الدفتر ولا يُنقص الفاتورة: يُلغى طلبٌ في فاتورةِ
-     * شهرٍ فيبقى مبلغُه مطلوبًا من الشركة، ويُرسَل لها تذكيرٌ بدَينٍ لم يعد
-     * عليها. والفارقُ يظهر في شريط المطابقة ولا يُعرف سببُه.
-     *
-     * ولا تُعاد كتابة الورقة: يُصدَر إشعارُ دائنٍ بمبلغ الطلب — والورقةُ في
-     * يد الشركة تبقى كما استلمتها.
-     *
-     * ولا قيدَ له: `Books::unpostSale` عكست قيدَ الطلب لحظةَ إلغائه.
-     */
-    public static function onOrderCancelled(Order $order, ?int $userId = null, ?string $reason = null): ?CustomerCreditNote
-    {
-        $invoice = CustomerInvoice::whereHas('orders', fn ($q) => $q->whereKey($order->id))
-            ->where('status', CustomerInvoice::ISSUED)->first();
-
-        if (! $invoice) {
-            return null;
-        }
-
-        // ولا يُعكس ما عُكس: إلغاءان لا يكتبان إشعارين
-        $already = CustomerCreditNote::where('customer_invoice_id', $invoice->id)
-            ->where('order_id', $order->id)->exists();
-
-        if ($already) {
-            return null;
-        }
-
-        $amount = round(min((float) $order->total, $invoice->outstanding() + $invoice->paidTotal()), 3);
-
-        if ($amount <= 0) {
-            return null;
-        }
-
-        return self::creditNote(
-            $invoice,
-            $amount,
-            round((float) $order->tax, 3),
-            $reason ?: __('إلغاء الطلب ').$order->number,
-            $userId,
-            self::NOTE_ORDER_CANCELLED,
-            (int) $order->id,
-        );
-    }
-
-    /**
-     * فاتورةٌ من طلبٍ قائم — لقطةُ بنوده، بلا مخزونٍ وبلا إيرادٍ ثانٍ.
-     *
-     * ولا تُنشأ مرّتين للطلب نفسه: ورقتان لدَينٍ واحد تُحصَّل إحداهما ويبقى
-     * الأخرى تُطالب.
-     */
-    public static function fromOrder(Order $order, array $data = [], ?int $userId = null): CustomerInvoice
-    {
-        $existing = CustomerInvoice::whereHas('orders', fn ($q) => $q->whereKey($order->id))
-            ->where('status', '!=', CustomerInvoice::CANCELLED)->first();
-
-        if ($existing) {
-            return $existing;
-        }
-
-        $customer = Customer::where('business_id', $order->business_id)
-            ->whereKey($order->customer_id)->first();
-
-        if (! $customer) {
-            throw new RuntimeException(__('لا فاتورةَ عميلٍ لطلبٍ بلا عميل مسجَّل.'));
-        }
-
-        $lines = $order->items->map(fn ($item) => [
-            'product_id' => $item->product_id,
-            'order_item_id' => $item->id,
-            'description' => $item->name ?: __('بند'),
-            'quantity' => (float) $item->quantity,
-            'unit_price' => (float) $item->price,
-            'discount' => 0.0,
-        ])->all();
-
-        /*
-         * والإجماليُّ يتبع الطلبَ لا حسابَ البنود.
-         *
-         * الطلبُ يحمل خصمًا على مستواه وأجرةَ توصيلٍ وضريبةً حُسبت بقواعده.
-         * وإعادةُ الحساب هنا تُنتج ورقةً بمبلغٍ غير الذي رُحّل في الدفتر —
-         * فتفترق الذمّةُ التشغيليّة عن رصيد `receivable`.
-         */
-        $invoice = self::create((int) $order->business_id, $customer, $data + [
-            'branch_id' => $order->branch_id,
-            'issued_at' => $order->ordered_at ?? $order->created_at,
-        ], $lines, $userId);
-
-        $invoice->orders()->attach($order->id);
-
-        $invoice->update([
-            'subtotal' => round((float) $order->subtotal + (float) $order->delivery_fee, 3),
-            'discount_total' => round((float) $order->discount, 3),
-            'tax_total' => round((float) $order->tax, 3),
-            'total' => round((float) $order->total, 3),
-        ]);
-
-        return $invoice->fresh('items');
     }
 }

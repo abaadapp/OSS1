@@ -129,9 +129,10 @@ export default function EmployeeShow() {
 
     const stats = [
         { label: t('إجمالي المبيعات'), value: m(employee.sales), icon: 'trending-up', color: 'success' },
-        { label: t('عدد الطلبات'), value: String(orderCount), icon: 'shopping-bag', color: 'primary' },
+        // فواتيرُه الصادرة (`Demo::employeeOrderCount` من فواتير العملاء) — والاسمُ القديم للعدد نفسه
+        { label: t('عدد الفواتير'), value: String(orderCount), icon: 'shopping-bag', color: 'primary' },
         {
-            label: t('متوسط الطلب'),
+            label: t('متوسط الفاتورة'),
             value: m(orderCount > 0 ? employee.sales / orderCount : 0),
             icon: 'calculator',
             color: 'info',

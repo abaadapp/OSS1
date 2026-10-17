@@ -133,6 +133,11 @@ class TheMoneyActionsAreNamedOneByOneTest extends TestCase
     public function test_the_upgrade_grants_only_actions_that_exist(): void
     {
         foreach (Permissions::LEGACY_SECTION_ACTIONS as $section => $actions) {
+            // و«المبيعات» (`orders`) قسمٌ خرج من الكتالوج — يبقى مفتاحًا تاريخيًّا تقرؤه الهجرة
+            if (in_array($section, Permissions::RETIRED, true)) {
+                continue;
+            }
+
             $this->assertContains($section, Permissions::SECTIONS, $section);
 
             foreach ($actions as $action) {

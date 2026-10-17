@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Branch;
 use App\Models\Business;
 use App\Models\Customer;
+use App\Models\CustomerInvoice;
 use App\Models\JobTitle;
 use App\Models\Order;
 use App\Models\Product;
@@ -154,16 +155,29 @@ class SearchWorksForEveryRoleTest extends TestCase
         ]);
     }
 
-    /** ومن يملك شاشة الطلبات يُقاد إليها لا إلى نقطة البيع */
-    public function test_the_owner_still_lands_on_the_orders_screen(): void
+    /**
+     * والطلبُ القديم لا يُبحث: خرجت «المبيعات» ولا صفحةَ له، فنتيجتُه رابطٌ ميّت.
+     * والفاتورةُ برقمها تقود إلى «فواتير العملاء».
+     */
+    public function test_an_old_order_is_not_found_and_an_invoice_leads_to_its_page(): void
     {
         $this->sale('INV-999999');
+        $customer = Customer::where('business_id', $this->shop->id)->firstOrFail();
+        $invoice = CustomerInvoice::create([
+            'business_id' => $this->shop->id, 'customer_id' => $customer->id, 'number' => 'CI-777777',
+            'status' => CustomerInvoice::ISSUED, 'issued_at' => now()->toDateString(),
+            'subtotal' => 5, 'tax_total' => 0, 'total' => 5,
+        ]);
 
-        $res = $this->actingAs($this->owner)->getJson(route('admin.search', ['q' => '999999']));
-        $url = $res->json('groups.0.items.0.url');
+        $old = $this->actingAs($this->owner)->getJson(route('admin.search', ['q' => '999999']));
+        $this->assertSame([], $old->json('groups'), 'رقمُ طلبٍ قديم يُعرض نتيجةً');
+        $this->assertStringNotContainsString('/admin/orders', $old->getContent());
 
-        $this->assertStringContainsString('/admin/orders', (string) $url);
+        $url = $this->actingAs($this->owner)->getJson(route('admin.search', ['q' => '777777']))
+            ->json('groups.0.items.0.url');
+        $this->assertSame(route('admin.customerInvoices.show', $invoice->id), $url);
     }
+
     /**
      * ولا يدخل بحثَ التجّار: ليس له متجرٌ يبحث فيه.
      *

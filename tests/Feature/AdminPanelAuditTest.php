@@ -4,15 +4,19 @@ namespace Tests\Feature;
 
 use App\Models\Business;
 use App\Models\Customer;
-use App\Models\Order;
+use App\Models\CustomerInvoice;
+use App\Models\CustomerInvoiceItem;
 use App\Models\Setting;
 use App\Models\User;
 use App\Support\Demo;
+use App\Support\DocumentRenderer;
+use App\Support\Vat;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 /**
- * لوحة النشاط: تنبيهٌ يُطلق حين يجب، وقالبٌ يحكم الأوراق الثلاث كما يَعِد.
+ * لوحة النشاط: تنبيهٌ يُطلق حين يجب، وقالبٌ يحكم ورقتَه كما يَعِد.
  */
 class AdminPanelAuditTest extends TestCase
 {
@@ -36,26 +40,39 @@ class AdminPanelAuditTest extends TestCase
         ]);
     }
 
-    private function order(Customer $c, string $status, string $when, int $n): Order
+    /*
+     * فاتورةُ عميلٍ لا طلب: «آخرُ شراء» صار آخرَ فاتورةٍ صدرت له — انظر
+     * `Demo::smartAlertsFor`. وكان آخرَ طلبٍ قديم، وخرجت «المبيعات».
+     */
+    private function invoice(Customer $c, string $status, string $when, int $n): CustomerInvoice
     {
-        return Order::create([
-            'business_id' => $this->business->id, 'customer_id' => $c->id, 'number' => $n,
-            'customer_name' => $c->name, 'subtotal' => 10, 'tax' => 0, 'discount' => 0, 'total' => 10,
-            'payment_method' => 'نقدي', 'status' => $status, 'ordered_at' => $when,
+        $invoice = CustomerInvoice::create([
+            'business_id' => $this->business->id, 'customer_id' => $c->id, 'number' => 'CI-'.str_pad((string) $n, 6, '0', STR_PAD_LEFT),
+            'customer_name' => $c->name, 'status' => $status, 'issued_at' => $when,
+            'subtotal' => 10, 'discount_total' => 0, 'tax_total' => 0.5, 'total' => 10.5,
         ]);
+        CustomerInvoiceItem::create([
+            'customer_invoice_id' => $invoice->id, 'description' => 'صنف',
+            'quantity' => 1, 'unit_price' => 10, 'discount' => 0,
+            'tax_rate' => 5, 'tax_amount' => 0.5, 'line_total' => 10.5,
+        ]);
+
+        return $invoice;
     }
 
     /* --------------------- تنبيه العميل المتعثّر --------------------- */
 
-    public function test_a_cancelled_order_does_not_make_a_lapsed_customer_look_active(): void
+    public function test_a_cancelled_invoice_does_not_make_a_lapsed_customer_look_active(): void
     {
         /*
          * التنبيه الذي لا يُطلق أسوأ من غيابه: صاحبه يقرأ سكوت الشاشة
          * «لا متعثّر عندي».
+         *
+         * وكان الطلبُ الملغى — خرج مع «المبيعات»؛ والقاعدةُ نفسُها على فاتورةٍ ملغاة.
          */
         $c = Customer::create(['business_id' => $this->business->id, 'name' => 'سالم', 'phone' => '90000001']);
-        $this->order($c, 'مكتمل', now()->subDays(120)->toDateTimeString(), 1);
-        $this->order($c, Order::CANCELLED, now()->toDateTimeString(), 2);
+        $this->invoice($c, CustomerInvoice::ISSUED, now()->subDays(120)->toDateTimeString(), 1);
+        $this->invoice($c, CustomerInvoice::CANCELLED, now()->toDateTimeString(), 2);
 
         $alerts = collect(Demo::smartAlertsFor($this->business->id));
 
@@ -65,8 +82,8 @@ class AdminPanelAuditTest extends TestCase
     public function test_a_customer_who_really_bought_recently_is_not_flagged(): void
     {
         $c = Customer::create(['business_id' => $this->business->id, 'name' => 'ناصر', 'phone' => '90000002']);
-        $this->order($c, 'مكتمل', now()->subDays(120)->toDateTimeString(), 1);
-        $this->order($c, 'مكتمل', now()->subDay()->toDateTimeString(), 2);
+        $this->invoice($c, CustomerInvoice::ISSUED, now()->subDays(120)->toDateTimeString(), 1);
+        $this->invoice($c, CustomerInvoice::ISSUED, now()->subDay()->toDateTimeString(), 2);
 
         $alerts = collect(Demo::smartAlertsFor($this->business->id));
 
@@ -89,62 +106,53 @@ class AdminPanelAuditTest extends TestCase
             $c = Customer::create([
                 'business_id' => $this->business->id, 'name' => "عميل {$i}", 'phone' => '9000'.str_pad((string) $i, 4, '0', STR_PAD_LEFT),
             ]);
-            $this->order($c, 'مكتمل', now()->subDays(120)->toDateTimeString(), $i);
+            $this->invoice($c, CustomerInvoice::ISSUED, now()->subDays(120)->toDateTimeString(), $i);
         }
 
-        \Illuminate\Support\Facades\DB::enableQueryLog();
+        DB::enableQueryLog();
         Demo::smartAlertsFor($this->business->id);
-        $reads = collect(\Illuminate\Support\Facades\DB::getQueryLog())
-            ->filter(fn ($q) => str_contains($q['query'], 'from "orders"'))->count();
-        \Illuminate\Support\Facades\DB::disableQueryLog();
+        $reads = collect(DB::getQueryLog())
+            ->filter(fn ($q) => str_contains($q['query'], 'from "customer_invoices"'))->count();
+        DB::disableQueryLog();
 
         $this->assertLessThanOrEqual(4, $reads, 'صفُّ كل عميلٍ يُقرأ على حدة');
     }
 
-    /* ------------------ القالب يحكم الأوراق الثلاث ------------------ */
+    /* ------------------------ القالب يحكم ورقتَه ------------------------ */
 
-    /* ------------------ القالب يحكم الأوراق الثلاث ------------------ */
+    /*
+     * وكانت تُفحص على فاتورة البيع A4 — والقالبُ يومها يحكم «الأوراق الثلاث»
+     * (الإيصال وA4 والضريبيّة). خرجت مع «المبيعات»؛ والقاعدةُ نفسُها على
+     * فاتورة العميل: ما يَعِد به المحرّرُ يبلغ الورقةَ المرسومة.
+     *
+     * وخرج معها فحصا «إخفاء اسم العميل» و«عدد الأصناف»: لا مقبضَ لهما في
+     * فاتورة العميل عمدًا (فاتورةٌ بلا جهةٍ ليست فاتورة) — انظر `DocumentTemplates::TYPES`.
+     */
 
-    /** فاتورة A4 كما تُرسَم فعلًا — القالب هو ما يُختبر لا ملفّ الـPDF */
+    /** فاتورةُ العميل كما تُرسم في المحرّر — القالب هو ما يُختبر لا ملفّ الـPDF */
     private int $paper = 100;
 
-    private function a4(array $tpl = []): string
+    private function a4(array $override = []): string
     {
         $n = ++$this->paper;
         $c = Customer::create(['business_id' => $this->business->id, 'name' => 'شركة النور', 'phone' => '9000'.$n]);
-        $order = $this->order($c, 'مكتمل', now()->toDateTimeString(), $n);
-        $order->items()->create(['name' => 'صنف', 'quantity' => 1, 'price' => 10, 'total' => 10]);
+        $this->invoice($c, CustomerInvoice::ISSUED, now()->toDateTimeString(), $n);
 
-        return view('pdf.invoice', [
-            'order' => $order->fresh('items'),
-            'qr' => '',
-            'tpl' => $tpl,
-            'customerTax' => null,
-        ])->render();
+        return DocumentRenderer::customerInvoice($this->business->id, $override);
     }
 
     public function test_the_a4_invoice_prints_the_header_line_the_card_promises_it_obeys(): void
     {
-        // البطاقة تقول: «يحكم الإيصال المطبوع وفاتورة A4 والفاتورة الضريبية معًا»
-        $this->assertStringContainsString('سطرٌ تحت الاسم', $this->a4(['tpl_header' => 'سطرٌ تحت الاسم']));
-    }
-
-    public function test_hiding_the_customer_reaches_the_a4_invoice(): void
-    {
-        $this->assertStringContainsString('شركة النور', $this->a4());
-        $this->assertStringNotContainsString('شركة النور', $this->a4(['tpl_show_customer' => '0']));
-    }
-
-    public function test_the_items_count_toggle_reaches_the_a4_invoice(): void
-    {
-        $this->assertStringContainsString('عدد الأصناف', $this->a4(['tpl_show_items_count' => '1']));
-        $this->assertStringNotContainsString('عدد الأصناف', $this->a4(['tpl_show_items_count' => '0']));
+        $this->assertStringContainsString('سطرٌ تحت الاسم', $this->a4(['header' => 'سطرٌ تحت الاسم']));
     }
 
     public function test_the_seller_tax_number_is_hideable_on_a_plain_invoice(): void
     {
-        $with = $this->a4(['tpl_show_vat_no' => '1', 'vat_number' => 'OM1234567']);
-        $without = $this->a4(['tpl_show_vat_no' => '0', 'vat_number' => 'OM1234567']);
+        Setting::create(['business_id' => $this->business->id, 'key' => 'vat_enabled', 'value' => '1']);
+        Setting::create(['business_id' => $this->business->id, 'key' => 'vat_number', 'value' => 'OM1234567']);
+
+        $with = $this->a4(['show_vat_no' => true]);
+        $without = $this->a4(['show_vat_no' => false]);
 
         $this->assertStringContainsString('OM1234567', $with);
         $this->assertStringNotContainsString('OM1234567', $without);
@@ -163,7 +171,7 @@ class AdminPanelAuditTest extends TestCase
         $size = function (string $font): float {
             $this->assertSame(1, preg_match(
                 '/font-size:\s*([\d.]+)pt/',
-                $this->a4(['tpl_font' => $font]),
+                $this->a4(['font' => $font]),
                 $m,
             ), 'الورقة لا تقول مقاس خطّها');
 
@@ -173,6 +181,7 @@ class AdminPanelAuditTest extends TestCase
         $this->assertGreaterThan($size('صغير'), $size('عادي'));
         $this->assertGreaterThan($size('عادي'), $size('كبير'));
     }
+
     /* ------------------ مفاتيح الإعدادات مغلقة ------------------ */
 
     public function test_a_key_the_screen_does_not_own_is_not_stored(): void
@@ -227,7 +236,7 @@ class AdminPanelAuditTest extends TestCase
         $this->assertDatabaseHas('settings', [
             'business_id' => $this->business->id, 'key' => 'vat_enabled', 'value' => '0',
         ]);
-        $this->assertFalse(\App\Support\Vat::enabled($this->business->id));
+        $this->assertFalse(Vat::enabled($this->business->id));
     }
 
     public function test_a_nonsense_value_is_refused_rather_than_saved(): void
@@ -238,12 +247,7 @@ class AdminPanelAuditTest extends TestCase
 
         $this->assertDatabaseMissing('settings', ['business_id' => $this->business->id, 'key' => 'decimals']);
 
-        // ومقاسُ الورق يُردّ في بابه هو
-        $this->actingAs($this->owner)
-            ->post(route('admin.settings.templates.update', 'sale'), ['paper' => 'A3'])
-            ->assertSessionHasErrors('paper');
-
-        $this->assertDatabaseMissing('settings', ['business_id' => $this->business->id, 'key' => 'paper']);
+        // وكان مقاسُ الورق يُردّ في بابه هو — مقبضُ ورقة البيع وحدها، وخرج معها
     }
 
     public function test_the_business_profile_still_lands_in_its_own_table(): void

@@ -6,7 +6,6 @@ use App\Models\Branch;
 use App\Models\Business;
 use App\Models\Customer;
 use App\Models\JobTitle;
-use App\Models\Order;
 use App\Models\Product;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -50,7 +49,9 @@ class TenantIsolationTest extends TestCase
     {
         return [
             'بطاقة عميل' => ['admin.customers.show', Customer::class],
-            'كشف حساب عميل' => ['admin.customers.statement', Customer::class],
+            // كان كشفَ الطلبات القديم (`admin.customers.statement`) — خرج مع «المبيعات»؛ والكشفُ الباقي من الذمم
+            'كشف حساب عميل' => ['admin.finance.customerStatement', Customer::class],
+            'كشف حساب عميل (PDF)' => ['admin.finance.customerStatement.pdf', Customer::class],
             'بطاقة موظف' => ['admin.employees.show', User::class],
             'تعديل موظف' => ['admin.employees.edit', User::class],
             'بطاقة منتج' => ['admin.products.show', Product::class],

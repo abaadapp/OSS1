@@ -4,11 +4,12 @@ namespace Tests\Feature;
 
 use App\Models\Branch;
 use App\Models\Business;
+use App\Models\Customer;
+use App\Models\CustomerInvoice;
 use App\Models\Expense;
 use App\Models\GoodsReceiptNote;
 use App\Models\JobTitle;
 use App\Models\JournalEntry;
-use App\Models\Order;
 use App\Models\Product;
 use App\Models\PurchaseOrder;
 use App\Models\StockAdjustment;
@@ -93,21 +94,26 @@ class HeaderSearchTest extends TestCase
      *
      * أكثرُ ما يُبحث عن رقم فاتورةٍ يقع عند الإرجاع والاعتراض، أي على فاتورةٍ
      * أُلغيت. وكان البحث يمرّ بـ`sold()` فيستثنيها، فيكتب التاجر رقمها ويُقال
-     * له «لا نتائج» — ويظنّ أنّ بيعه ضاع من النظام. وشاشةُ المبيعات تعرضها
-     * وتفتح صفحتها.
+     * له «لا نتائج» — ويظنّ أنّ بيعه ضاع من النظام. وشاشةُ فواتير العملاء
+     * تعرضها وتفتح صفحتها.
+     *
+     * (كانت فاتورةَ طلب — والطلباتُ خرجت من البحث مع «المبيعات»؛ والقاعدةُ
+     * نفسُها على فاتورة العميل.)
      */
     public function test_a_cancelled_receipt_is_found_by_its_code(): void
     {
-        Order::create([
-            'business_id' => $this->business->id, 'number' => 'INV-000042',
-            'customer_name' => 'خالد', 'status' => Order::CANCELLED,
-            'total' => 12, 'ordered_at' => now(),
+        $customer = Customer::create(['business_id' => $this->business->id, 'name' => 'خالد']);
+        $invoice = CustomerInvoice::create([
+            'business_id' => $this->business->id, 'customer_id' => $customer->id, 'customer_name' => $customer->name,
+            'number' => 'INV-000042', 'status' => CustomerInvoice::CANCELLED,
+            'issued_at' => now(), 'due_at' => now()->addDays(30),
+            'subtotal' => 12, 'discount_total' => 0, 'tax_total' => 0, 'total' => 12,
         ]);
 
         $hit = collect($this->search('INV-000042'))->firstWhere('label', 'INV-000042');
 
         $this->assertNotNull($hit, 'فاتورةٌ ملغاة لا تُوجَد برقمها');
-        $this->assertSame(route('admin.orders.show', 'INV-000042'), $hit['url']);
+        $this->assertSame(route('admin.customerInvoices.show', $invoice->id), $hit['url']);
     }
 
     /* ------------------------ رموز السندات ------------------------ */
@@ -241,30 +247,6 @@ class HeaderSearchTest extends TestCase
 
         $this->assertCount(1, $rows);
         $this->assertSame('TRX-000500', $rows[0]['reference']);
-    }
-
-    /**
-     * ومعاملةُ البيع لا تُعرض مرّتين.
-     *
-     * نقطةُ البيع تكتب لكل فاتورةٍ معاملةَ دخلٍ مرجعُها رقمُ الفاتورة نفسه،
-     * فالبحث عن رقمٍ واحد كان سيردّ صفَّين برمزٍ واحد — والفاتورة أنفعُ
-     * الوجهتين: فيها الأصناف والعميل وزرّ الطباعة.
-     */
-    public function test_a_sale_shows_once_not_twice(): void
-    {
-        $order = Order::create([
-            'business_id' => $this->business->id, 'number' => 'INV-000700',
-            'status' => 'مكتمل', 'total' => 40, 'ordered_at' => now(),
-        ]);
-        Transaction::create([
-            'business_id' => $this->business->id, 'order_id' => $order->id,
-            'reference' => 'INV-000700', 'description' => 'مبيعات نقطة البيع',
-            'method' => 'نقدي', 'type' => 'دخل', 'amount' => 40, 'occurred_at' => now(),
-        ]);
-
-        $hits = array_filter($this->labels('INV-000700'), fn ($l) => $l === 'INV-000700');
-
-        $this->assertCount(1, $hits, 'الفاتورة ومعاملتُها صفّان برمزٍ واحد');
     }
 
     /* --------------------- الحدود والصلاحيات --------------------- */

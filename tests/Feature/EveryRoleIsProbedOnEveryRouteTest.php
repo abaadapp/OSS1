@@ -129,7 +129,7 @@ class EveryRoleIsProbedOnEveryRouteTest extends TestCase
              * وربحيّةَ المشاريع والعملاءَ والموازناتِ والتوقّعاتِ قراءةً — والإعدادُ
              * والاعتمادُ أفعالٌ تُمنح بالاسم (`budgets.manage` و`budgets.approve`…).
              */
-            'accountant' => ['dashboard', 'orders', 'customers', 'finance', 'expenses',
+            'accountant' => ['dashboard', 'customers', 'finance', 'expenses',
                 'employees', 'reports', 'suppliers', 'purchases', 'projects', 'management'],
             /*
              * و«المعدّات» مُنحت لأمين المخزن عمدًا في المرحلة 10: القطعُ ذاتُ
@@ -142,13 +142,13 @@ class EveryRoleIsProbedOnEveryRouteTest extends TestCase
              * الأوّل في Event Plus — يعرض قبل أن يُفوتر. ولم يُمنحها المحاسب:
              * مستندٌ تجاريٌّ قبل البيع لا أثرَ له في الدفتر.
              */
-            'sales' => ['dashboard', 'quotations', 'projects', 'orders', 'customers', 'products'],
+            'sales' => ['dashboard', 'quotations', 'projects', 'customers', 'products'],
             /*
              * و«العمليات» (المرحلة 10) لا تُمنح للمنفّذ بالدور: دورُه أدنى
              * الأدوار ويوظّفه المحاسب، فما يُضاف إليه يصير فوق ما يملك المحاسب.
              * تُمنح له بالاسم مع أفعال الموقع.
              */
-            'delivery' => ['dashboard', 'orders', 'projects'],
+            'delivery' => ['dashboard', 'projects'],
         ], Permissions::MAP, 'تغيّر ما يُمنح لدورٍ — إن كان عمدًا فحدّث هذا الحارس');
     }
 

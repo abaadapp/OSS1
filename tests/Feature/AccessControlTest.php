@@ -37,9 +37,11 @@ class AccessControlTest extends TestCase
      * ما لم يُمنح لا يُفتح — ولو كان صاحبُه يدخل اللوحة.
      *
      * دخولُ اللوحة سؤالٌ، وفتحُ الشاشة سؤالٌ آخر: موظّفٌ خُصّصت صلاحياتُه
-     * في «المبيعات» وحدها يمرّ من حارس اللوحة ثمّ يُردّ عند كلّ شاشةٍ
+     * في «العملاء» وحدها يمرّ من حارس اللوحة ثمّ يُردّ عند كلّ شاشةٍ
      * سواها. وكان هذا يُقاس بدور «الكاشير» — وقد زال مع صندوقه — فيُقاس
      * الآن بما يقيسه الحارسُ فعلًا: القائمةُ اليدويّة.
+     *
+     * والقسمُ كان «المبيعات» — وخرج من الكتالوج، فقسمٌ باقٍ مكانَه.
      */
     public function test_a_section_that_was_not_granted_is_not_opened(): void
     {
@@ -47,7 +49,7 @@ class AccessControlTest extends TestCase
         $clerk = User::create([
             'business_id' => $business->id, 'name' => 'موظف', 'email' => 'c@test.local',
             'password' => bcrypt('x'), 'role' => 'sales', 'status' => 'نشط',
-            'permissions' => ['orders'],
+            'permissions' => ['customers'],
         ]);
 
         $this->actingAs($clerk)->get('/admin/dashboard')->assertForbidden();

@@ -5,18 +5,21 @@ namespace Tests\Feature;
 use App\Models\Branch;
 use App\Models\Business;
 use App\Models\Currency;
+use App\Models\GoodsReceiptNote;
+use App\Models\GoodsReceiptNoteItem;
 use App\Models\JobTitle;
-use App\Models\Order;
-use App\Models\OrderItem;
 use App\Models\Setting;
+use App\Models\Supplier;
 use App\Models\User;
+use App\Support\DocumentPaper;
+use App\Support\DocumentRenderer;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Schema;
 use Tests\TestCase;
 
 /**
- * تعديل الموظف، وتعديل الوظائف، وقوالب الإيصال.
+ * تعديل الموظف، وتعديل الوظائف، وقوالب الأوراق.
  *
  * وأخطر ما هنا أن الموظفين مرتبطون بالوظيفة **بالاسم لا بالمعرّف**: تغيير
  * اسم وظيفة يترك حامليها معلَّقين على وظيفة لا وجود لها، وتغيير صلاحيتها
@@ -342,21 +345,31 @@ class EmployeesAndTemplatesTest extends TestCase
         $this->assertSame('وظيفة الجار', $theirs->fresh()->name);
     }
 
-    /* ======================= قوالب الإيصال ======================= */
+    /* ======================= قوالب الأوراق ======================= */
 
-    private function order(): Order
+    /*
+     * وكانت تُفحص على الإيصال الحراريّ — خرج مع «المبيعات».
+     *
+     * والقاعدةُ نفسُها باقيةٌ لكلّ ورقة: ما يُحفظ من المحرّر يبلغ الورقةَ
+     * المرسومة لا القاعدةَ وحدها. فتُفحص على سند الاستلام: فيه اسمُ موظّفٍ
+     * يُخفى، وترويسةٌ وتذييلٌ يُكتبان، وخطٌّ يكبر — كما كان الإيصال.
+     */
+    private function grn(): GoodsReceiptNote
     {
-        $order = Order::create([
-            'business_id' => $this->business->id, 'number' => 'INV-1', 'status' => 'مكتمل',
-            'payment_method' => 'نقدي', 'subtotal' => 10, 'tax' => 0.5, 'total' => 10.5,
-            'employee_name' => 'أحمد', 'branch' => 'الفرع الرئيسي', 'ordered_at' => now(),
+        $branch = Branch::where('business_id', $this->business->id)->firstOrFail();
+        $supplier = Supplier::create(['business_id' => $this->business->id, 'name' => 'مشتل الوادي']);
+
+        $grn = GoodsReceiptNote::create([
+            'business_id' => $this->business->id, 'branch_id' => $branch->id,
+            'supplier_id' => $supplier->id, 'number' => 'GRN-1',
+            'received_at' => now()->toDateString(), 'receiver' => 'أحمد',
         ]);
-        OrderItem::create([
-            'order_id' => $order->id, 'name' => 'باقة ورد',
-            'price' => 10, 'quantity' => 1, 'total' => 10,
+        GoodsReceiptNoteItem::create([
+            'goods_receipt_note_id' => $grn->id, 'name' => 'باقة ورد',
+            'quantity' => 1, 'cost' => 10,
         ]);
 
-        return $order;
+        return $grn;
     }
 
     private function tpl(array $pairs): void
@@ -369,11 +382,13 @@ class EmployeesAndTemplatesTest extends TestCase
     public function test_the_templates_settings_are_saved(): void
     {
         /*
-         * والحفظ من محرّر الورقة لا من نموذج الإعدادات العامّ — والمفاتيح
-         * المخزَّنة هي هي: `tpl_header` لا `tpl_sale_header`، فمن ضبط ورقته
-         * قبل وجود المحرّر يجدها كما تركها.
+         * والحفظ من محرّر الورقة لا من نموذج الإعدادات العامّ — وبمفاتيح
+         * السجلّ (`tpl_grn_header`) لا بأسماء الحقول.
+         *
+         * وكانت على ورقة البيع بمفاتيحها المسطّحة (`tpl_header`) — خرجت مع
+         * «المبيعات»؛ والقاعدةُ نفسُها على سند الاستلام.
          */
-        $this->actingAs($this->owner)->post(route('admin.settings.templates.update', 'sale'), [
+        $this->actingAs($this->owner)->post(route('admin.settings.templates.update', 'grn'), [
             'header' => 'أجمل الورود',
             'footer' => "شكرًا\nنراكم قريبًا",
             'font' => 'كبير',
@@ -381,28 +396,29 @@ class EmployeesAndTemplatesTest extends TestCase
         ])->assertRedirect();
 
         $saved = Setting::where('business_id', $this->business->id)->pluck('value', 'key');
-        $this->assertSame('أجمل الورود', $saved['tpl_header']);
-        $this->assertSame("شكرًا\nنراكم قريبًا", $saved['tpl_footer']);
-        $this->assertSame('كبير', $saved['tpl_font']);
-        $this->assertSame('0', $saved['tpl_show_employee']);
+        $this->assertSame('أجمل الورود', $saved['tpl_grn_header']);
+        $this->assertSame("شكرًا\nنراكم قريبًا", $saved['tpl_grn_footer']);
+        $this->assertSame('كبير', $saved['tpl_grn_font']);
+        $this->assertSame('0', $saved['tpl_grn_show_employee']);
     }
-    public function test_hiding_a_field_removes_it_from_the_rendered_receipt(): void
-    {
-        $order = $this->order();
 
-        $shown = $this->renderReceipt($order);
+    public function test_hiding_a_field_removes_it_from_the_rendered_paper(): void
+    {
+        $grn = $this->grn();
+
+        $shown = $this->renderPaper($grn);
         $this->assertStringContainsString('أحمد', $shown, 'اسم الموظف غائب أصلًا — راجع الاختبار');
 
-        $this->tpl(['tpl_show_employee' => '0']);
-        $this->assertStringNotContainsString('أحمد', $this->renderReceipt($order), 'بقي اسم الموظف رغم إخفائه');
+        $this->tpl(['tpl_grn_show_employee' => '0']);
+        $this->assertStringNotContainsString('أحمد', $this->renderPaper($grn), 'بقي اسم الموظف رغم إخفائه');
     }
 
-    public function test_the_footer_text_reaches_the_receipt(): void
+    public function test_the_footer_text_reaches_the_paper(): void
     {
-        $order = $this->order();
-        $this->tpl(['tpl_footer' => "وداعًا\nنراكم قريبًا"]);
+        $grn = $this->grn();
+        $this->tpl(['tpl_grn_footer' => "وداعًا\nنراكم قريبًا"]);
 
-        $html = $this->renderReceipt($order);
+        $html = $this->renderPaper($grn);
 
         $this->assertStringContainsString('وداعًا', $html);
         $this->assertStringContainsString('نراكم قريبًا', $html, 'ضاع السطر الثاني من التذييل');
@@ -410,29 +426,29 @@ class EmployeesAndTemplatesTest extends TestCase
 
     public function test_the_header_line_appears_only_when_written(): void
     {
-        $order = $this->order();
-        $this->assertStringNotContainsString('أجمل الورود', $this->renderReceipt($order));
+        $grn = $this->grn();
+        $this->assertStringNotContainsString('أجمل الورود', $this->renderPaper($grn));
 
-        $this->tpl(['tpl_header' => 'أجمل الورود']);
-        $this->assertStringContainsString('أجمل الورود', $this->renderReceipt($order));
+        $this->tpl(['tpl_grn_header' => 'أجمل الورود']);
+        $this->assertStringContainsString('أجمل الورود', $this->renderPaper($grn));
     }
 
     public function test_the_font_size_setting_changes_the_rendered_size(): void
     {
-        $order = $this->order();
-        $normal = $this->renderReceipt($order);
+        $grn = $this->grn();
+        $normal = $this->renderPaper($grn);
 
-        $this->tpl(['tpl_font' => 'كبير']);
-        $this->assertNotSame($normal, $this->renderReceipt($order), 'حجم الخط لا أثر له');
+        $this->tpl(['tpl_grn_font' => 'كبير']);
+        $this->assertNotSame($normal, $this->renderPaper($grn), 'حجم الخط لا أثر له');
     }
 
-    /** يبني الإيصال كـHTML (لا PDF) حتى يُفحص محتواه لا حجمه */
-    private function renderReceipt(Order $order): string
+    /** يرسم الورقة كـHTML (لا PDF) بالقالب المحفوظ — حتى يُفحص محتواها لا حجمها */
+    private function renderPaper(GoodsReceiptNote $grn): string
     {
-        return view('pdf.receipt', [
-            'order' => $order->fresh(['items']),
-            'qr' => null,
-            'tpl' => \App\Support\ReceiptTemplate::forBusiness($this->business->id),
-        ])->render();
+        return DocumentRenderer::generic(
+            $this->business->id,
+            'grn',
+            DocumentPaper::forGrn($grn->fresh(['items', 'supplier', 'branch', 'purchaseOrder'])),
+        );
     }
 }

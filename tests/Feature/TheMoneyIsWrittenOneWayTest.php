@@ -2,17 +2,20 @@
 
 namespace Tests\Feature;
 
+use App\Http\Controllers\Admin\CustomerInvoiceController;
 use App\Models\Branch;
 use App\Models\Business;
 use App\Models\Currency;
+use App\Models\Customer;
+use App\Models\CustomerInvoice;
+use App\Models\CustomerInvoiceItem;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\Setting;
 use App\Models\User;
 use App\Support\Demo;
 use App\Support\DocumentPaper;
-use App\Support\DocumentRenderer;
-use App\Support\DocumentTemplates;
+use App\Support\InvoiceBranding;
 use App\Support\Money;
 use App\Support\PublicDocument;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -87,9 +90,24 @@ class TheMoneyIsWrittenOneWayTest extends TestCase
         return $order->load('items');
     }
 
-    private function values(): array
+    /* فاتورةُ عميلٍ بمبلغٍ واحد — الورقةُ التي تمضي باسم التاجر إلى جهةٍ خارجية */
+    private function invoice(float $total = 5.25): CustomerInvoice
     {
-        return DocumentTemplates::settings($this->business->id, 'sale');
+        $customer = Customer::create(['business_id' => $this->business->id, 'name' => 'جهة']);
+
+        $invoice = CustomerInvoice::create([
+            'business_id' => $this->business->id, 'customer_id' => $customer->id,
+            'branch_id' => $this->branch->id, 'number' => 'CINV-000001', 'status' => CustomerInvoice::ISSUED,
+            'issued_at' => now(), 'customer_name' => 'جهة',
+            'subtotal' => $total, 'discount_total' => 0, 'tax_total' => 0, 'total' => $total,
+        ]);
+        CustomerInvoiceItem::create([
+            'customer_invoice_id' => $invoice->id, 'description' => 'تنسيق قاعة',
+            'quantity' => 1, 'unit_price' => $total, 'discount' => 0,
+            'tax_rate' => 0, 'tax_amount' => 0, 'line_total' => $total,
+        ]);
+
+        return $invoice->load('items');
     }
 
     /* ═══════════════ الورقةُ تكتب بعملة صاحبها ═══════════════ */
@@ -127,11 +145,17 @@ class TheMoneyIsWrittenOneWayTest extends TestCase
         $this->dirham();
         $this->actingAs($this->owner);
 
-        $order = $this->order();
+        $bid = (int) $this->business->id;
+        $invoice = $this->invoice();
 
+        /*
+         * كانت ورقةَ البيع وشريطَها — خرجتا مع «المبيعات»؛ والقاعدةُ نفسُها
+         * على فاتورة العميل من باب طباعتها (`PdfController::customerInvoice`).
+         */
         $papers = [
-            'الورقة' => DocumentRenderer::saleSheet($this->business->id, $order, $this->values()),
-            'الشريط' => DocumentRenderer::saleStrip($this->business->id, $order, $this->values(), 80),
+            'فاتورة العميل' => InvoiceBranding::render($bid, null, fn () => CustomerInvoiceController::paper(
+                $bid, $invoice, $invoice->paidTotal(), $invoice->outstanding(), null,
+            )->render()),
         ];
 
         foreach ($papers as $what => $html) {

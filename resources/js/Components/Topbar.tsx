@@ -32,7 +32,7 @@ export default function Topbar({ onMenuClick }: { onMenuClick: () => void }) {
     /**
      * تغذية الجرس الحيّة — بديل استطلاع admin.notifications.feed الذي كان في
      * التخطيط القديم. يبدأ مما أرسله الخادم مع الصفحة ثم يستطلع كل 30 ثانية،
-     * فيظهر الطلب الجديد بلا إعادة تحميل. يتوقف عند إخفاء التبويب.
+     * فيظهر التنبيه الجديد بلا إعادة تحميل. يتوقف عند إخفاء التبويب.
      */
     const [feed, setFeed] = useState(notifications);
     useEffect(() => setFeed(notifications), [notifications]);

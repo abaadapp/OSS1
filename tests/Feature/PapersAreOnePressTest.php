@@ -2,11 +2,13 @@
 
 namespace Tests\Feature;
 
+use App\Http\Controllers\Admin\CustomerInvoiceController;
 use App\Models\Branch;
 use App\Models\Business;
+use App\Models\Customer;
+use App\Models\CustomerInvoice;
+use App\Models\CustomerInvoiceItem;
 use App\Models\DocumentLink;
-use App\Models\Order;
-use App\Models\OrderItem;
 use App\Models\PurchaseOrder;
 use App\Models\PurchaseOrderItem;
 use App\Models\Setting;
@@ -15,7 +17,6 @@ use App\Models\User;
 use App\Support\Document\Pdf\MpdfDriver;
 use App\Support\Pdf;
 use App\Support\PublicDocument;
-use App\Support\ReceiptTemplate;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -54,23 +55,43 @@ class PapersAreOnePressTest extends TestCase
         ]);
     }
 
-    private function order(int $items = 2, string $number = 'INV-000001'): Order
+    /*
+     * فاتورةُ عميلٍ لا طلب: الطلبُ وأوراقُه خرجت مع «المبيعات»، وفاتورةُ
+     * العميل هي ورقةُ الزبون الباقية التي تُطبع وتحمل بابَها العامّ.
+     */
+    private function invoice(string $number = 'CI-000001'): CustomerInvoice
     {
-        $order = Order::create([
-            'business_id' => $this->business->id, 'branch_id' => $this->branch->id, 'branch' => 'مسقط',
-            'number' => $number, 'status' => 'مكتمل', 'customer_name' => 'زبون',
-            'employee_name' => 'كاشير', 'payment_method' => 'نقدي',
-            'subtotal' => 12 * $items, 'total' => 12 * $items, 'ordered_at' => now(),
+        $customer = Customer::create(['business_id' => $this->business->id, 'name' => 'زبون', 'phone' => '90000001']);
+
+        $invoice = CustomerInvoice::create([
+            'business_id' => $this->business->id, 'branch_id' => $this->branch->id,
+            'customer_id' => $customer->id, 'customer_name' => 'زبون',
+            'number' => $number, 'status' => CustomerInvoice::ISSUED,
+            'issued_at' => now(), 'due_at' => now()->addDays(30),
+            'subtotal' => 24.0, 'discount_total' => 0, 'tax_total' => 1.2, 'total' => 25.2,
         ]);
 
-        for ($i = 0; $i < $items; $i++) {
-            OrderItem::create([
-                'order_id' => $order->id, 'name' => 'باقة ورد جوري أحمر رقم '.($i + 1),
-                'price' => 12, 'quantity' => 1, 'total' => 12,
-            ]);
-        }
+        CustomerInvoiceItem::create([
+            'customer_invoice_id' => $invoice->id, 'description' => 'باقة ورد جوري أحمر',
+            'quantity' => 2, 'unit_price' => 12.0, 'discount' => 0,
+            'tax_rate' => 5, 'tax_amount' => 1.2, 'line_total' => 25.2,
+        ]);
 
-        return $order->load('items');
+        return $invoice->load('items');
+    }
+
+    /** الورقةُ مرسومةً كما يرسمها بابُ الطباعة — HTML لا PDF حتى يُفحص محتواها */
+    private function paperHtml(CustomerInvoice $invoice, string $paperUrl = ''): string
+    {
+        return CustomerInvoiceController::paper(
+            $this->business->id,
+            $invoice,
+            0.0,
+            (float) $invoice->total,
+            null,
+            null,
+            ['paperUrl' => $paperUrl],
+        )->render();
     }
 
     /* ————————————— مطبعةٌ واحدة ————————————— */
@@ -130,8 +151,8 @@ class PapersAreOnePressTest extends TestCase
                 continue;
             }
 
-            $inherits = str_contains($code, "@extends('pdf.layout')")
-                || str_contains($code, "@include('pdf.partials.strip-style')");
+            // وكان الشريطُ الحراريّ يرث أنماطَه من `strip-style` — خرج مع «المبيعات» ومعه ملفُّها
+            $inherits = str_contains($code, "@extends('pdf.layout')");
 
             if (! $inherits) {
                 $offenders[] = $name.' (خارج النظام)';
@@ -173,11 +194,19 @@ class PapersAreOnePressTest extends TestCase
      * كان مقاسُه مثبَّتًا `[80, 200]` — ورقةً بارتفاع عشرين سنتيمترًا. فإيصالٌ
      * بأربعين صنفًا يُقسَم صفحتين على طابعةٍ لا تعرف الصفحات: يخرج نصفُه،
      * ثمّ يقفز الورق، ثمّ يخرج نصفُه الثاني بلا ترويسةٍ ولا مجموع.
+     *
+     * وكان يُقاس على الإيصال الحراريّ — خرج مع «المبيعات». والقياسُ نفسُه
+     * باقٍ في `Pdf::stripHeight` (كأخيه أدناه)، فيُقاس على سطورٍ بلا قالب.
      */
     public function test_the_strip_grows_with_what_is_printed(): void
     {
-        $short = Pdf::stripHeight($this->receiptHtml($this->order(2)), 80);
-        $long = Pdf::stripHeight($this->receiptHtml($this->order(40, 'INV-000002')), 80);
+        $rows = fn (int $n) => implode('', array_map(
+            fn ($i) => '<div style="padding: 2mm 0">باقة ورد جوري أحمر رقم '.$i.' — 12.000</div>',
+            range(1, $n),
+        ));
+
+        $short = Pdf::stripHeight($rows(2), 80);
+        $long = Pdf::stripHeight($rows(40), 80);
 
         $this->assertGreaterThan($short, $long, 'إيصالٌ بأربعين صنفًا لا يطول عن إيصالٍ بصنفين');
         $this->assertGreaterThan(200, $long, 'إيصالٌ طويل ما زال يُحشر في ورقةٍ بارتفاعٍ ثابت');
@@ -190,23 +219,28 @@ class PapersAreOnePressTest extends TestCase
     }
     /* ————————————— الرمز والورقة أونلاين ————————————— */
 
-    /** طباعةُ الإيصال تفتح له بابًا أونلاين، ورمزُه يحمل عنوانَه */
+    /**
+     * طباعةُ ورقة الزبون تفتح لها بابًا أونلاين، ورمزُها يحمل عنوانَه.
+     *
+     * وكانت على إيصال الطلب — خرج مع «المبيعات»؛ والقاعدةُ نفسُها على فاتورة العميل.
+     */
     public function test_printing_a_receipt_opens_its_online_copy(): void
     {
-        $order = $this->order();
+        $invoice = $this->invoice();
 
-        $this->actingAs($this->owner)->get(route('admin.orders.pdf', $order->number))->assertOk();
+        $this->actingAs($this->owner)->get(route('admin.customerInvoices.pdf', $invoice->id))->assertOk();
 
-        $link = DocumentLink::where('linkable_id', $order->id)->first();
+        $link = DocumentLink::where('linkable_type', $invoice->getMorphClass())
+            ->where('linkable_id', $invoice->id)->first();
 
-        $this->assertNotNull($link, 'الإيصال طُبع بلا رابطٍ إلى نسخته الحيّة');
+        $this->assertNotNull($link, 'الفاتورة طُبعت بلا رابطٍ إلى نسختها الحيّة');
         $this->assertSame($this->business->id, $link->business_id);
         $this->assertSame(22, strlen($link->token));
 
         $this->get(route('paper.show', $link->token))
             ->assertOk()
-            ->assertSee($order->number)
-            ->assertSee('موثّقة عبر افنت بلس');
+            ->assertSee($invoice->number)
+            ->assertSee('موثّقة من افنت بلس');
 
         /*
          * والرمزُ المطبوع يحمل العنوان نفسه.
@@ -215,12 +249,7 @@ class PapersAreOnePressTest extends TestCase
          * فارغًا، فيمسحه الزبون ولا يجد شيئًا — ولا يشتكي أحد لأنّ الاختبار
          * كان يسأل عن الصفّ وحده.
          */
-        $printed = view('pdf.receipt', [
-            'order' => $order,
-            'tpl' => ReceiptTemplate::forBusiness($this->business->id),
-            'qr' => '', 'paperUrl' => PublicDocument::url($order), 'customerTax' => null,
-            'googleReview' => null, 'width' => 80,
-        ])->render();
+        $printed = $this->paperHtml($invoice, (string) PublicDocument::url($invoice));
 
         $this->assertStringContainsString(
             '<barcode code="'.route('paper.show', $link->token).'"',
@@ -236,14 +265,15 @@ class PapersAreOnePressTest extends TestCase
      */
     public function test_a_paper_keeps_one_address_however_often_it_prints(): void
     {
-        $order = $this->order();
+        // كان الطلبَ — خرج مع «المبيعات»؛ والقاعدةُ نفسُها على فاتورة العميل
+        $invoice = $this->invoice();
 
-        $first = PublicDocument::url($order);
-        PublicDocument::url($order);
-        $third = PublicDocument::url($order);
+        $first = PublicDocument::url($invoice);
+        PublicDocument::url($invoice);
+        $third = PublicDocument::url($invoice);
 
         $this->assertSame($first, $third);
-        $this->assertSame(1, DocumentLink::where('linkable_id', $order->id)->count());
+        $this->assertSame(1, DocumentLink::where('linkable_id', $invoice->id)->count());
     }
 
     /**
@@ -276,44 +306,39 @@ class PapersAreOnePressTest extends TestCase
         $this->get('/i/'.str_repeat('a', 22))->assertNotFound();
     }
 
-    /** ولا يُبنى رمزٌ لطلبٍ لم يُحفظ — معاينةُ المحرّر لا تصنع صفوفًا */
+    /**
+     * ولا يُبنى رمزٌ لورقةٍ لم تُحفظ — معاينةُ المحرّر لا تصنع صفوفًا.
+     *
+     * وكان طلبًا لم يُحفظ — خرج مع «المبيعات»؛ ومعاينةُ فاتورة العميل ترسم
+     * مسودّةً غير محفوظة كذلك (`CustomerInvoices::draft`).
+     */
     public function test_an_unsaved_paper_has_no_address(): void
     {
-        $this->assertNull(PublicDocument::url(new Order(['business_id' => $this->business->id])));
+        $this->assertNull(PublicDocument::url(new CustomerInvoice(['business_id' => $this->business->id])));
         $this->assertNull(PublicDocument::url(null));
         $this->assertSame(0, DocumentLink::count());
     }
 
     /* ————————————— الترويسة ————————————— */
 
-    /** والرقمُ الضريبيّ يُقرأ من موضعٍ واحد، ويظهر في ترويسة الورقة */
+    /**
+     * والرقمُ الضريبيّ يُقرأ من موضعٍ واحد، ويظهر في ترويسة الورقة.
+     *
+     * وكانت فاتورةَ البيع A4 — خرجت مع «المبيعات»؛ والقاعدةُ نفسُها على فاتورة العميل.
+     */
     public function test_the_tax_number_reaches_the_header(): void
     {
+        Setting::create(['business_id' => $this->business->id, 'key' => 'vat_enabled', 'value' => '1']);
         Setting::create(['business_id' => $this->business->id, 'key' => 'vat_number', 'value' => 'OM1100']);
-        Setting::create(['business_id' => $this->business->id, 'key' => 'tpl_show_vat_no', 'value' => '1']);
-        Setting::create(['business_id' => $this->business->id, 'key' => 'tpl_paper', 'value' => 'A4']);
+        Setting::create(['business_id' => $this->business->id, 'key' => 'tpl_customer_invoice_show_vat_no', 'value' => '1']);
 
-        $html = view('pdf.invoice', [
-            'order' => $this->order(),
-            'tpl' => ReceiptTemplate::forBusiness($this->business->id),
-            'qr' => '', 'paperUrl' => '', 'customerTax' => null, 'googleReview' => null,
-        ])->render();
+        $html = $this->paperHtml($this->invoice());
 
         $this->assertStringContainsString('OM1100', $html);
         $this->assertStringContainsString('فاتورة ضريبية', $html);
     }
 
     /* ————————————— أدوات ————————————— */
-
-    private function receiptHtml(Order $order): string
-    {
-        return view('pdf.receipt', [
-            'order' => $order,
-            'tpl' => ReceiptTemplate::forBusiness($this->business->id),
-            'qr' => '', 'paperUrl' => '', 'customerTax' => null, 'googleReview' => null,
-            'width' => 80,
-        ])->render();
-    }
 
     /**
      * عرضُ صفحة الملفّ بالمليمتر — من `MediaBox` وهي بالنقطة.

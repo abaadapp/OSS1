@@ -2,11 +2,13 @@
 
 namespace Tests\Feature;
 
+use App\Http\Controllers\Admin\CustomerInvoiceController;
 use App\Models\Branch;
 use App\Models\Business;
 use App\Models\Currency;
 use App\Models\Customer;
 use App\Models\CustomerInvoice;
+use App\Models\CustomerInvoiceItem;
 use App\Models\GoodsReceiptNote;
 use App\Models\Order;
 use App\Models\OrderItem;
@@ -17,8 +19,7 @@ use App\Models\User;
 use App\Support\CustomerInvoices;
 use App\Support\Document\PaperSize;
 use App\Support\Document\Snapshot;
-use App\Support\DocumentRenderer;
-use App\Support\DocumentTemplates;
+use App\Support\InvoiceBranding;
 use App\Support\Money;
 use App\Support\Pdf;
 use App\Support\PublicDocument;
@@ -68,40 +69,67 @@ class ADocumentCanBeTrustedTest extends TestCase
         return [$b, $branch, $user];
     }
 
-    private function order(Business $b, Branch $br, string $number = 'INV-000001', int $items = 1, bool $stamp = true): Order
+    /** طلبٌ قديم — صفوفُه باقيةٌ للقراءة بعد خروج «المبيعات» */
+    private function order(Business $b, Branch $br, string $number = 'INV-000001'): Order
     {
-        $attrs = [
+        $order = Order::create([
             'business_id' => $b->id, 'branch_id' => $br->id, 'branch' => $br->name,
             'number' => $number, 'status' => 'مكتمل', 'customer_name' => 'شركة الواحة',
             'employee_name' => 'سالم', 'payment_method' => 'نقدي',
-            'subtotal' => 12.5 * $items, 'tax' => 0.625 * $items, 'total' => 13.125 * $items,
+            'subtotal' => 12.5, 'tax' => 0.625, 'total' => 13.125,
             'ordered_at' => now(),
-        ];
+            Snapshot::COLUMN => Snapshot::capture((int) $b->id),
+        ]);
 
-        if ($stamp) {
-            $attrs[Snapshot::COLUMN] = Snapshot::capture((int) $b->id);
-        }
-
-        $order = Order::create($attrs);
-
-        for ($i = 0; $i < $items; $i++) {
-            OrderItem::create([
-                'order_id' => $order->id, 'name' => 'باقة ورد '.($i + 1),
-                'price' => 12.5, 'quantity' => 1, 'total' => 12.5,
-            ]);
-        }
+        OrderItem::create([
+            'order_id' => $order->id, 'name' => 'باقة ورد 1',
+            'price' => 12.5, 'quantity' => 1, 'total' => 12.5,
+        ]);
 
         return $order->load('items');
     }
 
-    private function sheet(Order $order, ?int $bid = null): string
+    /*
+     * فاتورةُ عميلٍ صادرة — الورقةُ التي تُقاس عليها قواعدُ الثقة هنا.
+     * كانت ورقةَ البيع — خرجت مع «المبيعات»؛ والقاعدةُ نفسُها على فاتورة العميل.
+     */
+    private function invoice(string $number = 'CINV-000001', int $items = 1, bool $stamp = true, ?Customer $customer = null): CustomerInvoice
     {
-        $bid ??= (int) $this->business->id;
-        $v = DocumentTemplates::settings($bid, 'sale');
-        $v['paper'] = PaperSize::A4;
-        $v['show_vat_no'] = true;
+        $customer ??= Customer::create(['business_id' => $this->business->id, 'name' => 'شركة الواحة', 'phone' => '99887766']);
 
-        return DocumentRenderer::saleSheet($bid, $order, $v);
+        $attrs = [
+            'business_id' => $this->business->id, 'customer_id' => $customer->id,
+            'branch_id' => $this->branch->id, 'number' => $number, 'status' => CustomerInvoice::ISSUED,
+            'issued_at' => now(), 'customer_name' => $customer->name,
+            'subtotal' => 12.5 * $items, 'discount_total' => 0,
+            'tax_total' => 0.625 * $items, 'total' => 13.125 * $items,
+        ];
+
+        if ($stamp) {
+            $attrs[Snapshot::COLUMN] = Snapshot::capture((int) $this->business->id);
+        }
+
+        $invoice = CustomerInvoice::create($attrs);
+
+        for ($i = 0; $i < $items; $i++) {
+            CustomerInvoiceItem::create([
+                'customer_invoice_id' => $invoice->id, 'description' => 'باقة ورد '.($i + 1),
+                'quantity' => 1, 'unit_price' => 12.5, 'discount' => 0,
+                'tax_rate' => 5, 'tax_amount' => 0.625, 'line_total' => 13.125,
+            ]);
+        }
+
+        return $invoice->load('items');
+    }
+
+    /** الورقةُ من باب طباعتها — كما يرسمها `PdfController::customerInvoice` */
+    private function sheet(CustomerInvoice $invoice): string
+    {
+        $bid = (int) $this->business->id;
+
+        return InvoiceBranding::render($bid, null, fn () => CustomerInvoiceController::paper(
+            $bid, $invoice, $invoice->paidTotal(), $invoice->outstanding(), null, ['show_vat_no' => true],
+        )->render());
     }
 
     /* ═══════════ §4 — الورقةُ الصادرة لا تُعاد كتابتُها ═══════════ */
@@ -112,6 +140,9 @@ class ADocumentCanBeTrustedTest extends TestCase
      * وهو ما كان يقع: بنودُ الفاتورة ملقوطة، لكنّ هويّةَ البائع والعملةَ
      * كانتا تُقرآن حيّتين. فورقةٌ صدرت بـ«12.500 OMR» تُعاد طباعتُها
      * بـ«12.50 د.إ» ورقمٍ ضريبيٍّ لم يكن قائمًا يومَ البيع.
+     *
+     * والاسمُ وحده لا يُبدَّل هنا: على فاتورة العميل هو «الاسمُ المعروض» من
+     * `InvoiceBranding` حيًّا عمدًا، لا من اللقطة — انظر `CustomerInvoiceController::paper`.
      */
     public function test_an_issued_paper_does_not_change_when_the_shop_does(): void
     {
@@ -123,13 +154,13 @@ class ADocumentCanBeTrustedTest extends TestCase
         $product = Product::create(['business_id' => $this->business->id, 'name' => 'باقة ورد 1', 'price' => 12.5, 'active' => true]);
         $customer = Customer::create(['business_id' => $this->business->id, 'name' => 'شركة الواحة', 'phone' => '99887766']);
 
-        $order = $this->order($this->business, $this->branch);
-        $before = $this->sheet($order);
+        $invoice = $this->invoice(customer: $customer);
+        $before = $this->sheet($invoice);
 
         // ═══ ثمّ يتبدّل كلُّ ما تقرؤه الورقة حيًّا ═══
         $product->update(['name' => 'اسمٌ جديد تمامًا', 'price' => 999.999]);
         $customer->update(['name' => 'اسمٌ بعد الدمج']);
-        $this->business->update(['name' => 'زهور الخليج الدولية', 'address' => 'عنوانٌ آخر', 'phone' => '+968 0000 0000', 'email' => 'new@x.om']);
+        $this->business->update(['address' => 'عنوانٌ آخر', 'phone' => '+968 0000 0000', 'email' => 'new@x.om']);
         Setting::where('business_id', $this->business->id)->where('key', 'vat_number')->update(['value' => 'OM9999999999']);
         $this->branch->update(['name' => 'فرعٌ أُعيدت تسميتُه']);
         Currency::create([
@@ -137,7 +168,7 @@ class ADocumentCanBeTrustedTest extends TestCase
             'symbol' => 'د.إ', 'rate' => 1.0, 'is_base' => true, 'active' => true,
         ]);
 
-        $after = $this->sheet($order->fresh('items'));
+        $after = $this->sheet($invoice->fresh('items'));
 
         $this->assertSame($before, $after, 'الورقةُ الصادرة تغيّرت بعد إصدارها');
         $this->assertStringContainsString('OM1100234567', $after, 'الرقمُ الضريبيُّ ليس رقمَ يومها');
@@ -155,22 +186,22 @@ class ADocumentCanBeTrustedTest extends TestCase
     {
         $this->actingAs($this->owner);
 
-        $order = $this->order($this->business, $this->branch, 'INV-000009', stamp: false);
+        $invoice = $this->invoice('CINV-000009', stamp: false);
 
-        $this->assertFalse(Snapshot::stamped($order));
-        $this->assertStringContainsString('زهور الخليج', $this->sheet($order), 'ورقةٌ بلا لقطةٍ لا تُرسم');
+        $this->assertFalse(Snapshot::stamped($invoice));
+        $this->assertStringContainsString('زهور الخليج', $this->sheet($invoice), 'ورقةٌ بلا لقطةٍ لا تُرسم');
     }
 
     /** ولا يُعاد ختمُ ما خُتم — وإلّا كُتب عليها حالُ اليوم بدل حال يومها */
     public function test_a_stamp_is_never_written_twice(): void
     {
-        $order = $this->order($this->business, $this->branch);
-        $first = $order->getAttribute(Snapshot::COLUMN);
+        $invoice = $this->invoice();
+        $first = $invoice->getAttribute(Snapshot::COLUMN);
 
         $this->business->update(['name' => 'اسمٌ آخر']);
-        Snapshot::stamp($order, (int) $this->business->id);
+        Snapshot::stamp($invoice, (int) $this->business->id);
 
-        $this->assertSame($first, $order->getAttribute(Snapshot::COLUMN), 'اللقطةُ أُعيد ختمُها');
+        $this->assertSame($first, $invoice->getAttribute(Snapshot::COLUMN), 'اللقطةُ أُعيد ختمُها');
     }
 
     /** وفاتورةُ العميل تُختم لحظةَ الإصدار لا لحظةَ الكتابة */
@@ -196,7 +227,6 @@ class ADocumentCanBeTrustedTest extends TestCase
     public function test_a_merchant_cannot_open_a_neighbours_paper(): void
     {
         [$other, $otherBranch] = $this->tenant('متجر الجار', 'b@eventplusapp.om');
-        $theirs = $this->order($other, $otherBranch, 'INV-000777');
 
         $po = PurchaseOrder::create([
             'business_id' => $other->id, 'branch_id' => $otherBranch->id, 'number' => 'PO-000777',
@@ -215,13 +245,12 @@ class ADocumentCanBeTrustedTest extends TestCase
 
         $this->actingAs($this->owner);
 
+        // وكانت أبوابُ الطلب الثلاثة هنا (الإيصال والفاتورة الضريبية وسند التسليم) — خرجت مع «المبيعات»
         $doors = [
-            'إيصال الطلب' => route('admin.orders.pdf', $theirs->number),
-            'الفاتورة الضريبية' => route('admin.orders.taxInvoice', $theirs->number),
-            'سند التسليم' => route('admin.orders.deliveryNote', $theirs->number),
             'أمر الشراء' => route('admin.purchases.pdf', $po->id),
             'سند الاستلام' => route('admin.inventory.receipts.pdf', $grn->id),
             'فاتورة العميل' => route('admin.customerInvoices.show', $invoice->id),
+            'ورقة فاتورة العميل' => route('admin.customerInvoices.pdf', $invoice->id),
         ];
 
         foreach ($doors as $what => $url) {
@@ -234,7 +263,8 @@ class ADocumentCanBeTrustedTest extends TestCase
     {
         $this->actingAs($this->owner);
 
-        $this->get(route('admin.orders.pdf', 'INV-999999'))->assertStatus(404);
+        // كان بابَ إيصال الطلب — خرج مع «المبيعات»؛ والقاعدةُ نفسُها على ورقة فاتورة العميل
+        $this->get(route('admin.customerInvoices.pdf', 999999))->assertStatus(404);
         $this->get('/i/'.str_repeat('z', 22))->assertStatus(404);
     }
 
@@ -341,16 +371,16 @@ class ADocumentCanBeTrustedTest extends TestCase
 
     /* ═══════════ §16 — نصُّ المستخدم نصٌّ لا شفرة ═══════════ */
 
-    /** اسمُ صنفٍ فيه وسمٌ لا يصير وسمًا على الورقة */
+    /** اسمُ بندٍ فيه وسمٌ لا يصير وسمًا على الورقة */
     public function test_a_product_name_cannot_become_markup(): void
     {
         $this->actingAs($this->owner);
 
-        $order = $this->order($this->business, $this->branch, 'INV-000300');
-        $order->items->first()->update(['name' => '<script>alert(1)</script><b>x</b>']);
-        $order->update(['customer_name' => '</td></tr><script>x</script>']);
+        $invoice = $this->invoice('CINV-000300');
+        $invoice->items->first()->update(['description' => '<script>alert(1)</script><b>x</b>']);
+        $invoice->update(['customer_name' => '</td></tr><script>x</script>']);
 
-        $html = $this->sheet($order->fresh('items'));
+        $html = $this->sheet($invoice->fresh('items'));
 
         $this->assertStringNotContainsString('<script>', $html, 'شفرةٌ من اسم صنفٍ بلغت الورقة');
         $this->assertStringContainsString('&lt;script&gt;', $html, 'النصُّ لم يُهرَّب');
@@ -364,8 +394,8 @@ class ADocumentCanBeTrustedTest extends TestCase
     {
         $this->actingAs($this->owner);
 
-        $order = $this->order($this->business, $this->branch, 'INV-000400', items: 100);
-        $pdf = Pdf::sheet($this->sheet($order), 'x', PaperSize::A4)->getContent();
+        $invoice = $this->invoice('CINV-000400', items: 100);
+        $pdf = Pdf::sheet($this->sheet($invoice), 'x', PaperSize::A4)->getContent();
 
         $pages = substr_count($pdf, '/Type /Page') - substr_count($pdf, '/Type /Pages');
 
@@ -378,12 +408,11 @@ class ADocumentCanBeTrustedTest extends TestCase
     {
         $this->actingAs($this->owner);
 
-        $order = $this->order($this->business, $this->branch, 'INV-000500');
-        $v = DocumentTemplates::settings($this->business->id, 'sale');
-        $v['paper'] = PaperSize::A4;
+        // كانت ورقةَ البيع — خرجت مع «المبيعات»؛ والقاعدةُ نفسُها على فاتورة العميل
+        $invoice = $this->invoice('CINV-000500');
 
-        $a = DocumentRenderer::saleSheet($this->business->id, $order, $v);
-        $b = DocumentRenderer::saleSheet($this->business->id, $order->fresh('items'), $v);
+        $a = $this->sheet($invoice);
+        $b = $this->sheet($invoice->fresh('items'));
 
         $this->assertSame($a, $b, 'رسمان مختلفان لورقةٍ واحدة');
         $this->assertStringContainsString('@media screen', $a, 'المعاينةُ بلا صندوقِ ورقة');

@@ -14,7 +14,6 @@ use App\Models\Expense;
 use App\Models\ExpenseType;
 use App\Models\FixedAsset;
 use App\Models\JobTitle;
-use App\Models\Order;
 use App\Models\PayrollLine;
 use App\Models\PayrollRun;
 use App\Models\Product;
@@ -22,7 +21,6 @@ use App\Models\PurchaseOrder;
 use App\Models\StockAdjustment;
 use App\Models\Supplier;
 use App\Models\SupplierInvoice;
-use App\Models\Transaction;
 use App\Models\User;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -73,6 +71,9 @@ class DemoStore
      *
      * و«كبير» ليس بلا حدّ: الخادم بذاكرةٍ واحدة، والبناء يجري في طلبٍ واحد.
      * ما فوق هذا يحتاج طابورًا — وهو معطّلٌ على الخادم اليوم.
+     *
+     * و`orders` مقياسُ حجمٍ لا طلبات: منه يُشتقّ عددُ أوامر الشراء
+     * (`purchases`). والطلباتُ نفسُها لم تعد تُولَّد — خرجت «المبيعات».
      */
     public const SIZES = [
         'صغير' => ['products' => 40, 'customers' => 60, 'orders' => 250, 'months' => 6, 'suppliers' => 6],
@@ -234,17 +235,19 @@ class DemoStore
 
             /*
              * الكتالوجُ كتالوجُ الشركة المطبوع (`DemoCatalog`). وما له رفٌّ
-             * (البطاقاتُ المطبوعة) وحدَه يُشترى ويُجرد، والمبيعاتُ من البنود
-             * ذوات السعر الثابت.
+             * (البطاقاتُ المطبوعة) وحدَه يُشترى ويُجرد.
              */
             $catalog = $this->products($branches);
             $stocked = array_values(array_filter($catalog, fn ($p) => $p->kind === Product::ITEM));
-            $sellable = array_values(array_filter($catalog, fn ($p) => $p->kind !== Product::PACKAGE && $p->price > 0 && $p->price <= 100));
-            $customers = $this->customers();
+            $this->customers();
             $suppliers = $this->suppliers();
 
+            /*
+             * ولا مبيعاتِ صندوق: «المبيعات» خرجت من النظام، وما تبيعه الشركةُ
+             * عروضٌ ومشاريعُ وفواتير — يكتبها `DemoEvents` أسفل. وكانت تُولَّد
+             * هنا طلباتٌ بقيودها وتكلفتها في جدولٍ لا شاشةَ له.
+             */
             $this->purchases($suppliers, $stocked, $registered);
-            $this->sales($sellable, $customers, $staff, $branches, $registered);
             $this->expenses($registered);
             $this->payroll($staff, $registered);
             $this->assets($registered);
@@ -511,123 +514,6 @@ class DemoStore
                     ['account' => 'bank', 'credit' => $paid],
                 ], $at->copy()->addDays(10), 'مشتريات');
             }
-        }
-    }
-
-    /* ------------------------------ المبيعات ------------------------------ */
-
-    private function sales(array $products, array $customers, array $staff, array $branches, Carbon $from): void
-    {
-        $bid = $this->business->id;
-        // ‏`diffInDays` تُرجع عددًا عشريًّا في Carbon الحديث، و`intdiv` لا تقبله
-        $days = max(1, (int) $from->diffInDays(now()));
-        $sellers = array_values(array_filter($staff, fn ($u) => $u->role === 'sales'));
-        $statuses = ['مكتمل', 'مكتمل', 'مكتمل', 'مكتمل', 'قيد التجهيز', 'جاهز', 'خرج للتوصيل', 'ملغي'];
-        $methods = ['نقدي', 'بطاقة', 'تحويل', 'نقدي', 'بطاقة'];
-
-        /** مجاميع الشهر لترحيلها قيدًا واحدًا — انظر ترويسة الصنف */
-        $monthly = [];
-
-        /* والمبيعاتُ المباشرة سُدسُ الحجم: عملُ الشركة عروضٌ وفواتير، لا كاشير */
-        $orders = max(60, intdiv($this->size['orders'], 6));
-
-        for ($i = 0; $i < $orders; $i++) {
-            $at = $from->copy()->addDays(intdiv($i * $days, $orders))
-                ->setTime(9 + ($i % 12), ($i * 13) % 60);
-            $branch = $branches[$i % count($branches)];
-            $customer = $customers[($i * 7) % count($customers)];
-            $seller = $sellers[$i % max(1, count($sellers))] ?? $staff[0];
-            $status = $statuses[$i % count($statuses)];
-
-            $items = [];
-            $subtotal = 0.0;
-            $cost = 0.0;
-            for ($k = 0; $k < 1 + ($i % 5); $k++) {
-                $p = $products[($i * 5 + $k * 3) % count($products)];
-                $qty = 1 + ($i + $k) % 4;
-                $subtotal += $p->price * $qty;
-                $cost += $p->cost * $qty;
-                $items[] = [$p, $qty];
-            }
-
-            $subtotal = round($subtotal, 3);
-            $tax = round($subtotal * 0.05, 3);
-            $total = round($subtotal + $tax, 3);
-
-            $order = Order::create([
-                'business_id' => $bid, 'number' => 'DEMO-' . str_pad((string) (10000 + $i), 6, '0', STR_PAD_LEFT),
-                'branch_id' => $branch->id, 'branch' => $branch->name,
-                'customer_id' => $customer->id, 'customer_name' => $customer->name,
-                'employee_name' => $seller->name, 'status' => $status,
-                'payment_method' => $methods[$i % count($methods)],
-                'payment_status' => $status === 'ملغي' ? 'غير مدفوع' : 'مدفوع',
-                'subtotal' => $subtotal, 'tax' => $tax, 'total' => $total,
-                'ordered_at' => $at,
-            ]);
-
-            foreach ($items as [$p, $qty]) {
-                $order->items()->create([
-                    'product_id' => $p->id, 'name' => $p->name, 'price' => $p->price,
-                    // لقطةُ التكلفة كما يكتبها الصندوق: بدونها يقرأ التقرير
-                    // بطاقةَ المنتج اليوم، فيتحرّك ربحُ الشهر الماضي مع كلّ شراء
-                    'cost' => $p->cost,
-                    'quantity' => $qty, 'total' => round($p->price * $qty, 3),
-                ]);
-            }
-
-            if ($status === 'ملغي') {
-                continue;
-            }
-
-            /*
-             * وقيدُ الدخل مع الفاتورة — لا بعدها ولا بدلها.
-             *
-             * المالية كلُّها تقرأ `transactions`: إجمالي المبيعات، وصافي
-             * الإيراد، والضريبة المحصّلة، ووسائل الدفع. والربحية تقرأ منها
-             * الإيراد وتقرأ التكلفة من بنود الطلبات.
-             *
-             * فبذورٌ تكتب ألف فاتورةٍ بلا قيدٍ واحد تجعل الشاشة تقول: بيعٌ
-             * بأربعمئة ريال، وتكلفةُ مبيعاتٍ بمليون — وخسارةٌ صافية بمليون
-             * على متجرٍ باع مليونين وسبعمئة ألف. رقمٌ لا يصدّقه من يراه، وهو
-             * أوّل ما يراه من يجرّب النظام.
-             *
-             * ويُكتب هنا بما يكتبه الصندوق حرفًا بحرف — انظر
-             * PosController::checkout.
-             */
-            Transaction::create([
-                'business_id' => $bid,
-                'order_id' => $order->id,
-                'reference' => $order->number,
-                'description' => 'مبيعات نقطة البيع — ' . $order->customer_name,
-                'method' => $order->payment_method,
-                'type' => 'دخل',
-                'amount' => $total,
-                'tax_amount' => $tax,
-                'employee_name' => $seller->name,
-                'occurred_at' => $at,
-            ]);
-
-            $key = $at->format('Y-m');
-            $monthly[$key] ??= ['subtotal' => 0.0, 'tax' => 0.0, 'total' => 0.0, 'cost' => 0.0, 'date' => $at->copy()->endOfMonth()];
-            $monthly[$key]['subtotal'] += $subtotal;
-            $monthly[$key]['tax'] += $tax;
-            $monthly[$key]['total'] += $total;
-            $monthly[$key]['cost'] += $cost;
-        }
-
-        foreach ($monthly as $month => $m) {
-            $date = $m['date']->isFuture() ? now() : $m['date'];
-
-            Ledger::post($bid, "مبيعات شهر {$month}", [
-                ['account' => 'cash', 'debit' => round($m['total'], 3)],
-                ['account' => 'sales', 'credit' => round($m['subtotal'], 3)],
-                ['account' => 'tax_payable', 'credit' => round($m['tax'], 3)],
-            ], $date, 'مبيعات');
-
-            Ledger::post($bid, "تكلفة مبيعات شهر {$month}", [
-                ['account' => 'cogs', 'debit' => round($m['cost'], 3)],
-                ['account' => 'inventory', 'credit' => round($m['cost'], 3)],
-            ], $date, 'مبيعات');
         }
     }
 

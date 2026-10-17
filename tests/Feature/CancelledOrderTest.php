@@ -59,11 +59,11 @@ class CancelledOrderTest extends TestCase
     }
 
     /**
-     * طلبٌ بحاله — لشاشة «المبيعات» وحدها.
+     * طلبٌ بحاله — سجلٌّ قديمٌ تتعلّق به حركةُ المال وحدها.
      *
      * لا يقرؤه شيءٌ من طبقة التحليل بعد اليوم: الإيرادُ من الفواتير
-     * (انظر `Revenue`). وهو باقٍ هنا لأنّ الشاشةَ نفسَها ما زالت تقرأ
-     * الجدول، وحارسُها يقرأ ما تقرأ.
+     * (انظر `Revenue`). وشاشةُ «المبيعات» خرجت، فلم يبقَ له هنا إلّا
+     * `sale()` تحته: دفترُ الحركة يعرف الإلغاء من حال طلبه.
      */
     private function order(string $status, float $total, float $tax = 0): Order
     {
@@ -355,55 +355,5 @@ class CancelledOrderTest extends TestCase
 
         $live = collect($rows)->where('cancelled', false);
         $this->assertSame(100.0, (float) $live->where('type', 'دخل')->sum(fn ($t) => abs($t['amount'])));
-    }
-
-    /* ------------------------------ الشاشة ------------------------------ */
-
-    public function test_the_list_can_be_filtered_by_status(): void
-    {
-        $this->order('مكتمل', 100);
-        $this->order('ملغي', 900);
-
-        $rows = $this->get(route('admin.orders.index', ['status' => 'ملغي']))
-            ->assertOk()->viewData('page')['props']['orders'];
-
-        $this->assertCount(1, $rows);
-        $this->assertSame('ملغي', $rows[0]['status']);
-    }
-
-    public function test_the_list_can_be_filtered_by_a_date_range(): void
-    {
-        $this->order('مكتمل', 100)->update(['ordered_at' => now()->subDays(10)]);
-        $this->order('مكتمل', 200);
-
-        $rows = $this->get(route('admin.orders.index', [
-            'from' => now()->subDays(3)->toDateString(),
-            'to' => now()->toDateString(),
-        ]))->assertOk()->viewData('page')['props']['orders'];
-
-        $this->assertCount(1, $rows);
-    }
-
-    public function test_the_screen_totals_what_was_filtered_not_what_was_shown(): void
-    {
-        $this->order('مكتمل', 100);
-        $this->order('مكتمل', 250);
-        $this->order('ملغي', 900);
-
-        $props = $this->get(route('admin.orders.index'))->assertOk()->viewData('page')['props'];
-
-        $this->assertSame(350.0, $props['totalAmount'], 'دخل الملغى مجموع المبيعات');
-        $this->assertSame(3, $props['totalCount']);
-        $this->assertSame(1, $props['cancelledCount']);
-    }
-
-    public function test_the_search_now_finds_the_cashier(): void
-    {
-        $this->order('مكتمل', 100);
-
-        $rows = $this->get(route('admin.orders.index', ['q' => 'سالم']))
-            ->assertOk()->viewData('page')['props']['orders'];
-
-        $this->assertCount(1, $rows);
     }
 }

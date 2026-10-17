@@ -7,12 +7,9 @@ use App\Models\BranchStock;
 use App\Models\Business;
 use App\Models\InventoryMovement;
 use App\Models\JobTitle;
-use App\Models\Order;
-use App\Models\OrderItem;
 use App\Models\Product;
 use App\Models\StockAdjustment;
 use App\Models\User;
-use App\Support\OrderCorrection;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
@@ -98,30 +95,6 @@ class StockInvariantGuardsTest extends TestCase
 
         $this->assertSame(5, (int) $p->fresh()->quantity, 'التعديل لم يبلغ المتحكّم');
         $this->assertBalanced($p, 'تسوية مخزون على منتجٍ بلا توزيع');
-    }
-
-    public function test_an_invoice_correction_on_an_undistributed_product_keeps_it_balanced(): void
-    {
-        $p = $this->undistributed(10);
-
-        $order = Order::create([
-            'business_id' => $this->business->id, 'branch_id' => $this->other->id,
-            'number' => 'INV-1', 'status' => 'مكتمل', 'payment_method' => 'نقدي',
-            'subtotal' => 30, 'tax' => 0, 'discount' => 0, 'total' => 30,
-            'ordered_at' => now(),
-        ]);
-        $item = OrderItem::create([
-            'order_id' => $order->id, 'product_id' => $p->id, 'name' => $p->name,
-            'price' => 10, 'cost' => 4, 'quantity' => 3, 'total' => 30,
-        ]);
-
-        // إنقاص الكمية المباعة يعيد قطعتين إلى الرفّ — وهي الحركة التي كانت
-        // تُنشئ صفّ الفرع بالكمية الجديدة ثمّ تضيف الفرق فوقه
-        $this->actingAs($this->owner);
-        OrderCorrection::setQuantity($order, $item, 1, 'إرجاع قطعتين');
-
-        $this->assertSame(12, (int) $p->fresh()->quantity, 'التصحيح لم يُعِد الكمية');
-        $this->assertBalanced($p, 'تصحيح فاتورة على منتجٍ بلا توزيع');
     }
 
     public function test_a_stocktake_on_an_undistributed_product_keeps_it_balanced(): void

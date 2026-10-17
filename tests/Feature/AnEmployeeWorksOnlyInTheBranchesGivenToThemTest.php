@@ -5,9 +5,10 @@ namespace Tests\Feature;
 use App\Models\Branch;
 use App\Models\BranchStock;
 use App\Models\Business;
+use App\Models\Customer;
+use App\Models\CustomerInvoice;
 use App\Models\InventoryMovement;
 use App\Models\JobTitle;
-use App\Models\Order;
 use App\Models\Product;
 use App\Models\PurchaseOrder;
 use App\Models\Supplier;
@@ -15,7 +16,6 @@ use App\Models\User;
 use App\Support\BranchAccess;
 use App\Support\GoodsReceipts;
 use App\Support\Ledger;
-use App\Support\OrderStatus;
 use App\Support\Permissions;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
@@ -61,7 +61,7 @@ class AnEmployeeWorksOnlyInTheBranchesGivenToThemTest extends TestCase
 
         $other = Business::create(['name' => 'شركة الجار', 'status' => 'نشط']);
         $this->theirs = Branch::create(['business_id' => $other->id, 'name' => 'فرع الجار']);
-        Order::create($this->orderRow($other->id, $this->theirs, 'INV-X'));
+        CustomerInvoice::create($this->invoiceRow($other->id, $this->theirs, 'INV-X'));
 
         $this->owner = User::create([
             'business_id' => $this->shop->id, 'name' => 'المالك', 'email' => 'o@eventplus.om',
@@ -69,18 +69,20 @@ class AnEmployeeWorksOnlyInTheBranchesGivenToThemTest extends TestCase
         ]);
 
         foreach (['INV-M' => $this->muscat, 'INV-S' => $this->sur, 'INV-N' => $this->nizwa] as $number => $branch) {
-            Order::create($this->orderRow($this->shop->id, $branch, $number));
+            CustomerInvoice::create($this->invoiceRow($this->shop->id, $branch, $number));
         }
     }
 
-    private function orderRow(int $businessId, Branch $branch, string $number): array
+    // كانت طلباتٍ — خرجت مع «المبيعات»؛ والفاتورةُ الصادرة مستندُ فرعٍ مثلها
+    private function invoiceRow(int $businessId, Branch $branch, string $number): array
     {
+        $customer = Customer::firstOrCreate(['business_id' => $businessId, 'name' => 'عميل']);
+
         return [
-            'business_id' => $businessId, 'branch_id' => $branch->id, 'branch' => $branch->name,
-            'number' => $number, 'customer_name' => 'عميل', 'employee_name' => 'نورة',
-            'subtotal' => 10, 'tax' => 0, 'total' => 10,
-            'payment_method' => 'نقدي', 'payment_status' => 'مدفوع',
-            'status' => OrderStatus::COMPLETED, 'ordered_at' => now(),
+            'business_id' => $businessId, 'branch_id' => $branch->id, 'customer_id' => $customer->id,
+            'number' => $number, 'customer_name' => $customer->name, 'status' => CustomerInvoice::ISSUED,
+            'issued_at' => now(), 'due_at' => now()->addDays(30),
+            'subtotal' => 10, 'discount_total' => 0, 'tax_total' => 0, 'total' => 10,
         ];
     }
 
@@ -98,11 +100,18 @@ class AnEmployeeWorksOnlyInTheBranchesGivenToThemTest extends TestCase
         return $user;
     }
 
-    /** @return list<string> */
-    private function orderNumbers(): array
+    /**
+     * ما يعرضه العرضُ الذي يتبع الفرعَ المختار — بطاقةُ «أحدث الفواتير» في اللوحة.
+     *
+     * كانت قائمةَ الطلبات، وخرجت مع «المبيعات». والبطاقةُ تمرّ بـ`BranchAccess::scope`
+     * كما كانت القائمة: فرعٌ مختار ← هو، و«كل الفروع» لمقيَّدٍ ← فروعُه.
+     *
+     * @return list<string>
+     */
+    private function invoiceNumbers(): array
     {
-        return collect($this->get(route('admin.orders.index'))->assertOk()->viewData('page')['props']['orders'])
-            ->pluck('id')->sort()->values()->all();
+        return collect($this->get(route('admin.dashboard'))->assertOk()->viewData('page')['props']['recentInvoices'])
+            ->pluck('number')->sort()->values()->all();
     }
 
     /** @return list<string> */
@@ -124,7 +133,7 @@ class AnEmployeeWorksOnlyInTheBranchesGivenToThemTest extends TestCase
         }
 
         $this->get(route('admin.branch.switch', 'all'));
-        $this->assertSame(['INV-M', 'INV-N', 'INV-S'], $this->orderNumbers());
+        $this->assertSame(['INV-M', 'INV-N', 'INV-S'], $this->invoiceNumbers());
     }
 
     /* ══════════════ ٢–٤ · التبديل ══════════════ */
@@ -136,7 +145,7 @@ class AnEmployeeWorksOnlyInTheBranchesGivenToThemTest extends TestCase
         $this->get(route('admin.branch.switch', $this->muscat->id))->assertRedirect();
 
         $this->assertSame($this->muscat->id, session('current_branch'));
-        $this->assertSame(['INV-M'], $this->orderNumbers());
+        $this->assertSame(['INV-M'], $this->invoiceNumbers());
     }
 
     public function test_the_same_employee_cannot_switch_to_another_branch_of_the_business(): void
@@ -163,16 +172,18 @@ class AnEmployeeWorksOnlyInTheBranchesGivenToThemTest extends TestCase
 
     public function test_all_branches_for_an_employee_tied_to_one_branch_shows_that_branch_only(): void
     {
-        $this->actingAs($this->employee([$this->muscat]));
+        // مديرٌ يملك فتحَ الفاتورة وإلغاءها — فالرفضُ للفرع لا للصلاحية
+        $this->actingAs($this->employee([$this->muscat], 'manager'));
         $this->get(route('admin.branch.switch', 'all'));
 
-        $this->assertSame(['INV-M'], $this->orderNumbers());
+        $this->assertSame(['INV-M'], $this->invoiceNumbers());
 
-        // ولا تُفتح ورقةُ طلبٍ من فرعٍ آخر، ولا يُحرَّك
-        $this->get(route('admin.orders.show', 'INV-S'))->assertNotFound();
-        $this->get(route('admin.orders.pdf', 'INV-N'))->assertNotFound();
-        $this->post(route('admin.orders.status', 'INV-S'), ['status' => OrderStatus::CANCELLED])->assertNotFound();
-        $this->assertSame(OrderStatus::COMPLETED, Order::where('number', 'INV-S')->value('status'));
+        // ولا تُفتح فاتورةٌ من فرعٍ آخر، ولا تُلغى — كانت ورقةَ الطلب وحالَه، وخرجا مع «المبيعات»
+        $sur = CustomerInvoice::where('number', 'INV-S')->firstOrFail();
+        $this->get(route('admin.customerInvoices.show', $sur->id))->assertNotFound();
+        $this->get(route('admin.customerInvoices.pdf', CustomerInvoice::where('number', 'INV-N')->value('id')))->assertNotFound();
+        $this->post(route('admin.customerInvoices.cancel', $sur->id), ['reason' => 'خطأ'])->assertNotFound();
+        $this->assertSame(CustomerInvoice::ISSUED, $sur->fresh()->status);
     }
 
     public function test_all_branches_for_an_employee_tied_to_two_branches_shows_those_two(): void
@@ -180,7 +191,7 @@ class AnEmployeeWorksOnlyInTheBranchesGivenToThemTest extends TestCase
         $this->actingAs($this->employee([$this->muscat, $this->sur]));
         $this->get(route('admin.branch.switch', 'all'));
 
-        $this->assertSame(['INV-M', 'INV-S'], $this->orderNumbers());
+        $this->assertSame(['INV-M', 'INV-S'], $this->invoiceNumbers());
         $this->assertSame([$this->muscat->id, $this->sur->id], BranchAccess::currentAllowedBranchIds());
     }
 
@@ -212,7 +223,7 @@ class AnEmployeeWorksOnlyInTheBranchesGivenToThemTest extends TestCase
     {
         $this->actingAs($this->owner);
 
-        $this->assertSame(['INV-M', 'INV-N', 'INV-S'], $this->orderNumbers());
+        $this->assertSame(['INV-M', 'INV-N', 'INV-S'], $this->invoiceNumbers());
         $this->assertSame(['مسقط', 'صور', 'نزوى'], $this->headerBranches());
 
         foreach ([$this->muscat, $this->sur, $this->nizwa] as $branch) {
@@ -229,14 +240,14 @@ class AnEmployeeWorksOnlyInTheBranchesGivenToThemTest extends TestCase
         $employee = $this->employee([$this->muscat, $this->sur]);
         $this->actingAs($employee);
         $this->get(route('admin.branch.switch', $this->sur->id));
-        $this->assertSame(['INV-S'], $this->orderNumbers());
+        $this->assertSame(['INV-S'], $this->invoiceNumbers());
 
         // المدير يُزيل صور من فروع عمله — والجلسةُ ما زالت تقول «صور»
         $employee->branches()->sync([$this->muscat->id]);
 
-        $page = $this->get(route('admin.orders.index'))->assertOk()->viewData('page')['props'];
+        $page = $this->get(route('admin.dashboard'))->assertOk()->viewData('page')['props'];
 
-        $this->assertSame(['INV-M'], collect($page['orders'])->pluck('id')->all());
+        $this->assertSame(['INV-M'], collect($page['recentInvoices'])->pluck('number')->all());
         $this->assertNull($page['context']['branchId']);
         $this->assertNull(session('current_branch'));
     }
@@ -310,12 +321,12 @@ class AnEmployeeWorksOnlyInTheBranchesGivenToThemTest extends TestCase
 
         $this->actingAs($employee);
         $this->assertSame(['مسقط'], $this->headerBranches());
-        $this->assertSame(['INV-M'], $this->orderNumbers());
+        $this->assertSame(['INV-M'], $this->invoiceNumbers());
         $this->get(route('admin.branch.switch', $this->theirs->id))->assertNotFound();
 
-        // وصاحبُ النشاط لا يرى فرع الجار ولا طلبه
+        // وصاحبُ النشاط لا يرى فرع الجار ولا فاتورته
         $this->actingAs($this->owner);
-        $this->assertNotContains('INV-X', $this->orderNumbers());
+        $this->assertNotContains('INV-X', $this->invoiceNumbers());
         $this->assertNotContains('فرع الجار', $this->headerBranches());
     }
 
@@ -344,11 +355,11 @@ class AnEmployeeWorksOnlyInTheBranchesGivenToThemTest extends TestCase
 
         $this->actingAs($employee);
         $this->get(route('admin.dashboard'))->assertOk();
-        $this->assertSame(['INV-M', 'INV-N', 'INV-S'], $this->orderNumbers());
+        $this->assertSame(['INV-M', 'INV-N', 'INV-S'], $this->invoiceNumbers());
         $this->assertSame(['مسقط', 'صور', 'نزوى'], $this->headerBranches());
         $this->assertTrue($employee->worksAt($this->nizwa->id));
         $this->get(route('admin.branch.switch', $this->nizwa->id))->assertRedirect();
-        $this->assertSame(['INV-N'], $this->orderNumbers());
+        $this->assertSame(['INV-N'], $this->invoiceNumbers());
     }
 
     /* ══════════════ وما يتبعها ══════════════ */
@@ -363,7 +374,7 @@ class AnEmployeeWorksOnlyInTheBranchesGivenToThemTest extends TestCase
         $this->assertSame([], BranchAccess::allowedBranchIds($employee));
 
         $this->actingAs($employee);
-        $this->assertSame([], $this->orderNumbers());
+        $this->assertSame([], $this->invoiceNumbers());
         $this->get(route('admin.branch.switch', $this->sur->id))->assertForbidden();
     }
 

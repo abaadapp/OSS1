@@ -48,26 +48,17 @@ class DocumentTemplates
      * الأوراق — وكلُّ ورقةٍ منها **تُطبع فعلًا** من شاشتها.
      *
      * ولا يُدرج هنا نوعٌ لا مطبعَ له: قالبٌ يُضبط لورقةٍ لا تخرج مقبضٌ لا
-     * يُدير شيئًا. و`delivery` تُرسم من الطلب لا من جدول `delivery_notes`:
-     * ذاك جدولٌ لا يكتب فيه شيءٌ في النظام كلّه.
+     * يُدير شيئًا.
+     *
+     * ولذلك رُفع `sale` (الإيصالُ الحراريّ وفاتورةُ A4 والضريبيّة) و`delivery`
+     * (سندُ التسليم) مع «المبيعات»: كانت تُطبع من الطلب القديم وحده، ولا طلبَ
+     * يُطبع بعد اليوم. ومفاتيحُها المحفوظة في `settings` تبقى صفوفًا لا يقرؤها
+     * شيء. و«فاتورة العميل» وأخواتُها تحت «العملاء» — كانت تحت «المبيعات».
      *
      * ورُفع `transfer` مع شاشته: النقل بين الفروع حُذف بطلب صاحب النظام،
      * فلا سندَ يُنشأ ليُطبع — وقالبٌ لورقةٍ لا تُنشأ مقبضٌ لا يُدير شيئًا.
      */
     public const TYPES = [
-        'sale' => [
-            'label' => 'فاتورة البيع',
-            'desc' => 'الإيصال الحراري وفاتورة A4 والفاتورة الضريبية — قالبٌ واحد يحكم الثلاث',
-            'section' => 'المبيعات',
-            'legacy' => true,
-            'paper' => true,
-            'strip' => true,
-            'fields' => [
-                'show_logo' => false, 'show_branch' => true, 'show_employee' => true,
-                'show_customer' => true, 'show_datetime' => true, 'show_items_count' => true,
-                'show_vat_no' => false, 'show_qr' => true,
-            ],
-        ],
         /*
          * فاتورةُ العميل — الورقةُ التي تُرسَل إلى شركةٍ أو وزارة.
          *
@@ -94,7 +85,7 @@ class DocumentTemplates
         'customer_invoice' => [
             'label' => 'فاتورة العميل',
             'desc' => 'الورقة التي تُرسَل إلى الشركات والجهات مقابل بضاعةٍ أو خدمة',
-            'section' => 'المبيعات',
+            'section' => 'العملاء',
             'footer' => '',
             'fields' => [
                 'show_logo' => true, 'show_vat_no' => true, 'show_notes' => true,
@@ -117,20 +108,10 @@ class DocumentTemplates
         'quotation' => [
             'label' => 'عرض السعر',
             'desc' => 'الورقة التي تُعرض على العميل قبل أن يُطلب منه شيء — بنودُها وصلاحيتُها وشروطُها',
-            'section' => 'المبيعات',
+            'section' => 'العملاء',
             'footer' => '',
             'fields' => [
                 'show_logo' => true, 'show_vat_no' => true, 'show_notes' => true,
-            ],
-        ],
-        'delivery' => [
-            'label' => 'سند تسليم',
-            'desc' => 'يمشي مع الشحنة ويُوقَّع عند الاستلام — أصنافٌ بلا أسعار',
-            'section' => 'المبيعات',
-            'fields' => [
-                'show_logo' => true, 'show_branch' => true, 'show_employee' => true,
-                'show_customer' => true, 'show_datetime' => true, 'show_items_count' => true,
-                'show_prices' => false, 'show_notes' => true, 'show_signature' => true,
             ],
         ],
         /*
@@ -193,7 +174,7 @@ class DocumentTemplates
         'credit_note' => [
             'label' => 'إشعار دائن',
             'desc' => 'يُنقص ذمّةَ العميل عمّا رُدّ أو خُصم من فاتورةٍ صدرت',
-            'section' => 'المبيعات',
+            'section' => 'العملاء',
             'footer' => '',
             'fields' => [
                 'show_logo' => true, 'show_vat_no' => true, 'show_notes' => true,
@@ -208,7 +189,7 @@ class DocumentTemplates
         'customer_receipt' => [
             'label' => 'سند قبض',
             'desc' => 'إقرارٌ بقبض مبلغٍ من عميل — وما سُدِّد به من فواتير',
-            'section' => 'المبيعات',
+            'section' => 'العملاء',
             'footer' => '',
             'fields' => [
                 'show_logo' => true, 'show_datetime' => true, 'show_vat_no' => true,

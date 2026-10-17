@@ -34,12 +34,16 @@ final class EmployeeAccess
             'sections' => ['dashboard'],
             'actions' => [],
         ],
+        /*
+         * والمفتاحُ `sales` باقٍ — تقرؤه الشاشةُ والاختبارات — والاسمُ ما فيه
+         * اليوم: «المبيعات» خرجت من النظام، و«إصدار فاتورة عميل» انتقل مع
+         * فواتير العملاء إلى «المالية».
+         */
         'sales' => [
-            'label' => 'العملاء والمبيعات',
-            'sections' => ['customers', 'products', 'quotations', 'orders'],
+            'label' => 'العملاء وعروض الأسعار',
+            'sections' => ['customers', 'products', 'quotations'],
             'actions' => [
                 Permissions::QUOTATION_CREATE, Permissions::QUOTATION_SEND, Permissions::QUOTATION_RECORD_DECISION,
-                Permissions::CUSTOMER_INVOICE_ISSUE,
             ],
         ],
         'projects' => [
@@ -66,7 +70,8 @@ final class EmployeeAccess
             'label' => 'المالية والرواتب',
             'sections' => ['finance', 'expenses', 'employees', 'reports'],
             'actions' => [
-                Permissions::PAYROLL_VIEW, Permissions::CUSTOMER_PAYMENT_CREATE, Permissions::ATTACHMENT_VIEW,
+                Permissions::CUSTOMER_INVOICE_ISSUE, Permissions::CUSTOMER_PAYMENT_CREATE,
+                Permissions::PAYROLL_VIEW, Permissions::ATTACHMENT_VIEW,
             ],
         ],
         'communications' => [
@@ -104,7 +109,6 @@ final class EmployeeAccess
         Permissions::INVOICE_APPROVE => 'يُقرّ بأنّ الشركة مدينةٌ للمورّد بقيمة السند.',
         Permissions::INVOICE_OVERRIDE => 'قرارٌ استثنائيّ: اعتماد سندٍ لا يطابق ما استُلم.',
         Permissions::RECEIPT_APPROVE => 'يُدخل البضاعة المستلمة إلى المخزون ويغيّر تكلفتها.',
-        'order.edit' => 'يعيد كتابة فاتورة صدرت للعميل.',
         Permissions::CUSTOMER_INVOICE_CANCEL => 'يُلغي فاتورةً صادرة ويعكس قيدها.',
         Permissions::CUSTOMER_CREDIT_NOTE => 'يُنقص ما على العميل أو يردّ له مالًا.',
         'credit.override' => 'يضبط حدّ ائتمان العميل ويبيع فوقه.',
@@ -161,7 +165,6 @@ final class EmployeeAccess
      * @var array<string, list<string>>
      */
     public const PARENTS = [
-        'order.edit' => ['orders'],
         'credit.override' => ['finance'],
         Permissions::RECEIPT_VIEW => ['inventory'],
         Permissions::RECEIPT_CREATE => ['purchases'],
@@ -176,11 +179,11 @@ final class EmployeeAccess
         Permissions::PAYROLL_VIEW => ['employees'],
         Permissions::PAYROLL_APPROVE => ['employees'],
         Permissions::PAYROLL_PAY => ['employees'],
-        Permissions::CUSTOMER_INVOICE_ISSUE => ['orders', 'finance', 'projects'],
-        Permissions::CUSTOMER_INVOICE_CANCEL => ['orders'],
-        Permissions::CUSTOMER_CREDIT_NOTE => ['orders'],
+        Permissions::CUSTOMER_INVOICE_ISSUE => ['finance', 'projects'],
+        Permissions::CUSTOMER_INVOICE_CANCEL => ['finance'],
+        Permissions::CUSTOMER_CREDIT_NOTE => ['finance'],
         Permissions::CUSTOMER_PAYMENT_CREATE => ['finance'],
-        Permissions::ATTACHMENT_VIEW => ['purchases', 'inventory', 'expenses', 'orders'],
+        Permissions::ATTACHMENT_VIEW => ['purchases', 'inventory', 'expenses', 'finance'],
         Permissions::QUOTATION_CREATE => ['quotations'],
         Permissions::QUOTATION_SEND => ['quotations'],
         Permissions::QUOTATION_DISCOUNT => ['quotations', 'projects'],
@@ -189,8 +192,8 @@ final class EmployeeAccess
         Permissions::QUOTATION_CANCEL => ['quotations'],
         Permissions::QUOTATION_RECORD_DECISION => ['quotations'],
         Permissions::POLICY_OVERRIDE => ['quotations', 'projects'],
-        Permissions::MESSAGING_SEND => ['quotations', 'projects', 'orders', 'customers', 'communications'],
-        Permissions::COMMUNICATION_VIEW => ['quotations', 'projects', 'orders', 'customers'],
+        Permissions::MESSAGING_SEND => ['quotations', 'projects', 'finance', 'customers', 'communications'],
+        Permissions::COMMUNICATION_VIEW => ['quotations', 'projects', 'finance', 'customers'],
         Permissions::COMMUNICATION_RETRY => ['communications'],
         Permissions::COMMUNICATION_TEMPLATES_MANAGE => ['communications'],
         Permissions::AUTOMATION_MANAGE => ['automation'],

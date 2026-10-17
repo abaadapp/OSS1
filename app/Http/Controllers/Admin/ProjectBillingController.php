@@ -32,10 +32,10 @@ class ProjectBillingController extends Controller
         return Project::where('business_id', $this->bid())->whereKey($id)->with('customer')->firstOrFail();
     }
 
-    /** الفوترةُ لمن يفتح فواتيرَ العملاء — والإصدارُ فعلٌ يُسأل عنه في `ProjectBilling` */
+    /** الفوترةُ لمن يفتح فواتيرَ العملاء (قسمُها «المالية») — والإصدارُ فعلٌ يُسأل عنه في `ProjectBilling` */
     private function mayInvoice(): void
     {
-        abort_if(! auth()->user()?->allows('orders'), 403);
+        abort_if(! auth()->user()?->allows('finance'), 403);
     }
 
     /** حسابُ الدفعة قبل إنشائها — للشاشة، من الحساب نفسِه الذي يُنشئها */

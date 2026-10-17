@@ -7,10 +7,10 @@ use App\Models\Business;
 use App\Models\Category;
 use App\Models\Currency;
 use App\Models\Customer;
+use App\Models\CustomerInvoice;
+use App\Models\CustomerInvoiceItem;
 use App\Models\Expense;
 use App\Models\JobTitle;
-use App\Models\Order;
-use App\Models\OrderItem;
 use App\Models\Product;
 use App\Models\Setting;
 use App\Models\User;
@@ -36,7 +36,7 @@ class ExportIntegrityTest extends TestCase
 
     private User $owner;
 
-    private Order $order;
+    private CustomerInvoice $invoice;
 
     private Customer $customer;
 
@@ -76,17 +76,18 @@ class ExportIntegrityTest extends TestCase
             'name' => 'أحمد بن سالم', 'phone' => '+968 91111111',
         ]);
 
-        $this->order = Order::create([
+        // كانت طلبًا ببندٍ — خرجت «المبيعات»؛ والبيعُ الآن فاتورةُ عميلٍ صادرة
+        $this->invoice = CustomerInvoice::create([
             'business_id' => $business->id, 'branch_id' => $branch->id,
             'customer_id' => $this->customer->id, 'customer_name' => $this->customer->name,
-            'number' => 'ORD-1001', 'status' => 'مكتمل', 'payment_method' => 'نقدي',
-            'subtotal' => 25, 'discount' => 0, 'tax' => 1.25, 'total' => 26.25,
-            'ordered_at' => now()->subDay(),
-            'employee_name' => 'المالك',
+            'number' => 'CI-1001', 'status' => CustomerInvoice::ISSUED,
+            'issued_at' => now()->subDay(), 'due_at' => now()->addDays(29),
+            'subtotal' => 25, 'discount_total' => 0, 'tax_total' => 1.25, 'total' => 26.25,
         ]);
-        OrderItem::create([
-            'order_id' => $this->order->id, 'product_id' => $product->id,
-            'name' => $product->name, 'price' => 12.5, 'quantity' => 2, 'total' => 25,
+        CustomerInvoiceItem::create([
+            'customer_invoice_id' => $this->invoice->id, 'product_id' => $product->id,
+            'description' => $product->name, 'quantity' => 2, 'unit_price' => 12.5, 'discount' => 0,
+            'tax_rate' => 5, 'tax_amount' => 1.25, 'line_total' => 26.25,
         ]);
 
         Expense::create([
@@ -207,38 +208,35 @@ class ExportIntegrityTest extends TestCase
          * حارسٌ على الحارس: لو تغيّر شكل المسارات يومًا وصار المرشِّح يستبعد
          * كل شيء، لمرّ الاختبار أعلاه أخضرَ وهو لا يفحص ملفًّا واحدًا — وهو
          * أسوأ من غيابه، لأنه يُطمئن.
+         *
+         * والحدُّ تحت العدد بواحد. كانت ستّةً وعشرين، وخرج مع «المبيعات»
+         * ثلاثة: `orders/export-xlsx` و`orders/export-pdf` و`export/orders` —
+         * فالباقي ثلاثةٌ وعشرون.
          */
-        $this->assertGreaterThan(25, count($this->plainExportRoutes()));
+        $this->assertGreaterThan(22, count($this->plainExportRoutes()));
     }
 
     // ————— ما يحتاج معرّفًا —————
 
-    public function test_the_order_pdf_opens(): void
+    // كانت ورقتا الطلب (الفاتورةُ والضريبيّةُ A4) — خرجتا مع «المبيعات»؛ وورقةُ البيع الباقية فاتورةُ العميل
+    public function test_the_customer_invoice_pdf_opens(): void
     {
         $this->assertRealFile(
-            $this->actingAs($this->owner)->get(route('admin.orders.pdf', $this->order->number)),
-            'orders/pdf',
+            $this->actingAs($this->owner)->get(route('admin.customerInvoices.pdf', $this->invoice->id)),
+            'customer-invoices/pdf',
         );
     }
 
-    public function test_the_a4_tax_invoice_opens(): void
-    {
-        $this->assertRealFile(
-            $this->actingAs($this->owner)->get(route('admin.orders.taxInvoice', $this->order->number)),
-            'orders/tax-invoice/pdf',
-        );
-    }
-
+    // كان كشفَ الطلبات القديم (`admin.customers.statement`) — والكشفُ الباقي من الذمم
     public function test_the_customer_statement_opens(): void
     {
         $this->assertRealFile(
-            $this->actingAs($this->owner)->get(route('admin.customers.statement', $this->customer->id)),
-            'customers/statement/pdf',
+            $this->actingAs($this->owner)->get(route('admin.finance.customerStatement.pdf', $this->customer->id)),
+            'finance/receivables/statement/pdf',
         );
     }
 
     // ————— ما وراء الترويسة —————
-
 
     public function test_the_filename_reaches_the_browser(): void
     {

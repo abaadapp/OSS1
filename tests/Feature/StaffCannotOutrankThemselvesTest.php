@@ -94,7 +94,7 @@ class StaffCannotOutrankThemselvesTest extends TestCase
         $this->actingAs($this->staff('accountant', 'محاسب'));
 
         $this->post(route('admin.employees.store'), $this->payload([
-            'manual_permissions' => 1, 'permissions' => ['orders', 'customers'],
+            'manual_permissions' => 1, 'permissions' => ['finance', 'customers'],
         ]))->assertSessionHasNoErrors();
 
         $this->assertNotNull(User::where('email', 'newstaff@eventplusapp.om')->first());

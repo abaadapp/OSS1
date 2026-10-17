@@ -111,7 +111,7 @@ class CustomAlertsTest extends TestCase
     {
         $this->post(route('admin.alerts.store'), [
             'type' => 'rule', 'metric' => 'overdue_invoices', 'operator' => '>',
-            'threshold' => 0, 'message' => 'فواتير متراكمة', 'section' => 'orders',
+            'threshold' => 0, 'message' => 'فواتير متراكمة', 'section' => 'finance',
         ])->assertRedirect();
 
         $this->assertStringNotContainsString('فواتير متراكمة', implode(' | ', $this->alertTexts()));

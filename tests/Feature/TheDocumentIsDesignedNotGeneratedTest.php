@@ -2,9 +2,12 @@
 
 namespace Tests\Feature;
 
+use App\Http\Controllers\Admin\CustomerInvoiceController;
 use App\Models\Branch;
 use App\Models\Business;
 use App\Models\Customer;
+use App\Models\CustomerInvoice;
+use App\Models\CustomerInvoiceItem;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\Setting;
@@ -16,6 +19,7 @@ use App\Support\Document\Theme;
 use App\Support\Document\Version;
 use App\Support\DocumentPaper;
 use App\Support\DocumentRenderer;
+use App\Support\InvoiceBranding;
 use App\Support\Pdf;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Storage;
@@ -60,7 +64,10 @@ class TheDocumentIsDesignedNotGeneratedTest extends TestCase
         ]);
     }
 
-    /** طلبٌ بعددٍ من الأصناف — لقياس ما يقع عند الكثرة */
+    /**
+     * طلبٌ قديم — لما بقي من «المبيعات» للقراءة وحدها: بيانُ ورقته
+     * (`DocumentPaper::forSale`) وبابُ رمزه العامّ.
+     */
     private function order(int $items = 2, string $name = 'باقة ورد', string $number = 'INV-000001'): Order
     {
         $order = Order::create([
@@ -81,13 +88,58 @@ class TheDocumentIsDesignedNotGeneratedTest extends TestCase
         return $order->load('items');
     }
 
-    private function sheet(Order $order): string
+    /**
+     * فاتورةُ عميلٍ بعددٍ من البنود — لقياس ما يقع عند الكثرة.
+     *
+     * وكانت قواعدُ هذا الملفّ تُقاس على ورقة البيع — وخرجت مع «المبيعات».
+     * وفاتورةُ العميل تُرسم بالتخطيط نفسِه (`documents.v1.layout`) وأنماطِه
+     * وجزئيّاتِه، فالقواعدُ نفسُها تُقاس عليها.
+     */
+    private function invoice(int $items = 2, string $name = 'باقة ورد', string $number = 'CI-000001'): CustomerInvoice
     {
-        return DocumentRenderer::saleSheet(
-            $this->business->id,
-            $order,
-            \App\Support\DocumentTemplates::settings($this->business->id, 'sale'),
-        );
+        $customer = Customer::firstOrCreate(['business_id' => $this->business->id, 'name' => 'زبون']);
+
+        $invoice = CustomerInvoice::create([
+            'business_id' => $this->business->id, 'branch_id' => $this->branch->id,
+            'customer_id' => $customer->id, 'customer_name' => 'زبون',
+            'number' => $number, 'status' => CustomerInvoice::ISSUED,
+            'issued_at' => now(), 'due_at' => now()->addDays(30), 'payment_terms_days' => 30,
+            'subtotal' => 12 * $items, 'discount_total' => 0, 'tax_total' => 0.6 * $items, 'total' => 12.6 * $items,
+        ]);
+
+        for ($i = 0; $i < $items; $i++) {
+            CustomerInvoiceItem::create([
+                'customer_invoice_id' => $invoice->id, 'description' => $name.' '.($i + 1),
+                'quantity' => 1, 'unit_price' => 12, 'discount' => 0,
+                'tax_rate' => 5, 'tax_amount' => 0.6, 'line_total' => 12.6, 'sort_order' => $i,
+            ]);
+        }
+
+        return $invoice->load('items');
+    }
+
+    /**
+     * ورقةُ فاتورة العميل مرسومةً — من الباب الذي يطبعها.
+     *
+     * `InvoiceBranding::render` حولَ `CustomerInvoiceController::paper` كما
+     * في `PdfController::customerInvoice`: بلغة الورقة وبخاناتها الغربيّة.
+     *
+     * @param  array<string,mixed>|null  $override  قيمُ قالبٍ لم تُحفظ
+     * @param  array<string,mixed>  $options  خيارُ الرسمة: `paperUrl`
+     */
+    private function sheet(CustomerInvoice $invoice, ?array $override = null, array $options = [], ?string $lang = null): string
+    {
+        $bid = $this->business->id;
+
+        return InvoiceBranding::render($bid, $lang, fn () => CustomerInvoiceController::paper(
+            $bid,
+            $invoice,
+            $invoice->paidTotal(),
+            $invoice->outstanding(),
+            null,
+            $override,
+            $options,
+        )->render());
     }
 
     /* ═══════════════════ الهويّةُ تبلغ الورقة ═══════════════════ */
@@ -103,7 +155,7 @@ class TheDocumentIsDesignedNotGeneratedTest extends TestCase
     {
         Branding::save($this->business->id, ['primary' => '#7c3aed']);
 
-        $html = $this->sheet($this->order());
+        $html = $this->sheet($this->invoice());
 
         $this->assertStringContainsString('--document-primary: #7c3aed', $html, 'المتغيّرُ لا يبلغ المتصفّح');
         $this->assertStringContainsString(
@@ -158,7 +210,7 @@ class TheDocumentIsDesignedNotGeneratedTest extends TestCase
      */
     public function test_a_paper_without_a_cover_prints_no_empty_band(): void
     {
-        $html = $this->sheet($this->order());
+        $html = $this->sheet($this->invoice());
 
         $this->assertStringNotContainsString('class="cover"', $html);
         $this->assertStringNotContainsString('class="cover-plain"', $html, 'شريطٌ يُطبع لمن لم يختر لونًا');
@@ -177,7 +229,7 @@ class TheDocumentIsDesignedNotGeneratedTest extends TestCase
     public function test_the_brand_reaches_the_paper_as_one_hairline(): void
     {
         Branding::save($this->business->id, ['primary' => '#7c3aed']);
-        $html = $this->sheet($this->order());
+        $html = $this->sheet($this->invoice());
 
         $this->assertStringNotContainsString('class="cover-plain"', $html, 'عاد الشريطُ الثاني بلون التاجر');
         $this->assertStringContainsString('class="brandrule"', $html, 'الورقةُ بلا أثرٍ من لون التاجر');
@@ -194,7 +246,7 @@ class TheDocumentIsDesignedNotGeneratedTest extends TestCase
             'key' => Branding::COVER, 'value' => 'covers/band.png',
         ]);
 
-        $html = $this->sheet($this->order());
+        $html = $this->sheet($this->invoice());
 
         $this->assertStringContainsString('class="cover"', $html);
         $this->assertStringContainsString(
@@ -215,7 +267,7 @@ class TheDocumentIsDesignedNotGeneratedTest extends TestCase
      */
     public function test_a_long_invoice_keeps_its_rows_and_repeats_its_header(): void
     {
-        $html = $this->sheet($this->order(50));
+        $html = $this->sheet($this->invoice(50));
 
         $this->assertStringContainsString('table.items tr { page-break-inside: avoid; }', $html);
         $this->assertStringContainsString('table.items thead { display: table-header-group; }', $html);
@@ -230,7 +282,7 @@ class TheDocumentIsDesignedNotGeneratedTest extends TestCase
      */
     public function test_the_totals_and_the_code_are_held_whole(): void
     {
-        $html = $this->sheet($this->order(40));
+        $html = $this->sheet($this->invoice(40));
 
         $this->assertMatchesRegularExpression('/table\.totals \{[^}]*page-break-inside: avoid/s', $html);
         $this->assertMatchesRegularExpression('/\.qr-block \{[^}]*page-break-inside: avoid/s', $html);
@@ -256,7 +308,7 @@ class TheDocumentIsDesignedNotGeneratedTest extends TestCase
     /**
      * واسمُ صنفٍ طويل لا يخرج عن الورقة — الخليّةُ تلفّ ولا تمتدّ.
      *
-     * وطولُه أطولُ ما يقبله العمود لا أطولَ منه: `order_items.name` عمودٌ
+     * وطولُه أطولُ ما يقبله العمود لا أطولَ منه: `customer_invoice_items.description` عمودٌ
      * بـ٢٥٥ حرفًا، فاسمٌ بثلاثمئةٍ حالةٌ **لا تقع في النظام**. وSQLite لا
      * تفرض الطولَ فيمرّ الحارس، وPostgreSQL تفرضه فيسقط — ومحرّكُ الإنتاج
      * PostgreSQL. فحارسٌ يقيس المستحيل يكذب في المحرّكين معًا: هنا بأن
@@ -267,7 +319,7 @@ class TheDocumentIsDesignedNotGeneratedTest extends TestCase
     public function test_a_very_long_item_name_does_not_overflow(): void
     {
         $long = str_repeat('باقة ورد جوري أحمر بتغليف فاخر ', 8);
-        $html = $this->sheet($this->order(1, $long));
+        $html = $this->sheet($this->invoice(1, $long));
 
         $this->assertStringContainsString('table.items { width: 100%;', $html);
         $this->assertStringNotContainsString('white-space: nowrap', substr($html, strpos($html, 'table.items td') ?: 0, 200));
@@ -322,13 +374,11 @@ class TheDocumentIsDesignedNotGeneratedTest extends TestCase
     /** الورقةُ العربية من اليمين، والإنجليزية من اليسار — بقالبٍ واحد */
     public function test_one_template_serves_both_directions(): void
     {
-        $order = $this->order();
+        // كانت ورقةَ البيع بلغة الجلسة — وفاتورةُ العميل تُرسم بلغة ورقتها
+        $invoice = $this->invoice();
 
-        app()->setLocale('ar');
-        $ar = $this->sheet($order);
-
-        app()->setLocale('en');
-        $en = $this->sheet($order);
+        $ar = $this->sheet($invoice, lang: 'ar');
+        $en = $this->sheet($invoice, lang: 'en');
 
         $this->assertStringContainsString('direction: rtl', $ar);
         $this->assertStringContainsString('text-align: right', $ar);
@@ -337,36 +387,7 @@ class TheDocumentIsDesignedNotGeneratedTest extends TestCase
         $this->assertStringContainsString('text-align: left', $en);
 
         // وقالبٌ واحد لا نسخةٌ لكلّ لغة
-        $this->assertSame(Version::views(null).'.sale', Version::views(null).'.sale');
-    }
-
-    /**
-     * والشريطُ الحراريُّ يتبع لغتَه كالورقة — لا يُثبَّت على العربية.
-     *
-     * ═══ وهذا عطبٌ وقع فعلًا ولم يُرَ ═══
-     *
-     * كان `direction: rtl` مكتوبًا في أنماط الشريط، فإيصالٌ إنجليزيّ يخرج
-     * بأعمدةٍ معكوسة وبنقطةٍ تقفز إلى أوّل السطر: «‎.Invoice no» بدل
-     * «Invoice no.». ولا يراه من ضبط متجرَه بالعربية أبدًا — يراه زبونُه
-     * الذي اختار الإنجليزية، ولا يشتكي: يظنّ أنّ هكذا يطبع هذا المتجر.
-     */
-    public function test_the_thermal_strip_follows_its_language(): void
-    {
-        $order = $this->order();
-        $values = \App\Support\DocumentTemplates::settings($this->business->id, 'sale');
-
-        app()->setLocale('ar');
-        $ar = DocumentRenderer::saleStrip($this->business->id, $order, $values, 80);
-
-        app()->setLocale('en');
-        $en = DocumentRenderer::saleStrip($this->business->id, $order, $values, 80);
-
-        $this->assertStringContainsString('direction: rtl', $ar);
-        $this->assertStringContainsString('text-align: right', $ar);
-
-        $this->assertStringContainsString('direction: ltr', $en);
-        $this->assertStringContainsString('text-align: left', $en);
-        $this->assertStringNotContainsString('direction: rtl', $en, 'الشريطُ الإنجليزيّ يُرسم بترتيبٍ عربيّ');
+        $this->assertTrue(view()->exists(Version::views(null).'.customer-invoice'));
     }
 
     /**
@@ -378,20 +399,15 @@ class TheDocumentIsDesignedNotGeneratedTest extends TestCase
      */
     public function test_amounts_are_isolated_from_the_line_direction(): void
     {
-        $order = $this->order();
-        $values = \App\Support\DocumentTemplates::settings($this->business->id, 'sale');
+        // كانت ورقةَ البيع وشريطَها — خرجا مع «المبيعات»؛ والقاعدةُ نفسُها على فاتورة العميل
+        $html = $this->sheet($this->invoice());
 
-        foreach ([
-            DocumentRenderer::saleSheet($this->business->id, $order, $values),
-            DocumentRenderer::saleStrip($this->business->id, $order, $values, 80),
-        ] as $html) {
-            /* كلُّ مبلغٍ ملفوفٌ بـ`dir` — والقاعدةُ في CSS وحدها لا يقرؤها mpdf هنا */
-            $this->assertMatchesRegularExpression(
-                '/<span dir="ltr">[^<]*'.preg_quote(__('ر.ع'), '/').'/u',
-                $html,
-                'مبلغٌ يُرسم بلا عزلٍ عن اتّجاه السطر',
-            );
-        }
+        /* كلُّ مبلغٍ ملفوفٌ بـ`dir` — والقاعدةُ في CSS وحدها لا يقرؤها mpdf هنا */
+        $this->assertMatchesRegularExpression(
+            '/<span dir="ltr">[^<]*'.preg_quote(__('ر.ع'), '/').'/u',
+            $html,
+            'مبلغٌ يُرسم بلا عزلٍ عن اتّجاه السطر',
+        );
     }
 
     /**
@@ -403,7 +419,7 @@ class TheDocumentIsDesignedNotGeneratedTest extends TestCase
      */
     public function test_latin_runs_are_isolated_from_the_arabic_line(): void
     {
-        $html = $this->sheet($this->order());
+        $html = $this->sheet($this->invoice());
 
         $this->assertStringContainsString('unicode-bidi: isolate', $html);
         $this->assertStringContainsString('.ltr', $html);
@@ -492,13 +508,16 @@ class TheDocumentIsDesignedNotGeneratedTest extends TestCase
      */
     public function test_every_paper_declares_its_own_size(): void
     {
-        $order = $this->order();
-
-        foreach ([PaperSize::A4, PaperSize::A5] as $paper) {
-            $values = \App\Support\DocumentTemplates::settings($this->business->id, 'sale');
-            $values['paper'] = $paper;
-
-            $html = DocumentRenderer::saleSheet($this->business->id, $order, $values, ['paper' => $paper]);
+        /*
+         * وكانت ورقةُ البيع تُقاس على A4 وA5 — وخرجت مع «المبيعات». وما بقي
+         * من الأوراق على A4 وحدها، فيُقاس مقاسُها على عائلتَي الرسم كلتيهما:
+         * فاتورةِ العميل والورقةِ العامّة.
+         */
+        foreach ([
+            $this->sheet($this->invoice()),
+            DocumentRenderer::preview($this->business->id, 'purchase'),
+        ] as $html) {
+            $paper = PaperSize::A4;
             $p = PaperSize::of($paper);
 
             $this->assertStringContainsString(
@@ -520,12 +539,9 @@ class TheDocumentIsDesignedNotGeneratedTest extends TestCase
      */
     public function test_no_paper_is_scaled_to_fit(): void
     {
-        $order = $this->order();
-        $values = \App\Support\DocumentTemplates::settings($this->business->id, 'sale');
-
+        // كانت ورقةَ البيع وشريطَها — خرجا مع «المبيعات»؛ والقاعدةُ نفسُها على فاتورة العميل
         foreach ([
-            DocumentRenderer::saleSheet($this->business->id, $order, $values),
-            DocumentRenderer::saleStrip($this->business->id, $order, $values, 80),
+            $this->sheet($this->invoice()),
             DocumentRenderer::preview($this->business->id, 'purchase'),
         ] as $html) {
             foreach (['transform:', 'zoom:', 'scale('] as $forbidden) {
@@ -543,11 +559,8 @@ class TheDocumentIsDesignedNotGeneratedTest extends TestCase
      */
     public function test_the_page_rule_is_kept_away_from_the_engine(): void
     {
-        $html = DocumentRenderer::saleSheet(
-            $this->business->id,
-            $this->order(),
-            \App\Support\DocumentTemplates::settings($this->business->id, 'sale'),
-        );
+        // كانت ورقةَ البيع — خرجت مع «المبيعات»؛ والقاعدةُ نفسُها على فاتورة العميل
+        $html = $this->sheet($this->invoice());
 
         /* `@page` محبوسٌ في `@media print` — لا في جسد الأنماط */
         $this->assertStringNotContainsString("\n    @page", $html, '`@page` خارج `@media print` فيقرؤه mpdf');
@@ -575,17 +588,12 @@ class TheDocumentIsDesignedNotGeneratedTest extends TestCase
             array_merge(PaperSize::sheets(), PaperSize::strips()),
         );
 
-        foreach (PaperSize::sheets() as $paper) {
-            $this->actingAs($this->owner)
-                ->post(route('admin.settings.templates.update', 'sale'), ['paper' => $paper])
-                ->assertSessionHasNoErrors();
-        }
-
-        foreach (PaperSize::strips() as $strip) {
-            $this->actingAs($this->owner)
-                ->post(route('admin.settings.templates.update', 'sale'), ['strip' => $strip])
-                ->assertSessionHasNoErrors();
-        }
+        /*
+         * وكان الحفظُ يُجرَّب بحقلَي `paper` و`strip` في قالب ورقة البيع —
+         * وهما لها وحدها، وخرجت مع «المبيعات». ولا نوعَ باقٍ يحملهما، فلا
+         * حفظَ يُجرَّب: طلبٌ إلى نوعٍ لا وجودَ له يُردّ بـ٤٠٤ فيمرّ الحارسُ
+         * بلا أن يقيس شيئًا.
+         */
     }
 
     /* ═══════════════════ المحرّكُ خلف واجهة ═══════════════════ */
@@ -650,41 +658,6 @@ class TheDocumentIsDesignedNotGeneratedTest extends TestCase
         $this->assertStringNotContainsString('data:', $snapshot['logo'].$snapshot['cover']);
     }
 
-    /* ═══════════════════ الشريطُ الحراريّ ═══════════════════ */
-
-    /** والإيصالُ قالبٌ مستقلّ — لا A4 مُصغَّرة */
-    public function test_the_thermal_receipt_is_its_own_template(): void
-    {
-        $this->order();
-
-        $strip = DocumentRenderer::preview($this->business->id, 'sale', ['strip' => '80mm'], thermal: true);
-        $sheet = DocumentRenderer::preview($this->business->id, 'sale', ['paper' => 'A4']);
-
-        // الشريطُ بلا غلافٍ ولا حوافَّ مُدوَّرة: الطابعةُ الحرارية لا ترسمها
-        $this->assertStringNotContainsString('class="cover', $strip);
-        $this->assertStringContainsString('border-top: 0.5pt dashed', $strip, 'الفاصلُ مصمتٌ فيشرب الحبر');
-
-        // والورقةُ A4 لها ما ليس للشريط
-        $this->assertStringContainsString('table.items', $sheet);
-        $this->assertStringNotContainsString('table.items', $strip);
-    }
-
-    /** وعرضُ ٥٨ يُصغّر القياس — لا يترك خطَّ ٨٠ على ثلثي العرض */
-    public function test_the_narrow_strip_shrinks_its_scale(): void
-    {
-        $this->order();
-
-        $wide = DocumentRenderer::preview($this->business->id, 'sale', ['strip' => '80mm'], thermal: true);
-        $narrow = DocumentRenderer::preview($this->business->id, 'sale', ['strip' => '58mm'], thermal: true);
-
-        preg_match('/font-size: ([\d.]+)pt;\s*line-height: 1\.35/', $wide, $w);
-        preg_match('/font-size: ([\d.]+)pt;\s*line-height: 1\.35/', $narrow, $n);
-
-        $this->assertNotEmpty($w);
-        $this->assertNotEmpty($n);
-        $this->assertLessThan((float) $w[1], (float) $n[1], 'الشريطُ الضيّق بخطّ الشريط العريض');
-    }
-
     /* ═══════════════════ لا بابَ طباعةٍ متروك ═══════════════════ */
 
     /**
@@ -723,34 +696,6 @@ class TheDocumentIsDesignedNotGeneratedTest extends TestCase
         }
 
         $this->assertSame([], $guilty, 'بابُ طباعةٍ ما زال يرسم بالقالب القديم');
-    }
-
-    /** والفاتورةُ الضريبية وجهٌ ثالثٌ للقالب نفسه — لا قالبٌ رابع */
-    public function test_the_tax_invoice_is_a_face_of_the_same_template(): void
-    {
-        $order = $this->order();
-
-        Setting::create([
-            'business_id' => $this->business->id, 'key' => 'vat_number', 'value' => 'OM1100123456',
-        ]);
-
-        $values = \App\Support\DocumentTemplates::settings($this->business->id, 'sale');
-
-        /*
-         * والرقمُ الضريبيّ يُطبع وإن أطفأ التاجر مقبضَه.
-         *
-         * ورقةٌ عنوانها «فاتورة ضريبية» بلا رقم بائعها تُردّ من أوّل جهةٍ
-         * تراجعها — ويظنّ صاحبُها نفسَه ممتثلًا حتى تُردّ.
-         */
-        $off = $values + ['show_vat_no' => false];
-
-        $plain = DocumentRenderer::saleSheet($this->business->id, $order, $off);
-        $tax = DocumentRenderer::saleSheet($this->business->id, $order, $off, ['taxInvoice' => true]);
-
-        $this->assertStringNotContainsString('OM1100123456', $plain, 'المقبضُ لا يُطفئ الرقم في الورقة العادية');
-        $this->assertStringContainsString('OM1100123456', $tax, 'الفاتورةُ الضريبية طُبعت بلا رقم بائعها');
-        $this->assertStringContainsString(__('فاتورة ضريبية'), $tax);
-        $this->assertStringContainsString(__('فاتورة ضريبية صادرة آليًا عبر نظام افنت بلس'), $tax);
     }
 
     /* ═══════════════════ صفحةُ التحقّق ═══════════════════ */
@@ -831,12 +776,8 @@ class TheDocumentIsDesignedNotGeneratedTest extends TestCase
      */
     public function test_the_close_stands_at_the_foot_of_the_page(): void
     {
-        $html = DocumentRenderer::saleSheet(
-            $this->business->id,
-            $this->order(1),
-            \App\Support\DocumentTemplates::settings($this->business->id, 'sale'),
-            ['paperUrl' => 'https://app.eventplusapp.om/d/testcode'],
-        );
+        // كانت ورقةَ البيع — خرجت مع «المبيعات»؛ والقاعدةُ نفسُها على فاتورة العميل
+        $html = $this->sheet($this->invoice(1), null, ['paperUrl' => 'https://app.eventplusapp.om/d/testcode']);
 
         $this->assertStringContainsString('<!--eventplus:close-->', $html, 'الرسمُ بلا علامةِ خاتمة');
         $this->assertStringContainsString('class="closezone"', $html, 'الورقةُ بلا منطقةِ خاتمة');
@@ -876,10 +817,10 @@ class TheDocumentIsDesignedNotGeneratedTest extends TestCase
      */
     public function test_the_close_is_written_once_in_a_long_document(): void
     {
-        $html = DocumentRenderer::saleSheet(
-            $this->business->id,
-            $this->order(40, 'باقة ورد', 'INV-000040'),
-            \App\Support\DocumentTemplates::settings($this->business->id, 'sale'),
+        // كانت ورقةَ البيع — خرجت مع «المبيعات»؛ والقاعدةُ نفسُها على فاتورة العميل
+        $html = $this->sheet(
+            $this->invoice(40, 'باقة ورد', 'CI-000040'),
+            null,
             ['paperUrl' => 'https://app.eventplusapp.om/d/testcode'],
         );
 
@@ -891,21 +832,9 @@ class TheDocumentIsDesignedNotGeneratedTest extends TestCase
         $this->assertSame(1, substr_count($html, '<barcode'), 'الرمزُ مرسومٌ أكثر من مرّة');
 
         /*
-         * والشريطُ الحراريّ خارجَ هذا كلِّه.
-         *
-         * المواصفة: «لا تطبق full-page A4 anchoring على 58mm و80mm».
-         * وورقٌ يخرج بطول محتواه لا أسفلَ له يُثبَّت إليه — فلو حملت
-         * علامةَ الخاتمة لقاس المحرّكُ فراغًا على ورقةٍ لا تنتهي.
+         * وكان الشريطُ الحراريّ يُفحص هنا أنّه خارجَ التثبيت — وخرج مع
+         * «المبيعات»: لا ورقةَ باقيةً تُطبع بطول محتواها.
          */
-        $strip = DocumentRenderer::saleStrip(
-            $this->business->id,
-            $this->order(2, 'باقة ورد', 'INV-000002'),
-            \App\Support\DocumentTemplates::settings($this->business->id, 'sale'),
-            80,
-        );
-
-        $this->assertStringNotContainsString('<!--eventplus:close-->', $strip, 'علامةُ التثبيت بلغت الشريط الحراريّ');
-        $this->assertStringNotContainsString('closezone', $strip, 'خاتمةُ A4 بلغت الشريط الحراريّ');
     }
 
     /**
@@ -972,7 +901,7 @@ class TheDocumentIsDesignedNotGeneratedTest extends TestCase
      */
     public function test_the_shop_name_closes_the_paper_once(): void
     {
-        $html = $this->sheet($this->order());
+        $html = $this->sheet($this->invoice());
 
         /* وهي في الرسم — للمعاينة والرابط */
         $this->assertStringContainsString('class="docfoot"', $html, 'ذهب تذييلُ الشاشة');
@@ -1099,7 +1028,7 @@ class TheDocumentIsDesignedNotGeneratedTest extends TestCase
      */
     public function test_the_header_is_three_columns_and_a_bilingual_title(): void
     {
-        $html = $this->sheet($this->order());
+        $html = $this->sheet($this->invoice());
 
         $this->assertStringContainsString('class="brandrule"', $html, 'الورقةُ بلا خيطٍ يحمل لونَ التاجر');
         $this->assertStringContainsString('class="doctitle"', $html, 'الورقةُ بلا عنوان');
@@ -1140,7 +1069,7 @@ class TheDocumentIsDesignedNotGeneratedTest extends TestCase
      */
     public function test_the_items_header_is_one_hairline(): void
     {
-        $html = $this->sheet($this->order());
+        $html = $this->sheet($this->invoice());
 
         $this->assertSame(1, preg_match('/table\\.items th \\{([^}]*)\\}/s', $html, $m));
 
@@ -1166,7 +1095,7 @@ class TheDocumentIsDesignedNotGeneratedTest extends TestCase
      */
     public function test_the_grand_total_is_a_heavier_line_not_a_block(): void
     {
-        $html = $this->sheet($this->order());
+        $html = $this->sheet($this->invoice());
 
         $this->assertSame(1, preg_match('/table\\.totals tr\\.grand td \\{([^}]*)\\}/s', $html, $m));
         $this->assertStringNotContainsString('background', $m[1], 'عادت الكتلةُ إلى الإجمالي');
@@ -1192,7 +1121,7 @@ class TheDocumentIsDesignedNotGeneratedTest extends TestCase
     public function test_the_brand_colour_fills_nothing_but_one_hairline(): void
     {
         Branding::save($this->business->id, ['primary' => '#7c3aed']);
-        $html = $this->sheet($this->order());
+        $html = $this->sheet($this->invoice());
 
         $style = substr($html, (int) strpos($html, '<style>'), (int) strpos($html, '</style>') - (int) strpos($html, '<style>'));
 
@@ -1225,7 +1154,7 @@ class TheDocumentIsDesignedNotGeneratedTest extends TestCase
      */
     public function test_rules_sit_on_the_cell_not_on_a_block_inside_it(): void
     {
-        $html = $this->sheet($this->order());
+        $html = $this->sheet($this->invoice());
 
         foreach (['table.items th', 'table.items td', 'table.sign td.box'] as $selector) {
             $this->assertStringContainsString(
@@ -1268,7 +1197,7 @@ class TheDocumentIsDesignedNotGeneratedTest extends TestCase
      */
     public function test_the_items_table_is_ruled_not_shaded(): void
     {
-        $html = $this->sheet($this->order(4));
+        $html = $this->sheet($this->invoice(4));
 
         $this->assertStringNotContainsString('table.items tr.alt', $html, 'عادت الزِّبرةُ إلى الجدول');
         $this->assertStringNotContainsString('<tr class="alt">', $html, 'صفوفٌ تحمل صنفًا لا قاعدةَ له');
@@ -1286,20 +1215,21 @@ class TheDocumentIsDesignedNotGeneratedTest extends TestCase
      * والحالةُ خَتمٌ على الورقة — ولا تُختم حالٌ ليست في النموذج.
      *
      * ورقةُ أمرٍ ملغيٍّ تُطبع وتُرسل إلى المورّد فيجهّز شحنةً لا أحدَ
-     * ينتظرها. و«مكتمل» في المقابل هي الحالُ الطبيعيّ لكلّ فاتورةٍ في الدرج:
+     * ينتظرها. و«صادرة» في المقابل هي الحالُ الطبيعيّ لكلّ فاتورةٍ في الدرج:
      * ختمُها على كلّ ورقةٍ ضجيجٌ لا خبر.
      */
     public function test_the_status_is_stamped_only_when_the_model_carries_one(): void
     {
-        $order = $this->order();
+        // كانت ورقةَ البيع — خرجت مع «المبيعات»؛ والقاعدةُ نفسُها على فاتورة العميل
+        $invoice = $this->invoice();
 
-        $this->assertStringNotContainsString('class="stamp"', $this->sheet($order), 'ورقةٌ مكتملةٌ تُختم بلا خبر');
+        $this->assertStringNotContainsString('class="stamp"', $this->sheet($invoice), 'ورقةٌ صادرةٌ تُختم بلا خبر');
 
-        $order->update(['status' => 'ملغي']);
+        $invoice->update(['status' => CustomerInvoice::CANCELLED]);
 
         $this->assertStringContainsString(
             'class="stamp"',
-            $this->sheet($order->fresh()->load('items')),
+            $this->sheet($invoice->fresh()->load('items')),
             'فاتورةٌ ملغاةٌ تخرج بلا ما يقول إنّها أُلغيت',
         );
     }
@@ -1323,12 +1253,11 @@ class TheDocumentIsDesignedNotGeneratedTest extends TestCase
             'business_id' => $this->business->id, 'key' => 'vat_number', 'value' => 'OM1100234567',
         ]);
 
-        /* و«إظهار الرقم الضريبي» مُطفأٌ افتراضًا في ورقة البيع — فيُشعَل هنا */
-        $html = DocumentRenderer::saleSheet(
-            $this->business->id,
-            $this->order(),
-            ['show_vat_no' => true] + \App\Support\DocumentTemplates::settings($this->business->id, 'sale'),
-        );
+        /*
+         * كانت ورقةَ البيع — خرجت مع «المبيعات»؛ والقاعدةُ نفسُها على فاتورة
+         * العميل. و«إظهار الرقم الضريبي» يُشعَل صراحةً هنا لا يُترك لافتراضيّه.
+         */
+        $html = $this->sheet($this->invoice(), ['show_vat_no' => true]);
 
         $this->assertStringContainsString('class="docfoot"', $html, 'الورقةُ بلا تذييل');
 
@@ -1351,7 +1280,7 @@ class TheDocumentIsDesignedNotGeneratedTest extends TestCase
      */
     public function test_the_footer_is_quiet(): void
     {
-        $html = $this->sheet($this->order());
+        $html = $this->sheet($this->invoice());
 
         $this->assertSame(1, preg_match('/table\\.docfoot td \\{([^}]*)\\}/s', $html, $m));
 

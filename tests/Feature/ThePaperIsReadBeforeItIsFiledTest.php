@@ -2,20 +2,28 @@
 
 namespace Tests\Feature;
 
-use App\Http\Controllers\PdfController;
+use App\Http\Controllers\Admin\CustomerInvoiceController;
 use App\Models\Branch;
 use App\Models\Business;
-use App\Models\Order;
-use App\Models\OrderItem;
+use App\Models\Customer;
+use App\Models\CustomerInvoice;
+use App\Models\CustomerInvoiceItem;
+use App\Models\GoodsReceiptNote;
+use App\Models\GoodsReceiptNoteItem;
+use App\Models\PurchaseOrder;
+use App\Models\PurchaseOrderItem;
 use App\Models\Setting;
+use App\Models\Supplier;
 use App\Models\User;
-use App\Support\Document\PaperSize;
+use App\Support\Document\Pdf\Driver;
 use App\Support\Document\Theme;
+use App\Support\DocumentPaper;
 use App\Support\DocumentRenderer;
-use App\Support\DocumentTemplates;
+use App\Support\InvoiceBranding;
 use App\Support\Paper;
+use App\Support\Pdf;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use ReflectionMethod;
+use Illuminate\Http\Response;
 use Tests\TestCase;
 
 /**
@@ -51,33 +59,53 @@ class ThePaperIsReadBeforeItIsFiledTest extends TestCase
         $this->actingAs($u);
     }
 
-    private function order(array $names = ['باقة ورد']): Order
+    /**
+     * فاتورةُ عميلٍ ببنودٍ بأسمائها.
+     *
+     * وكانت قواعدُ هذا الملفّ تُقاس على ورقة البيع — وخرجت مع «المبيعات».
+     * وفاتورةُ العميل تُرسم بالتخطيط نفسِه وجزئيّاتِه، فتُقاس عليها.
+     */
+    private function invoice(array $names = ['باقة ورد']): CustomerInvoice
     {
-        $order = Order::create([
+        $customer = Customer::create(['business_id' => $this->business->id, 'name' => 'شركة الواحة']);
+
+        $invoice = CustomerInvoice::create([
             'business_id' => $this->business->id, 'branch_id' => $this->branch->id,
-            'branch' => 'فرع الخوير', 'number' => 'INV-2026-000412', 'status' => 'مكتمل',
-            'customer_name' => 'شركة الواحة', 'employee_name' => 'سالم', 'payment_method' => 'بطاقة',
-            'subtotal' => 12 * count($names), 'tax' => 0, 'total' => 12 * count($names),
-            'ordered_at' => now(),
+            'customer_id' => $customer->id, 'customer_name' => 'شركة الواحة',
+            'number' => 'CI-2026-000412', 'status' => CustomerInvoice::ISSUED,
+            'issued_at' => now(), 'due_at' => now()->addDays(30), 'payment_terms_days' => 30,
+            'subtotal' => 12 * count($names), 'discount_total' => 0, 'tax_total' => 0, 'total' => 12 * count($names),
         ]);
 
-        foreach ($names as $n) {
-            OrderItem::create(['order_id' => $order->id, 'name' => $n, 'price' => 12, 'quantity' => 1, 'total' => 12]);
+        foreach ($names as $i => $n) {
+            CustomerInvoiceItem::create([
+                'customer_invoice_id' => $invoice->id, 'description' => $n,
+                'quantity' => 1, 'unit_price' => 12, 'discount' => 0,
+                'tax_rate' => 0, 'tax_amount' => 0, 'line_total' => 12, 'sort_order' => $i,
+            ]);
         }
 
-        return $order->load('items');
+        return $invoice->load('items');
     }
 
-    private function sheet(?Order $order = null, array $over = []): string
+    /**
+     * ورقةُ فاتورة العميل مرسومةً — من الباب الذي يطبعها.
+     *
+     * @param  array<string,mixed>  $over  قيمُ قالبٍ لم تُحفظ
+     */
+    private function sheet(?CustomerInvoice $invoice = null, array $over = []): string
     {
-        $v = DocumentTemplates::settings($this->business->id, 'sale');
+        $bid = $this->business->id;
+        $invoice ??= $this->invoice();
 
-        /* وA4 صراحةً: افتراضيُّ «sale» شريطٌ حراريّ، ويُوجَّه في المتحكّم لا هنا */
-        return DocumentRenderer::saleSheet(
-            $this->business->id,
-            $order ?? $this->order(),
-            $over + ['paper' => PaperSize::A4] + $v,
-        );
+        return InvoiceBranding::render($bid, null, fn () => CustomerInvoiceController::paper(
+            $bid,
+            $invoice,
+            $invoice->paidTotal(),
+            $invoice->outstanding(),
+            null,
+            $over ?: null,
+        )->render());
     }
 
     /* ═══════════ الطرفان متقابلان ═══════════ */
@@ -97,7 +125,13 @@ class ThePaperIsReadBeforeItIsFiledTest extends TestCase
 
         $this->assertStringContainsString(__('البائع'), $html, 'الورقةُ لا تعرّف بائعَها');
         $this->assertStringContainsString(__('العميل'), $html, 'الورقةُ لا تعرّف مشتريَها');
-        $this->assertStringContainsString('شارع السلطان قابوس', $html);
+        /*
+         * كانت ورقةَ البيع، وكتلةُ بائعها تحمل عنوانَ المبنى — خرجت مع
+         * «المبيعات». وفاتورةُ العميل لا تطبع عنوانَ المبنى بشرط صاحب النظام
+         * (يحرسه `TheInvoiceCarriesTheShopsIdentityTest`)، فيُقاس هاتفُ
+         * البائع مكانَه: ما يُثبت البائعَ في كتلته المعنونة.
+         */
+        $this->assertStringContainsString('+968 9123 4567', $html);
         $this->assertStringContainsString('OM1100234567', $html);
 
         /*
@@ -128,7 +162,7 @@ class ThePaperIsReadBeforeItIsFiledTest extends TestCase
         /* ورقمٌ عربيٌّ وحده محايد: لا يقلب سطرًا ليس فيه حرف */
         $this->assertSame('rtl', Paper::dirOf('٢٠٢٦'), 'في ورقةٍ عربيّة يتبع الورقة');
 
-        $html = $this->sheet($this->order(['Premium Gift Box', 'باقة ورد']));
+        $html = $this->sheet($this->invoice(['Premium Gift Box', 'باقة ورد']));
 
         $this->assertStringContainsString('dir="ltr"', $html, 'الاسمُ الإنجليزيُّ لا يحمل اتّجاهَه');
         $this->assertStringContainsString('dir="rtl"', $html);
@@ -142,7 +176,7 @@ class ThePaperIsReadBeforeItIsFiledTest extends TestCase
      */
     public function test_direction_does_not_drag_alignment_with_it(): void
     {
-        $html = $this->sheet($this->order(['Premium Gift Box']));
+        $html = $this->sheet($this->invoice(['Premium Gift Box']));
 
         /*
          * و`bidi` أوّلُ أصنافِ الخليّة لا وحدَها: يجاورها `item` الذي يُثقل
@@ -163,27 +197,47 @@ class ThePaperIsReadBeforeItIsFiledTest extends TestCase
      *
      * «الفرع: —» و«الموظف: —» سطران يشغلان مكانًا ولا يقولان شيئًا، ويجعلان
      * من يقرأ يظنّ أنّ بياناتٍ سقطت.
+     *
+     * وكانا يُقاسان على ورقة البيع — وخرجت مع «المبيعات». ونظيراهما على
+     * سند الاستلام: «المخزن / الفرع» و«المستلِم» — يُطبعان من صفّه إن مُلئا.
      */
     public function test_an_empty_field_leaves_no_hole(): void
     {
         $bare = Business::create(['name' => 'مخبز الحيّ', 'type' => '', 'city' => '', 'status' => 'نشط']);
         $branch = Branch::create(['business_id' => $bare->id, 'name' => '']);
+        $supplier = Supplier::create(['business_id' => $bare->id, 'name' => 'مطحنة الوادي']);
 
-        $order = Order::create([
-            'business_id' => $bare->id, 'branch_id' => $branch->id, 'branch' => '',
-            'number' => 'INV-000007', 'status' => 'مكتمل', 'customer_name' => '',
-            'employee_name' => '', 'payment_method' => 'نقدي',
-            'subtotal' => 0.9, 'tax' => 0, 'total' => 0.9, 'ordered_at' => now(),
+        $note = GoodsReceiptNote::create([
+            'business_id' => $bare->id, 'branch_id' => $branch->id, 'supplier_id' => $supplier->id,
+            'number' => 'GRN-000007', 'received_at' => now()->toDateString(),
+            'receiver' => '', 'status' => 'معتمد',
         ]);
-        OrderItem::create(['order_id' => $order->id, 'name' => 'خبز', 'price' => 0.3, 'quantity' => 3, 'total' => 0.9]);
+        GoodsReceiptNoteItem::create(['goods_receipt_note_id' => $note->id, 'name' => 'طحين', 'quantity' => 3, 'cost' => 0.3]);
 
-        $html = DocumentRenderer::saleSheet($bare->id, $order->load('items'), DocumentTemplates::settings($bare->id, 'sale'));
+        $html = DocumentRenderer::generic(
+            $bare->id,
+            'grn',
+            DocumentPaper::forGrn($note->load('items', 'supplier', 'branch', 'purchaseOrder')),
+        );
 
         $this->assertStringNotContainsString('>—<', $html, 'الورقةُ تطبع شرطةً مكانَ قيمةٍ غائبة');
-        /* و«الفرع» تقع داخل «المجموع الفرعي» — فيُفحص العنوانُ كاملًا لا الحرف */
-        $this->assertStringNotContainsString('>'.__('الفرع').'<', $html, 'عنوانُ الفرع يُطبع بلا فرع');
-        $this->assertStringNotContainsString('>'.__('الموظف').'<', $html, 'عنوانُ الموظف يُطبع بلا موظف');
+        /* والعنوانُ كاملًا لا الحرف: «الفرع» تقع داخل غيرها */
+        $this->assertStringNotContainsString('>'.__('المخزن / الفرع').'<', $html, 'عنوانُ الفرع يُطبع بلا فرع');
+        $this->assertStringNotContainsString('>'.__('المستلِم').'<', $html, 'عنوانُ المستلِم يُطبع بلا مستلِم');
         $this->assertStringContainsString('مخبز الحيّ', $html, 'الورقةُ الأدنى لا تحمل اسمَ متجرها');
+
+        /* والحارسُ يقيس شيئًا: الحقلان نفسُهما يُطبعان حين يُملآن */
+        $branch->update(['name' => 'المخزن الرئيسي']);
+        $note->update(['receiver' => 'سالم']);
+
+        $filled = DocumentRenderer::generic(
+            $bare->id,
+            'grn',
+            DocumentPaper::forGrn($note->fresh()->load('items', 'supplier', 'branch', 'purchaseOrder')),
+        );
+
+        $this->assertStringContainsString('>'.__('المخزن / الفرع').'<', $filled);
+        $this->assertStringContainsString('>'.__('المستلِم').'<', $filled);
     }
 
     /**
@@ -227,20 +281,27 @@ class ThePaperIsReadBeforeItIsFiledTest extends TestCase
     public function test_every_page_says_which_document_it_belongs_to(): void
     {
         /*
-         * وورقةُ البيع الافتراضيّة شريطٌ حراريّ — والشريطُ لا صفحاتِ له.
-         *
-         * فيُضبط المتجر على A4 كما يفعل تاجرٌ يطبع فواتيرَ لا إيصالات.
-         * ومفتاحُها مسطَّحٌ بلا اسم النوع لأنّها سبقت سجلَّ القوالب.
+         * وكانت ورقةَ البيع على A4 (`admin.orders.pdf`) — خرجت مع «المبيعات».
+         * والقاعدةُ نفسُها على أمر الشراء: ورقةُ A4 تُطبع من بابها وتحمل
+         * سياقَها إلى تذييل كلّ صفحة.
          */
-        Setting::create(['business_id' => $this->business->id, 'key' => 'paper', 'value' => 'A4']);
+        $supplier = Supplier::create(['business_id' => $this->business->id, 'name' => 'مشتل الربيع']);
 
-        $names = [];
+        $po = PurchaseOrder::create([
+            'business_id' => $this->business->id, 'branch_id' => $this->branch->id,
+            'supplier_id' => $supplier->id, 'supplier_name' => $supplier->name,
+            'number' => 'PO-2026-000412', 'status' => 'مسودة',
+            'items_subtotal' => 720.0, 'total' => 720.0, 'ordered_at' => now(),
+        ]);
 
         for ($i = 1; $i <= 60; $i++) {
-            $names[] = 'صنف رقم '.$i;
+            PurchaseOrderItem::create([
+                'purchase_order_id' => $po->id, 'name' => 'صنف رقم '.$i,
+                'quantity' => 1, 'cost' => 12.0, 'line_total' => 12.0,
+            ]);
         }
 
-        $pdf = $this->get(route('admin.orders.pdf', $this->order($names)->number));
+        $pdf = $this->get(route('admin.purchases.pdf', $po->id));
         $pdf->assertOk();
 
         $raw = $pdf->getContent();
@@ -248,21 +309,47 @@ class ThePaperIsReadBeforeItIsFiledTest extends TestCase
         $this->assertStringStartsWith('%PDF', $raw, 'الناتجُ ليس ملفَّ PDF');
 
         $pages = substr_count($raw, '/Type /Page') - substr_count($raw, '/Type /Pages');
-        $this->assertGreaterThan(1, $pages, 'الفاتورةُ لم تتجاوز صفحةً واحدة، فلا يُختبر ما يقع عند الثانية');
+        $this->assertGreaterThan(1, $pages, 'الورقةُ لم تتجاوز صفحةً واحدة، فلا يُختبر ما يقع عند الثانية');
 
         /*
-         * والسياقُ في التذييل: رقمُ الورقة واسمُ متجرها على كلّ صفحة.
+         * والسياقُ في التذييل: رقمُ الورقة على كلّ صفحة.
          *
-         * ويُفحص في مجرى المحتوى مضغوطًا — نصُّ الـPDF لا يُقرأ حرفًا حرفًا،
-         * لكنّ المحرّك يُدرج التذييلَ مرّةً لكلّ صفحة. فيكفي أن يُبنى
-         * الاستدعاءُ صحيحًا، وهو ما يحرسه `MpdfDriver`.
+         * نصُّ الـPDF مضغوطٌ لا يُقرأ حرفًا حرفًا، لكنّ المحرّك يُدرج التذييلَ
+         * مرّةً لكلّ صفحة من السياق الذي يُعطاه. فيُقرأ ما بلغ السائقَ من
+         * الباب نفسِه — بسائقٍ يسجّل بدل أن يرسم. انظر `MpdfDriver::pageNumbers`.
          */
-        $this->assertSame(
-            'INV-2026-000412 · زهور الخليج',
-            (new ReflectionMethod(PdfController::class, 'context'))
-                ->invoke(null, 'INV-2026-000412', $this->business->id),
-            'سياقُ التذييل لا يحمل رقمَ الورقة واسمَ متجرها',
-        );
+        $fake = new class implements Driver
+        {
+            public ?string $context = null;
+
+            public function sheet(string $html, string $name, array $preset, bool $landscape = false, ?string $runningHeader = null, ?string $context = null): Response
+            {
+                $this->context = $context;
+
+                return response('FAKE');
+            }
+
+            public function strip(string $html, string $name, int $widthMm): Response
+            {
+                return response('FAKE');
+            }
+
+            public function stripHeight(string $html, int $widthMm): float
+            {
+                return 100.0;
+            }
+        };
+
+        $was = Pdf::swap($fake);
+
+        try {
+            $this->get(route('admin.purchases.pdf', $po->id))->assertOk();
+        } finally {
+            Pdf::swap($was);
+        }
+
+        $this->assertStringContainsString('PO-2026-000412', (string) $fake->context, 'سياقُ التذييل لا يحمل رقمَ الورقة');
+        $this->assertStringContainsString(__('أمر شراء'), (string) $fake->context, 'سياقُ التذييل لا يقول أيَّ ورقةٍ هي');
     }
 
     /* ═══════════ والرموزُ في موضعٍ واحد ═══════════ */

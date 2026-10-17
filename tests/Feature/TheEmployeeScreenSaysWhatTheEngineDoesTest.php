@@ -185,8 +185,9 @@ class TheEmployeeScreenSaysWhatTheEngineDoesTest extends TestCase
     /** ٨ · ولا تُدمج القائمةُ المخصّصة بملفّ الوظيفة سرًّا */
     public function test_a_custom_list_is_not_secretly_merged_with_the_profile(): void
     {
+        // كانت `orders` — خرجت من الكتالوج فيردّها التحقّق؛ و«العملاء» قسمٌ في ملفّ البائع مثلها
         $this->actingAs($this->owner)->post(route('admin.employees.store'), $this->newEmployee([
-            'manual_permissions' => true, 'permissions' => ['dashboard', 'orders'],
+            'manual_permissions' => true, 'permissions' => ['dashboard', 'customers'],
         ]));
         $employee = $this->created();
 
@@ -199,7 +200,7 @@ class TheEmployeeScreenSaysWhatTheEngineDoesTest extends TestCase
     /** ٩ · والرجوعُ إلى صلاحيات الوظيفة يعيد العمودَ `null` — بلا قائمةٍ تُرسل معه */
     public function test_returning_to_the_job_title_sets_permissions_back_to_null(): void
     {
-        $employee = $this->person('سارة', 'sara', 'sales', 'مسؤول مبيعات', ['permissions' => ['dashboard', 'orders']]);
+        $employee = $this->person('سارة', 'sara', 'sales', 'مسؤول مبيعات', ['permissions' => ['dashboard', 'customers']]);
 
         $this->save($this->owner, $employee, ['manual_permissions' => false])->assertSessionHasNoErrors();
 
@@ -296,7 +297,8 @@ class TheEmployeeScreenSaysWhatTheEngineDoesTest extends TestCase
     public function test_salary_fields_are_hidden_and_protected_without_payroll_view(): void
     {
         // يملك ما يحمله ملفُّ التوصيل فيمسّ السائق — ولا يملك «عرض مسيرة الرواتب»
-        $clerk = $this->person('كاتب', 'clerk', 'delivery', 'مندوب توصيل', ['permissions' => ['dashboard', 'employees', 'orders', 'projects']]);
+        // (و«المبيعات» خرجت من ملفّ التوصيل ومن الكتالوج — فلا تُذكر هنا)
+        $clerk = $this->person('كاتب', 'clerk', 'delivery', 'مندوب توصيل', ['permissions' => ['dashboard', 'employees', 'projects']]);
         $driver = $this->person('سائق', 'driver', 'delivery', 'مندوب توصيل', ['basic_salary' => 250]);
 
         $edit = $this->actingAs($clerk)->get(route('admin.employees.edit', $driver->id))->viewData('page')['props'];
@@ -427,14 +429,15 @@ class TheEmployeeScreenSaysWhatTheEngineDoesTest extends TestCase
     /** وبطاقةُ الموظّف تعرض ما يفتحه فعلًا — بالحارس نفسِه — ووضعَه */
     public function test_the_card_shows_what_the_guard_allows_and_the_mode(): void
     {
-        $employee = $this->person('سارة', 'sara', 'sales', 'مسؤول مبيعات', ['permissions' => ['dashboard', 'orders', Permissions::CUSTOMER_INVOICE_CANCEL]]);
+        // كانت `orders` قسمَ إلغاء الفاتورة — خرجت مع «المبيعات»، وقسمُ الفعل الآن «المالية»
+        $employee = $this->person('سارة', 'sara', 'sales', 'مسؤول مبيعات', ['permissions' => ['dashboard', 'finance', Permissions::CUSTOMER_INVOICE_CANCEL]]);
 
         $access = $this->actingAs($this->owner)->get(route('admin.employees.show', $employee->id))->viewData('page')['props']['access'];
 
         $this->assertSame(['custom', 'sales'], [$access['mode'], $access['role']]);
         $this->assertSame(['sections' => 2, 'actions' => 1, 'sensitive' => 1], $access['summary']);
         $shown = collect($access['groups'])->flatMap(fn ($g) => array_column($g['items'], 'key'))->sort()->values()->all();
-        $this->assertSame(['customerInvoice.cancel', 'dashboard', 'orders'], $shown);
+        $this->assertSame(['customerInvoice.cancel', 'dashboard', 'finance'], $shown);
         $this->assertSame([Permissions::CUSTOMER_INVOICE_CANCEL], array_column(collect($access['groups'])->firstWhere('key', 'sensitive')['items'], 'key'));
 
         $row = collect($this->get(route('admin.employees.index'))->viewData('page')['props']['employees'])->firstWhere('id', $employee->id);

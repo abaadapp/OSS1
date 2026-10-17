@@ -24,11 +24,11 @@
             <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:separate; border-spacing:8px;">
                 <tr>
                     <td width="50%" style="background:#f9fafb; border-radius:10px; padding:12px;">
-                        <div style="font-size:12px; color:#6b7280;">{{ __('عدد الطلبات') }}</div>
+                        <div style="font-size:12px; color:#6b7280;">{{ __('عدد الفواتير') }}</div>
                         <div style="font-size:18px; font-weight:bold;">{{ $summary['orders'] }}</div>
                     </td>
                     <td width="50%" style="background:#f9fafb; border-radius:10px; padding:12px;">
-                        <div style="font-size:12px; color:#6b7280;">{{ __('متوسط قيمة الطلب') }}</div>
+                        <div style="font-size:12px; color:#6b7280;">{{ __('متوسط قيمة الفاتورة') }}</div>
                         <div style="font-size:18px; font-weight:bold;">{{ $money($summary['avg']) }}</div>
                     </td>
                 </tr>

@@ -5,33 +5,23 @@ namespace App\Http\Controllers;
 use App\Http\Controllers\Admin\CustomerInvoiceController;
 use App\Http\Controllers\Admin\QuotationController;
 use App\Models\BankAccount;
-use App\Models\Business as BusinessModel;
 use App\Models\Customer;
 use App\Models\CustomerInvoice;
-use App\Models\Order;
 use App\Models\Quotation;
-use App\Models\Setting;
 use App\Support\Activity;
 use App\Support\BranchAccess;
 use App\Support\Demo;
-use App\Support\Document\PaperSize;
-use App\Support\DocumentRenderer;
-use App\Support\DocumentTemplates;
-use App\Support\EInvoice;
 use App\Support\InvoiceBranding;
-use App\Support\OrderStatus;
-use App\Support\Paper;
 use App\Support\Pdf;
 use App\Support\PublicDocument;
 use App\Support\Quotations;
 use App\Support\Receivables;
 use App\Support\Reports;
-use App\Support\ShopIdentity;
 use Illuminate\Http\Request;
 
 class PdfController extends Controller
 {
-    /** فاتورة طلب (نقطة البيع / لوحة النشاط) */
+    /** ملخّص المبيعات (PDF) — من فواتير العملاء الصادرة (`Reports::salesReport`) */
     public function salesReport()
     {
         // الفترة تُورَث من الشاشة وتُطبع في الترويسة: ورقةٌ مطبوعة لا مبدّل
@@ -54,191 +44,6 @@ class PdfController extends Controller
         Activity::log('report', 'صدّر تقرير المبيعات (PDF)');
 
         return $this->pdf($html, 'sales-report-'.$range.'-'.now()->format('Y-m-d'));
-    }
-
-    /**
-     * فاتورةُ البيع — ورقةٌ مقصوصة، وهي المستندُ الأساسيّ للبيعة.
-     *
-     * ═══ وكانت تخرج شريطًا حراريًّا، فلم تكن فاتورة ═══
-     *
-     * بابٌ واحدٌ كان يقرأ `paper` ويُخرج ما يقوله: من ضبط صندوقَه على ٨٠مم
-     * — وهو الافتراضيّ — لم يكن يملك فاتورةَ A4 إطلاقًا. لا في المعاينة ولا
-     * في الطباعة ولا في ملفٍّ يُرسله إلى شركةٍ تطلب فاتورةً بمشترياتها.
-     * والوجهُ الوحيدُ على A4 كان الفاتورةَ الضريبية — وتلك تشترط تسجيلًا
-     * ضريبيًّا، فغيرُ المسجَّل لا ورقةَ له أصلًا.
-     *
-     * فصار البابان اثنين: هذا يُخرج الفاتورة، و`orderThermal` يُخرج إيصالَ
-     * الصندوق. ولا شرطَ على أيّهما.
-     */
-    public function orderReceipt($number)
-    {
-        $bid = auth()->user()->business_id ?? Demo::bid();
-        $order = BranchAccess::limit(Order::where('business_id', $bid))->where('number', $number)->with('items')->firstOrFail();
-
-        ['html' => $html, 'paper' => $paper] = self::saleHtml($bid, $order);
-
-        return Pdf::sheet(
-            $html,
-            'invoice-'.$order->number,
-            $paper,
-            /*
-             * وسياقُ الورقة يتكرّر في تذييل كلّ صفحة.
-             *
-             * فاتورةٌ بخمسين صنفًا تمتدّ ثلاثَ صفحات، وصفحةٌ ثانيةٌ لا تحمل
-             * إلّا رقمَها ورقةٌ لا يُعرف إلى أيّ حزمةٍ تعود إن سقطت. انظر
-             * `MpdfDriver::pageNumbers`.
-             */
-            context: self::context($order->number, $bid),
-        );
-    }
-
-    /**
-     * إيصالُ الصندوق — شريطٌ حراريّ، ومخرجٌ ثانٍ لا مستندٌ أوّل.
-     *
-     * وعرضُه من `strip` في القالب، وتغلبه طابعةُ الصندوق الموصولة إن قالت
-     * عرضَها — انظر `stripWidth`.
-     */
-    public function orderThermal($number)
-    {
-        $bid = auth()->user()->business_id ?? Demo::bid();
-        $order = BranchAccess::limit(Order::where('business_id', $bid))->where('number', $number)->with('items')->firstOrFail();
-
-        ['html' => $html, 'paper' => $paper] = self::saleHtml($bid, $order, thermal: true);
-
-        return Pdf::strip($html, 'receipt-'.$order->number, self::stripWidth($paper));
-    }
-
-    /**
-     * ورقةُ البيع مرسومةً — HTML لا PDF.
-     *
-     * ═══ ولمَ خرجت من `orderReceipt` ═══
-     *
-     * شاشةُ الطلب تعرض الورقةَ إلى جانب تفاصيله. ولو بنت متغيّراتِها بيدها
-     * لصارت نسخةً ثانية: يُضاف رمزُ تقييمٍ إلى المطبوع فلا يبلغ المعروض،
-     * أو يُقرأ رقمُ المشتري الضريبيّ في أحدهما دون الآخر. فيرى التاجر ورقةً
-     * ويستلم زبونُه غيرَها — وهو خلافٌ لا يُكتشف إلّا بعد أن تُسلَّم الورقة.
-     *
-     * فالوصفةُ واحدة، والفرقُ بين البابين آخرُ سطرٍ وحده: هذا يردّ نصًّا،
-     * وذاك يمرّره إلى المحرّك.
-     *
-     * @param  bool  $thermal  إيصالُ الصندوق بدل الفاتورة المقصوصة
-     * @return array{html: string, paper: string}
-     */
-    public static function saleHtml(int $bid, Order $order, bool $thermal = false): array
-    {
-        /*
-         * والوجهُ يختاره البابُ لا الإعداد.
-         *
-         * A4 ورقةٌ أخرى لا شريطٌ مُمدَّد: قالبٌ واحدٌ يحكمهما فلا تفترق
-         * ورقتان لطلبٍ واحد، لكنّ التخطيط يختلف — الشريطُ عمودٌ ضيّق
-         * والصفحةُ جدولٌ بأعمدة.
-         *
-         * وكان `paper` يختار أيَّهما يخرج، فيُلغي أحدُهما الآخر. والطلبُ
-         * الواحد له الاثنان معًا: فاتورةٌ تُرسَل وإيصالٌ يُسلَّم.
-         */
-        $values = DocumentTemplates::settings($bid, 'sale');
-
-        $paper = $thermal
-            ? (string) ($values['strip'] ?? PaperSize::T80)
-            : (string) ($values['paper'] ?? PaperSize::A4);
-
-        $width = $thermal ? self::stripWidth($paper) : 0;
-
-        /*
-         * والرسمُ من `DocumentRenderer` لا من قائمةٍ تُكتب هنا.
-         *
-         * كان هذا البابُ يبني متغيّراتِ القالب بيده، ومعاينةُ محرّر القوالب
-         * تبنيها عندها — فما يُضاف لأحدهما لا يبلغ الآخر: يُضبط شيءٌ فيُرى
-         * في المعاينة ويغيب عن الطابعة. وهو خلافٌ لا يُكتشف إلّا بعد أن
-         * يأخذ الزبون ورقته.
-         *
-         * وقيمُ القالب من السجلّ (`DocumentTemplates`) لا من `ReceiptTemplate`:
-         * تلك تردّ المفاتيح القديمة المسطَّحة (`tpl_show_logo`)، وقالبُ A4
-         * الجديد يقرأ أسماءَ السجلّ. و`legacy()` تحوّلها للشريط وحده.
-         */
-        $extra = [
-            'qr' => EInvoice::forOrder($order, Demo::vatSettings(), Demo::business($bid)),
-            /*
-             * ورمزُ الورقة أونلاين.
-             *
-             * الإيصال الحراريّ يبهت في جيبٍ خلال أشهر، ويُبلَّل، ويضيع. وزبونٌ
-             * يعود بضمانٍ بعد سنةٍ يحمل قصاصةً لا تُقرأ. فيحمل أسفلُه رمزًا
-             * يفتح نسختَه الحيّة — رابطٌ دائم لا يُخمَّن (انظر PublicDocument).
-             */
-            'paperUrl' => PublicDocument::url($order) ?? '',
-            // رقم المشتري الضريبي: تحتاجه منشأةٌ مسجَّلة لتخصم ضريبة شرائها
-            'customerTax' => $order->customer_id
-                ? optional(Customer::find($order->customer_id))->tax_number
-                : null,
-        ];
-
-        return [
-            'paper' => $thermal ? ($width <= 60 ? PaperSize::T58 : PaperSize::T80) : $paper,
-            'html' => $thermal
-                ? DocumentRenderer::saleStrip($bid, $order, $values, $width, $extra)
-                : DocumentRenderer::saleSheet($bid, $order, $values, $extra + ['paper' => $paper]),
-        ];
-    }
-
-    /**
-     * عرضُ ورق هذه الطابعة بالمليمتر.
-     *
-     * ولا تُسأل إلّا عن شريط: الفاتورةُ المقصوصة بابٌ آخر.
-     */
-    private static function stripWidth(string $paper): int
-    {
-        return $paper === '58mm' ? 58 : 80;
-    }
-
-    /** كشف حساب عميل (PDF) */
-    public function customerStatement($id)
-    {
-        $bid = auth()->user()->business_id ?? Demo::bid();
-        $customer = Customer::where('business_id', $bid)->findOrFail($id);
-
-        // ولمن قُيّد بفروعٍ: كشفُه ما بيع في فروعه — انظر BranchAccess
-        $orders = BranchAccess::limit(Order::where('business_id', $bid))->where('customer_id', $customer->id)->sold()
-            ->orderBy('ordered_at')->get();
-        $returns = collect();
-
-        $totalSpent = (float) $orders->sum('total');
-        $totalReturned = 0.0;
-
-        $html = view('pdf.customer-statement', [
-            'customer' => $customer,
-            'orders' => $orders,
-            'returns' => $returns,
-            'totalSpent' => $totalSpent,
-            'totalReturned' => $totalReturned,
-            'net' => $totalSpent - $totalReturned,
-            'business' => Demo::business($bid),
-            'generatedAt' => now()->format('Y-m-d H:i'),
-        ])->render();
-
-        Activity::log('report', 'صدّر كشف حساب العميل: '.$customer->name, ['subject_id' => $customer->id]);
-
-        return $this->pdf($html, 'statement-'.$customer->id.'-'.now()->format('Y-m-d'));
-    }
-
-    /** تقرير قائمة الطلبات (PDF) */
-    public function ordersReport()
-    {
-        $orders = Demo::orders(request());
-        $html = view('pdf.orders-report', [
-            'business' => Demo::business(auth()->user()->business_id ?? Demo::bid()),
-            'branch' => Demo::scopeName(true),
-            'orders' => $orders,
-            // الملغى خارج المجموع كما في الشاشة — انظر ReportExportController::ordersXlsx
-            'total' => array_sum(array_map(
-                fn ($o) => $o['status'] === OrderStatus::CANCELLED ? 0.0 : (float) $o['total'],
-                $orders,
-            )),
-            'generatedAt' => now()->format('Y-m-d H:i'),
-        ])->render();
-
-        Activity::log('report', 'صدّر قائمة الطلبات (PDF)');
-
-        return $this->pdf($html, 'orders-report-'.now()->format('Y-m-d'));
     }
 
     /** تقرير المنتجات (PDF) */
@@ -291,73 +96,6 @@ class PdfController extends Controller
     }
 
     
-
-    /**
-     * الفاتورةُ الضريبيّة — ولا تخرج باسمٍ يكتبه النظام.
-     *
-     * `Paper::brand()` تطبع اسمَ المتجر في رأسها، و`EInvoice` تضعه في رمز
-     * الاستجابة. ومتجرٌ لم يُسمَّ بعدُ يخرج ورقُه باسمٍ لم يختره صاحبُه —
-     * «متجري» أو «نظام Event Plus OSS» — والزبونُ الذي يطلبها لمحاسبه يعيدها،
-     * والرقمُ الضريبيّ عليها منسوبٌ إلى اسمٍ لا وجود له.
-     *
-     * والمنعُ هنا لا في الشاشة: هذا البابُ يُفتح برابطٍ مباشر، ولا زرَّ
-     * يقوده اليوم أصلًا.
-     */
-    public function taxInvoice($number)
-    {
-        $bid = auth()->user()->business_id ?? Demo::bid();
-        $order = BranchAccess::limit(Order::where('business_id', $bid))->where('number', $number)->with('items')->firstOrFail();
-
-        if (! ShopIdentity::confirmed(BusinessModel::find($bid))) {
-            abort(409, __('لم تُسمَّ شركتك بعد — والفاتورة الضريبية تحمل اسمها. أتمّ التهيئة من «الإعدادات ‹ تهيئة الشركة» ثمّ أصدِرها.'));
-        }
-
-        $vat = Demo::vatSettings();
-        $business = Demo::business($bid);
-
-        /*
-         * والفاتورةُ الضريبية وجهٌ ثالثٌ للقالب نفسه لا قالبٌ رابع.
-         *
-         * ثلاثتُها — الإيصالُ الحراريّ وفاتورةُ A4 والضريبيةُ — يحكمها
-         * `sale` في السجلّ. وقالبان لهما ترويسةٌ وتذييلٌ وجدولٌ واحد
-         * يفترقان عند أوّل تعديل: لطلبٍ واحد تخرج ورقتان لا يجمعهما شكل.
-         *
-         * وما يخصّها وحدها — أنّ رقمَ البائع الضريبيّ **بلا مقبض** — علمٌ
-         * يُمرَّر لا قالبٌ يُنسَخ. انظر رأس `documents/v1/sale.blade.php`.
-         */
-        $values = DocumentTemplates::settings($bid, 'sale');
-        /* والضريبيةُ ورقةٌ لا شريط: من اختار ٨٠ مم يأخذها على A4 */
-        $sheet = PaperSize::isStrip((string) ($values['paper'] ?? ''))
-            ? PaperSize::A4
-            : (string) $values['paper'];
-
-        $html = DocumentRenderer::saleSheet($bid, $order, $values, [
-            'taxInvoice' => true,
-            'paper' => $sheet,
-            'customerTax' => $order->customer_id ? optional(Customer::find($order->customer_id))->tax_number : null,
-            'qr' => EInvoice::forOrder($order, $vat, $business),
-            // ورمزُ الورقة أونلاين — كما في فاتورة البيع وإيصالها
-            'paperUrl' => PublicDocument::url($order) ?? '',
-            'generatedAt' => now()->format('Y-m-d H:i'),
-        ]);
-
-        Activity::log('report', 'أصدر فاتورة ضريبية للطلب: '.$order->number, ['subject_id' => $order->id]);
-
-        return Pdf::sheet($html, 'tax-invoice-'.$order->number, $sheet, context: self::context($order->number, $bid));
-    }
-
-    /**
-     * ما يُعرِّف الورقةَ في تذييل كلّ صفحة — رقمُها واسمُ متجرها.
-     *
-     * ويُقرأ اسمُ المتجر من `Paper::brand` كبقيّة الورق: هي التي تعرف الاسمَ
-     * المعروض الذي اختاره صاحبُ المحلّ، لا صفَّ المتجر في لوحة المنصّة.
-     */
-    private static function context(?string $number, int $businessId): string
-    {
-        $shop = Paper::brand(Demo::business($businessId))['name'];
-
-        return trim(trim((string) $number).' · '.$shop, ' ·');
-    }
 
     /**
      * فاتورةُ عميل (PDF) — بالبنية القائمة لا بمحرّكٍ ثانٍ.

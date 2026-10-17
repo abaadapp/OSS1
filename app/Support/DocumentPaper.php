@@ -79,13 +79,19 @@ class DocumentPaper
     /**
      * فاتورةُ البيع ورقةً — أكملُ ما يُطبع في النظام.
      *
+     * ═══ وتبقى للقراءة وحدها ═══
+     *
+     * خرجت «المبيعات» وطباعتُها من النظام، وبقيت هذه لبابٍ واحد: النسخةُ
+     * العامّة لإيصالٍ قديم في يد زبون (`PublicDocumentController` — رمزُه
+     * مطبوعٌ على الورقة نفسِها). لا شاشةَ في اللوحة تستدعيها.
+     *
      * ═══ وحقولُ السداد تُقرأ من الدفتر لا من عمودٍ في `orders` ═══
      *
      * «المسدَّد» و«الباقي» و«تاريخ الاستحقاق» و«شروط الدفع» ليست أعمدةً في
      * `orders`، ولا يجوز أن تكون:
      *
-     *  • البيعُ الآجل في نقطة البيع **يُصدر فاتورةَ عميلٍ فعلًا**
-     *    (`CustomerInvoices::fromOrder`)، وهي التي تحمل الاستحقاقَ والشروط.
+     *  • البيعُ الآجل في نقطة البيع **كان يُصدر فاتورةَ عميلٍ فعلًا**
+     *    (`Order::customerInvoices`)، وهي التي تحمل الاستحقاقَ والشروط.
      *  • و«المسدَّد» ليس عمودًا هناك أيضًا: `CustomerInvoice::paidTotal()`
      *    يجمعه من `customer_payment_allocations` — أي من الدفتر نفسِه.
      *
@@ -222,50 +228,6 @@ class DocumentPaper
             'partial' => $outstanding > 0 || ($paid > 0 && $paid < (float) $invoice->total),
             'terms' => self::terms($invoice->payment_terms_days),
             'due_at' => optional($invoice->due_at)->format('Y-m-d') ?: '',
-        ];
-    }
-
-    /**
-     * سندُ تسليمٍ لطلب — من الطلب لا من جدول `delivery_notes`.
-     *
-     * ذاك جدولٌ لا يكتب فيه شيءٌ في النظام كلّه: نموذجٌ وهجرةٌ بلا متحكّم ولا
-     * شاشة. وورقةٌ تُرسم منه تخرج فارغةً أبدًا.
-     */
-    public static function forDelivery(Order $order): array
-    {
-        $cur = self::currency($order->business_id, $order);
-
-        return [
-            'title' => __('سند تسليم'),
-            'number' => $order->number,
-            'date' => optional($order->ordered_at)->format('Y-m-d H:i'),
-            'branch' => $order->branch,
-            'employee' => $order->employee_name,
-            /*
-             * والمستلِم قبل المشتري: الورقة تمشي مع الشحنة، والسائق يقرأ إلى
-             * من يُسلّم لا من دفع. وطلبُ هديّةٍ يفترق فيه الاثنان دائمًا.
-             */
-            'parties' => [
-                [
-                    'cap' => 'المستلِم',
-                    'lines' => array_values(array_filter([
-                        $order->recipient_name ?: ($order->customer_name ?: __('عميل نقدي')),
-                        $order->recipient_phone ?: null,
-                        $order->delivery_address ?: null,
-                        $order->delivery_notes ?: null,
-                    ])),
-                ],
-            ],
-            'items' => $order->items->map(fn ($i) => [
-                'name' => $i->name,
-                'qty' => self::qty($i->quantity),
-                'unit' => self::money($i->price, $cur),
-                'total' => self::money($i->total ?: $i->price * $i->quantity, $cur),
-            ])->all(),
-            'totals' => [
-                ['label' => 'الإجمالي', 'value' => self::money($order->total, $cur), 'grand' => true],
-            ],
-            'notes' => (string) ($order->delivery_notes ?: $order->notes ?: ''),
         ];
     }
 
@@ -699,7 +661,6 @@ class DocumentPaper
         }
 
         $titles = [
-            'delivery' => 'سند تسليم',
             'purchase' => 'أمر شراء',
             'grn' => 'سند استلام بضاعة',
             'supplier_invoice' => 'فاتورة مورّد',

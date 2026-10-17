@@ -50,7 +50,7 @@ class TheManagementScreensOpenForTheRightPeopleTest extends ManagementTestCase
     {
         $bid = (int) $this->business->id;
         $this->invoice(1000, '2026-09-10');
-        $this->seller->update(['permissions' => ['dashboard', 'quotations', 'projects', 'orders', 'customers', 'products', 'management']]);
+        $this->seller->update(['permissions' => ['dashboard', 'quotations', 'projects', 'customers', 'products', 'management']]);
         $viewer = $this->seller->fresh();
 
         $overview = ExecutiveMetrics::overview($bid, Period::resolve($bid, 'this_month'), $viewer);

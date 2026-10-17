@@ -5,7 +5,6 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\ActivityController;
 use App\Http\Controllers\Admin\Finance\ChartController;
 use App\Http\Controllers\Controller;
-use App\Http\Controllers\PdfController;
 use App\Models\Branch;
 use App\Models\Business;
 use App\Models\CustomAlert;
@@ -13,7 +12,6 @@ use App\Models\Customer;
 use App\Models\CustomerAddress;
 use App\Models\GoodsReceiptNote;
 use App\Models\JobTitle;
-use App\Models\Order;
 use App\Models\Product;
 use App\Models\Project;
 use App\Models\Quotation;
@@ -29,7 +27,6 @@ use App\Support\GoodsReceipts;
 use App\Support\InventoryForecast;
 use App\Support\InvoiceBranding;
 use App\Support\Mailer;
-use App\Support\OrderStatus;
 use App\Support\Permissions;
 use App\Support\PurchaseOrders;
 use App\Support\PurchaseOrderTotals;
@@ -37,8 +34,6 @@ use App\Support\PurchaseUnits;
 use App\Support\Quotations;
 use App\Support\Reports;
 use App\Support\Roles;
-use App\Support\ShopIdentity;
-use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
@@ -144,166 +139,6 @@ class PageController extends Controller
         ]);
     }
 
-    /* ------------------------------ الطلبات ------------------------------ */
-
-    public function ordersShow(string $number): Response
-    {
-        $order = Demo::orderDetails($number);
-        abort_if(empty($order), 404);
-
-        // تُفتح لطلبات المتجر كلِّها — إلّا لمن قُيّد بفروعٍ: طلبُ غيرها ليس له
-        abort_unless(BranchAccess::limit(Order::where('business_id', Demo::bid())->where('number', $number))->exists(), 404);
-
-        return Inertia::render('Admin/Orders/Show', [
-            'order' => $order,
-            /*
-             * هل تُعرض «فاتورة ضريبية» على هذا الطلب — وإن لم تُعرض فلمَ.
-             *
-             * والحالتان تُفترقان لأنّ علاجَهما مختلف. متجرٌ غير مسجَّلٍ في
-             * الضريبة لا فاتورةَ ضريبيّةً له أصلًا: القالبُ يُسقط الرمزَ ولا
-             * يدّعي أنّها ضريبيّة، فزرٌّ بهذا الاسم يَعِد بورقةٍ لا تُنتَج.
-             * ومتجرٌ مسجَّلٌ لم يُسمَّ بعد سيُردّ عند الباب — فيُقال له ذلك
-             * على الزرّ لا بعد الضغط عليه.
-             */
-            'taxInvoice' => [
-                'registered' => Demo::vatSettings()['number'] !== '',
-                'ready' => ShopIdentity::confirmed(Business::find(Demo::bid())),
-            ],
-            /*
-             * طلبُ تقييم Google — ويُعرض حين يعمل وحدَه.
-             *
-             * الشرطان يُقاسان في الخادم لا في الشاشة: الحالةُ بعد التسليم،
-             * وفرعُ الطلب مربوطٌ بملفّه. وزرٌّ يُعرض ثمّ يردّ «اربط فرعك
-             * أوّلًا» بابٌ معروضٌ لا يُفتح.
-             */
-            /*
-             * إبلاغُ الزبون بحالة طلبه يدويًّا — طريقٌ لا يمرّ بميتا.
-             *
-             * ويبقى معروضًا ولو عمل المُرسِلُ الآليّ: الآليُّ يُوقَف بحظرٍ
-             * أو بقالبٍ لم يُعتمَد أو بحصّةٍ نفدت، وفي كلٍّ منها يبقى الزبون
-             * بلا خبر. واليدُ آخرُ ما يبقى حين تسقط الأتمتة.
-             */
-            /*
-             * والورقةُ إلى جانب التفاصيل — HTML لا PDF.
-             *
-             * الشاشةُ قسمان: ما يقوله النظام عن الطلب، وما ستراه الجهةُ التي
-             * تستلم ورقتَه. ومن يراجع فاتورةً أمام زبونٍ يحتاج الاثنين في
-             * نظرةٍ واحدة لا في تبديلٍ بين نافذتين.
-             *
-             * ورسمُها HTML لا PDF عن قصد: لا شريطَ قارئٍ من المتصفّح فوقها،
-             * ولا محرّكَ طباعةٍ يُشغَّل لمن جاء يقرأ حالةَ طلب — والرسمُ
-             * نصًّا جزءٌ يسير من ثمن توليد ملفّ.
-             *
-             * ووصفتُها من `PdfController::saleHtml` نفسِها التي تُطبع، فلا
-             * تفترق المعروضةُ عن المطبوعة.
-             */
-            'paper' => $this->orderPaper($number),
-            /*
-             * أيُصحَّح **متنُ** الفاتورة من هنا — وإن لم يُصحَّح فلمَ.
-             *
-             * وشرطاه اللذان يقيسهما الخادم عند الكتابة نفسِهما: صلاحيةٌ باسمها
-             * (`order.edit`)، ويومُ البيع لم ينتهِ (`OrderCorrection::assertSameDay`).
-             * فما تقوله الشاشة قبل الضغط هو ما سيقوله الردُّ بعده.
-             *
-             * ويفترق جوابُ المانعين: من لا يملك الصلاحية لا يُعرض له الزرّ —
-             * بابٌ لا يُعرض خيرٌ من بابٍ يُعرض ثمّ يُقال لصاحبه «ليست لك». ومن
-             * يملكها وانتهى يومُ فاتورته يراه معطَّلًا بسببه مكتوبًا عليه: هذا
-             * حدٌّ زمنيّ يعرفه غدًا ويُقدّر له، لا رفضٌ لشخصه.
-             */
-            'invoiceEdit' => $this->invoiceEditState($number),
-            /*
-             * أهذا الطلب من الفرع الذي تقف عليه — وإن لم يكن، فمن أيّ فرع.
-             *
-             * الصفحةُ تُفتح لطلبات المتجر كلِّها عمدًا: يصلها التاجرُ من
-             * البحث العامّ، ومن التنبيهات، ومن صفحة العميل — وكلُّها لا
-             * تُرشِّح بالفرع. فإغلاقُها كان سيقطع تلك الطرق الأربعة.
-             *
-             * لكنّ **الأفعال** تتبع الفرع (`OrderDetailController::find`):
-             * فكانت الصفحة تُفتح كاملةً بأزرارها، ويضغط التاجرُ «جاهز» أو
-             * «إرسال» فتُردّ صفحةُ ٤٠٤ بلا كلمة. وهذا ما تقيسه الشاشةُ الآن
-             * لتقوله قبل الضغط بدل أن تُظهره بعده.
-             */
-            'otherBranch' => $this->orderOtherBranch($number),
-        ]);
-    }
-
-    /**
-     * فرعُ الطلب حين لا يكون فرعَك — و`null` حين يكون.
-     *
-     * @return array{id: int, name: string}|null
-     */
-    private function orderOtherBranch(string $number): ?array
-    {
-        $here = Demo::currentBranchId();
-
-        if (! $here) {
-            // «كل الفروع» يرى المتجر كلَّه ويتصرّف فيه — لا قفل
-            return null;
-        }
-
-        $order = Order::where('business_id', Demo::bid())
-            ->where('number', $number)->first();
-
-        if (! $order || (int) $order->branch_id === (int) $here || ! $order->branch_id) {
-            return null;
-        }
-
-        $branch = Branch::where('business_id', Demo::bid())->find($order->branch_id);
-
-        return $branch ? ['id' => (int) $branch->id, 'name' => (string) $branch->name] : null;
-    }
-
-    /**
-     * حالُ تصحيح الفاتورة لهذا الطلب.
-     *
-     * @return array{can: bool, reason: ?string}
-     */
-    private function invoiceEditState(string $number): array
-    {
-        if (! auth()->user()?->may('order.edit')) {
-            return ['can' => false, 'reason' => null];
-        }
-
-        /*
-         * وبالفرع كما يقرؤه `OrderEditController::find`: طلبُ فرعٍ آخر لا
-         * يُصحَّح، فلا يُعرض له قلم. وسببُ المنع هنا ليس «انتهى اليوم» —
-         * هو الفرع، وتقوله لافتةُ الصفحة كلِّها لا هذا الزرّ وحده.
-         */
-        $order = Order::where('business_id', Demo::bid())
-            ->tap(fn ($w) => BranchAccess::scope($w))
-            ->where('number', $number)->first();
-
-        $soldOn = $order?->ordered_at ?? $order?->created_at;
-
-        // فاتورةٌ بلا تاريخٍ أصلًا لا يُقاس عليها يوم — ولا يُعرض لها زرّ
-        if (! $soldOn) {
-            return ['can' => false, 'reason' => null];
-        }
-
-        return Carbon::parse($soldOn)->isSameDay(now())
-            ? ['can' => true, 'reason' => null]
-            : ['can' => false, 'reason' => __('تعديل الفاتورة — انتهى يومها')];
-    }
-
-    /**
-     * ورقةُ الطلب للعرض — أو `null` لطلبٍ لا صفَّ له.
-     *
-     * @return array{html: string, size: string}|null
-     */
-    private function orderPaper(string $number): ?array
-    {
-        $order = Order::where('business_id', Demo::bid())
-            ->where('number', $number)->with('items')->first();
-
-        if (! $order) {
-            return null;
-        }
-
-        $paper = PdfController::saleHtml((int) Demo::bid(), $order);
-
-        return ['html' => $paper['html'], 'size' => $paper['paper']];
-    }
-
     /* ------------------------------ العملاء ------------------------------ */
 
     public function customersShow(string $id): Response
@@ -313,7 +148,14 @@ class PageController extends Controller
 
         return Inertia::render('Admin/Customers/Show', [
             'customer' => $customer,
-            'orders' => Demo::customerOrders($id),
+            /*
+             * فواتيرُه وكشفُ حسابه لمن يفتح «فواتير العملاء» — وبابُها «المالية».
+             *
+             * كانت تُرسَل لكلّ من يفتح العملاء تحت اسم «سجل الطلبات»، وتُفتح
+             * من «المبيعات». وخرجت المبيعات فصار السؤالُ سؤالَ المالية: من لا
+             * يفتح الفاتورة لا يُعرض له سجلُّها.
+             */
+            'invoices' => auth()->user()?->allows('finance') ? Demo::customerInvoices($id) : null,
             // الافتراضي أولًا ثم الأقدم — ترتيب ثابت لا يقفز بين التحميلات
             'addresses' => CustomerAddress::where('customer_id', $id)
                 ->orderByDesc('is_default')->orderBy('id')->get()
@@ -846,5 +688,4 @@ class PageController extends Controller
             ? $logo
             : \Illuminate\Support\Facades\Storage::disk('public')->url($logo);
     }
-
 }

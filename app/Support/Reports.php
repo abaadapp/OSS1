@@ -112,9 +112,9 @@ class Reports
         [
             'key' => 'invoices',
             'category' => 'operational',
-            // وقسمُها `orders`: هو القسمُ الذي يحكم شاشاتِ فواتير العملاء
+            // وقسمُها `finance`: هو القسمُ الذي يحكم شاشاتِ فواتير العملاء
             // أصلًا — انظر `Permissions::ALIASES['customerInvoices']`
-            'section' => 'orders',
+            'section' => 'finance',
             'title' => 'فواتير العملاء',
             'desc' => 'كل فاتورةٍ بحال سدادها وفرعها وقيمتها وما بقي عليها.',
             'icon' => 'file-text',

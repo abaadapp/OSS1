@@ -27,9 +27,11 @@ class ADocumentScreenShowsThePaperBesideItTest extends TestCase
      * وسندُ المورّد ليس منها عمدًا: ورقةٌ **تصل** من المورّد لا تخرج من
      * افنت بلس، فلا ورقةَ لنا نعرضها — ومرفقُها هو مستندُه. وقرارُه نافذةُ
      * مطابقةٍ ثلاثيّة (الأمرُ والمستلَمُ والمفوتَر)، وهي فعلٌ لا مستندٌ يُقرأ.
+     *
+     * وشاشةُ الطلب كانت أوّلَها — وخرجت مع «المبيعات»، والقاعدةُ باقيةٌ على
+     * الثلاث.
      */
     private const SCREENS = [
-        'Admin/Orders/Show.tsx',
         'Admin/Purchases/Show.tsx',
         'Admin/Inventory/ReceiptShow.tsx',
         'Admin/CustomerInvoices/Show.tsx',
@@ -120,7 +122,7 @@ class ADocumentScreenShowsThePaperBesideItTest extends TestCase
     /**
      * والورقةُ إلى جانب التفاصيل لا تحتها — على الشاشة الواسعة.
      *
-     * وبقياسٍ واحد في الأربع: من ينتقل بين شاشةِ طلبٍ وشاشةِ أمرِ شراءٍ
+     * وبقياسٍ واحد في الثلاث: من ينتقل بين شاشةِ فاتورةٍ وشاشةِ أمرِ شراءٍ
      * يجد الورقةَ حيث تركها.
      */
     public function test_the_paper_sits_beside_the_details_at_one_measure(): void
@@ -137,9 +139,9 @@ class ADocumentScreenShowsThePaperBesideItTest extends TestCase
     /**
      * وشريطُ التعريف مشتركٌ كذلك — لا قائمةَ «عنوان … قيمة» تُكتب بيدها.
      *
-     * وشاشةُ الطلب خارجَه اليوم: ترويستُها تحمل حالَ الطلب وعنوانَ التسليم
-     * وبطاقةَ الزبون في كتلٍ لها أسبابُها. وإدخالُها في الشريط عملٌ لم
-     * يُطلَب — والشرطُ هنا على الثلاث التي أُعيد ترتيبُها.
+     * وكانت شاشةُ الطلب خارجَه: ترويستُها تحمل حالَ الطلب وعنوانَ التسليم
+     * وبطاقةَ الزبون في كتلٍ لها أسبابُها — وخرجت مع «المبيعات». والشرطُ
+     * هنا على الثلاث التي أُعيد ترتيبُها.
      */
     public function test_the_rebuilt_screens_share_one_identity_strip(): void
     {
