@@ -53,7 +53,8 @@ class PurchaseOrderController extends Controller
     {
         $s = Demo::purchaseOrderStats();
         $mayRead = (bool) auth()->user()?->may(Permissions::ATTACHMENT_VIEW);
-        $filtered = collect(['status', 'from', 'to', 'supplier_id'])->contains(fn ($k) => Dataset::param($request, $k) !== null);
+        $filtered = collect(['status', 'from', 'to', 'supplier_id'])->contains(fn ($k) => Dataset::param($request, $k) !== null)
+            || Search::term($request) !== '';
         $kept = $filtered ? PurchaseOrdersDataset::query($request, $this->bid())->pluck('id')->flip()->all() : null;
 
         return Inertia::render('Admin/Purchases/Index', [
@@ -72,9 +73,9 @@ class PurchaseOrderController extends Controller
              * ومن لا يملك فتحَ المرفقات لا يُبنى له رابط.
              */
             /*
-             * والحالُ والمدّةُ (`status` · `from` · `to`) تُرشَّح في الخادم بالاستعلام
-             * نفسِه الذي يقرؤه ملفُّ التصدير (`Exports\PurchaseOrdersDataset::query`):
-             * فما في القائمة هو ما في الملفّ.
+             * والبحثُ والحالُ والمدّةُ والمورّد (`q` · `status` · `from` · `to` · `supplier_id`)
+             * تُرشَّح في الخادم بالاستعلام نفسِه الذي يقرؤه ملفُّ التصدير
+             * (`Exports\PurchaseOrdersDataset::query`): فما في القائمة هو ما في الملفّ.
              */
             'orders' => array_values(array_map(function ($o) use ($mayRead) {
                 $o['receipt'] = $o['receipt'] && $mayRead
@@ -83,7 +84,7 @@ class PurchaseOrderController extends Controller
 
                 return $o;
             }, array_filter(Demo::purchaseOrders(), fn ($o) => $kept === null || isset($kept[$o['id']])))),
-            'filters' => $request->only('status', 'from', 'to'),
+            'filters' => $request->only('status', 'from', 'to', 'supplier_id'),
             'reorder' => Demo::reorderSuggestions(),
             /*
              * بحثٌ يصل مع الرابط.

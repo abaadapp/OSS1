@@ -49,8 +49,8 @@
 | قوالب Blade | 55 |
 | أوامر الطرفيّة | 16 (منها `eventplus:production-check` و`eventplus:smoke`) |
 | المهامّ المجدولة | 7 — كلُّها موجودة |
-| ملفات اختبار PHP | 291 (**2698** اختبارًا — 16 منها سباقاتٌ لا تعمل إلّا على PostgreSQL) |
-| ملفات اختبار الواجهة | 27 (234 اختبارًا) |
+| ملفات اختبار PHP | 292 (**2702** اختبارًا — 16 منها سباقاتٌ لا تعمل إلّا على PostgreSQL) |
+| ملفات اختبار الواجهة | 28 (237 اختبارًا) |
 | مفاتيح `lang/en.json` | 6731 |
 | ملفات `config/` | 12 |
 
@@ -58,9 +58,9 @@
 
 | الفحص | النتيجة |
 |---|---|
-| اختبارات PHP على SQLite (`phpunit.xml`) | **2682 / 2698** ناجحًا · 16 متخطّاةً (سباقاتُ PostgreSQL) · 0 إخفاق · 0 خطأ |
-| اختبارات PHP على PostgreSQL 16 (`phpunit.pgsql.xml`) | **2698 / 2698** — بما فيها السباقاتُ الـ16 |
-| اختبارات الواجهة (vitest) | **234 / 234** |
+| اختبارات PHP على SQLite (`phpunit.xml`) | **2686 / 2702** ناجحًا · 16 متخطّاةً (سباقاتُ PostgreSQL) · 0 إخفاق · 0 خطأ |
+| اختبارات PHP على PostgreSQL 16 (`phpunit.pgsql.xml`) | **2702 / 2702** — بما فيها السباقاتُ الـ16 |
+| اختبارات الواجهة (vitest) | **237 / 237** |
 | `npx tsc --noEmit` | صفر أخطاء |
 | `npm run build` | يبني |
 | `composer audit` · `npm audit` | لا ثغرات معلنة · 0 |
@@ -1027,7 +1027,7 @@ Services, Cash, Budgets, Operations, Reviews, ReviewShow, Reports}.tsx` — وك
 | كشف الحساب البنكي | يوم الحركة — برصيدٍ جارٍ صحيح | Excel · PDF · CSV | — |
 | الشيكات | يوم الاستلام | Excel · PDF · CSV | — |
 | فواتير العملاء | الإصدار والاستحقاق | Excel · PDF · CSV | فروع المستخدم |
-| أوامر الشراء | تاريخ الأمر | Excel · PDF · CSV | فروع المستخدم |
+| أوامر الشراء | تاريخ الأمر — والبحثُ (`q`: الرقمُ والمورّدُ والفرع) في الرابط والملفّ | Excel · PDF · CSV | فروع المستخدم |
 | سندات المورّدين | تاريخ السند | Excel · PDF · CSV | `invoice.view` |
 | سداد المورّدين | تاريخ الدفع | Excel · PDF · CSV | `invoice.view` |
 | المشاريع والمعارض | تاريخ البداية — والمرحلةُ اليدويّة كما هي | Excel · PDF · CSV | القيمُ لمن يقرأ المال التجاريّ |
@@ -1159,6 +1159,7 @@ Services, Cash, Budgets, Operations, Reviews, ReviewShow, Reports}.tsx` — وك
 | ملخّصُ الإيرادات وتقاريرُ الإدارة والهالك بمدّتها الخاصّة — وتنزيلُ الإداريّ يسأل عن إذن التحليل | `TheSpecialReportsKeepTheirOwnPeriodsTest` |
 | CSV وإكسل بلا سقف (٢٠٬٥٠٠ صفّ لا يسقط منها صفٌّ ولا يتكرّر، والذاكرةُ لا تنمو) · PDF فوق حدّه يُنبَّه إليه ولا يمرّ كاملًا · المخزونُ «الرصيد الحالي بتاريخ …» | `AnExportCarriesEveryRowOrSaysWhyNotTest` |
 | تعليقُ الكود لا يُطبع على الشاشة نصًّا بين وسوم JSX | `no-comment-renders-as-text.test.ts` |
+| البحثُ في أوامر الشراء (الرقم · المورّد · الفرع) يصل إلى الشاشة والصيغ الثلاث مع المدّة والحال والمورّد والفروع | `APurchaseOrderSearchReachesItsExportTest` · `purchase-order-search-reaches-the-export.test.tsx` |
 | المرحلة 13: المراحلُ من مستنداتها، والإقفالُ يسأل عن المسار، والبطاقةُ والصفحةُ مصدرُهما واحد | `TheProjectWalksSevenStagesFromQuoteToCloseTest` |
 | المسارُ يُنقل يدويًّا إلى أيّ مرحلة بلا تسلسل، ولا يمحو مستندًا ولا يغيّر حالة المشروع، ويُسجَّل، ولمن يملك `PROJECT_MANAGE` في شركته وحدها | `TheProjectPathMovesToAnyStageByHandTest` |
 | لا مستندَ يحرّك المرحلة من نفسه — النطاقُ والدفعةُ والفعاليّةُ والتسليمُ والنهائيّة تُحدّث الحقائق والمؤشّرُ مكانه، ولا كاتبَ لـ`workflow_stage` غيرُ `moveTo` | `NoDocumentMovesTheProjectStageByItselfTest` |

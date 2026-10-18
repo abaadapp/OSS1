@@ -49,10 +49,13 @@ interface Props {
     orders: PurchaseOrder[];
     stats: Stat[];
     reorder: ReorderRow[];
-    /** رقمٌ يصل مع الرابط من إشعار الاستلام — يُملأ به حقل البحث */
+    /**
+     * البحثُ في الرابط (`q`) — يصل من إشعار الاستلام أو يُكتب في الحقل، ويقرؤه
+     * الخادمُ للقائمة ولملفّ تصديرها معًا.
+     */
     q: string | null;
-    /** الحالُ والمدّةُ في الرابط — يقرؤهما الخادمُ للقائمة ولملفّ تصديرها معًا */
-    filters?: { status?: string; from?: string; to?: string };
+    /** الحالُ والمدّةُ والمورّدُ في الرابط — يقرؤها الخادمُ للقائمة ولملفّ تصديرها معًا */
+    filters?: { status?: string; from?: string; to?: string; supplier_id?: string };
 }
 
 const STATUSES = ['مسودة', 'مُرسل', 'مستلم جزئيًا', 'مستلم', 'ملغي'];
@@ -196,8 +199,34 @@ export default function PurchasesIndex() {
      * ملفُّ التصدير. والآن يقرؤها الخادمُ للقائمة وللملفّ معًا.
      */
     const status = filters?.status ?? '';
-    const goStatus = (next: string) =>
-        router.get(route('admin.purchases.orders'), { status: next || undefined, from: filters?.from, to: filters?.to }, { preserveState: true, preserveScroll: true, replace: true });
+
+    /*
+     * والبحثُ في الرابط أيضًا (`q`): كان يُرشّح في المتصفّح وحده، فيرى التاجرُ
+     * ثلاثةَ أوامر ويصدّر فيخرج الملفُّ بالأوامر كلّها. الجدولُ ما زال يرشّح فورًا،
+     * وبعد توقّفٍ قصير يُكتب النصُّ في الرابط ويُعاد ما يطابقه من الخادم — فيقرؤه
+     * زرُّ «تصدير» كما يقرأ الحالَ والمدّة.
+     */
+    const typed = useRef(q ?? '');
+    const searchTimer = useRef<number | undefined>(undefined);
+    // آخرُ المرشّحات لا ما كانت عليه حين بدأ المؤقّت — فلا يُعيد البحثُ المتأخّرُ حالًا تغيّرت
+    const shown = useRef({ status, filters });
+    shown.current = { status, filters };
+    const visit = (patch: Record<string, string | null | undefined>) => {
+        const query: Record<string, string> = {};
+        const { status: now, filters: f } = shown.current;
+        const merged = { q: typed.current.trim(), status: now, from: f?.from, to: f?.to, supplier_id: f?.supplier_id, ...patch };
+        for (const [k, v] of Object.entries(merged)) {
+            if (v) query[k] = v;
+        }
+        window.clearTimeout(searchTimer.current);
+        router.get(route('admin.purchases.orders'), query, { preserveState: true, preserveScroll: true, replace: true });
+    };
+    const goStatus = (next: string) => visit({ status: next || null });
+    const search = (value: string) => {
+        typed.current = value;
+        window.clearTimeout(searchTimer.current);
+        searchTimer.current = window.setTimeout(() => visit({}), 400);
+    };
 
     return (
         <AdminLayout title="أوامر الشراء">
@@ -206,7 +235,7 @@ export default function PurchasesIndex() {
                 subtitle={t('طلبات التزويد من المورّدين واستلام البضاعة')}
                 actions={
                     <>
-                        {/* بالحال والمدّة المعروضتين — والقيمةُ التزامٌ لا مصروفٌ محقَّق */}
+                        {/* بالبحث والحال والمدّة المعروضة — والقيمةُ التزامٌ لا مصروفٌ محقَّق */}
                         <ExportMenu {...exportLinks('admin.purchases.orders.export')} />
                         <Button variant="outline" asChild>
                             <SmartLink routeName="admin.suppliers.index" href={route('admin.suppliers.index')}>
@@ -281,7 +310,7 @@ export default function PurchasesIndex() {
             )}
 
             {/* «لا أوامر بعد» لمن لم يكتب أمرًا — لا لمن رشّح فلم يجد: له مرشّحاتُه ليغيّرها */}
-            {orders.length === 0 && !status && !filters?.from && !filters?.to ? (
+            {orders.length === 0 && !status && !filters?.from && !filters?.to && !filters?.supplier_id && !q ? (
                 <Card className="px-5 py-16 text-center">
                     <ClipboardList className="mx-auto size-8 text-[#d1d5db]" />
                     <p className="mt-3 font-medium text-[#111]">{t('لا توجد أوامر شراء بعد')}</p>
@@ -306,7 +335,13 @@ export default function PurchasesIndex() {
                             onChange={goStatus}
                             tabs={[{ key: '', label: 'كل الحالات' }, ...STATUSES.map((x) => ({ key: x, label: x }))]}
                         />
-                        <ListDateRange routeName="admin.purchases.orders" params={{ status: status || null }} from={filters?.from} to={filters?.to} label="تاريخ الأمر" />
+                        <ListDateRange
+                            routeName="admin.purchases.orders"
+                            params={{ status: status || null, q: q || null, supplier_id: filters?.supplier_id ?? null }}
+                            from={filters?.from}
+                            to={filters?.to}
+                            label="تاريخ الأمر"
+                        />
                     </div>
                     <DataTable
                         rows={orders}
@@ -315,6 +350,7 @@ export default function PurchasesIndex() {
                         searchPlaceholder="ابحث بالرقم أو المورّد…"
                         searchable={(o) => `${o.number} ${o.supplier} ${o.branch ?? ''}`}
                         initialQuery={q ?? undefined}
+                        onQueryChange={search}
                         empty="لا توجد أوامر شراء بعد"
                     />
                 </Card>

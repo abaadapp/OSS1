@@ -6,6 +6,7 @@ use App\Models\PurchaseOrder;
 use App\Models\Supplier;
 use App\Support\BranchAccess;
 use App\Support\Demo;
+use App\Support\Search;
 use Illuminate\Contracts\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 
@@ -32,10 +33,32 @@ final class PurchaseOrdersDataset extends Dataset
     public static function query(Request $request, int $bid): Builder
     {
         return BranchAccess::limit(PurchaseOrder::where('business_id', $bid))
+            ->when(Search::term($request) ?: null, fn ($q, $term) => self::search($q, $term))
             ->when(self::param($request, 'status'), fn ($q, $s) => $q->where('status', $s))
             ->when(self::param($request, 'supplier_id'), fn ($q, $s) => $q->where('supplier_id', (int) $s))
             ->when(self::day($request, 'from'), fn ($q, $d) => $q->whereDate('ordered_at', '>=', $d))
             ->when(self::day($request, 'to'), fn ($q, $d) => $q->whereDate('ordered_at', '<=', $d));
+    }
+
+    /**
+     * البحثُ كما كان يبحث جدولُ الشاشة في المتصفّح: رقمُ الأمر، والمورّدُ كما
+     * يُعرض (الاسمُ المكتوب على الأمر وإلّا اسمُ المورّد)، والفرع.
+     *
+     * كان البحثُ محلّيًّا في `DataTable` لا يعرفه الخادم: يكتب التاجرُ «الخليج»
+     * فيرى ثلاثة أوامر، ويصدّر فيخرج الملفُّ بالأوامر كلّها.
+     */
+    private static function search(Builder $query, string $term): Builder
+    {
+        $like = Search::like();
+        $text = '%'.$term.'%';
+
+        return $query->where(fn ($w) => $w
+            ->where('number', $like, $text)
+            ->orWhere('supplier_name', $like, $text)
+            ->orWhere(fn ($x) => $x
+                ->where(fn ($none) => $none->whereNull('supplier_name')->orWhere('supplier_name', ''))
+                ->whereHas('supplier', fn ($supplier) => $supplier->where('name', $like, $text)))
+            ->orWhereHas('branch', fn ($branch) => $branch->where('name', $like, $text)));
     }
 
     public function columns(Request $request): array
@@ -74,6 +97,7 @@ final class PurchaseOrdersDataset extends Dataset
         $bid = (int) (auth()->user()->business_id ?? Demo::bid());
 
         return array_values(array_filter([
+            ($q = Search::term($request)) !== '' ? __('البحث').': '.$q : null,
             ($s = self::param($request, 'status')) ? __('الحالة').': '.$s : null,
             ($sp = self::param($request, 'supplier_id')) ? __('المورّد').': '.(Supplier::where('business_id', $bid)->whereKey((int) $sp)->value('name') ?? $sp) : null,
         ]));
