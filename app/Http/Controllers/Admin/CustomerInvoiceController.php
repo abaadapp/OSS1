@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\BankAccount;
+use App\Models\Branch;
 use App\Models\Business;
 use App\Models\Customer;
 use App\Models\CustomerCreditNote;
@@ -27,6 +28,7 @@ use App\Support\Document\Version;
 use App\Support\DocumentPaper;
 use App\Support\DocumentRenderer;
 use App\Support\DocumentTemplates;
+use App\Support\Exports\Dataset;
 use App\Support\InvoiceAttachments;
 use App\Support\InvoiceBranding;
 use App\Support\Money;
@@ -38,6 +40,7 @@ use App\Support\Receivables;
 use App\Support\Search;
 use App\Support\Vat;
 use Illuminate\Contracts\View\View;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
@@ -119,15 +122,16 @@ class CustomerInvoiceController extends Controller
      * ترشيحَ عشرين صفًّا من أربعمئة — فتقول الشاشة «لا متأخّرات» ولها عشرون
      * في الصفحة الثالثة. انظر `CustomerInvoice::scopePaymentState`.
      */
-    public function index(Request $request): Response
+    /**
+     * الفواتيرُ المرشَّحة — تقرؤها الشاشةُ وملفُّ تصديرها معًا (`Exports\CustomerInvoicesDataset`).
+     *
+     * فلا يخرج ملفٌّ بعميلٍ أو حالٍ أو مدّةٍ غير التي على الشاشة، ولا بفرعٍ غير
+     * فروع من قُيّد بفروعه (`BranchAccess::invoices`) — ولو كتب `branch_id` بيده.
+     */
+    public static function listQuery(Request $request, int $bid): Builder
     {
-        $bid = $this->bid();
-
-        $per = (int) $request->integer('per_page');
-        $per = in_array($per, self::PER_PAGE, true) ? $per : self::PER_PAGE[0];
-
         // القائمةُ لا تتبع الشريط — ولمن قُيّد بفروعٍ فواتيرُ فروعه وحدها
-        $page = BranchAccess::invoices(CustomerInvoice::where('business_id', $bid))->withMoney()->with('customer')
+        return BranchAccess::invoices(CustomerInvoice::where('business_id', $bid))->withMoney()->with(['customer', 'project:id,code,name'])
             // والمعاملُ من `Search::like` لا مكتوبًا بيده: `like` على Postgres
             // حسّاسٌ لحالة الأحرف و`ilike` ليس كذلك — ومن كتبه بيده أصاب في
             // شاشةٍ وأخطأ في أخرى
@@ -142,16 +146,26 @@ class CustomerInvoiceController extends Controller
             // وحالُ السداد غيرُها: مدفوعة / جزئيًا / غير مدفوعة / متأخرة
             ->when($request->string('state')->toString(), fn ($q, $s) => $q->paymentState($s))
             ->when($request->boolean('overdue'), fn ($q) => $q->overdue())
-            ->when($request->date('from'), fn ($q, $d) => $q->whereDate('issued_at', '>=', $d))
-            ->when($request->date('to'), fn ($q, $d) => $q->whereDate('issued_at', '<=', $d))
-            ->when($request->date('due_from'), fn ($q, $d) => $q->whereDate('due_at', '>=', $d))
-            ->when($request->date('due_to'), fn ($q, $d) => $q->whereDate('due_at', '<=', $d))
-            ->orderByDesc('id')
-            ->paginate($per)
-            ->withQueryString();
+            ->when(Dataset::day($request, 'from'), fn ($q, $d) => $q->whereDate('issued_at', '>=', $d))
+            ->when(Dataset::day($request, 'to'), fn ($q, $d) => $q->whereDate('issued_at', '<=', $d))
+            ->when(Dataset::day($request, 'due_from'), fn ($q, $d) => $q->whereDate('due_at', '>=', $d))
+            ->when(Dataset::day($request, 'due_to'), fn ($q, $d) => $q->whereDate('due_at', '<=', $d))
+            // والفرعُ داخل ما يُسمح به لا خارجه — `BranchAccess::invoices` قبله
+            ->when($request->integer('branch_id'), fn ($q, $id) => $q->where('branch_id', $id))
+            ->orderByDesc('id');
+    }
+
+    public function index(Request $request): Response
+    {
+        $bid = $this->bid();
+
+        $per = (int) $request->integer('per_page');
+        $per = in_array($per, self::PER_PAGE, true) ? $per : self::PER_PAGE[0];
+
+        $page = self::listQuery($request, $bid)->paginate($per)->withQueryString();
 
         return Inertia::render('Admin/CustomerInvoices/Index', [
-            'invoices' => collect($page->items())->map(fn ($i) => $this->row($i))->all(),
+            'invoices' => collect($page->items())->map(fn ($i) => self::listRow($i))->all(),
             /*
              * وشكلُ الترقيم من `Pagination::meta` لا مكتوبًا هنا بيده.
              *
@@ -161,17 +175,19 @@ class CustomerInvoiceController extends Controller
              */
             'pagination' => Pagination::meta($page),
             'filters' => $request->only(
-                'q', 'customer_id', 'status', 'state', 'from', 'to', 'due_from', 'due_to', 'overdue', 'per_page',
+                'q', 'customer_id', 'status', 'state', 'from', 'to', 'due_from', 'due_to', 'overdue', 'per_page', 'branch_id',
             ),
             'states' => ['غير مدفوعة', 'مدفوعة جزئيًا', 'مدفوعة', 'متأخرة'],
             'statuses' => [CustomerInvoice::DRAFT, CustomerInvoice::ISSUED, CustomerInvoice::CANCELLED],
             'customers' => Customer::where('business_id', $bid)->orderBy('name')->get(['id', 'name'])->all(),
+            // الفروعُ التي يراها — ومن قُيّد بفروعٍ لا يُعرض له غيرُها
+            'branches' => BranchAccess::limit(Branch::where('business_id', $bid), null, 'id')->orderBy('id')->get(['id', 'name'])->all(),
             'totals' => Receivables::totals($bid),
         ]);
     }
 
     /** @return array<string, mixed> */
-    private function row(CustomerInvoice $i): array
+    public static function listRow(CustomerInvoice $i): array
     {
         return [
             'id' => $i->id,
@@ -235,7 +251,7 @@ class CustomerInvoiceController extends Controller
              */
             'methods' => CustomerPayments::METHODS,
             'bank_methods' => CustomerInvoices::bankMethods(),
-            'invoice' => $this->row($invoice) + [
+            'invoice' => self::listRow($invoice) + [
                 'subtotal' => (float) $invoice->subtotal,
                 'discount_total' => (float) $invoice->discount_total,
                 'tax_total' => (float) $invoice->tax_total,

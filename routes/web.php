@@ -3,24 +3,23 @@
 use App\Http\Controllers\ActivityController;
 use App\Http\Controllers\Admin\AssetController;
 use App\Http\Controllers\Admin\AutomationController;
-use App\Http\Controllers\Admin\BudgetController;
 use App\Http\Controllers\Admin\BankStatementController;
 use App\Http\Controllers\Admin\BranchController;
+use App\Http\Controllers\Admin\BudgetController;
 use App\Http\Controllers\Admin\CatalogQuickAddController;
 use App\Http\Controllers\Admin\ChangeOrderController;
 use App\Http\Controllers\Admin\ChequeController;
 use App\Http\Controllers\Admin\CommandCenterController;
 use App\Http\Controllers\Admin\CommunicationController;
-use App\Http\Controllers\Admin\WhatsAppController;
 use App\Http\Controllers\Admin\CommunicationTemplateController;
 use App\Http\Controllers\Admin\CurrencyController;
 use App\Http\Controllers\Admin\CustomAlertController;
 use App\Http\Controllers\Admin\CustomerContactController;
 use App\Http\Controllers\Admin\CustomerController;
-use App\Http\Controllers\Admin\DeliveryPackageController;
 use App\Http\Controllers\Admin\CustomerImportExportController;
 use App\Http\Controllers\Admin\CustomerInvoiceController;
 use App\Http\Controllers\Admin\DataImportController;
+use App\Http\Controllers\Admin\DeliveryPackageController;
 use App\Http\Controllers\Admin\DocumentController;
 use App\Http\Controllers\Admin\DocumentPrintController;
 use App\Http\Controllers\Admin\EmployeeController;
@@ -41,6 +40,7 @@ use App\Http\Controllers\Admin\Inventory\StockAdjustmentController;
 use App\Http\Controllers\Admin\InventoryController;
 use App\Http\Controllers\Admin\JobTitleController;
 use App\Http\Controllers\Admin\LanguageController;
+use App\Http\Controllers\Admin\ListExportController;
 use App\Http\Controllers\Admin\ManagementController;
 use App\Http\Controllers\Admin\ManagementReviewController;
 use App\Http\Controllers\Admin\OrganizerController;
@@ -49,22 +49,23 @@ use App\Http\Controllers\Admin\Payroll\PayrollPaymentController;
 use App\Http\Controllers\Admin\Payroll\PayrollRunController;
 use App\Http\Controllers\Admin\PolicyController;
 use App\Http\Controllers\Admin\ProductController;
+use App\Http\Controllers\Admin\ProductImportExportController;
+use App\Http\Controllers\Admin\ProductPackageController;
 use App\Http\Controllers\Admin\ProjectBillingController;
 use App\Http\Controllers\Admin\ProjectController;
 use App\Http\Controllers\Admin\ProjectWorkflowController;
-use App\Http\Controllers\Admin\ProductImportExportController;
-use App\Http\Controllers\Admin\ProductPackageController;
 use App\Http\Controllers\Admin\PurchaseOrderController;
-use App\Http\Controllers\Admin\QuotationController;
-use App\Http\Controllers\Admin\ScopeOfWorkController;
 use App\Http\Controllers\Admin\Purchasing\PurchaseRegisterController;
 use App\Http\Controllers\Admin\Purchasing\SupplierInvoiceController;
+use App\Http\Controllers\Admin\QuotationController;
 use App\Http\Controllers\Admin\ReceivablesController;
 use App\Http\Controllers\Admin\RecoveryEmailController;
 use App\Http\Controllers\Admin\ReportDownloadController;
 use App\Http\Controllers\Admin\ReportExportController;
 use App\Http\Controllers\Admin\ReportFeedController;
 use App\Http\Controllers\Admin\ReportPageController;
+use App\Http\Controllers\Admin\ScopeOfWorkController;
+use App\Http\Controllers\Admin\SettingController;
 use App\Http\Controllers\Admin\SetupController;
 use App\Http\Controllers\Admin\SupplierController;
 use App\Http\Controllers\Admin\SupplierExportController;
@@ -72,6 +73,7 @@ use App\Http\Controllers\Admin\TaskController;
 use App\Http\Controllers\Admin\TemplateController;
 use App\Http\Controllers\Admin\TrashController;
 use App\Http\Controllers\Admin\WasteAnalyticsController;
+use App\Http\Controllers\Admin\WhatsAppController;
 use App\Http\Controllers\Auth\AccountRecoveryController;
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\PasswordResetController;
@@ -86,9 +88,9 @@ use App\Http\Controllers\PdfController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\PublicDeliveryController;
 use App\Http\Controllers\PublicDocumentController;
+use App\Http\Controllers\SearchController;
 use App\Http\Controllers\Webhooks\PostmarkWebhookController;
 use App\Http\Controllers\Webhooks\WhatsAppWebhookController;
-use App\Http\Controllers\SearchController;
 use App\Support\Permissions;
 use Illuminate\Support\Facades\Route;
 
@@ -893,6 +895,44 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'tenant', 'business'
     Route::get('/reports/{report}/export/xlsx', [ReportDownloadController::class, 'xlsx'])->name('reports.export.xlsx');
     Route::get('/reports/{report}/export/csv', [ReportDownloadController::class, 'csv'])->name('reports.export.csv');
     Route::get('/reports/{report}/export/pdf', [ReportDownloadController::class, 'pdf'])->name('reports.export.pdf');
+
+    /*
+     * تصديرُ القوائم التشغيليّة — مسارٌ لكلّ شاشةٍ بصيغته معاملًا (xlsx · csv · pdf).
+     *
+     * الاسمُ تحت قسم الشاشة (`finance.transactions.export`…) فيقيسه حارسُ المسار
+     * بصلاحيتها، والمسارُ تحت `/exports/` فلا يبتلعه مسارٌ بمعرّفٍ قبله. والقائمةُ
+     * من تعريف المسار (`dataset`) لا من الرابط — انظر ListExportController.
+     */
+    Route::get('/exports/transactions/{format}', ListExportController::class)->defaults('dataset', 'transactions')
+        ->whereIn('format', ['xlsx', 'csv', 'pdf'])->name('finance.transactions.export');
+    Route::get('/exports/journal/{format}', ListExportController::class)->defaults('dataset', 'journal')
+        ->whereIn('format', ['xlsx', 'csv', 'pdf'])->name('finance.journal.export');
+    Route::get('/exports/expenses/{format}', ListExportController::class)->defaults('dataset', 'expenses')
+        ->whereIn('format', ['xlsx', 'csv', 'pdf'])->name('expenses.export');
+    Route::get('/exports/dues/{format}', ListExportController::class)->defaults('dataset', 'dues')
+        ->whereIn('format', ['xlsx', 'csv', 'pdf'])->name('finance.dues.export');
+    Route::get('/exports/receivables/{format}', ListExportController::class)->defaults('dataset', 'receivables')
+        ->whereIn('format', ['xlsx', 'csv', 'pdf'])->name('finance.receivables.export');
+    Route::get('/exports/bank-statement/{format}', ListExportController::class)->defaults('dataset', 'bank-statement')
+        ->whereIn('format', ['xlsx', 'csv', 'pdf'])->name('finance.statement.export');
+    Route::get('/exports/cheques/{format}', ListExportController::class)->defaults('dataset', 'cheques')
+        ->whereIn('format', ['xlsx', 'csv', 'pdf'])->name('finance.cheques.export');
+    Route::get('/exports/customer-invoices/{format}', ListExportController::class)->defaults('dataset', 'customer-invoices')
+        ->whereIn('format', ['xlsx', 'csv', 'pdf'])->name('customerInvoices.export');
+    Route::get('/exports/purchase-orders/{format}', ListExportController::class)->defaults('dataset', 'purchase-orders')
+        ->whereIn('format', ['xlsx', 'csv', 'pdf'])->name('purchases.orders.export');
+    Route::get('/exports/supplier-invoices/{format}', ListExportController::class)->defaults('dataset', 'supplier-invoices')
+        ->whereIn('format', ['xlsx', 'csv', 'pdf'])->name('purchases.invoices.export');
+    Route::get('/exports/supplier-payments/{format}', ListExportController::class)->defaults('dataset', 'supplier-payments')
+        ->whereIn('format', ['xlsx', 'csv', 'pdf'])->name('purchases.payments.export');
+    Route::get('/exports/projects/{format}', ListExportController::class)->defaults('dataset', 'projects')
+        ->whereIn('format', ['xlsx', 'csv', 'pdf'])->name('projects.export');
+    Route::get('/exports/payroll/{format}', ListExportController::class)->defaults('dataset', 'payroll')
+        ->whereIn('format', ['xlsx', 'csv', 'pdf'])->name('payroll.export');
+    Route::get('/exports/payroll-payments/{format}', ListExportController::class)->defaults('dataset', 'payroll-payments')
+        ->whereIn('format', ['xlsx', 'csv', 'pdf'])->name('payroll.payments.export');
+    Route::get('/exports/activity/{format}', ListExportController::class)->defaults('dataset', 'activity')
+        ->whereIn('format', ['xlsx', 'csv', 'pdf'])->name('activity.export');
     // تغذية: صفحةٌ تُترك مفتوحة لا يجوز أن تتجمّد على أرقام الصباح
     Route::get('/reports/feed', [ReportFeedController::class, 'reports'])->name('reports.feed');
     // والتصدير يتبع الفترة المعروضة — ملفٌّ يحمل غير ما على الشاشة يُقرأ خطأً
@@ -911,9 +951,9 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'tenant', 'business'
     Route::get('/activity', [ActivityController::class, 'adminIndex'])->name('activity.index');
     Route::get('/settings', [PageController::class, 'settingsIndex'])->name('settings.index');
     Route::post('/language', [LanguageController::class, 'update'])->name('language.update');
-    Route::post('/settings', [App\Http\Controllers\Admin\SettingController::class, 'update'])->name('settings.update');
+    Route::post('/settings', [SettingController::class, 'update'])->name('settings.update');
     // الشعار وحده: ملفٌّ يحتاج multipart، وخلطُه بنموذج الإعدادات يُرسل كل مقبضٍ نصًّا
-    Route::post('/settings/logo', [App\Http\Controllers\Admin\SettingController::class, 'logo'])->name('settings.logo');
+    Route::post('/settings/logo', [SettingController::class, 'logo'])->name('settings.logo');
 
     // المحذوفات — استعادة ما أذهبته ضغطة (انظر TrashController)
     /*

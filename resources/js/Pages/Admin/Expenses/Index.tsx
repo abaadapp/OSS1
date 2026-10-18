@@ -6,6 +6,7 @@ import PageHeader from '@/Components/PageHeader';
 import SectionTabs, { FINANCE_TABS } from '@/Components/SectionTabs';
 import Tabs from '@/Components/Tabs';
 import ExportMenu from '@/Components/ExportMenu';
+import { exportLinks } from '@/lib/exportLink';
 import DataTable, { type Column, type Filter, type ServerPagination } from '@/Components/DataTable';
 import RowActions from '@/Components/RowActions';
 import Field, { Select } from '@/Components/Field';
@@ -58,6 +59,8 @@ interface Props {
     overdueCount: number;
     /** الشهر المعروض (Y-m) — فارغًا يعني كل الشهور */
     month: string;
+    /** الفترةُ المخصَّصة بحدّيها — حين تُكتب `from`/`to` مكان الشهر */
+    span?: string | null;
     /** مجموع الشهر المعروض — يُحسب على الشهر كلّه لا على صفحته */
     monthTotal: number | null;
     monthUnpaid: number | null;
@@ -71,7 +74,7 @@ interface Props {
 
 export default function ExpensesIndex() {
     const { expenses, pagination, types, accountOptions, filters, sorts, totalAmount, totalCount, unpaidAmount, unpaidCount,
-        dueSoonCount, overdueCount, month, monthTotal, monthUnpaid, monthCount, months, today, projects, context } =
+        dueSoonCount, overdueCount, month, span, monthTotal, monthUnpaid, monthCount, months, today, projects, context } =
         usePage<PageProps<Props>>().props;
     const t = useTranslate();
     const currency = context!.currency;
@@ -212,6 +215,9 @@ export default function ExpensesIndex() {
 
     const expenseFilters: Filter<ExpenseRow>[] = [
         { label: 'كل الأنواع', param: 'type', options: typeOptions },
+        /* فترةٌ مخصَّصة من يومٍ إلى يوم — أولى من الشهر حين تُكتب */
+        { label: 'من تاريخ', type: 'date', param: 'from' },
+        { label: 'إلى تاريخ', type: 'date', param: 'to' },
         {
             label: 'كل الحالات',
             asTabs: true,
@@ -371,11 +377,8 @@ export default function ExpensesIndex() {
                             empty="لا توجد مصروفات"
                             server={{ pagination, params: filters, sorts }}
                             toolbar={
-                                <ExportMenu
-                                    xlsx={route('admin.expenses.xlsx')}
-                                    pdf={route('admin.expenses.exportPdf')}
-                                    csv={route('admin.export.expenses')}
-                                />
+                                /* بمرشّحات الشاشة نفسِها: الشهرُ أو الفترةُ المخصَّصة، والنوعُ والحالُ والبحث */
+                                <ExportMenu {...exportLinks('admin.expenses.export')} />
                             }
                         />
                         {/*
@@ -384,9 +387,9 @@ export default function ExpensesIndex() {
                             الشهر؟» — ورقمُ العمر كلّه يجيب سؤالًا آخر، فيبقى
                             معروضًا ولا يتصدّر.
                         */}
-                        {month && monthTotal !== null && (
+                        {(month || span) && monthTotal !== null && (
                             <div className="border-t border-[var(--ui-border,#e8e8e8)] bg-[#fafafa] px-4 py-3 text-sm text-[#374151]">
-                                <span className="font-medium">{month}</span> — {t('المدفوع')}:{' '}
+                                <span className="font-medium">{month || span}</span> — {t('المدفوع')}:{' '}
                                 <span className="font-semibold text-[#111]">{m(monthTotal)}</span>
                                 {(monthUnpaid ?? 0) > 0 && (
                                     <>

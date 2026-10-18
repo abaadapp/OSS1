@@ -3,7 +3,7 @@ import AdminLayout from '@/Layouts/AdminLayout';
 import PageHeader from '@/Components/PageHeader';
 import ExportMenu from '@/Components/ExportMenu';
 import BackToReports from '@/Components/BackToReports';
-import RangeTabs, { type ReportRange } from '@/Components/RangeTabs';
+import RangeTabs, { periodQuery, type PeriodInfo, type ReportRange } from '@/Components/RangeTabs';
 import StatCard from '@/Components/StatCard';
 import { Badge } from '@/Components/ui/badge';
 import { Card } from '@/Components/ui/card';
@@ -34,6 +34,7 @@ interface Props {
     rows: Row[];
     summary: { total: number; staff: number; sellers: number; average: number; topName: string | null; topSales: number };
     range: ReportRange;
+    period: PeriodInfo;
     rangeLabel: string;
 }
 
@@ -45,7 +46,7 @@ interface Props {
  * بلا ما يقول ذلك.
  */
 export default function ReportsStaff() {
-    const { rows, summary, range, rangeLabel, context } = usePage<PageProps<Props>>().props;
+    const { rows, summary, range, rangeLabel, period, context } = usePage<PageProps<Props>>().props;
     const t = useTranslate();
     const m = (v: number) => money(v, context!.currency);
 
@@ -84,16 +85,16 @@ export default function ReportsStaff() {
                     subtitle={t('إيرادات الفواتير التي أصدرها كل موظف في الفترة المختارة وفرعه وحالته')}
                     actions={
                         <ExportMenu
-                            xlsx={route('admin.reports.export.xlsx', 'staff')}
-                            pdf={route('admin.reports.export.pdf', 'staff')}
-                            csv={route('admin.reports.export.csv', 'staff')}
+                            xlsx={route('admin.reports.export.xlsx', { report: 'staff', ...periodQuery(period) })}
+                            pdf={route('admin.reports.export.pdf', { report: 'staff', ...periodQuery(period) })}
+                            csv={route('admin.reports.export.csv', { report: 'staff', ...periodQuery(period) })}
                         />
                     }
                 />
 
                 {/* الرجوع فوق العنوان: أوّلُ ما تقع عليه العين عند الخروج */}
                 <div className="no-print">
-                    <RangeTabs current={range} />
+                    <RangeTabs current={range} period={period} />
                 </div>
 
                 <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">

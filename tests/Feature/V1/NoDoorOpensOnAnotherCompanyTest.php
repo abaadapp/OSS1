@@ -2,42 +2,43 @@
 
 namespace Tests\Feature\V1;
 
-use App\Models\Asset;
+use App\Models\Account;
+use App\Models\AutomationRule;
+use App\Models\AutomationRun;
+use App\Models\BankAccount;
 use App\Models\Branch;
-use App\Models\Budget;
 use App\Models\Business;
-use App\Models\ChangeOrder;
 use App\Models\Communication;
+use App\Models\CompanyPolicy;
 use App\Models\Currency;
+use App\Models\CustomAlert;
 use App\Models\Customer;
 use App\Models\CustomerAddress;
-use App\Models\CustomerInvoice;
-use App\Models\CustomerPayment;
-use App\Models\DeliveryPackage;
-use App\Models\EventOperation;
+use App\Models\DocumentRecord;
+use App\Models\DocumentRecordFile;
 use App\Models\Expense;
 use App\Models\ExpenseType;
-use App\Models\FinancialForecast;
-use App\Models\FinancialScenario;
-use App\Models\ImportDataset;
+use App\Models\FixedAsset;
+use App\Models\InternalNotification;
 use App\Models\JobTitle;
 use App\Models\JournalEntry;
-use App\Models\ManagementReview;
 use App\Models\Order;
-use App\Models\OperationChecklistTemplate;
 use App\Models\PayrollRun;
 use App\Models\Product;
 use App\Models\Project;
 use App\Models\PurchaseOrder;
-use App\Models\Quotation;
 use App\Models\Setting;
 use App\Models\Supplier;
-use App\Models\SupplierInvoice;
 use App\Models\User;
+use App\Models\WhatsAppConversation;
+use App\Models\WhatsAppMessage;
+use App\Support\Automation\Rules;
+use App\Support\ChangeOrders;
+use App\Support\CustomerContacts;
 use App\Support\CustomerInvoices;
 use App\Support\CustomerPayments;
 use App\Support\DeliveryPackages;
-use App\Support\DemoStore;
+use App\Support\DocumentRecords;
 use App\Support\Import\Datasets;
 use App\Support\Intelligence\Budgeting;
 use App\Support\Intelligence\Forecasting;
@@ -50,15 +51,20 @@ use App\Support\Operations\Consumables;
 use App\Support\Operations\Crew;
 use App\Support\Operations\EventOperations;
 use App\Support\Operations\Incidents;
+use App\Support\Operations\OperationOrganizers;
 use App\Support\Operations\Requirements;
 use App\Support\Operations\Reservations;
 use App\Support\Operations\Schedule;
+use App\Support\Organizers;
 use App\Support\Permissions;
 use App\Support\Projects;
+use App\Support\PurchaseOrders;
 use App\Support\Quotations;
+use App\Support\ScopesOfWork;
 use App\Support\SupplierInvoices;
 use App\Support\TenantTables;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Tests\TestCase;
@@ -91,6 +97,11 @@ class NoDoorOpensOnAnotherCompanyTest extends TestCase
         'admin.currency.switch', 'admin.reports.export.csv', 'admin.reports.export.pdf', 'admin.reports.export.xlsx',
         'admin.settings.templates.edit', 'admin.settings.templates.update', 'admin.settings.templates.preview',
         'admin.imports.rows',
+        // تصديرُ القوائم التشغيليّة: معاملُها الوحيد صيغةُ الملفّ (`{format}`) — والعزلُ في `Dataset` يُختبر في بابه
+        'admin.finance.transactions.export', 'admin.finance.journal.export', 'admin.expenses.export', 'admin.finance.dues.export',
+        'admin.finance.receivables.export', 'admin.finance.statement.export', 'admin.finance.cheques.export', 'admin.customerInvoices.export',
+        'admin.purchases.orders.export', 'admin.purchases.invoices.export', 'admin.purchases.payments.export', 'admin.projects.export',
+        'admin.payroll.export', 'admin.payroll.payments.export', 'admin.activity.export',
     ];
 
     private Business $a;
@@ -161,8 +172,8 @@ class NoDoorOpensOnAnotherCompanyTest extends TestCase
         $member = Projects::addMember($project, $employee->id, 'منسّق', $owner);
         $task = Projects::addTask($project, ['title' => "مهمّة $m"], $owner);
         $requirement = Projects::addRequirement($project, ['title' => "متطلَّب $m", 'kind' => 'equipment'], $owner);
-        $co = \App\Support\ChangeOrders::create($project, ['title' => "أمر تغيير $m", 'requested_by_party' => 'customer'], [['project_item_id' => $project->items()->first()->id, 'quantity' => 1]], [], $owner);
-        $scope = \App\Support\ScopesOfWork::start($project, $owner);
+        $co = ChangeOrders::create($project, ['title' => "أمر تغيير $m", 'requested_by_party' => 'customer'], [['project_item_id' => $project->items()->first()->id, 'quantity' => 1]], [], $owner);
+        $scope = ScopesOfWork::start($project, $owner);
         $scope->update(['description' => "نطاق $m"]);
 
         $op = EventOperations::create($project, ['name' => "فعاليّة $m", 'venue_name' => "قاعة $m", 'setup_starts_at' => '2026-10-01 06:00', 'event_starts_at' => '2026-10-01 09:00',
@@ -180,15 +191,15 @@ class NoDoorOpensOnAnotherCompanyTest extends TestCase
         $consumable = Consumables::issue($op, $product, ['quantity' => 2, 'key' => 'k'], $owner);
 
         /* المرحلة 14: شخصُ اتصالٍ للجهة، ومنظّمٌ بتصنيفه على الفعاليّة */
-        $contact = \App\Support\CustomerContacts::save($customer, ['name' => "شخص $m", 'email' => 'buyer@a.om', 'phone' => '99887700'], $owner);
-        $organizerCategory = \App\Support\Organizers::saveCategory($bid, "تصنيف $m");
-        $organizer = \App\Support\Organizers::create($bid, ['name' => "منظّم $m", 'gender' => 'female', 'category_ids' => [$organizerCategory->id]], $owner);
-        $organizerAssignment = \App\Support\Operations\OperationOrganizers::assign($op, ['organizer_id' => $organizer->id, 'organizer_category_id' => $organizerCategory->id], $owner);
+        $contact = CustomerContacts::save($customer, ['name' => "شخص $m", 'email' => 'buyer@a.om', 'phone' => '99887700'], $owner);
+        $organizerCategory = Organizers::saveCategory($bid, "تصنيف $m");
+        $organizer = Organizers::create($bid, ['name' => "منظّم $m", 'gender' => 'female', 'category_ids' => [$organizerCategory->id]], $owner);
+        $organizerAssignment = OperationOrganizers::assign($op, ['organizer_id' => $organizer->id, 'organizer_category_id' => $organizerCategory->id], $owner);
 
         /* ومستندٌ داخليّ بتصنيفه ونسخة ملفّه */
-        $documentCategory = \App\Support\DocumentRecords::saveCategory($bid, "تصنيف مستند $m");
-        $document = \App\Models\DocumentRecord::create(['business_id' => $bid, 'title' => "مستند $m", 'document_category_id' => $documentCategory->id, 'expires_at' => now()->addDays(10)->toDateString(), 'file_path' => "documents/$bid/x.pdf", 'file_name' => 'x.pdf']);
-        $documentFile = \App\Models\DocumentRecordFile::create(['business_id' => $bid, 'document_record_id' => $document->id, 'path' => "documents/$bid/x.pdf", 'name' => 'x.pdf']);
+        $documentCategory = DocumentRecords::saveCategory($bid, "تصنيف مستند $m");
+        $document = DocumentRecord::create(['business_id' => $bid, 'title' => "مستند $m", 'document_category_id' => $documentCategory->id, 'expires_at' => now()->addDays(10)->toDateString(), 'file_path' => "documents/$bid/x.pdf", 'file_name' => 'x.pdf']);
+        $documentFile = DocumentRecordFile::create(['business_id' => $bid, 'document_record_id' => $document->id, 'path' => "documents/$bid/x.pdf", 'name' => 'x.pdf']);
 
         $package = DeliveryPackages::create($bid, null, ['project_id' => $project->id], $owner);
         $packageItem = DeliveryPackages::addItem($package, ['kind' => 'item', 'project_item_id' => $project->items()->first()->id, 'quantity' => 1], null, $owner);
@@ -199,7 +210,7 @@ class NoDoorOpensOnAnotherCompanyTest extends TestCase
         $payment = CustomerPayments::record($bid, $customer, 100, ['method' => 'نقدي', 'occurred_at' => now()->toDateString()], [$invoice->id => 100], $owner->id);
         $creditNote = CustomerInvoices::creditNote($invoice->fresh(), 105, 5, "إشعار $m", $owner->id);
 
-        $po = PurchaseOrder::create(['business_id' => $bid, 'number' => "PO-$m", 'supplier_id' => $supplier->id, 'supplier_name' => "مورّد $m", 'status' => \App\Support\PurchaseOrders::SENT, 'items_subtotal' => 100, 'tax' => 0, 'total' => 100, 'ordered_at' => now()]);
+        $po = PurchaseOrder::create(['business_id' => $bid, 'number' => "PO-$m", 'supplier_id' => $supplier->id, 'supplier_name' => "مورّد $m", 'status' => PurchaseOrders::SENT, 'items_subtotal' => 100, 'tax' => 0, 'total' => 100, 'ordered_at' => now()]);
         $si = SupplierInvoices::create($bid, ['supplier_id' => $supplier->id, 'supplier_ref' => "R-$m", 'issued_at' => now()->toDateString(), 'subtotal' => 100, 'tax' => 0], $owner);
         /* وسندٌ معتمَدٌ عليه دفعةٌ بإيصال — إيصالُ دفعة «أ» لا يُفتح من «ب» */
         $paidInvoice = SupplierInvoices::approve(SupplierInvoices::create($bid, ['supplier_id' => $supplier->id, 'supplier_ref' => "P-$m", 'issued_at' => now()->toDateString(), 'subtotal' => 50, 'tax' => 0], $owner), $owner);
@@ -207,23 +218,23 @@ class NoDoorOpensOnAnotherCompanyTest extends TestCase
         $supplierPayment->update(['receipt' => "supplier-invoice-payments/$bid/x.pdf", 'receipt_name' => "إيصال $m.pdf"]);
         $journal = JournalEntry::where('business_id', $bid)->firstOrFail();
         $order = Order::create(['business_id' => $bid, 'number' => "ORD-$m", 'customer_id' => $customer->id, 'customer_name' => "عميل $m", 'status' => 'جديد', 'subtotal' => 10, 'total' => 10, 'ordered_at' => now()]);
-        $bank = \App\Models\BankAccount::create(['business_id' => $bid, 'bank_name' => "بنك $m", 'label' => "حساب $m", 'active' => true, 'is_primary' => true]);
-        $account = \App\Models\Account::where('business_id', $bid)->where('code', '5900')->firstOrFail();
-        $fixedAsset = \App\Models\FixedAsset::create(['business_id' => $bid, 'name' => "أصل $m", 'cost' => 1000, 'purchased_at' => now()->toDateString(), 'life_months' => 12, 'status' => 'نشط']);
+        $bank = BankAccount::create(['business_id' => $bid, 'bank_name' => "بنك $m", 'label' => "حساب $m", 'active' => true, 'is_primary' => true]);
+        $account = Account::where('business_id', $bid)->where('code', '5900')->firstOrFail();
+        $fixedAsset = FixedAsset::create(['business_id' => $bid, 'name' => "أصل $m", 'cost' => 1000, 'purchased_at' => now()->toDateString(), 'life_months' => 12, 'status' => 'نشط']);
 
         $communication = Communication::create(['business_id' => $bid, 'customer_id' => $customer->id, 'project_id' => $project->id, 'subject_type' => Project::class, 'subject_id' => $project->id,
             'channel' => 'email', 'recipient' => 'buyer@a.om', 'template_key' => 'project.update', 'title' => "رسالة $m", 'provider' => 'postmark', 'provider_message_id' => "pm-$m",
             'status' => Communication::BOUNCED, 'sent_at' => now(), 'failed_at' => now(), 'failure_reason' => 'x', 'initiated_by_name' => 'المالك']);
-        $waConversation = \App\Models\WhatsAppConversation::create(['business_id' => $bid, 'customer_id' => $customer->id, 'wa_id' => '96890000001', 'contact_name' => "محادثة $m", 'last_inbound_at' => now(), 'last_preview' => "رسالة $m"]);
-        $waMessage = \App\Models\WhatsAppMessage::create(['business_id' => $bid, 'conversation_id' => $waConversation->id, 'direction' => 'inbound', 'type' => 'document',
+        $waConversation = WhatsAppConversation::create(['business_id' => $bid, 'customer_id' => $customer->id, 'wa_id' => '96890000001', 'contact_name' => "محادثة $m", 'last_inbound_at' => now(), 'last_preview' => "رسالة $m"]);
+        $waMessage = WhatsAppMessage::create(['business_id' => $bid, 'conversation_id' => $waConversation->id, 'direction' => 'inbound', 'type' => 'document',
             'body' => "مستند $m", 'media_id' => "media-$m", 'media_filename' => "ملف $m.pdf", 'provider_message_id' => "wamid-$m", 'status' => 'delivered', 'occurred_at' => now()]);
-        \App\Support\Automation\Rules::ensure($bid);
-        $rule = \App\Models\AutomationRule::where('business_id', $bid)->firstOrFail();
-        $run = \App\Models\AutomationRun::create(['business_id' => $bid, 'automation_rule_id' => $rule->id, 'trigger' => 'invoice_due', 'step' => 0, 'audience' => 'management', 'occurrence' => 'x', 'status' => 'pending', 'idempotency_key' => "k-$m", 'scheduled_for' => now()]);
-        $notification = \App\Models\InternalNotification::create(['business_id' => $bid, 'user_id' => $owner->id, 'title' => "تنبيه $m", 'body' => 'x', 'kind' => 'automation']);
-        $alert = \App\Models\CustomAlert::create(['business_id' => $bid, 'type' => 'metric', 'section' => 'dashboard', 'metric' => 'daily_sales', 'operator' => '<', 'threshold' => 1, 'message' => "تنبيه $m", 'active' => true]);
+        Rules::ensure($bid);
+        $rule = AutomationRule::where('business_id', $bid)->firstOrFail();
+        $run = AutomationRun::create(['business_id' => $bid, 'automation_rule_id' => $rule->id, 'trigger' => 'invoice_due', 'step' => 0, 'audience' => 'management', 'occurrence' => 'x', 'status' => 'pending', 'idempotency_key' => "k-$m", 'scheduled_for' => now()]);
+        $notification = InternalNotification::create(['business_id' => $bid, 'user_id' => $owner->id, 'title' => "تنبيه $m", 'body' => 'x', 'kind' => 'automation']);
+        $alert = CustomAlert::create(['business_id' => $bid, 'type' => 'metric', 'section' => 'dashboard', 'metric' => 'daily_sales', 'operator' => '<', 'threshold' => 1, 'message' => "تنبيه $m", 'active' => true]);
 
-        $budget = Budgeting::create($bid, ['fiscal_year' => 2026, 'name' => "موازنة $m", 'lines' => [['account_id' => \App\Models\Account::where('business_id', $bid)->where('code', '4100')->value('id'), 'month' => 1, 'planned_amount' => 10]]], $owner);
+        $budget = Budgeting::create($bid, ['fiscal_year' => 2026, 'name' => "موازنة $m", 'lines' => [['account_id' => Account::where('business_id', $bid)->where('code', '4100')->value('id'), 'month' => 1, 'planned_amount' => 10]]], $owner);
         $forecast = Forecasting::create($bid, ['name' => "توقّع $m", 'horizon_days' => 30], $owner);
         $scenario = ScenarioPlanning::create($bid, ['name' => "سيناريو $m"], $owner);
         $review = ManagementReviews::create($bid, ['title' => "مراجعة $m", 'period_start' => '2026-08-01', 'period_end' => '2026-08-31'], $owner);
@@ -231,7 +242,7 @@ class NoDoorOpensOnAnotherCompanyTest extends TestCase
 
         $dataset = Datasets::registerPath($bid, base_path('tests/Fixtures/import/customers.csv'), ['category' => 'customers', 'name' => "استيراد $m"], $owner);
         $payroll = PayrollRun::create(['business_id' => $bid, 'number' => 'PR-00001', 'period' => '2026-08-01', 'status' => 'مسودة', 'gross' => 0, 'deductions' => 0, 'net' => 0]);
-        $policy = \App\Models\CompanyPolicy::create(['business_id' => $bid, 'key' => 'lead_time', 'params' => ['days' => 3], 'text_ar' => "سياسة $m", 'active' => true, 'version' => 1]);
+        $policy = CompanyPolicy::create(['business_id' => $bid, 'key' => 'lead_time', 'params' => ['days' => 3], 'text_ar' => "سياسة $m", 'active' => true, 'version' => 1]);
 
         auth()->logout();
 
@@ -341,7 +352,7 @@ class NoDoorOpensOnAnotherCompanyTest extends TestCase
     }
 
     /** معرّفاتُ صفوف «أ» في جدولٍ — مباشرةً بـ`business_id` أو صعودًا عبر الأمّ */
-    private function rowsOf(string $table): \Illuminate\Support\Collection
+    private function rowsOf(string $table): Collection
     {
         if (Schema::hasColumn($table, 'business_id')) {
             return DB::table($table)->where('business_id', $this->a->id)->pluck('id');

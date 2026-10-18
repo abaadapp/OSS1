@@ -160,9 +160,13 @@ class ReportsFollowTheirPeriodTest extends TestCase
     {
         $screen = file_get_contents(resource_path('js/Pages/Admin/Finance/Banks.tsx'));
 
-        foreach (['admin.finance.xlsx', 'admin.finance.pdf', 'admin.export.transactions'] as $route) {
-            $this->assertStringContainsString($route, $screen,
-                "تقرير الحركة المالية بلا زرٍّ يصل إليه: {$route}");
+        /*
+         * والزرُّ صار بابَ القوائم الموحّد (`admin.finance.transactions.export` بصيغته
+         * معاملًا) — يقرأ مرشّحات الشاشة بدل الشهر وحده. والصيغُ الثلاث تُفتح منه.
+         */
+        $this->assertStringContainsString('admin.finance.transactions.export', $screen, 'تقرير الحركة المالية بلا زرٍّ يصل إليه');
+        foreach (['xlsx', 'pdf', 'csv'] as $format) {
+            $this->actingAs($this->owner)->get(route('admin.finance.transactions.export', $format))->assertOk();
         }
     }
 

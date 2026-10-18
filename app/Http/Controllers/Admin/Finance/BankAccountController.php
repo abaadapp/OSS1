@@ -6,12 +6,14 @@ use App\Http\Controllers\Controller;
 use App\Models\Account;
 use App\Models\BankAccount;
 use App\Models\BankStatementLine;
+use App\Support\Activity;
 use App\Support\Bank;
 use App\Support\Demo;
+use App\Support\Exports\BankStatementDataset;
+use App\Support\Exports\Dataset;
 use App\Support\Ledger;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -24,7 +26,10 @@ use Inertia\Response;
  */
 class BankAccountController extends Controller
 {
-    private function bid(): int { return auth()->user()->business_id ?? Demo::bid(); }
+    private function bid(): int
+    {
+        return auth()->user()->business_id ?? Demo::bid();
+    }
 
     public function index(): Response
     {
@@ -95,7 +100,7 @@ class BankAccountController extends Controller
             $account->update(['account_id' => $this->leafFor($bid, $account)->id]);
         });
 
-        \App\Support\Activity::log('created', 'أضاف حسابًا بنكيًّا: '.($data['label'] ?? $data['bank_name'] ?? ''));
+        Activity::log('created', 'أضاف حسابًا بنكيًّا: '.($data['label'] ?? $data['bank_name'] ?? ''));
 
         return back()->with('toast', ['msg' => __('أُضيف الحساب البنكي'), 'type' => 'success']);
     }
@@ -180,7 +185,7 @@ class BankAccountController extends Controller
             $account->delete();
         });
 
-        \App\Support\Activity::log('deleted', 'حذف حسابًا بنكيًّا', ['subject_id' => $account->id]);
+        Activity::log('deleted', 'حذف حسابًا بنكيًّا', ['subject_id' => $account->id]);
 
         return back()->with('toast', ['msg' => __('حُذف الحساب البنكي'), 'type' => 'warning']);
     }
@@ -207,7 +212,9 @@ class BankAccountController extends Controller
 
         return Inertia::render('Admin/Finance/Statement', [
             'account' => Demo::bankAccount($current?->id),
-            'statement' => Demo::bankStatement($current?->id),
+            /* والمدّةُ تقصّ الصفوف لا الرصيد — `BankStatementDataset::window`، كما في ملفّ تصديره */
+            'statement' => BankStatementDataset::window(Demo::bankStatement($current?->id), Dataset::day($request, 'from'), Dataset::day($request, 'to')),
+            'filters' => $request->only('from', 'to'),
             'lines' => Demo::bankLines($current?->id),
             'reconciliation' => Demo::reconciliationSummary($current?->id),
             'accounts' => $accounts->map(fn ($a) => ['id' => $a->id, 'label' => $a->displayName()])->all(),

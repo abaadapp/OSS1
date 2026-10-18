@@ -3,6 +3,9 @@ import { router, useForm, usePage } from "@inertiajs/react";
 import { Undo2 } from "lucide-react";
 import AdminLayout from "@/Layouts/AdminLayout";
 import PageHeader from "@/Components/PageHeader";
+import ExportMenu from "@/Components/ExportMenu";
+import ListDateRange from "@/Components/ListDateRange";
+import { exportLinks } from "@/lib/exportLink";
 import SectionTabs, { FINANCE_TABS } from "@/Components/SectionTabs";
 import StatCard from "@/Components/StatCard";
 import { Badge } from "@/Components/ui/badge";
@@ -56,6 +59,9 @@ interface Props {
     soonDays: number;
     cheques: Cheque[];
     bankAccounts: { value: string; label: string }[];
+    /** كم شيكًا في الحال والمدّة — الشاشةُ تعرض ثلاثمئة وتقول إن كان أكثر */
+    total?: number;
+    filters?: { status?: string; from?: string; to?: string };
     context?: { currency: Parameters<typeof money>[1] };
 }
 
@@ -74,6 +80,8 @@ export default function Cheques() {
         soonDays,
         cheques,
         bankAccounts,
+        total,
+        filters,
         context,
     } = usePage<PageProps<Props>>().props;
     const t = useTranslate();
@@ -91,7 +99,7 @@ export default function Cheques() {
     const go = (next: string) =>
         router.get(
             route("admin.finance.cheques"),
-            { status: next },
+            { status: next, from: filters?.from, to: filters?.to },
             { preserveScroll: true },
         );
 
@@ -102,8 +110,22 @@ export default function Cheques() {
                 subtitle={t(
                     "شيكٌ في يدك ليس مالًا في بنكك — يُسجَّل صرفُه أو ارتدادُه هنا فيتحرّك الدفتر",
                 )}
+                /* بالحال المعروضة ومدّة الاستلام — والملفُّ يحمل كلَّ ما طابق لا أوّلَ ثلاثمئة */
+                actions={<ExportMenu {...exportLinks("admin.finance.cheques.export", { status })} />}
             />
             <SectionTabs tabs={FINANCE_TABS} current="admin.finance.cheques" />
+            <ListDateRange
+                routeName="admin.finance.cheques"
+                params={{ status }}
+                from={filters?.from}
+                to={filters?.to}
+                label="تاريخ الاستلام"
+            />
+            {(total ?? 0) > cheques.length && (
+                <p className="mb-3 rounded-[10px] bg-[#fff7ed] px-3 py-2 text-[12.5px] text-[#9a3412]">
+                    {t("تُعرض :shown من :total شيكًا — ضيّق بالمدّة، أو صدّر الملفّ ليحمل الكلّ.", { shown: cheques.length, total: total ?? 0 })}
+                </p>
+            )}
 
             <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
                 <StatCard

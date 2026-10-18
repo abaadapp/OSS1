@@ -16,6 +16,8 @@ import {
     Trash2,
 } from 'lucide-react';
 import Field, { Select } from '@/Components/Field';
+import ExportMenu from '@/Components/ExportMenu';
+import { exportLinks } from '@/lib/exportLink';
 import { Badge } from '@/Components/ui/badge';
 import { Button } from '@/Components/ui/button';
 import { Card } from '@/Components/ui/card';
@@ -96,10 +98,12 @@ export default function ActivityPanel({
     const t = useTranslate();
     const [q, setQ] = useState(filters.q ?? '');
     const [action, setAction] = useState(filters.action ?? '');
+    const [from, setFrom] = useState(filters.from ?? '');
+    const [to, setTo] = useState(filters.to ?? '');
 
     const go = (patch: Record<string, string | number | null>) => {
         const next: Record<string, string | number> = { ...endpointParams };
-        Object.entries({ q, action, ...patch }).forEach(([k, v]) => {
+        Object.entries({ q, action, from, to, ...patch }).forEach(([k, v]) => {
             if (v !== null && v !== undefined && v !== '') next[k] = v as string | number;
         });
         router.get(endpoint, next, { preserveState: true, preserveScroll: true, replace: true });
@@ -113,7 +117,7 @@ export default function ActivityPanel({
                         e.preventDefault();
                         go({ page: null });
                     }}
-                    className="grid grid-cols-1 gap-3 md:grid-cols-4"
+                    className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-6"
                 >
                     <Field className="md:col-span-2">
                         <Input
@@ -141,9 +145,36 @@ export default function ActivityPanel({
                             ]}
                         />
                     </Field>
-                    {/* flex-wrap: الزرّان في خانةٍ واحدة من أربع، وضاق العمود
-                        بعد إضافة عمود الإعدادات — فكانا يخرجان عن الشاشة */}
-                    <div className="flex flex-wrap items-center gap-2">
+                    {/* المدّةُ بيوم الحدث — للقائمة ولملفّ تصديرها معًا */}
+                    <Field>
+                        <Input
+                            type="date"
+                            dir="ltr"
+                            value={from}
+                            max={to || undefined}
+                            aria-label={t('من تاريخ')}
+                            onChange={(e) => {
+                                setFrom(e.target.value);
+                                go({ from: e.target.value || null, page: null });
+                            }}
+                        />
+                    </Field>
+                    <Field>
+                        <Input
+                            type="date"
+                            dir="ltr"
+                            value={to}
+                            min={from || undefined}
+                            aria-label={t('إلى تاريخ')}
+                            onChange={(e) => {
+                                setTo(e.target.value);
+                                go({ to: e.target.value || null, page: null });
+                            }}
+                        />
+                    </Field>
+                    {/* flex-wrap: الأزرار في خانةٍ واحدة، وضاق العمود بعد إضافة
+                        عمود الإعدادات — فكانت تخرج عن الشاشة */}
+                    <div className="flex flex-wrap items-center gap-2 sm:col-span-2 md:col-span-6">
                         <Button type="submit">{t('تصفية')}</Button>
                         <Button
                             type="button"
@@ -151,11 +182,15 @@ export default function ActivityPanel({
                             onClick={() => {
                                 setQ('');
                                 setAction('');
+                                setFrom('');
+                                setTo('');
                                 router.get(endpoint, endpointParams);
                             }}
                         >
                             {t('عرض الكل')}
                         </Button>
+                        {/* المالكون خارج السجلّ كما في شاشته — والمرشّحاتُ المعروضةُ نفسُها */}
+                        <ExportMenu {...exportLinks('admin.activity.export', { q: filters.q, action: filters.action, from: filters.from, to: filters.to })} />
                     </div>
                 </form>
             </Card>

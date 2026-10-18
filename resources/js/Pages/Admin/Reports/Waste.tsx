@@ -61,6 +61,8 @@ interface Props {
     insights: Insight[];
     suspicious: Suspicious[];
     filters: Record<string, string | null>;
+    /** سببُ رفض مدّةٍ وصلت الخادم — عادت الشاشةُ إلى الشهر وهذا يقول لماذا */
+    periodError?: string | null;
     options: {
         branches: Option[];
         categories: Option[];
@@ -84,7 +86,7 @@ const TONE: Record<string, string> = {
 export default function WasteAnalytics() {
     const {
         totals, previous, change, byProduct, byCategory, byBranch, byReason,
-        overTime, versusConsumption, insights, suspicious, filters, options, context,
+        overTime, versusConsumption, insights, suspicious, filters, options, context, periodError,
     } = usePage<PageProps<Props>>().props;
 
     const t = useTranslate();
@@ -119,6 +121,10 @@ export default function WasteAnalytics() {
 
             {/* الرجوع فوق الترويسة: الباب واحد وإليه يُرجع بضغطة */}
 
+            {periodError && (
+                <p role="alert" className="mb-3 rounded-[10px] bg-[#fef2f2] px-3 py-2 text-[12.5px] text-[#b91c1c]">{t(periodError)}</p>
+            )}
+
             {/* المرشّحات — بنفس عناصر بقية الشاشات، لا منتقي تواريخ جديد */}
             <Card className="mb-6 grid grid-cols-1 gap-3 p-4 sm:grid-cols-3 lg:grid-cols-6">
                 <label className="flex flex-col gap-1">
@@ -127,6 +133,7 @@ export default function WasteAnalytics() {
                         type="date"
                         dir="ltr"
                         value={filters.from ?? ''}
+                        max={filters.to ?? undefined}
                         onChange={(e) => go({ from: e.target.value })}
                     />
                 </label>
@@ -136,6 +143,7 @@ export default function WasteAnalytics() {
                         type="date"
                         dir="ltr"
                         value={filters.to ?? ''}
+                        min={filters.from ?? undefined}
                         onChange={(e) => go({ to: e.target.value })}
                     />
                 </label>

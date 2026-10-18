@@ -15,6 +15,7 @@ use App\Models\Supplier;
 use App\Models\SupplierInvoice;
 use App\Models\Transaction;
 use App\Models\User;
+use App\Support\Intelligence\ManagementReports;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 
@@ -40,10 +41,26 @@ class ReportData
      */
     public const LIMIT = 500;
 
-    /** بداية الفترة — أو null فالعمر كلّه */
-    private static function start(string $range): ?Carbon
+    /**
+     * الفترةُ من المرشّحات — جاهزةً (اليوم … الكل) أو مخصَّصةً بحدّين.
+     *
+     * والجاهزةُ تبدأ من `Demo::rangeStart` وتمتدّ حتى الآن كما كانت؛ والمخصَّصةُ
+     * تُقصر من طرفيها — انظر `ReportPeriod::apply`.
+     */
+    private static function period(array $filters, string $fallback = 'month'): ReportPeriod
     {
-        return Demo::rangeStart(Demo::range($range));
+        return ReportPeriod::of($filters, $fallback);
+    }
+
+    /**
+     * سقفُ صفوف الجدول — للشاشة `LIMIT`، وللتنزيل ما يطلبه (`_limit`).
+     *
+     * الملفُّ يحمل كلَّ ما طابق الفترةَ والمرشّحات لا أوّلَ خمسمئة: محاسبٌ يجمع
+     * عمودًا مبتورًا لا يعرف أنّه مبتور. وسقفُ التنزيل نفسُه يُقال في الملفّ إن بُلغ.
+     */
+    private static function limit(array $filters): int
+    {
+        return max(1, (int) ($filters['_limit'] ?? self::LIMIT));
     }
 
     /** قيمةُ منتقًى إن كانت غير فارغة — و«الكل» ليست قيمة */
@@ -59,7 +76,7 @@ class ReportData
     {
         return [
             'rows' => $rows->values()->all(),
-            'truncated' => $total > self::LIMIT ? ['shown' => $rows->count(), 'total' => $total] : null,
+            'truncated' => $total > $rows->count() ? ['shown' => $rows->count(), 'total' => $total] : null,
         ];
     }
 
@@ -107,19 +124,14 @@ class ReportData
      */
     public static function vat(int $bid, array $filters): array
     {
-        $range = Demo::range($filters['range'] ?? 'month');
-        $start = self::start($range);
+        $period = self::period($filters);
 
-        $invoices = SupplierInvoice::where('business_id', $bid);
+        $invoices = $period->apply(SupplierInvoice::where('business_id', $bid), 'issued_at', 'date');
 
-        if ($start !== null) {
-            $invoices->where('issued_at', '>=', $start->copy()->startOfDay());
-        }
-
-        $sold = Revenue::query($bid, $start)
+        $sold = Revenue::query($bid, $period->startDay(), $period->endDay())
             ->get(['issued_at', 'subtotal', 'discount_total', 'tax_total']);
 
-        $returned = Revenue::credits($bid, $start)->get(['issued_at', 'amount', 'tax_amount']);
+        $returned = Revenue::credits($bid, $period->startDay(), $period->endDay())->get(['issued_at', 'amount', 'tax_amount']);
 
         /*
          * وضريبةُ المدخلات من السندات **المعتمَدة** وحدها.
@@ -212,6 +224,12 @@ class ReportData
                 'rate' => (float) (Demo::vatSettings()['rate'] ?? 0),
                 'number' => (string) (Demo::vatSettings()['number'] ?? ''),
             ],
+            // سطرُ الإجمالي في الملفّ: الأشهرُ مجموعةً كما تقرؤها البطاقات
+            'totals' => [
+                'taxable' => round((float) $rows->sum('taxable'), 3), 'output' => $output,
+                'purchases' => round((float) $rows->sum('purchases'), 3), 'input' => $input,
+                'returns' => round((float) $rows->sum('returns'), 3), 'due' => round($output - $input, 3),
+            ],
             'options' => [],
         ]);
     }
@@ -235,8 +253,7 @@ class ReportData
 
     public static function payments(int $bid, array $filters): array
     {
-        $range = Demo::range($filters['range'] ?? 'month');
-        $methods = Demo::paymentMethods($range, $bid);
+        $methods = Demo::paymentMethods(self::period($filters), $bid);
 
         $rows = collect($methods)->map(fn ($m) => [
             'id' => $m['key'],
@@ -257,6 +274,7 @@ class ReportData
                 'topName' => ($top['count'] ?? 0) > 0 ? $top['name'] : null,
                 'topTotal' => ($top['count'] ?? 0) > 0 ? $top['total'] : 0.0,
             ],
+            'totals' => ['total' => round((float) $rows->sum('total'), 3), 'count' => (int) $rows->sum('count')],
             'options' => [],
         ]);
     }
@@ -265,8 +283,7 @@ class ReportData
 
     public static function staff(int $bid, array $filters): array
     {
-        $range = Demo::range($filters['range'] ?? 'month');
-        $rows = collect(Demo::staffPerformance($range, $bid));
+        $rows = collect(Demo::staffPerformance(self::period($filters), $bid));
         $total = (float) $rows->sum('sales');
 
         /*
@@ -284,6 +301,7 @@ class ReportData
                 'topName' => $sellers->first()['name'] ?? null,
                 'topSales' => $sellers->first()['sales'] ?? 0.0,
             ],
+            'totals' => ['invoices' => (int) $rows->sum('invoices'), 'sales' => round($total, 3)],
             'options' => [],
         ]);
     }
@@ -292,11 +310,9 @@ class ReportData
 
     public static function customers(int $bid, array $filters): array
     {
-        $range = Demo::range($filters['range'] ?? 'month');
-
-        // سقفٌ يُقال على الشاشة لا يُخفى: قائمةُ «الأكثر إنفاقًا» مبتورةٌ عمدًا
-        $limit = 50;
-        $rows = collect(Demo::topCustomers($limit, $range, $bid))
+        // سقفٌ يُقال على الشاشة لا يُخفى: قائمةُ «الأكثر إنفاقًا» مبتورةٌ عمدًا — والتنزيلُ يحمل الترتيبَ كاملًا
+        $limit = isset($filters['_limit']) ? self::limit($filters) : 50;
+        $rows = collect(Demo::topCustomers($limit, self::period($filters), $bid))
             ->map(fn ($c, $i) => ['id' => $i + 1] + $c);
 
         $total = (float) $rows->sum('total');
@@ -310,6 +326,7 @@ class ReportData
                 'invoices' => $invoices,
                 'average' => $invoices > 0 ? round($total / $invoices, 3) : 0.0,
             ],
+            'totals' => ['invoices' => $invoices, 'total' => round($total, 3)],
             'options' => [],
         ]);
     }
@@ -327,8 +344,9 @@ class ReportData
     public static function waste(int $bid, array $filters): array
     {
         $scope = [
-            'from' => $filters['from'] ?? now()->startOfMonth()->toDateString(),
-            'to' => $filters['to'] ?? now()->toDateString(),
+            // الحقلُ المُفرَّغ يعود إلى افتراضيّه لا إلى حدٍّ مفتوح يقرأ التاريخَ كلَّه — كالشاشة
+            'from' => self::pick($filters, 'from') ?? now()->startOfMonth()->toDateString(),
+            'to' => self::pick($filters, 'to') ?? now()->toDateString(),
             'branch_id' => $filters['branch_id'] ?? null,
             'category_id' => $filters['category_id'] ?? null,
             'product_id' => $filters['product_id'] ?? null,
@@ -363,7 +381,7 @@ class ReportData
 
     public static function finance(int $bid, array $filters): array
     {
-        $start = self::start($filters['range'] ?? 'month');
+        $period = self::period($filters);
         $method = self::pick($filters, 'method');
         $type = self::pick($filters, 'type');
 
@@ -380,7 +398,7 @@ class ReportData
         $search = self::pick($filters, 'q');
 
         $base = Transaction::where('business_id', $bid)
-            ->when($start, fn ($q) => $q->where('occurred_at', '>=', $start))
+            ->tap(fn ($q) => $period->apply($q, 'occurred_at'))
             ->when($method, fn ($q) => $q->where('method', $method))
             ->when($type, fn ($q) => $q->where('type', $type))
             ->when($search, fn ($q) => $q->where(fn ($w) => $w
@@ -403,7 +421,7 @@ class ReportData
         $total = (clone $base)->count();
 
         $rows = (clone $base)->with('order:id,status')
-            ->orderByDesc('occurred_at')->orderByDesc('id')->limit(self::LIMIT)->get()
+            ->orderByDesc('occurred_at')->orderByDesc('id')->limit(self::limit($filters))->get()
             ->map(fn ($t) => [
                 'id' => $t->id,
                 'reference' => $t->reference,
@@ -437,11 +455,11 @@ class ReportData
 
     public static function expenses(int $bid, array $filters): array
     {
-        $start = self::start($filters['range'] ?? 'month');
+        $period = self::period($filters);
         $type = self::pick($filters, 'type');
 
         $base = Expense::where('business_id', $bid)
-            ->when($start, fn ($q) => $q->where('spent_at', '>=', $start))
+            ->tap(fn ($q) => $period->apply($q, 'spent_at', 'date'))
             ->when($type, fn ($q) => $q->where('type', $type));
 
         $total = (float) (clone $base)->sum('amount');
@@ -450,7 +468,7 @@ class ReportData
         $byType = (clone $base)->selectRaw('type, SUM(amount) as s, COUNT(*) as c')
             ->groupBy('type')->orderByDesc('s')->get();
 
-        $rows = (clone $base)->orderByDesc('spent_at')->orderByDesc('id')->limit(self::LIMIT)->get()
+        $rows = (clone $base)->orderByDesc('spent_at')->orderByDesc('id')->limit(self::limit($filters))->get()
             ->map(fn ($e) => [
                 'id' => $e->id,
                 'type' => $e->type,
@@ -469,6 +487,7 @@ class ReportData
                 'topType' => $byType->first()->type ?? null,
                 'topTotal' => round((float) ($byType->first()->s ?? 0), 3),
             ],
+            'totals' => ['amount' => round($total, 3)],
             'byType' => $byType->map(fn ($r) => [
                 'label' => $r->type,
                 'value' => round((float) $r->s, 3),
@@ -485,11 +504,11 @@ class ReportData
 
     public static function bank(int $bid, array $filters): array
     {
-        $start = self::start($filters['range'] ?? 'month');
+        $period = self::period($filters);
         $status = self::pick($filters, 'match_status');
 
         $base = BankStatementLine::where('business_id', $bid)
-            ->when($start, fn ($q) => $q->where('date', '>=', $start))
+            ->tap(fn ($q) => $period->apply($q, 'date', 'date'))
             ->when($status, fn ($q) => $q->where('match_status', $status));
 
         $count = (clone $base)->count();
@@ -500,11 +519,11 @@ class ReportData
          * رقمٌ صحيحٌ يقول كذبًا.
          */
         $scope = BankStatementLine::where('business_id', $bid)
-            ->when($start, fn ($q) => $q->where('date', '>=', $start));
+            ->tap(fn ($q) => $period->apply($q, 'date', 'date'));
 
         $matched = (clone $scope)->where('match_status', BankStatementLine::MATCHED)->count();
 
-        $rows = (clone $base)->orderByDesc('date')->orderByDesc('id')->limit(self::LIMIT)->get()
+        $rows = (clone $base)->orderByDesc('date')->orderByDesc('id')->limit(self::limit($filters))->get()
             ->map(fn ($l) => [
                 'id' => $l->id,
                 'description' => $l->description,
@@ -521,6 +540,8 @@ class ReportData
                 'unmatched' => (clone $scope)->count() - $matched,
                 'total' => round((float) (clone $scope)->sum('amount'), 3),
             ],
+            // الإجماليُّ لما في الجدول — بمرشّح المطابقة إن اختير، لا للفترة كلّها
+            'totals' => ['amount' => round((float) (clone $base)->sum('amount'), 3)],
             'options' => [
                 'statuses' => collect(BankStatementLine::where('business_id', $bid)->distinct()->pluck('match_status'))
                     ->filter()->values()->map(fn ($s) => ['value' => $s, 'label' => $s])->all(),
@@ -552,13 +573,13 @@ class ReportData
      */
     public static function invoices(int $bid, array $filters): array
     {
-        $start = self::start($filters['range'] ?? 'month');
+        $period = self::period($filters);
         $status = self::pick($filters, 'status');
         $branch = self::pick($filters, 'branch_id');
         $state = self::pick($filters, 'state');
 
         $base = CustomerInvoice::where('business_id', $bid)
-            ->when($start, fn ($q) => $q->whereDate('issued_at', '>=', $start->toDateString()))
+            ->tap(fn ($q) => $period->apply($q, 'issued_at', 'date'))
             ->when($status, fn ($q) => $q->where('status', $status))
             ->when($branch, fn ($q) => $q->where('branch_id', $branch))
             // وبلا فرعٍ مختار: فروعُ من قُيّد بفروعٍ وحدها — انظر BranchAccess
@@ -582,10 +603,13 @@ class ReportData
             ->selectRaw('COALESCE(SUM('.CustomerInvoice::outstandingSql().'), 0) as o')
             ->value('o');
         $overdue = (clone $base)->overdue()->count();
+        $paid = (float) (clone $issued)
+            ->selectRaw('COALESCE(SUM('.CustomerInvoice::paidSql().'), 0) as p')
+            ->value('p');
 
         $branches = Branch::where('business_id', $bid)->pluck('name', 'id');
 
-        $rows = (clone $base)->withMoney()->orderByDesc('issued_at')->orderByDesc('id')->limit(self::LIMIT)->get()
+        $rows = (clone $base)->withMoney()->orderByDesc('issued_at')->orderByDesc('id')->limit(self::limit($filters))->get()
             ->map(fn ($i) => [
                 'id' => $i->id,
                 'number' => $i->number,
@@ -610,6 +634,14 @@ class ReportData
                 'drafts' => $drafts,
                 'cancelled' => $cancelled,
             ],
+            /*
+             * والإجماليُّ للصادرة وحدها — المسودّةُ لم تصدر والملغاةُ عُكس قيدُها.
+             * جمعُ عمود «الإجمالي» صفًّا صفًّا كان يُدخلهما في رقمٍ يُقرأ إيرادًا.
+             */
+            'totals' => [
+                '_label' => __('الإجمالي (الصادرة فقط)'),
+                'total' => round($issuedSum, 3), 'paid' => round($paid, 3), 'outstanding' => round($outstanding, 3),
+            ],
             'options' => [
                 'statuses' => collect([CustomerInvoice::DRAFT, CustomerInvoice::ISSUED, CustomerInvoice::CANCELLED])
                     ->map(fn ($s) => ['value' => $s, 'label' => $s])->all(),
@@ -625,7 +657,7 @@ class ReportData
 
     public static function products(int $bid, array $filters): array
     {
-        $start = self::start($filters['range'] ?? 'month');
+        $period = self::period($filters);
         $category = self::pick($filters, 'category_id');
 
         $products = Product::where('business_id', $bid)
@@ -640,7 +672,7 @@ class ReportData
          * أبدًا — انظر `Revenue`. وبندُ خدمةٍ بلا `product_id` لا يُنسب إلى
          * صنفٍ أصلًا فيسقط من هذه القراءة، وهو الصواب: التقريرُ عن الأصناف.
          */
-        $sold = Revenue::items($bid, $start)
+        $sold = Revenue::items($bid, $period->startDay(), $period->endDay())
             ->whereNotNull('customer_invoice_items.product_id')
             ->selectRaw('customer_invoice_items.product_id as pid, '
                 .'SUM(customer_invoice_items.quantity) as q, '
@@ -667,13 +699,14 @@ class ReportData
 
         $total = $products->count();
 
-        return array_merge(self::capped($rows->take(self::LIMIT), $total), [
+        return array_merge(self::capped($rows->take(self::limit($filters)), $total), [
             'summary' => [
                 'products' => $total,
                 'revenue' => round((float) $rows->sum('revenue'), 3),
                 'profit' => round((float) $rows->sum('profit'), 3),
                 'sold' => $rows->where('units', '>', 0)->count(),
             ],
+            'totals' => ['units' => (int) $rows->sum('units'), 'revenue' => round((float) $rows->sum('revenue'), 3), 'profit' => round((float) $rows->sum('profit'), 3)],
             'options' => ['categories' => self::categoryOptions($bid)],
         ]);
     }
@@ -715,8 +748,9 @@ class ReportData
 
         $shown = $only === '1' ? $rows->where('below', true) : $rows;
 
-        return array_merge(self::capped($shown->take(self::LIMIT), $shown->count()), [
+        return array_merge(self::capped($shown->take(self::limit($filters)), $shown->count()), [
             'summary' => $summary,
+            'totals' => ['quantity' => (int) $shown->sum('quantity'), 'value' => round((float) $shown->sum('value'), 3)],
             'options' => ['categories' => self::categoryOptions($bid)],
         ]);
     }
@@ -725,19 +759,21 @@ class ReportData
 
     public static function purchases(int $bid, array $filters): array
     {
-        $start = self::start($filters['range'] ?? 'month');
+        $period = self::period($filters);
         $status = self::pick($filters, 'status');
         $supplier = self::pick($filters, 'supplier_id');
 
         $base = PurchaseOrder::where('business_id', $bid)
-            ->when($start, fn ($q) => $q->where('ordered_at', '>=', $start))
+            // ولمن قُيّد بفروعٍ أوامرُ فروعه وحدها — كما في شاشة أوامر الشراء (`Demo::purchaseOrders`)
+            ->tap(fn ($q) => BranchAccess::limit($q))
+            ->tap(fn ($q) => $period->apply($q, 'ordered_at'))
             ->when($status, fn ($q) => $q->where('status', $status))
             ->when($supplier, fn ($q) => $q->where('supplier_id', $supplier));
 
         $count = (clone $base)->count();
         $total = (float) (clone $base)->sum('total');
 
-        $rows = (clone $base)->orderByDesc('ordered_at')->orderByDesc('id')->limit(self::LIMIT)->get()
+        $rows = (clone $base)->orderByDesc('ordered_at')->orderByDesc('id')->limit(self::limit($filters))->get()
             ->map(fn ($p) => [
                 'id' => $p->id,
                 'number' => $p->number,
@@ -755,6 +791,7 @@ class ReportData
                 'received' => (clone $base)->whereNotNull('received_at')->count(),
                 'pending' => (clone $base)->whereNull('received_at')->count(),
             ],
+            'totals' => ['total' => round($total, 3)],
             'options' => [
                 'statuses' => collect(PurchaseOrder::where('business_id', $bid)->distinct()->pluck('status'))
                     ->filter()->values()->map(fn ($s) => ['value' => $s, 'label' => $s])->all(),
@@ -768,10 +805,10 @@ class ReportData
 
     public static function suppliers(int $bid, array $filters): array
     {
-        $start = self::start($filters['range'] ?? 'all');
+        $period = self::period($filters, 'all');
 
         $orders = PurchaseOrder::where('business_id', $bid)
-            ->when($start, fn ($q) => $q->where('ordered_at', '>=', $start))
+            ->tap(fn ($q) => $period->apply($q, 'ordered_at'))
             ->selectRaw('supplier_id, COUNT(*) as c, SUM(total) as s')
             ->groupBy('supplier_id')->get()->keyBy('supplier_id');
 
@@ -789,13 +826,14 @@ class ReportData
                 ];
             })->sortByDesc('total');
 
-        return array_merge(self::capped($rows->take(self::LIMIT), $rows->count()), [
+        return array_merge(self::capped($rows->take(self::limit($filters)), $rows->count()), [
             'summary' => [
                 'suppliers' => $rows->count(),
                 'active' => $rows->where('orders', '>', 0)->count(),
                 'orders' => (int) $rows->sum('orders'),
                 'total' => round((float) $rows->sum('total'), 3),
             ],
+            'totals' => ['orders' => (int) $rows->sum('orders'), 'total' => round((float) $rows->sum('total'), 3)],
             'options' => [],
         ]);
     }
@@ -804,12 +842,12 @@ class ReportData
 
     public static function activity(int $bid, array $filters): array
     {
-        $start = self::start($filters['range'] ?? 'month');
+        $period = self::period($filters);
         $user = self::pick($filters, 'user_id');
         $action = self::pick($filters, 'action');
 
         $base = ActivityLog::where('business_id', $bid)
-            ->when($start, fn ($q) => $q->where('created_at', '>=', $start))
+            ->tap(fn ($q) => $period->apply($q, 'created_at'))
             ->when($user, fn ($q) => $q->where('user_id', $user))
             ->when($action, fn ($q) => $q->where('action', $action));
 
@@ -818,7 +856,7 @@ class ReportData
         $byAction = (clone $base)->selectRaw('action, COUNT(*) as c')
             ->groupBy('action')->orderByDesc('c')->get();
 
-        $rows = (clone $base)->orderByDesc('created_at')->orderByDesc('id')->limit(self::LIMIT)->get()
+        $rows = (clone $base)->orderByDesc('created_at')->orderByDesc('id')->limit(self::limit($filters))->get()
             ->map(fn ($a) => [
                 'id' => $a->id,
                 'user' => $a->user_name,
@@ -864,8 +902,8 @@ class ReportData
     /** تقاريرُ الإدارة تُبنى في `Intelligence\ManagementReports` — وهنا بابُها الموحَّد للتنزيل */
     public static function __callStatic(string $name, array $arguments): array
     {
-        if (in_array($name, \App\Support\Intelligence\ManagementReports::KEYS, true)) {
-            return \App\Support\Intelligence\ManagementReports::build($name, (int) $arguments[0], (array) ($arguments[1] ?? []));
+        if (in_array($name, ManagementReports::KEYS, true)) {
+            return ManagementReports::build($name, (int) $arguments[0], (array) ($arguments[1] ?? []));
         }
 
         throw new \BadMethodCallException("ReportData::{$name} غير موجود");
@@ -873,7 +911,7 @@ class ReportData
 
     public static function stocktake(int $bid, array $filters): array
     {
-        $start = self::start($filters['range'] ?? 'month');
+        $period = self::period($filters);
         $branch = self::pick($filters, 'branch_id');
         $reason = self::pick($filters, 'reason');
 
@@ -884,7 +922,7 @@ class ReportData
 
         $base = StockAdjustment::where('business_id', $bid)
             ->whereIn('reason', $reasons)
-            ->when($start, fn ($q) => $q->where('adjusted_at', '>=', $start))
+            ->tap(fn ($q) => $period->apply($q, 'adjusted_at'))
             ->when($branch, fn ($q) => $q->where('branch_id', $branch))
             ->tap(fn ($q) => BranchAccess::limit($q))
             ->when($reason, fn ($q) => $q->where('reason', $reason));
@@ -912,7 +950,7 @@ class ReportData
             ->unique()->count();
 
         $rows = (clone $base)->with(['product:id,name', 'branch:id,name'])
-            ->orderByDesc('adjusted_at')->orderByDesc('id')->limit(self::LIMIT)->get()
+            ->orderByDesc('adjusted_at')->orderByDesc('id')->limit(self::limit($filters))->get()
             ->map(fn ($a) => [
                 'id' => $a->id,
                 'number' => $a->number,

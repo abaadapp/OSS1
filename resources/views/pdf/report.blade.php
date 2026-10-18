@@ -13,6 +13,9 @@
     <div>{{ $branch }}</div>
     {{-- الفترة تُطبع دائمًا: ورقةٌ لا تقول مدّتها تُقرأ على أنها عمر المتجر --}}
     <div><span class="k">{{ __('الفترة') }}:</span> {{ $rangeLabel }}</div>
+    @foreach ($filters ?? [] as $filter)
+        <div>{{ $filter }}</div>
+    @endforeach
     <div><span class="k">{{ __('تاريخ الإصدار') }}:</span> <span dir="ltr">{{ $generatedAt }}</span></div>
 @endsection
 
@@ -56,6 +59,10 @@
                         {{ __('لا بيانات في هذه الفترة') }}
                     </td></tr>
                 @endforelse
+                {{-- الإجماليُّ من مجاميع التقرير نفسِه — بتعريف شاشته لا جمعٌ أعمى لكلّ صفّ --}}
+                @if (! empty($totals))
+                    <tr class="total">@foreach ($totals as $cell)<td><strong>{{ $cell }}</strong></td>@endforeach</tr>
+                @endif
             </tbody>
         </table>
     @endif
@@ -63,7 +70,7 @@
     {{-- البتر يُقال على الورق كما يُقال على الشاشة، وإلّا قُرئت الورقة على أنها الكلّ --}}
     @if ($truncated)
         <p class="small" style="color:#9a3412">
-            {{ __('تُعرض :shown من :total صفًّا.', ['shown' => $truncated['shown'], 'total' => $truncated['total']]) }}
+            {{ __('يحمل الملفّ :shown من :total صفًّا — ضيّق الفترة أو المرشّحات لتصدير الباقي.', ['shown' => number_format((int) $truncated['shown']), 'total' => number_format((int) $truncated['total'])]) }}
         </p>
     @endif
 @endsection

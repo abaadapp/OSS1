@@ -5,6 +5,7 @@ import AdminLayout from '@/Layouts/AdminLayout';
 import PageHeader from '@/Components/PageHeader';
 import SectionTabs, { FINANCE_TABS } from '@/Components/SectionTabs';
 import ExportMenu from '@/Components/ExportMenu';
+import { exportLinks } from '@/lib/exportLink';
 import SmartLink from '@/Components/SmartLink';
 import StatCard from '@/Components/StatCard';
 import Field from '@/Components/Field';
@@ -120,12 +121,7 @@ export default function Banks() {
                          * — وفيها الأرصدة لا المقبوضات والمدفوعات. فيُوصَل هنا،
                          * وهي وجهةُ البطاقة أصلًا.
                          */}
-                        <ExportMenu
-                            label="الحركة المالية"
-                            xlsx={route('admin.finance.xlsx')}
-                            pdf={route('admin.finance.pdf')}
-                            csv={route('admin.export.transactions')}
-                        />
+                        <ExportMenu label="الحركة المالية" {...exportLinks('admin.finance.transactions.export')} />
                         <Button onClick={() => open()}>
                             <Plus />
                             {t('حساب بنكي')}

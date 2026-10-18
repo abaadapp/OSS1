@@ -5,6 +5,7 @@ namespace App\Support\Intelligence;
 use App\Models\Budget;
 use App\Models\FinancialForecast;
 use App\Support\Money;
+use App\Support\Permissions;
 use App\Support\Receivables;
 use RuntimeException;
 
@@ -35,6 +36,23 @@ final class ManagementReports
     ];
 
     /** @param  array<string, mixed>  $filters */
+    /**
+     * الإذنُ الذي يقرأ به تقريرٌ إداريّ — في الشاشة وفي التنزيل معًا.
+     *
+     * كان يُسأل في الشاشة وحدها: من يملك قسمَي «الإدارة» و«التقارير» بلا إذن
+     * التحليل الماليّ يُنزّل التقريرَ الشهريّ بكتابة رابطه. والملفُّ يخرج من
+     * النظام — فبابُه أولى بالسؤال لا أهون.
+     */
+    public static function action(string $key): string
+    {
+        return match ($key) {
+            'project_profitability' => Permissions::ANALYTICS_PROJECTS,
+            'customer_revenue', 'service_performance' => Permissions::ANALYTICS_CUSTOMERS,
+            'asset_utilization' => Permissions::ANALYTICS_OPERATIONS,
+            default => Permissions::ANALYTICS_FINANCIAL,
+        };
+    }
+
     public static function period(int $bid, array $filters): Period
     {
         return Period::resolve($bid, (string) ($filters['period'] ?? 'this_month'), $filters['from'] ?? null, $filters['to'] ?? null);

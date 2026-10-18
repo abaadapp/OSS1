@@ -128,12 +128,12 @@ class EveryReportOpensOnRealDataTest extends TestCase
         foreach (glob($dir.'/*.tsx') ?: [] as $file) {
             $source = file_get_contents($file);
 
-            /* route('admin.…', 'key')  أو  route('admin.…', { … }) */
-            preg_match_all("/route\\('(admin\\.[a-z.]*(?:xlsx|pdf|csv|reports))'(?:\\s*,\\s*'([a-z]+)')?/", $source, $m, PREG_SET_ORDER);
+            /* route('admin.…', 'key')  أو  route('admin.…', { report: 'key', … })  أو  route('admin.…', { … }) */
+            preg_match_all("/route\\('(admin\\.[a-z.]*(?:xlsx|pdf|csv|reports))'(?:\\s*,\\s*(?:'([a-z_]+)'|\\{\\s*report:\\s*'([a-z_]+)'))?/", $source, $m, PREG_SET_ORDER);
 
             foreach ($m as $hit) {
                 $name = $hit[0 + 1];
-                $key = $hit[2] ?? null;
+                $key = ($hit[2] ?? '') !== '' ? $hit[2] : (($hit[3] ?? '') !== '' ? $hit[3] : null);
 
                 if (! Route::has($name)) {
                     $broken[] = basename($file).' → '.$name.' (مسارٌ لا وجود له)';

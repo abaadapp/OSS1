@@ -4,6 +4,8 @@ import { Check, Plus, Trash2, Undo2 } from 'lucide-react';
 import AdminLayout from '@/Layouts/AdminLayout';
 import PageHeader from '@/Components/PageHeader';
 import SectionTabs, { FINANCE_TABS } from '@/Components/SectionTabs';
+import ExportMenu from '@/Components/ExportMenu';
+import { exportLinks } from '@/lib/exportLink';
 import DataTable, { type Column, type Filter, type ServerPagination } from '@/Components/DataTable';
 import Field, { Select } from '@/Components/Field';
 import { Badge } from '@/Components/ui/badge';
@@ -242,6 +244,8 @@ export default function Journal() {
                     filters={tableFilters}
                     empty="لا قيود في الدفتر بعد"
                     server={{ pagination, params: filters, sorts }}
+                    /* القيودُ سطرًا سطرًا بمرشّحات الشاشة — المدينُ والدائنُ يُجمعان ويتساويان */
+                    toolbar={<ExportMenu {...exportLinks('admin.finance.journal.export')} />}
                 />
             </Card>
 

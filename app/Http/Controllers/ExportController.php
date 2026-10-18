@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Support\Demo;
 use App\Support\Reports;
+use App\Support\Sheet;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
@@ -19,11 +20,11 @@ class ExportController extends Controller
         // الفترة التي كان التاجر ينظر إليها — الملفّ يغادر الشاشة ولا يصحّحه
         // مبدّلٌ فوقه، فيحملها في أوّل سطرٍ منه وفي اسمه. والحمولة من مصدر
         // الشاشة نفسه — انظر Support\Reports::salesReport
-        $report = Reports::salesReport(request()->query('range'));
+        $report = Reports::salesReport(request()->query(), true);
         $range = $report['range'];
 
         $rows = [];
-        $rows[] = [__('الفترة'), Demo::rangeLabel($range), ''];
+        $rows[] = [__('الفترة'), $report['rangeLabel'], ''];
         $rows[] = ['', '', ''];
         $rows[] = [__('— المؤشرات الرئيسية —'), '', ''];
         $rows[] = [__('المؤشر'), __('القيمة'), ''];
@@ -44,7 +45,7 @@ class ExportController extends Controller
         $rows[] = ['', '', ''];
         $rows[] = [__('— توزيع وسائل الدفع —'), '', ''];
         $rows[] = [__('الوسيلة'), __('الإجمالي'), __('عدد العمليات')];
-        foreach (Demo::paymentBreakdown($range) as $m) {
+        foreach (Reports::salesPayments($report) as $m) {
             $rows[] = [$m['name'], number_format((float) $m['total'], 3, '.', ''), $m['count']];
         }
         $rows[] = ['', '', ''];
@@ -54,7 +55,7 @@ class ExportController extends Controller
             $rows[] = [$p['name'], $p['sold'], number_format((float) $p['revenue'], 3, '.', '')];
         }
 
-        return $this->stream('revenue-report-'.$range, [__('العنصر'), __('القيمة 1'), __('القيمة 2')], $rows);
+        return $this->stream('revenue-report-'.Reports::salesSlug($report), [__('العنصر'), __('القيمة 1'), __('القيمة 2')], $rows);
     }
 
     public function products()
@@ -130,8 +131,6 @@ class ExportController extends Controller
         return $this->stream('inventory', [__('المعرّف'), __('المنتج'), 'SKU', __('الكمية الحالية'), __('الحد الأدنى'), __('القيمة'), __('حالة المخزون'), __('آخر تحديث')], $rows);
     }
 
-    
-
     /* ------------------------------ المولّد ------------------------------ */
 
     private function stream(string $name, array $headers, array $rows): StreamedResponse
@@ -155,7 +154,7 @@ class ExportController extends Controller
              */
             fputcsv($out, $headers, escape: '');
             foreach ($rows as $row) {
-                fputcsv($out, array_map([\App\Support\Sheet::class, 'guard'], $row), escape: '');
+                fputcsv($out, array_map([Sheet::class, 'guard'], $row), escape: '');
             }
             fclose($out);
         }, $filename, ['Content-Type' => 'text/csv; charset=UTF-8']);

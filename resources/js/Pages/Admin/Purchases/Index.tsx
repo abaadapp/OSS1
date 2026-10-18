@@ -5,7 +5,11 @@ import AdminLayout from '@/Layouts/AdminLayout';
 import PageHeader from '@/Components/PageHeader';
 import SectionTabs, { PURCHASE_TABS } from '@/Components/SectionTabs';
 import StatCard, { type Stat } from '@/Components/StatCard';
-import DataTable, { type Column, type Filter } from '@/Components/DataTable';
+import DataTable, { type Column } from '@/Components/DataTable';
+import ExportMenu from '@/Components/ExportMenu';
+import ListDateRange from '@/Components/ListDateRange';
+import Tabs from '@/Components/Tabs';
+import { exportLinks } from '@/lib/exportLink';
 import SmartLink from '@/Components/SmartLink';
 import { Badge } from '@/Components/ui/badge';
 import { Button } from '@/Components/ui/button';
@@ -47,10 +51,14 @@ interface Props {
     reorder: ReorderRow[];
     /** رقمٌ يصل مع الرابط من إشعار الاستلام — يُملأ به حقل البحث */
     q: string | null;
+    /** الحالُ والمدّةُ في الرابط — يقرؤهما الخادمُ للقائمة ولملفّ تصديرها معًا */
+    filters?: { status?: string; from?: string; to?: string };
 }
 
+const STATUSES = ['مسودة', 'مُرسل', 'مستلم جزئيًا', 'مستلم', 'ملغي'];
+
 export default function PurchasesIndex() {
-    const { orders, stats, reorder, q, context } = usePage<PageProps<Props>>().props;
+    const { orders, stats, reorder, q, filters, context } = usePage<PageProps<Props>>().props;
     const t = useTranslate();
     const currency = context!.currency;
     const m = (v: number) => money(v, currency);
@@ -183,14 +191,13 @@ export default function PurchasesIndex() {
         },
     ];
 
-    const filters: Filter<PurchaseOrder>[] = [
-        {
-            label: 'كل الحالات',
-            asTabs: true,
-            options: ['مسودة', 'مُرسل', 'مستلم جزئيًا', 'مستلم', 'ملغي'].map((s) => ({ label: s, value: s })),
-            match: (o, v) => o.status === v,
-        },
-    ];
+    /*
+     * والحالُ في الرابط لا في المتصفّح: كانت تبويبًا يُرشّح ما وصل، فلا يعرفها
+     * ملفُّ التصدير. والآن يقرؤها الخادمُ للقائمة وللملفّ معًا.
+     */
+    const status = filters?.status ?? '';
+    const goStatus = (next: string) =>
+        router.get(route('admin.purchases.orders'), { status: next || undefined, from: filters?.from, to: filters?.to }, { preserveState: true, preserveScroll: true, replace: true });
 
     return (
         <AdminLayout title="أوامر الشراء">
@@ -199,6 +206,8 @@ export default function PurchasesIndex() {
                 subtitle={t('طلبات التزويد من المورّدين واستلام البضاعة')}
                 actions={
                     <>
+                        {/* بالحال والمدّة المعروضتين — والقيمةُ التزامٌ لا مصروفٌ محقَّق */}
+                        <ExportMenu {...exportLinks('admin.purchases.orders.export')} />
                         <Button variant="outline" asChild>
                             <SmartLink routeName="admin.suppliers.index" href={route('admin.suppliers.index')}>
                                 <Truck />
@@ -271,7 +280,8 @@ export default function PurchasesIndex() {
                 </Card>
             )}
 
-            {orders.length === 0 ? (
+            {/* «لا أوامر بعد» لمن لم يكتب أمرًا — لا لمن رشّح فلم يجد: له مرشّحاتُه ليغيّرها */}
+            {orders.length === 0 && !status && !filters?.from && !filters?.to ? (
                 <Card className="px-5 py-16 text-center">
                     <ClipboardList className="mx-auto size-8 text-[#d1d5db]" />
                     <p className="mt-3 font-medium text-[#111]">{t('لا توجد أوامر شراء بعد')}</p>
@@ -290,6 +300,14 @@ export default function PurchasesIndex() {
                     <div className="border-b border-[var(--ui-border,#e8e8e8)] px-5 pt-5">
                         <h3 className="font-bold text-[#111]">{t('أوامر الشراء')}</h3>
                     </div>
+                    <div className="px-5 pt-3">
+                        <Tabs
+                            current={status}
+                            onChange={goStatus}
+                            tabs={[{ key: '', label: 'كل الحالات' }, ...STATUSES.map((x) => ({ key: x, label: x }))]}
+                        />
+                        <ListDateRange routeName="admin.purchases.orders" params={{ status: status || null }} from={filters?.from} to={filters?.to} label="تاريخ الأمر" />
+                    </div>
                     <DataTable
                         rows={orders}
                         columns={columns}
@@ -297,7 +315,6 @@ export default function PurchasesIndex() {
                         searchPlaceholder="ابحث بالرقم أو المورّد…"
                         searchable={(o) => `${o.number} ${o.supplier} ${o.branch ?? ''}`}
                         initialQuery={q ?? undefined}
-                        filters={filters}
                         empty="لا توجد أوامر شراء بعد"
                     />
                 </Card>

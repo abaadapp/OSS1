@@ -1,10 +1,9 @@
 import { router } from '@inertiajs/react';
-import { Download, FileSpreadsheet, FileText } from 'lucide-react';
 import AdminLayout from '@/Layouts/AdminLayout';
+import ExportMenu from '@/Components/ExportMenu';
 import PageHeader from '@/Components/PageHeader';
 import SectionTabs, { MANAGEMENT_TABS } from '@/Components/SectionTabs';
 import Field, { Select } from '@/Components/Field';
-import { Button } from '@/Components/ui/button';
 import { Card } from '@/Components/ui/card';
 import PeriodPicker from '@/Components/management/PeriodPicker';
 import { money } from '@/lib/format';
@@ -57,9 +56,10 @@ export default function ManagementReports({ period, periods, catalog, report, ti
                 subtitle={t('ثمانيةُ تقاريرَ من الحساب نفسِه الذي تراه الشاشات — تُقرأ هنا وتُنزَّل من باب التقارير')}
                 actions={report ? (
                     <div className="flex flex-wrap items-end gap-2">
-                        {!['budget_vs_actual'].includes(report) && <PeriodPicker period={period} periods={periods} routeName="admin.management.reports" extra={extra} />}
+                        {/* ربحيّةُ المشاريع تقرأ «الكلّ» أيضًا — مشاريعُ كلِّ الفترات (`ManagementReports::project_profitability`) */}
+                        {!['budget_vs_actual'].includes(report) && <PeriodPicker period={period} periods={periods} routeName="admin.management.reports" extra={extra} allowAll={report === 'project_profitability'} />}
                         {report === 'budget_vs_actual' && <Field label="التجميع" className="w-[120px]" hint="الموازنةُ المعتمَدة للسنة الحاليّة ما لم تُختر من شاشة الموازنات"><Select value={filters.grouping ?? 'month'} onChange={(e) => router.get(route('admin.management.reports'), { report, budget: filters.budget, grouping: e.target.value }, { preserveState: true, replace: true })} options={[{ value: 'month', label: t('شهري') }, { value: 'quarter', label: t('ربعي') }, { value: 'year', label: t('سنوي') }]} /></Field>}
-                        {report === 'cash_forecast' && <Field label="الأفق" className="w-[120px]"><Select value={filters.horizon ?? '90'} onChange={(e) => router.get(route('admin.management.reports'), { report, horizon: e.target.value }, { preserveState: true, replace: true })} options={[30, 60, 90, 180, 365].map((h) => ({ value: h, label: `${h} ${t('يومًا')}` }))} /></Field>}
+                        {report === 'cash_forecast' && <Field label="الأفق" className="w-[120px]"><Select value={filters.horizon ?? '90'} onChange={(e) => router.get(route('admin.management.reports'), { ...filters, report, horizon: e.target.value }, { preserveState: true, replace: true })} options={[30, 60, 90, 180, 365].map((h) => ({ value: h, label: `${h} ${t('يومًا')}` }))} /></Field>}
                     </div>
                 ) : undefined}
             />
@@ -89,13 +89,8 @@ export default function ManagementReports({ period, periods, catalog, report, ti
                                     <h3 className="text-[15px] font-semibold">{title}</h3>
                                     <p className="text-[12px] text-[#6b7280]">{data.periodLabel}</p>
                                 </div>
-                                {exp && (
-                                    <div className="flex gap-2">
-                                        <Button variant="outline" size="sm" asChild><a href={exp.xlsx}><FileSpreadsheet />XLSX</a></Button>
-                                        <Button variant="outline" size="sm" asChild><a href={exp.csv}><Download />CSV</a></Button>
-                                        <Button variant="outline" size="sm" asChild><a href={exp.pdf}><FileText />PDF</a></Button>
-                                    </div>
-                                )}
+                                {/* زرٌّ واحد «تصدير» كأخواته — والروابطُ من الخادم بمدّة الشاشة ومرشّحاتها */}
+                                {exp && <ExportMenu xlsx={exp.xlsx} pdf={exp.pdf} csv={exp.csv} />}
                             </Card>
                             {data.sections.map((s) => (
                                 <Card key={s.title} className="overflow-hidden">

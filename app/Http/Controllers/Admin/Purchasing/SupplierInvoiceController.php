@@ -17,12 +17,14 @@ use App\Support\Demo;
 use App\Support\Document\PaperSize;
 use App\Support\DocumentPaper;
 use App\Support\DocumentRenderer;
+use App\Support\Exports\Dataset;
 use App\Support\Ledger;
 use App\Support\Pagination;
 use App\Support\Permissions;
 use App\Support\Search;
 use App\Support\Sort;
 use App\Support\SupplierInvoices;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Storage;
@@ -62,21 +64,14 @@ class SupplierInvoiceController extends Controller
         return auth()->user()->business_id ?? Demo::bid();
     }
 
-    public function index(Request $request): Response
+    /**
+     * السنداتُ المرشَّحة — تقرؤها الشاشةُ وملفُّ تصديرها معًا (`Exports\SupplierInvoicesDataset`).
+     * والمدّةُ بتاريخ السند (`issued_at`).
+     */
+    public static function listQuery(Request $request, int $bid): Builder
     {
-        /*
-         * والقراءةُ فعلٌ يُمنح: هذه الشاشة تقول ما على المتجر لمورّديه وبكم
-         * اشترى منهم — وقسمُ «المشتريات» يُمنح لمن يطلب البضاعة.
-         */
-        if (! auth()->user()?->may(Permissions::INVOICE_VIEW)) {
-            abort(403);
-        }
-
-        $bid = $this->bid();
-        Ledger::ensureSystemAccounts($bid);
-
         // السندُ يتبع أمرَ شرائه: لمن قُيّد بفروعٍ سنداتُ أوامرِ فروعه، وما لا أمرَ له
-        $q = BranchAccess::limitThrough(SupplierInvoice::where('business_id', $bid), 'purchaseOrder')->with(['supplier', 'purchaseOrder']);
+        $q = BranchAccess::limitThrough(SupplierInvoice::where('business_id', $bid), 'purchaseOrder')->with(['supplier', 'purchaseOrder', 'project:id,code,name']);
 
         if ($s = Search::term($request)) {
             $like = Search::like();
@@ -93,10 +88,32 @@ class SupplierInvoiceController extends Controller
         if ($supplier = $request->query('supplier')) {
             $q->where('supplier_id', $supplier);
         }
+        if ($from = Dataset::day($request, 'from')) {
+            $q->whereDate('issued_at', '>=', $from);
+        }
+        if ($to = Dataset::day($request, 'to')) {
+            $q->whereDate('issued_at', '<=', $to);
+        }
 
         Sort::apply($q, $request, self::SORTS, fn ($w) => $w->orderByDesc('issued_at')->orderByDesc('id'));
 
-        $invoices = $q->paginate(Pagination::perPage($request, 20))->withQueryString();
+        return $q;
+    }
+
+    public function index(Request $request): Response
+    {
+        /*
+         * والقراءةُ فعلٌ يُمنح: هذه الشاشة تقول ما على المتجر لمورّديه وبكم
+         * اشترى منهم — وقسمُ «المشتريات» يُمنح لمن يطلب البضاعة.
+         */
+        if (! auth()->user()?->may(Permissions::INVOICE_VIEW)) {
+            abort(403);
+        }
+
+        $bid = $this->bid();
+        Ledger::ensureSystemAccounts($bid);
+
+        $invoices = self::listQuery($request, $bid)->paginate(Pagination::perPage($request, 20))->withQueryString();
 
         $all = BranchAccess::limitThrough(SupplierInvoice::where('business_id', $bid), 'purchaseOrder')->get();
 
@@ -156,7 +173,7 @@ class SupplierInvoiceController extends Controller
             ])->all(),
             'pagination' => Pagination::meta($invoices),
             'cost_kinds' => collect(SupplierInvoices::COST_KINDS)->map(fn ($k) => ['value' => $k, 'label' => __(SupplierInvoices::COST_LABELS[$k])])->values()->all(),
-            'filters' => $request->only('q', 'status', 'supplier', 'approval')
+            'filters' => $request->only('q', 'status', 'supplier', 'approval', 'from', 'to')
                 + Sort::params($request, self::SORTS),
             'sorts' => Sort::keys(self::SORTS),
             'suppliers' => Supplier::where('business_id', $bid)->orderBy('name')

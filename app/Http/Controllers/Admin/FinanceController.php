@@ -4,11 +4,14 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Transaction;
+use App\Support\Activity;
 use App\Support\Books;
 use App\Support\Demo;
+use App\Support\Exports\Dataset;
 use App\Support\Pagination;
 use App\Support\Search;
 use App\Support\Sort;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
@@ -41,12 +44,19 @@ class FinanceController extends Controller
         'amount' => 'amount',
     ];
 
-    private function bid(): int { return auth()->user()->business_id ?? Demo::bid(); }
-
-    public function index(Request $request): Response
+    private function bid(): int
     {
-        $bid = $this->bid();
+        return auth()->user()->business_id ?? Demo::bid();
+    }
 
+    /**
+     * القائمةُ المرشَّحة — تقرؤها الشاشةُ وملفُّ تصديرها معًا (`Exports\TransactionsDataset`).
+     *
+     * كان الملفّ يقرأ `Demo::transactions` بفترتها وحدها: يكتب التاجرُ مرجعًا أو
+     * يحدّد يومين ثمّ يصدّر فيخرج الشهرُ الجاري كلُّه. والآن الاستعلامُ واحد.
+     */
+    public static function listQuery(Request $request, int $bid): Builder
+    {
         $q = Transaction::where('business_id', $bid)->with('order:id,status');
 
         // والمعامل من المحرّك لا مكتوبًا بيدٍ: `like` تفرّق في PostgreSQL وحدها
@@ -59,68 +69,71 @@ class FinanceController extends Controller
         if ($kind = $request->query('kind')) {
             $q->where('kind', $kind);
         }
-        if ($from = $request->query('from')) {
+        if ($from = Dataset::day($request, 'from')) {
             $q->whereDate('occurred_at', '>=', $from);
         }
-        if ($to = $request->query('to')) {
+        if ($to = Dataset::day($request, 'to')) {
             $q->whereDate('occurred_at', '<=', $to);
         }
 
-        /*
-         * المجاميع تُحسب على المدة كلّها لا على صفحتها.
-         *
-         * والنسخة تُؤخذ قبل الترقيم: `paginate` تكتب حدَّ الصفحة في الاستعلام
-         * نفسه، فجمعٌ بعدها يجمع عشرين صفًّا ويقول إنها المدة كلّها.
-         *
-         * والتحويل صنفٌ ثالث لا يُجمع مع الدخل: هو انتقالٌ بين جيبين لا مالٌ
-         * دخل المتجر أو خرج منه، وجمعُه معه يُضخّم المقبوض بمالٍ قُبض مرّة.
-         *
-         * والفاتورة الملغاة تخرج من المجموع وتبقى في الجدول: مالٌ لم يُقبض
-         * لا يُجمع، وسجلٌّ وقع لا يُمحى — انظر Transaction::scopeNotCancelled.
-         */
+        Sort::apply($q, $request, self::SORTS, fn ($w) => $w->orderByDesc('occurred_at')->orderByDesc('id'));
+
+        return $q;
+    }
+
+    /** مجاميعُ القائمة بالنوع — بلا الملغاة — للشاشة وللملفّ */
+    public static function listTotals(Builder $q): array
+    {
         $totals = (clone $q)->reorder()->notCancelled()
             ->selectRaw('type, COALESCE(SUM(amount),0) total')->groupBy('type')
             ->pluck('total', 'type');
 
-        Sort::apply($q, $request, self::SORTS, fn ($w) => $w->orderByDesc('occurred_at')->orderByDesc('id'));
+        return [
+            'in' => round((float) ($totals['دخل'] ?? 0), 3),
+            'out' => round((float) ($totals['مصروف'] ?? 0), 3),
+            'transfers' => round((float) ($totals['تحويل'] ?? 0), 3),
+        ];
+    }
+
+    /** صفُّ القائمة — للشاشة وللملفّ */
+    public static function listRow(Transaction $t): array
+    {
+        return [
+            'id' => $t->id,
+            'reference' => $t->reference,
+            'date' => optional($t->occurred_at)->format('Y-m-d H:i'),
+            'description' => $t->description,
+            'method' => $t->method,
+            'type' => $t->type,
+            'kind' => $t->kind,
+            'kind_label' => Books::label($t->kind),
+            'amount' => (float) $t->amount,
+            'employee' => $t->employee_name,
+            // ما رُحّل إلى الأستاذ وما لم يُرحَّل — يُقرأ ولا يُخفى
+            'posted' => $t->journal_entry_id !== null,
+            // والملغاة تُوسم ولا تُحذف: خرجت من المجموع وبقيت في السجلّ
+            'cancelled' => $t->isCancelled(),
+        ];
+    }
+
+    public function index(Request $request): Response
+    {
+        $bid = $this->bid();
+
+        $q = self::listQuery($request, $bid);
+        $summary = self::listTotals($q);
 
         $rows = $q->paginate(Pagination::perPage($request, 20))->withQueryString();
 
         return Inertia::render('Admin/Finance/Transactions', [
-            'rows' => collect($rows->items())->map(fn ($t) => [
-                'id' => $t->id,
-                'reference' => $t->reference,
-                'date' => optional($t->occurred_at)->format('Y-m-d H:i'),
-                'description' => $t->description,
-                'method' => $t->method,
-                'type' => $t->type,
-                'kind' => $t->kind,
-                'kind_label' => Books::label($t->kind),
-                'amount' => (float) $t->amount,
-                'employee' => $t->employee_name,
-                // ما رُحّل إلى الأستاذ وما لم يُرحَّل — يُقرأ ولا يُخفى
-                'posted' => $t->journal_entry_id !== null,
-                // والملغاة تُوسم ولا تُحذف: خرجت من المجموع وبقيت في السجلّ
-                'cancelled' => $t->isCancelled(),
-            ])->all(),
+            'rows' => collect($rows->items())->map(fn ($t) => self::listRow($t))->all(),
             'pagination' => Pagination::meta($rows),
             'filters' => $request->only('q', 'kind', 'from', 'to') + Sort::params($request, self::SORTS),
             'sorts' => Sort::keys(self::SORTS),
             'movements' => Books::movementOptions(),
             'kinds' => $this->kindFilters($bid),
-            /*
-             * أنواع المصروفات — اختياريّةٌ في النموذج.
-             *
-             * وبلا هذا يسقط كلُّ مصروفٍ يُسجَّل هنا في «مصروف عام»، فيصير
-             * ترشيحُ شاشة المصروفات بالنوع لا يفصل شيئًا. والحقل يبقى
-             * اختياريًّا: من يريد التسجيل بسرعة يتركه.
-             */
             'expenseTypes' => collect(Demo::expenseTypes())->pluck('name')->all(),
-            'summary' => [
-                'in' => round((float) ($totals['دخل'] ?? 0), 3),
-                'out' => round((float) ($totals['مصروف'] ?? 0), 3),
-                'transfers' => round((float) ($totals['تحويل'] ?? 0), 3),
-            ],
+            'summary' => $summary,
             'today' => now()->format('Y-m-d'),
         ]);
     }
@@ -173,7 +186,7 @@ class FinanceController extends Controller
             return back()->withInput()->withErrors(['amount' => $e->getMessage()]);
         }
 
-        \App\Support\Activity::log(
+        Activity::log(
             'created',
             'سجّل حركة '.Books::label($data['kind']).' بقيمة '.$data['amount'],
             ['subject_id' => $transaction->id],

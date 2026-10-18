@@ -83,6 +83,14 @@ class ListFilters
      */
     public static function expenseSpan(Request $request): ?array
     {
+        /*
+         * والفترةُ المخصَّصة (`from` · `to`) أولى من الشهر حين تُكتب: من يحدّد
+         * يومين يريدهما لا الشهرَ الذي في القائمة. والحدُّ الغائبُ منهما مفتوح.
+         */
+        if (($custom = self::expenseRange($request)) !== null) {
+            return $custom;
+        }
+
         $month = (string) $request->query('month', now()->format('Y-m'));
 
         if (! preg_match('/^\d{4}-\d{2}$/', $month)) {
@@ -95,6 +103,42 @@ class ListFilters
     }
 
     /** المصروفات — كما ترشّحها شاشة «المصروفات»، بشهرها */
+    /**
+     * حدّا المصروفات المخصَّصان — أو null فالشهرُ يحكم.
+     *
+     * @return array{0: Carbon, 1: Carbon}|null
+     */
+    public static function expenseRange(Request $request): ?array
+    {
+        $from = self::day($request->query('from'));
+        $to = self::day($request->query('to'));
+
+        if ($from === null && $to === null) {
+            return null;
+        }
+
+        return [
+            ($from ?? Carbon::createFromFormat('!Y-m-d', '1900-01-01'))->copy()->startOfDay(),
+            ($to ?? Carbon::createFromFormat('!Y-m-d', '2200-12-31'))->copy()->endOfDay(),
+        ];
+    }
+
+    /** يومٌ بصيغته الصارمة — أو null */
+    private static function day(mixed $value): ?Carbon
+    {
+        if (! is_string($value) || preg_match('/^\d{4}-\d{2}-\d{2}$/', $value) !== 1) {
+            return null;
+        }
+
+        try {
+            $date = Carbon::createFromFormat('!Y-m-d', $value);
+        } catch (\Throwable) {
+            return null;
+        }
+
+        return $date->format('Y-m-d') === $value ? $date : null;
+    }
+
     public static function expenses(Builder $q, Request $request): Builder
     {
         if ($span = self::expenseSpan($request)) {

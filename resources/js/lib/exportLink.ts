@@ -27,3 +27,19 @@ export function withFilters(url: string): string {
 
     return `${base}?${merged.toString()}`;
 }
+
+/**
+ * روابطُ الصيغ الثلاث لقائمةٍ تشغيليّة — مسارٌ واحدٌ بصيغته معاملًا (`{format}`).
+ *
+ * والمرشّحاتُ المعروضةُ تلحقها `ExportMenu` من الرابط (`withFilters`)، وما يُمرَّر
+ * هنا صراحةً أولى بها: حسابُ الكشف المفتوح، أو حالٌ تُختار في الصفحة.
+ */
+export function exportLinks(name: string, params: Record<string, string | number | null | undefined> = {}): { xlsx: string; pdf: string; csv: string } {
+    const clean = Object.fromEntries(Object.entries(params).filter(([, v]) => v !== null && v !== undefined && v !== ''));
+
+    return {
+        xlsx: route(name, { format: 'xlsx', ...clean }),
+        pdf: route(name, { format: 'pdf', ...clean }),
+        csv: route(name, { format: 'csv', ...clean }),
+    };
+}

@@ -2,6 +2,9 @@ import { useRef, useState } from 'react';
 import { router, useForm, usePage } from '@inertiajs/react';
 import { ArrowRight, Landmark, RefreshCw, Save, Trash2, Upload, UploadCloud } from 'lucide-react';
 import AdminLayout from '@/Layouts/AdminLayout';
+import ExportMenu from '@/Components/ExportMenu';
+import ListDateRange from '@/Components/ListDateRange';
+import { exportLinks } from '@/lib/exportLink';
 import PageHeader from '@/Components/PageHeader';
 import SectionTabs, { FINANCE_TABS } from '@/Components/SectionTabs';
 import Tabs from '@/Components/Tabs';
@@ -66,6 +69,8 @@ interface Props {
     /** تاريخ اليوم بتوقيت الخادم — تعبئة تاريخ الرصيد الافتتاحي حين لا يكون محفوظًا */
     today: string;
     statement: { opening: number; rows: StatementRow[]; closing: number };
+    /** مدّةُ الكشف — تقصّ الصفوف لا الرصيد */
+    filters?: { from?: string; to?: string };
     lines: BankLine[];
     reconciliation: {
         lines: number;
@@ -85,7 +90,7 @@ const TABS = [
 type TabKey = (typeof TABS)[number]['key'];
 
 export default function FinanceStatement() {
-    const { account, accounts, statement, lines, reconciliation, today, context } =
+    const { account, accounts, statement, lines, reconciliation, today, context, filters } =
         usePage<PageProps<Props>>().props;
     const t = useTranslate();
     // نافذةُ التأكيد من النظام لا من المتصفّح — انظر ConfirmDialog
@@ -138,6 +143,8 @@ export default function FinanceStatement() {
                                 options={accounts.map((a) => ({ value: a.id, label: a.label }))}
                             />
                         )}
+                        {/* كشفُ هذا الحساب بمدّته — والرصيدُ الجاري صحيحٌ من أوّل المدّة */}
+                        <ExportMenu {...exportLinks('admin.finance.statement.export', { account: account.id })} />
                         <Button variant="outline" asChild>
                             <SmartLink routeName="admin.finance.index" href={route('admin.finance.index')}>
                                 <ArrowRight />
@@ -163,11 +170,13 @@ export default function FinanceStatement() {
             {/* ===== كشف الحساب المحسوب ===== */}
             {tab === 'statement' && (
                 <>
+                    <ListDateRange routeName="admin.finance.statement" routeParams={{ id: account.id }} from={filters?.from} to={filters?.to} />
                     <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
                         {[
-                            { label: t('الرصيد الافتتاحي'), value: m(statement.opening), icon: 'wallet', color: 'secondary' },
+                            /* بمدّةٍ مختارة: رصيدُ أوّلها وآخرُها — رصيدان لا مجموعُ حركات */
+                            { label: t(filters?.from || filters?.to ? 'رصيد أوّل المدّة' : 'الرصيد الافتتاحي'), value: m(statement.opening), icon: 'wallet', color: 'secondary' },
                             { label: t('عدد الحركات'), value: number(statement.rows.length), icon: 'list', color: 'info' },
-                            { label: t('الرصيد الحالي'), value: m(statement.closing), icon: 'landmark', color: 'primary' },
+                            { label: t(filters?.from || filters?.to ? 'رصيد آخر المدّة' : 'الرصيد الحالي'), value: m(statement.closing), icon: 'landmark', color: 'primary' },
                         ].map((s, i) => (
                             <StatCard key={s.label} stat={s} index={i} />
                         ))}
@@ -189,8 +198,8 @@ export default function FinanceStatement() {
                                 {/* سطر الرصيد الافتتاحي — نقطة انطلاق العمود المتراكم */}
                                 <TableRow className="bg-[#fafafa] hover:bg-[#fafafa]">
                                     <TableCell colSpan={5} className="text-[#9ca3af]">
-                                        {t('رصيد افتتاحي')}
-                                        {account.opening_date ? ` — ${account.opening_date}` : ''}
+                                        {filters?.from ? t('رصيد أوّل المدّة') : t('رصيد افتتاحي')}
+                                        {filters?.from ? ` — ${filters.from}` : account.opening_date ? ` — ${account.opening_date}` : ''}
                                     </TableCell>
                                     <TableCell className="text-end font-semibold tabular-nums text-[#111]">
                                         {m(statement.opening)}

@@ -1086,12 +1086,12 @@ class Demo
      * أقدمُ موظفٍ لا أعلاهم بيعًا لا يُقرأ بنظرة.
      */
     /** أداءُ الموظّفين — في متجرٍ يُسمّى لا يُستنتَج، انظر `topCustomers` */
-    public static function staffPerformance(string $range = 'month', ?int $businessId = null): array
+    public static function staffPerformance(string|ReportPeriod $range = 'month', ?int $businessId = null): array
     {
         $bid = $businessId ?? self::bid();
-        $start = self::rangeStart(self::range($range));
+        [$start, $end] = self::window($range);
 
-        $sold = Revenue::byUser($bid, $start);
+        $sold = Revenue::byUser($bid, $start, $end);
 
         return User::where('business_id', $bid)->orderBy('id')->get()->map(function ($u) use ($sold) {
             $row = $sold->get($u->id);
@@ -1442,6 +1442,40 @@ class Demo
         };
     }
 
+    /**
+     * محورُ فترةٍ مخصَّصة — دقّتُه بطولها: يومٌ بالساعات، وحتى شهرين بالأيّام،
+     * وما فوقها بالأشهر. ونهايتُه آخرُ لحظةٍ في يومها الأخير.
+     *
+     * @return array{0: string, 1: \Illuminate\Support\Carbon, 2: \Illuminate\Support\Carbon}
+     */
+    private static function customAxis(ReportPeriod $period): array
+    {
+        $start = $period->startDay();
+        $end = $period->endDay()->subSecond();
+        $days = (int) $start->diffInDays($end) + 1;
+
+        return match (true) {
+            $days <= 1 => ['hour', $start, $end],
+            $days <= 62 => ['day', $start, $end],
+            default => ['month', $start->copy()->startOfMonth(), $end],
+        };
+    }
+
+    /**
+     * حدّا فترةٍ لأبواب الإيراد (`Revenue`) — [البداية، النهاية).
+     *
+     * الجاهزةُ بمفتاحها: بدايتُها `rangeStart` ونهايتُها مفتوحةٌ حتى الآن كما
+     * كانت. والمخصَّصةُ (`ReportPeriod`) بيومَيها كاملين — انظر `ReportPeriod`.
+     *
+     * @return array{0: ?\Illuminate\Support\Carbon, 1: ?\Illuminate\Support\Carbon}
+     */
+    public static function window(string|ReportPeriod $range): array
+    {
+        return $range instanceof ReportPeriod
+            ? [$range->startDay(), $range->endDay()]
+            : [self::rangeStart(self::range($range)), null];
+    }
+
     /** حدود الفترة السابقة المكافئة [البداية، النهاية) — null إذا لا مقارنة (كل الفترات) */
     public static function rangePrev(string $range): ?array
     {
@@ -1527,13 +1561,13 @@ class Demo
      * من مهمّةٍ في الخلفية أو من شاشة مشرف المنصّة يقرأ متجرًا غير الذي طلب،
      * بلا خطأ يقول شيئًا.
      */
-    public static function paymentMethods(string $range = 'month', ?int $businessId = null): array
+    public static function paymentMethods(string|ReportPeriod $range = 'month', ?int $businessId = null): array
     {
         $bid = $businessId ?? self::bid();
         // الفترة تُردّ إلى المفهوم كما في أخواتها: فترةٌ مجهولة كانت تسقط إلى
         // null فتُقرأ «كل الفترات» بلا أن يقول شيءٌ ذلك
-        $start = self::rangeStart(self::range($range));
-        $rows = Revenue::byMethod($bid, $start)->keyBy('key');
+        [$start, $end] = self::window($range);
+        $rows = Revenue::byMethod($bid, $start, $end)->keyBy('key');
         $grand = max(0.001, (float) $rows->sum('total'));
 
         /*
@@ -1702,12 +1736,13 @@ class Demo
      * ولكل عمود عدد طلباته إلى جانب مبلغه: مئة ريالٍ من طلبٍ واحد غير مئةٍ من
      * أربعين طلبًا، والمبلغ وحده لا يفرّق بينهما.
      */
-    public static function salesTrend(string $range = 'month'): array
+    public static function salesTrend(string|ReportPeriod $range = 'month'): array
     {
         $bid = self::bid();
-        $range = self::range($range);
+        $period = $range instanceof ReportPeriod ? $range : null;
+        $range = $period?->key ?? self::range($range);
 
-        [$unit, $start, $end] = match ($range) {
+        [$unit, $start, $end] = $period?->isCustom() ? self::customAxis($period) : match ($range) {
             'today' => ['hour', now()->startOfDay(), now()->endOfDay()],
             'week' => ['day', now()->startOfWeek(self::WEEK_START), now()->endOfWeek(self::WEEK_END)],
             'year' => ['month', now()->startOfYear(), now()->endOfYear()],
@@ -1719,7 +1754,8 @@ class Demo
         // الاستعلام يقف عند الآن، والمحور لا يقف: ما بعدها فراغٌ يُملأ null
         $cutoff = $end->gt(now()) ? now()->copy() : $end->copy();
 
-        $buckets = Revenue::series($bid, $unit, $start, $cutoff);
+        // والمخصَّصةُ بالأشهر يبدأ محورُها أوّلَ الشهر، واستعلامُها من يومِها الأوّل لا قبله
+        $buckets = Revenue::series($bid, $unit, $period?->isCustom() ? $period->startDay() : $start, $cutoff);
         $sums = $buckets->map(fn ($b) => $b['sum']);
         $counts = $buckets->map(fn ($b) => $b['count']);
 
@@ -1755,7 +1791,12 @@ class Demo
                 ],
                 default => [
                     $cursor->format('Y-m-d'),
-                    $range === 'week' ? $cursor->translatedFormat('D') : $cursor->format('j'),
+                    match (true) {
+                        $range === 'week' => $cursor->translatedFormat('D'),
+                        // المخصَّصةُ قد تعبر شهرًا: «٣١» وحدَها تتكرّر — فاليومُ بشهره
+                        $range === ReportPeriod::CUSTOM => $cursor->format('j/n'),
+                        default => $cursor->format('j'),
+                    },
                     $cursor->translatedFormat('l j F'),
                 ],
             };
@@ -1854,10 +1895,10 @@ class Demo
      *
      * والنسبة تُحسب من مجموع ما هنا لا من دفترٍ آخر، فتجمع مئةً دائمًا.
      */
-    public static function paymentBreakdown(string $range = 'month'): array
+    public static function paymentBreakdown(string|ReportPeriod $range = 'month'): array
     {
-        $start = self::rangeStart(self::range($range));
-        $rows = Revenue::byMethod(self::bid(), $start);
+        [$start, $end] = self::window($range);
+        $rows = Revenue::byMethod(self::bid(), $start, $end);
         $grand = (float) $rows->sum('total');
 
         return $rows->map(fn ($r) => [
@@ -1870,7 +1911,7 @@ class Demo
     }
 
     /** المخطّط على الشاشة: أسماءٌ ومبالغ من التوزيع نفسه لا من استعلامٍ ثانٍ */
-    public static function paymentDistribution(string $range = 'month'): array
+    public static function paymentDistribution(string|ReportPeriod $range = 'month'): array
     {
         $rows = self::paymentBreakdown($range);
 
@@ -1948,7 +1989,7 @@ class Demo
     }
 
     /** ملخّص أرقام بطاقات التقارير — كلها محسوبة فعليًا من قاعدة البيانات (صفر عند فراغها) */
-    public static function reportSummary(string $range = 'month'): array
+    public static function reportSummary(string|ReportPeriod $range = 'month'): array
     {
         $bid = self::bid();
         /*
@@ -1960,12 +2001,13 @@ class Demo
          * وما لا زمن له يبقى كما هو: عدد المنتجات والموظفين والعملاء حالةٌ
          * الآن لا حصيلةُ فترة، و«منتجات تحت حدّ التنبيه» كذلك.
          */
-        $start = self::rangeStart(self::range($range));
-        $revenue = Revenue::summary($bid, $start);
+        [$start, $end] = self::window($range);
+        $revenue = Revenue::summary($bid, $start, $end);
         $sales = $revenue['total'];
         $tax = $revenue['netTax'];
         $expenses = (float) Expense::where('business_id', $bid)->paid()
-            ->when($start, fn ($q) => $q->where('spent_at', '>=', $start))->sum('amount');
+            ->when($start, fn ($q) => $q->where('spent_at', '>=', $start))
+            ->when($end, fn ($q) => $q->whereDate('spent_at', '<', $end->toDateString()))->sum('amount');
 
         /*
          * «صافي الربح» ربحٌ لا فرقُ طرحٍ بين رقمين.
@@ -1980,7 +2022,7 @@ class Demo
          *
          * والضريبة تُطرح لأنها التزامٌ يُورَّد لا إيرادٌ يُملك.
          */
-        $cogs = self::cogsFor($bid, $start);
+        $cogs = self::cogsFor($bid, $start, $end);
 
         return [
             'sales' => $sales,
@@ -1993,7 +2035,7 @@ class Demo
             'employees' => User::where('business_id', $bid)->count(),
             'customers' => Customer::where('business_id', $bid)->count(),
             // وسائلُ التحصيل لا وسائلُ البيع: الفاتورةُ التزامٌ بلا وسيلةِ دفع
-            'payment_methods' => Revenue::collections($bid, $start)->distinct()->count('method'),
+            'payment_methods' => Revenue::collections($bid, $start, $end)->distinct()->count('method'),
         ];
     }
 
@@ -2007,11 +2049,11 @@ class Demo
      * والتساوي يُفصَل بالاسم: صنفان بالإيراد نفسه كانا يتبادلان الموضع بين
      * فتحةٍ وأخرى بلا سبب، فتُقرأ الصدارةُ تبدّلًا وهي لم تتبدّل.
      */
-    public static function topSellingProducts(int $limit = 5, string $range = 'month', int|array|null $branchId = null): array
+    public static function topSellingProducts(int $limit = 5, string|ReportPeriod $range = 'month', int|array|null $branchId = null): array
     {
         $bid = self::bid();
-        $start = self::rangeStart(self::range($range));
-        $rows = Revenue::items($bid, $start, null, $branchId)
+        [$start, $end] = self::window($range);
+        $rows = Revenue::items($bid, $start, $end, $branchId)
             ->selectRaw('customer_invoice_items.description as name, '
                 .'SUM(customer_invoice_items.quantity) as sold, '
                 .'SUM(customer_invoice_items.line_total) as revenue')
@@ -2117,12 +2159,12 @@ class Demo
      * مهما طُلب. ومعطًى يُؤخذ ولا يُستعمل يكذب على من يقرأ التوقيع — ويومَ
      * يُنادى من طابورٍ أو تقريرٍ للمنصّة يردّ صفوفَ متجرٍ آخر أو لا شيء.
      */
-    public static function topCustomers(int $limit = 7, string $range = 'month', ?int $bid = null): array
+    public static function topCustomers(int $limit = 7, string|ReportPeriod $range = 'month', ?int $bid = null): array
     {
-        $start = self::rangeStart(self::range($range));
+        [$start, $end] = self::window($range);
 
         $bid ??= self::bid();
-        $rows = Revenue::byCustomer($bid, $start, null, $limit);
+        $rows = Revenue::byCustomer($bid, $start, $end, $limit);
         $names = Customer::where('business_id', $bid)->whereIn('id', $rows->pluck('customer_id'))
             ->pluck('name', 'id');
 

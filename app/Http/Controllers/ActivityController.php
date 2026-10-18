@@ -5,15 +5,25 @@ namespace App\Http\Controllers;
 use App\Models\ActivityLog;
 use App\Models\User;
 use App\Support\Demo;
+use App\Support\Exports\Dataset;
 use App\Support\Pagination;
 use App\Support\Search;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 
 class ActivityController extends Controller
 {
-    private static function shape($q, Request $request)
+    /**
+     * السجلُّ المرشَّح — تقرؤه الشاشةُ وملفُّ تصديرها معًا (`Exports\ActivityDataset`).
+     *
+     * والمالكون خارجه كما كانوا (`role = admin`)، والمدّةُ بيوم الحدث (`created_at`).
+     */
+    public static function listQuery(Request $request, int $bid): Builder
     {
+        $notStaff = User::where('role', 'admin')->select('id');
+        $q = ActivityLog::where('business_id', $bid)->whereNotIn('user_id', $notStaff);
+
         if ($s = Search::term($request)) {
             $like = Search::like();
             $q->where(fn ($w) => $w->where('description', $like, "%{$s}%")->orWhere('user_name', $like, "%{$s}%"));
@@ -21,8 +31,19 @@ class ActivityController extends Controller
         if ($a = $request->query('action')) {
             $q->where('action', $a);
         }
+        if ($from = Dataset::day($request, 'from')) {
+            $q->whereDate('created_at', '>=', $from);
+        }
+        if ($to = Dataset::day($request, 'to')) {
+            $q->whereDate('created_at', '<=', $to);
+        }
 
-        return $q->latest('id')->paginate(15)->withQueryString()->through(fn ($l) => [
+        return $q->latest('id');
+    }
+
+    private static function shape($q)
+    {
+        return $q->paginate(15)->withQueryString()->through(fn ($l) => [
             'user' => $l->user_name, 'action' => $l->action, 'description' => $l->description,
             'icon' => $l->icon, 'color' => $l->color, 'ip' => $l->ip,
             'time' => optional($l->created_at)->format('Y-m-d H:i'),
@@ -52,17 +73,12 @@ class ActivityController extends Controller
          * منتجًا» — تدفع أفعالَ من يجب أن يُراقَبوا خارج الصفحة الأولى.
          * والغرض من الشاشة أن يعرف ما جرى في غيابه، فيُستثنى هو.
          */
-        $notStaff = User::where('role', 'admin')->select('id');
-
-        $logs = self::shape(
-            ActivityLog::where('business_id', $bid)->whereNotIn('user_id', $notStaff),
-            $request,
-        );
+        $logs = self::shape(self::listQuery($request, (int) $bid));
 
         return [
             'logs' => $logs->items(),
             'pagination' => Pagination::meta($logs),
-            'filters' => $request->only('q', 'action'),
+            'filters' => $request->only('q', 'action', 'from', 'to'),
         ];
     }
 }
