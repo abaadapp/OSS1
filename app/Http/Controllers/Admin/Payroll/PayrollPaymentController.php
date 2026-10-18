@@ -5,7 +5,9 @@ namespace App\Http\Controllers\Admin\Payroll;
 use App\Http\Controllers\Controller;
 use App\Models\PayrollLine;
 use App\Models\PayrollRun;
+use App\Support\Activity;
 use App\Support\Demo;
+use App\Support\Exports\Dataset;
 use App\Support\Ledger;
 use App\Support\Permissions;
 use Illuminate\Http\Request;
@@ -29,7 +31,10 @@ use RuntimeException;
  */
 class PayrollPaymentController extends Controller
 {
-    private function bid(): int { return auth()->user()->business_id ?? Demo::bid(); }
+    private function bid(): int
+    {
+        return auth()->user()->business_id ?? Demo::bid();
+    }
 
     public function index(Request $request): Response
     {
@@ -39,8 +44,14 @@ class PayrollPaymentController extends Controller
         Ledger::ensureSystemAccounts($bid);
 
         // المسودّات خارج هذه الشاشة: لا يُصرف ما لم يُعتمد
+        /* وتاريخُ الصرف (`from` · `to`) يقصر المسيرات على ما صُرف منه فيها — كما يقرؤه ملفُّ تصديرها */
+        $from = Dataset::day($request, 'from');
+        $to = Dataset::day($request, 'to');
         $runs = PayrollRun::where('business_id', $bid)->with('lines')
             ->whereIn('status', ['معتمدة', 'مصروفة'])
+            ->when($from || $to, fn ($q) => $q->whereHas('lines', fn ($l) => $l->where('paid', true)
+                ->when($from, fn ($w) => $w->whereDate('paid_at', '>=', $from))
+                ->when($to, fn ($w) => $w->whereDate('paid_at', '<=', $to))))
             ->orderByDesc('period')->orderByDesc('id')->get();
 
         $current = $request->query('run')
@@ -63,6 +74,7 @@ class PayrollPaymentController extends Controller
             'due' => round($runs->where('status', 'معتمدة')->sum(fn ($r) => PayrollRunController::unpaidNet($r)), 3),
             'today' => now()->format('Y-m-d'),
             'canPay' => (bool) auth()->user()?->may(Permissions::PAYROLL_PAY),
+            'filters' => $request->only('from', 'to'),
         ]);
     }
 
@@ -167,7 +179,7 @@ class PayrollPaymentController extends Controller
             return back()->withErrors(['lines' => $e->getMessage()]);
         }
 
-        \App\Support\Activity::log(
+        Activity::log(
             'updated',
             'صرف رواتب '.$run->period->format('Y-m').' لـ'.$lines->count().' موظّفًا بقيمة '.$total,
             ['subject_id' => $run->id]

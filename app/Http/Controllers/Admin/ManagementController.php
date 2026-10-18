@@ -230,17 +230,21 @@ class ManagementController extends Controller
 
         abort_if($key !== '' && ! in_array($key, ManagementReports::KEYS, true), 404);
         if ($key !== '') {
-            $this->gate(match ($key) {
-                'project_profitability' => Permissions::ANALYTICS_PROJECTS,
-                'customer_revenue', 'service_performance' => Permissions::ANALYTICS_CUSTOMERS,
-                'asset_utilization' => Permissions::ANALYTICS_OPERATIONS,
-                default => Permissions::ANALYTICS_FINANCIAL,
-            });
+            $this->gate(ManagementReports::action($key));
         }
 
-        $data = $key === '' ? null : ManagementReports::build($key, $bid, $filters);
+        /*
+         * والمدّةُ المخصَّصةُ الخاطئة تُردّ بـ422 بسببها — كأخواتها في `period()`.
+         * كانت تسقط خطأَ خادمٍ (500): تاريخٌ نهايتُه قبل بدايته ليس عطبًا في النظام.
+         */
+        try {
+            $data = $key === '' ? null : ManagementReports::build($key, $bid, $filters);
+            $period = Period::resolve($bid, (string) ($filters['period'] ?? 'this_month'), $filters['from'] ?? null, $filters['to'] ?? null);
+        } catch (RuntimeException $e) {
+            abort(422, $e->getMessage());
+        }
 
-        return Inertia::render('Admin/Management/Reports', $this->shared(Period::resolve($bid, (string) ($filters['period'] ?? 'this_month'), $filters['from'] ?? null, $filters['to'] ?? null)) + [
+        return Inertia::render('Admin/Management/Reports', $this->shared($period) + [
             'catalog' => collect(Reports::ALL)->where('category', 'management')->map(fn ($r) => ['key' => $r['key'], 'title' => __($r['title']), 'desc' => __($r['desc'])])->values()->all(),
             'report' => $key ?: null,
             'title' => $key ? __(ManagementReports::TITLES[$key]) : null,

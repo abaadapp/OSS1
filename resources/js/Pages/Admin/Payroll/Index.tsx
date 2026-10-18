@@ -2,6 +2,9 @@ import { useState } from 'react';
 import { router, useForm, usePage } from '@inertiajs/react';
 import { BadgeCheck, Check, Plus, Trash2, Users } from 'lucide-react';
 import AdminLayout from '@/Layouts/AdminLayout';
+import ExportMenu from '@/Components/ExportMenu';
+import ListDateRange from '@/Components/ListDateRange';
+import { exportLinks } from '@/lib/exportLink';
 import PageHeader from '@/Components/PageHeader';
 import SectionTabs, { EMPLOYEE_TABS } from '@/Components/SectionTabs';
 import SmartLink from '@/Components/SmartLink';
@@ -61,6 +64,8 @@ interface RunDetail extends RunRow {
 }
 
 interface Props {
+    /** فترةُ الراتب أو تاريخُ الصرف — تقصر القائمة وملفَّ تصديرها معًا */
+    filters?: { from?: string; to?: string };
     runs: RunRow[];
     current: RunDetail | null;
     /** شهورٌ لم تُفتح لها مسيرة — لا يُقترح شهرٌ له مسيرة */
@@ -80,7 +85,7 @@ const STATUS_TONE: Record<string, string> = {
 };
 
 export default function PayrollIndex() {
-    const { runs, current, openPeriods, employeeCount, canApprove, canPay, context } =
+    const { runs, current, openPeriods, employeeCount, canApprove, canPay, filters, context } =
         usePage<PageProps<Props>>().props;
     const t = useTranslate();
     // نافذةُ التأكيد من النظام لا من المتصفّح — انظر ConfirmDialog
@@ -111,14 +116,19 @@ export default function PayrollIndex() {
                 title="مسيرة الرواتب"
                 subtitle={t('رواتب الشهر تُحضَّر ثم تُعتمد — والاعتماد يقيّد المستحقّ ولا يصرف مالًا')}
                 actions={
-                    <Button onClick={() => setOpening(true)} disabled={openPeriods.length === 0}>
-                        <Plus />
-                        {t('مسيرة شهر')}
-                    </Button>
+                    <>
+                        {/* موظّفًا موظّفًا بفترة الراتب — لمن يقرأ الرواتب وحده */}
+                        <ExportMenu {...exportLinks('admin.payroll.export')} />
+                        <Button onClick={() => setOpening(true)} disabled={openPeriods.length === 0}>
+                            <Plus />
+                            {t('مسيرة شهر')}
+                        </Button>
+                    </>
                 }
             />
 
             <SectionTabs tabs={EMPLOYEE_TABS} current="admin.payroll.index" />
+            <ListDateRange routeName="admin.payroll.index" from={filters?.from} to={filters?.to} label="فترة الراتب" />
 
             {employeeCount === 0 ? (
                 <Card className="px-5 py-16 text-center">
@@ -151,7 +161,7 @@ export default function PayrollIndex() {
                                         <button
                                             type="button"
                                             onClick={() =>
-                                                router.get(route('admin.payroll.index'), { run: r.id }, {
+                                                router.get(route('admin.payroll.index'), { run: r.id, from: filters?.from, to: filters?.to }, {
                                                     preserveState: true,
                                                     preserveScroll: true,
                                                     replace: true,

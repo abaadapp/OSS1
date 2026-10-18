@@ -17,7 +17,7 @@ import {
     TableRow,
 } from '@/Components/ui/table';
 import useLiveFeed from '@/hooks/useLiveFeed';
-import RangeTabs, { type ReportRange } from '@/Components/RangeTabs';
+import RangeTabs, { periodQuery, type PeriodInfo, type ReportRange } from '@/Components/RangeTabs';
 import { money, number } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import { useTranslate } from '@/lib/i18n';
@@ -48,6 +48,7 @@ interface Props {
     summary: Summary;
     salesSeries: { labels: string[]; full: string[]; data: (number | null)[]; counts: (number | null)[]; range: ReportRange };
     range: ReportRange;
+    period: PeriodInfo;
     paymentDistribution: { labels: string[]; series: number[] };
     topSellingProducts: TopProduct[];
 }
@@ -59,6 +60,7 @@ const CHART_TITLE: Record<ReportRange, string> = {
     month: 'إيرادات الشهر حسب اليوم',
     year: 'إيرادات السنة حسب الشهر',
     all: 'الإيرادات في آخر ١٢ شهرًا',
+    custom: 'الإيرادات في الفترة المخصّصة',
 };
 
 /**
@@ -73,7 +75,7 @@ export default function ReportsSales() {
     /* الفترة تُمرَّر إلى التغذية أيضًا، وإلا انقلبت أرقام «اليوم» إلى أرقام
        الشهر بعد أوّل تحديث تلقائيّ بلا أن يلمس التاجر شيئًا */
     const { data: live, updatedAt } = useLiveFeed<Props>(
-        route('admin.reports.feed', { range: server.range }),
+        route('admin.reports.feed', periodQuery(server.period)),
     );
     const { summary, salesSeries, paymentDistribution, topSellingProducts } = live ?? server;
 
@@ -112,9 +114,9 @@ export default function ReportsSales() {
                 actions={
                     /* الملفّ يحمل الفترة المعروضة — لا فترته الخاصّة */
                     <ExportMenu
-                        xlsx={route('admin.reports.xlsx', { range: server.range })}
-                        pdf={route('admin.reports.pdf', { range: server.range })}
-                        csv={route('admin.export.reports', { range: server.range })}
+                        xlsx={route('admin.reports.xlsx', periodQuery(server.period))}
+                        pdf={route('admin.reports.pdf', periodQuery(server.period))}
+                        csv={route('admin.export.reports', periodQuery(server.period))}
                     />
                 }
             />
@@ -129,7 +131,9 @@ export default function ReportsSales() {
                 </p>
             )}
 
-            <RangeTabs current={server.range} />
+            <RangeTabs current={server.range} period={server.period} />
+            {/* الفترةُ بتاريخيها تُقال على الشاشة كما تُقال في الملفّ */}
+            {server.period && <p className="mb-3 text-[12px] text-[#9ca3af]">{server.period.label}</p>}
 
             <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 {stats.map((s, i) => (

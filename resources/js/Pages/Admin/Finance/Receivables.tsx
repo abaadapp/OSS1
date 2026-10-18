@@ -1,5 +1,7 @@
 import { Link, usePage } from '@inertiajs/react';
 import AdminLayout from '@/Layouts/AdminLayout';
+import ExportMenu from '@/Components/ExportMenu';
+import { exportLinks } from '@/lib/exportLink';
 import PageHeader from '@/Components/PageHeader';
 import SectionTabs, { FINANCE_TABS } from '@/Components/SectionTabs';
 import StatCard from '@/Components/StatCard';
@@ -33,7 +35,12 @@ export default function Receivables({ totals, aging, invoices, reconciliation }:
 
     return (
         <AdminLayout title={t('الذمم المدينة')}>
-            <PageHeader title={t('الذمم المدينة')} subtitle={t('ما لك على عملائك — وما تأخّر منه.')} />
+            <PageHeader
+                title={t('الذمم المدينة')}
+                subtitle={t('ما لك على عملائك — وما تأخّر منه.')}
+                /* الفواتيرُ القائمةُ الآن — لقطةٌ حاليّة لا حركةُ مدّة */
+                actions={<ExportMenu {...exportLinks('admin.finance.receivables.export')} />}
+            />
             <SectionTabs tabs={FINANCE_TABS} current="admin.finance.receivables" />
 
             <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">

@@ -40,6 +40,19 @@ class Reports
     ];
 
     /**
+     * تقاريرُ الرصيد الحاليّ — لقطةُ اليوم لا حركةُ مدّة.
+     *
+     * لا تُقرأ بفترة، ولا تُكتب فوقها فترة: شاشتُها وملفّاتُها تقول «الرصيد الحالي
+     * بتاريخ …» (`ReportPeriod::asOf`) — لا «هذا الشهر».
+     */
+    public const SNAPSHOTS = ['inventory'];
+
+    public static function isSnapshot(string $key): bool
+    {
+        return in_array($key, self::SNAPSHOTS, true);
+    }
+
+    /**
      * البنود. `icon` مفتاحٌ تترجمه الواجهة إلى أيقونة (خريطة صريحة في
      * Reports/Index.tsx — الاستيراد الشامل من lucide يضخّ المكتبة كاملة).
      */
@@ -314,17 +327,36 @@ class Reports
      *
      * وباجتماعها هنا لا يبقى للاختلاف موضع.
      */
-    public static function salesReport(?string $range): array
+    public static function salesReport(array|string|null $filters, bool $strict = false): array
     {
-        $range = Demo::range($range);
+        /*
+         * والفترةُ من `ReportPeriod` — جاهزةً كما كانت أو مخصَّصةً بحدّين. والملفُّ
+         * يطلبها صارمةً (`$strict`): مخصَّصةٌ خاطئةٌ تُردّ بـ422 لا بملفٍّ لشهرٍ آخر.
+         */
+        $query = is_array($filters) ? $filters : ['range' => $filters];
+        $period = $strict ? ReportPeriod::strict($query) : ReportPeriod::of($query);
 
         return [
-            'summary' => Demo::reportSummary($range),
-            'salesSeries' => Demo::salesTrend($range),
-            'paymentDistribution' => Demo::paymentDistribution($range),
-            'topSellingProducts' => Demo::topSellingProducts(5, $range),
-            'range' => $range,
+            'summary' => Demo::reportSummary($period),
+            'salesSeries' => Demo::salesTrend($period),
+            'paymentDistribution' => Demo::paymentDistribution($period),
+            'topSellingProducts' => Demo::topSellingProducts(5, $period),
+            'range' => $period->key,
+            'rangeLabel' => $period->label(),
+            'period' => $period->toArray(),
         ];
+    }
+
+    /** توزيعُ التحصيل على الوسائل للملفّات — من الفترة نفسِها التي قرأتها الشاشة */
+    public static function salesPayments(array $report): array
+    {
+        return Demo::paymentBreakdown(ReportPeriod::of($report['period']));
+    }
+
+    /** وسمُ الفترة لاسم ملفّ الإيرادات */
+    public static function salesSlug(array $report): string
+    {
+        return ReportPeriod::of($report['period'])->slug();
     }
 
     /**

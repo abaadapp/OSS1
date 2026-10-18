@@ -1,10 +1,10 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { router } from '@inertiajs/react';
+import { router, usePage } from '@inertiajs/react';
 import AdminLayout from '@/Layouts/AdminLayout';
 import PageHeader from '@/Components/PageHeader';
 import ExportMenu from '@/Components/ExportMenu';
 import BackToReports from '@/Components/BackToReports';
-import RangeTabs, { type ReportRange } from '@/Components/RangeTabs';
+import RangeTabs, { periodQuery, type PeriodInfo, type ReportRange } from '@/Components/RangeTabs';
 import StatCard from '@/Components/StatCard';
 import { Select } from '@/Components/Field';
 import { Input } from '@/Components/ui/input';
@@ -66,6 +66,13 @@ export default function ReportScreen({
     filters, controls, stats, truncated, children,
 }: Props) {
     const t = useTranslate();
+    /*
+     * والفترةُ بحدّيها من الخادم (`ReportPeriod::toArray`): الشاشةُ تعرض «فترة
+     * مخصّصة» ويعرف الملفُّ أيَّ يومين يحمل. وروابطُ التصدير تُبنى من الفترة
+     * التي عُرضت فعلًا لا من الرابط: مخصَّصةٌ خاطئةٌ عادت إلى الشهر يُصدَّر شهرُها.
+     */
+    const period = (usePage().props as { period?: PeriodInfo }).period ?? null;
+    const exportParams = { report: reportKey, ...periodQuery(period) };
 
     /*
      * كل تبديلٍ يُعيد التحميل من الخادم لا يُرشّح في المتصفّح: الجدول مبتورٌ
@@ -104,16 +111,17 @@ export default function ReportScreen({
                     subtitle={t(subtitle)}
                     actions={
                         <ExportMenu
-                            xlsx={route('admin.reports.export.xlsx', reportKey)}
-                            pdf={route('admin.reports.export.pdf', reportKey)}
-                            csv={route('admin.reports.export.csv', reportKey)}
+                            xlsx={route('admin.reports.export.xlsx', exportParams)}
+                            pdf={route('admin.reports.export.pdf', exportParams)}
+                            csv={route('admin.reports.export.csv', exportParams)}
+                            checkPdf
                         />
                     }
                 />
 
                 {/* الأدوات لا تُطبع: التقرير ورقةٌ لا لوحةُ تحكّم */}
                 <div className="no-print">
-                    {range && <RangeTabs current={range} params={filters} />}
+                    {range && <RangeTabs current={range} params={filters} period={period} />}
 
                     {controls && controls.length > 0 && (
                         <Card className="mb-6 flex flex-wrap items-end gap-3 p-4">

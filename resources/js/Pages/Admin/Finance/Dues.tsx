@@ -2,6 +2,8 @@ import { usePage } from '@inertiajs/react';
 import { CheckCircle2 } from 'lucide-react';
 import AdminLayout from '@/Layouts/AdminLayout';
 import PageHeader from '@/Components/PageHeader';
+import ExportMenu from '@/Components/ExportMenu';
+import { exportLinks } from '@/lib/exportLink';
 import SectionTabs, { FINANCE_TABS } from '@/Components/SectionTabs';
 import SmartLink from '@/Components/SmartLink';
 import StatCard from '@/Components/StatCard';
@@ -85,6 +87,8 @@ export default function Dues() {
             <PageHeader
                 title="المبالغ المستحقة"
                 subtitle={t('ما على الشركة: فواتير لم تُدفع، وسندات موردين، ورواتب اعتُمدت ولم تُصرف')}
+                /* لقطةٌ حاليّة بالمستندات الثلاثة — كما على الشاشة */
+                actions={<ExportMenu {...exportLinks('admin.finance.dues.export')} />}
             />
 
             <SectionTabs tabs={FINANCE_TABS} current="admin.finance.dues" />

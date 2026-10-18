@@ -2,6 +2,8 @@ import type { ReactNode } from 'react';
 import { router, usePage } from '@inertiajs/react';
 import { AlertTriangle, ArrowLeft, CalendarDays, Check, ListChecks, MoreHorizontal, Plus, UserRound, X } from 'lucide-react';
 import AdminLayout from '@/Layouts/AdminLayout';
+import ExportMenu from '@/Components/ExportMenu';
+import { exportLinks } from '@/lib/exportLink';
 import PageHeader from '@/Components/PageHeader';
 import SmartLink from '@/Components/SmartLink';
 import StatCard from '@/Components/StatCard';
@@ -68,6 +70,8 @@ interface Props {
     filters: Record<string, string | undefined>;
     statuses: string[];
     customers: { id: number; name: string }[];
+    /** المسؤولون — لمرشّح «المسؤول» في القائمة وتصديرها */
+    owners?: { value: string; label: string }[];
     totals: { open: number; upcoming: number; unbaselined: number; pending_change_orders: number };
     may: { delivery: boolean; manage: boolean };
 }
@@ -81,7 +85,7 @@ interface Props {
  * هو وما يُنتظر منه دون أن يُفتح — والمسارُ كاملًا في صفحته. و«مشروع جديد»
  * يبدأ بعرض سعر — انظر `Projects::fromQuotation`.
  */
-export default function ProjectsIndex({ projects, quotes, me, pagination, filters, statuses, customers, totals, may }: Props) {
+export default function ProjectsIndex({ projects, quotes, me, pagination, filters, statuses, customers, owners, totals, may }: Props) {
     const { context } = usePage<PageProps>().props;
     const t = useTranslate();
     const m = (v: number | null) => (v === null ? '—' : money(v, context!.currency));
@@ -100,6 +104,10 @@ export default function ProjectsIndex({ projects, quotes, me, pagination, filter
             param: 'customer_id',
             options: customers.map((c) => ({ label: c.name, value: String(c.id) })),
         },
+        ...((owners ?? []).length > 0 ? [{ label: 'المسؤول', param: 'owner_id', options: owners ?? [] }] : []),
+        /* المدّةُ بتاريخ بداية المشروع — للقائمة ولتصديرها معًا */
+        { label: 'يبدأ من', type: 'date' as const, param: 'from' },
+        { label: 'يبدأ إلى', type: 'date' as const, param: 'to' },
         {
             label: 'عدد الصفوف',
             param: 'per_page',
@@ -140,6 +148,8 @@ export default function ProjectsIndex({ projects, quotes, me, pagination, filter
                 filters={tableFilters}
                 empty="لا مشاريع بعد — ابدأ بعرض سعر، ويصير مشروعًا حين يقبله العميل"
                 server={{ pagination, params: filters }}
+                /* المرحلةُ اليدويّة كما اختارها الفريق، والقيمُ لمن يقرأ المال التجاريّ وحده */
+                toolbar={<ExportMenu {...exportLinks('admin.projects.export')} />}
                 renderBody={(rows) => (
                     <div className="space-y-3 pt-1">
                         {rows.map((i) =>

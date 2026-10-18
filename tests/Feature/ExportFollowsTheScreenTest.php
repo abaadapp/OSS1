@@ -33,8 +33,11 @@ class ExportFollowsTheScreenTest extends TestCase
     use RefreshDatabase;
 
     private Business $business;
+
     private User $owner;
+
     private Product $rose;
+
     private Product $vase;
 
     protected function setUp(): void
@@ -204,6 +207,7 @@ class ExportFollowsTheScreenTest extends TestCase
             $this->csv('admin.export.products', ['q' => 'سرّ']),
         );
     }
+
     public function test_the_export_menu_carries_the_filters_in_its_links(): void
     {
         /*
@@ -212,7 +216,8 @@ class ExportFollowsTheScreenTest extends TestCase
          */
         $menu = file_get_contents(resource_path('js/Components/ExportMenu.tsx'));
 
-        foreach (['withFilters(xlsx)', 'withFilters(pdf)', 'withFilters(csv)'] as $call) {
+        // ومعها ما على الشاشة ولم يبلغ الرابطَ بعد (`params`) — بحثٌ كُتب للتوّ
+        foreach (['withFilters(xlsx, params)', 'withFilters(pdf, params)', 'withFilters(csv, params)'] as $call) {
             $this->assertStringContainsString($call, $menu, 'رابط تصديرٍ لا يحمل المُرشِّحات');
         }
 

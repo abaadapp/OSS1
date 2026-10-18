@@ -2,6 +2,9 @@ import { useMemo, useState } from 'react';
 import { router, useForm, usePage } from '@inertiajs/react';
 import { Banknote, Wallet } from 'lucide-react';
 import AdminLayout from '@/Layouts/AdminLayout';
+import ExportMenu from '@/Components/ExportMenu';
+import ListDateRange from '@/Components/ListDateRange';
+import { exportLinks } from '@/lib/exportLink';
 import PageHeader from '@/Components/PageHeader';
 import SectionTabs, { EMPLOYEE_TABS } from '@/Components/SectionTabs';
 import SmartLink from '@/Components/SmartLink';
@@ -47,6 +50,8 @@ interface RunRow {
 }
 
 interface Props {
+    /** فترةُ الراتب أو تاريخُ الصرف — تقصر القائمة وملفَّ تصديرها معًا */
+    filters?: { from?: string; to?: string };
     runs: RunRow[];
     current: (RunRow & { lines: Line[] }) | null;
     remaining: number;
@@ -58,7 +63,7 @@ interface Props {
 }
 
 export default function PayrollPayments() {
-    const { runs, current, remaining, due, today, canPay, context } = usePage<PageProps<Props>>().props;
+    const { runs, current, remaining, due, today, canPay, filters, context } = usePage<PageProps<Props>>().props;
     const t = useTranslate();
     const m = (v: number) => money(v, context!.currency);
 
@@ -90,9 +95,12 @@ export default function PayrollPayments() {
             <PageHeader
                 title="صرف الرواتب"
                 subtitle={t('إخراج المال مقابل مستحقٍّ قُيّد يوم الاعتماد — سطرًا سطرًا أو دفعةً واحدة')}
+                /* ما صُرف فعلًا بتاريخ صرفه — لا فترة الراتب */
+                actions={<ExportMenu {...exportLinks('admin.payroll.payments.export')} />}
             />
 
             <SectionTabs tabs={EMPLOYEE_TABS} current="admin.payroll.payments" />
+            <ListDateRange routeName="admin.payroll.payments" from={filters?.from} to={filters?.to} label="تاريخ الصرف" />
 
             <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <StatCard
@@ -143,7 +151,7 @@ export default function PayrollPayments() {
                                         type="button"
                                         onClick={() => {
                                             setPicked([]);
-                                            router.get(route('admin.payroll.payments'), { run: r.id }, {
+                                            router.get(route('admin.payroll.payments'), { run: r.id, from: filters?.from, to: filters?.to }, {
                                                 preserveState: true,
                                                 preserveScroll: true,
                                                 replace: true,

@@ -8,6 +8,7 @@ use App\Models\Category;
 use App\Models\Product;
 use App\Support\BranchAccess;
 use App\Support\Demo;
+use App\Support\ReportPeriod;
 use App\Support\Waste;
 use App\Support\WasteInsights;
 use Illuminate\Http\Request;
@@ -41,8 +42,19 @@ class WasteAnalyticsController extends Controller
          * كلّه، فيقرأ التاجر رقمًا هائلًا يظنّه شهره — والمقارنة بالمدّة
          * السابقة تفقد معناها بلا حدّين.
          */
-        $from = (string) $request->query('from', now()->startOfMonth()->toDateString());
-        $to = (string) $request->query('to', now()->toDateString());
+        /*
+         * المدّةُ بحدّين يُفحصان قبل أن يُقرآ.
+         *
+         * كان تاريخٌ غير مقروء يُسقط الشاشة خطأَ خادم، وحقلٌ مُفرَّغٌ يجعل حدَّه
+         * مفتوحًا فتقرأ الشاشةُ التاريخَ كلَّه وتقول «هذا الشهر». فالفارغُ يعود
+         * إلى افتراضيّه، والخاطئُ يعود إلى الشهر ومعه سببُه يُقال فوق الأرقام.
+         */
+        $from = is_string($request->query('from')) && $request->query('from') !== '' ? (string) $request->query('from') : now()->startOfMonth()->toDateString();
+        $to = is_string($request->query('to')) && $request->query('to') !== '' ? (string) $request->query('to') : now()->toDateString();
+        $periodError = ReportPeriod::check($from, $to);
+        if ($periodError !== null) {
+            [$from, $to] = [now()->startOfMonth()->toDateString(), now()->toDateString()];
+        }
 
         $filters = [
             'from' => $from,
@@ -72,6 +84,7 @@ class WasteAnalyticsController extends Controller
             // صفوفٌ قديمة تخالف القاعدة — تُعرض ولا تُصلَح
             'suspicious' => Waste::suspiciousRows($bid),
             'filters' => $filters,
+            'periodError' => $periodError,
             'options' => [
                 'branches' => BranchAccess::limit(Branch::where('business_id', $bid), null, 'id')->orderBy('id')
                     ->get(['id', 'name'])->map(fn ($b) => ['value' => $b->id, 'label' => $b->name])->all(),

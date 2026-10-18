@@ -5,6 +5,7 @@ import AdminLayout from '@/Layouts/AdminLayout';
 import PageHeader from '@/Components/PageHeader';
 import SectionTabs, { FINANCE_TABS } from '@/Components/SectionTabs';
 import ExportMenu from '@/Components/ExportMenu';
+import { exportLinks } from '@/lib/exportLink';
 import MovementForm, { type Movement } from '@/Components/MovementForm';
 import DataTable, { type Column, type Filter, type ServerPagination } from '@/Components/DataTable';
 import StatCard from '@/Components/StatCard';
@@ -171,12 +172,8 @@ export default function Transactions() {
                 subtitle={t('كلّ ما دخل وما خرج — ولكلّ حركةٍ قيدُها في الدفتر')}
                 actions={
                     <div className="flex flex-wrap items-center gap-2">
-                        <ExportMenu
-                            label="تصدير"
-                            xlsx={route('admin.finance.xlsx')}
-                            pdf={route('admin.finance.pdf')}
-                            csv={route('admin.export.transactions')}
-                        />
+                        {/* الملفّ بمرشّحات الشاشة نفسِها — البحث والحركة والتاريخان (`Exports\TransactionsDataset`) */}
+                        <ExportMenu label="تصدير" {...exportLinks('admin.finance.transactions.export')} />
                         <Button onClick={() => setAdding(true)}>
                             <Plus />
                             {t('تسجيل حركة')}

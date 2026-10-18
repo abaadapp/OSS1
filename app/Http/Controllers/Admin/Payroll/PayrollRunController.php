@@ -8,6 +8,7 @@ use App\Models\PayrollRun;
 use App\Models\User;
 use App\Support\Activity;
 use App\Support\Demo;
+use App\Support\Exports\Dataset;
 use App\Support\Ledger;
 use App\Support\Permissions;
 use Illuminate\Http\Request;
@@ -60,7 +61,10 @@ class PayrollRunController extends Controller
         $bid = $this->bid();
         Ledger::ensureSystemAccounts($bid);
 
+        /* وفترةُ الراتب (`from` · `to`) تقصر المسيرات — كما يقصرها ملفُّ تصديرها (`Exports\PayrollDataset`) */
         $runs = PayrollRun::where('business_id', $bid)->with('lines')
+            ->when(Dataset::day($request, 'from'), fn ($q, $d) => $q->whereDate('period', '>=', $d))
+            ->when(Dataset::day($request, 'to'), fn ($q, $d) => $q->whereDate('period', '<=', $d))
             ->orderByDesc('period')->orderByDesc('id')->get();
 
         $current = $request->query('run')
@@ -71,7 +75,8 @@ class PayrollRunController extends Controller
             'runs' => $runs->map(fn ($r) => $this->runRow($r))->all(),
             'current' => $current ? $this->runDetail($current) : null,
             // الشهور التي لم تُفتح لها مسيرة بعد — لا تُقترح شهرٌ له مسيرة
-            'openPeriods' => $this->openPeriods($bid, $runs->pluck('period')->map->format('Y-m')->all()),
+            'openPeriods' => $this->openPeriods($bid, PayrollRun::where('business_id', $bid)->pluck('period')->map->format('Y-m')->all()),
+            'filters' => $request->only('from', 'to'),
             'employeeCount' => $this->payableEmployees($bid)->count(),
             'today' => now()->format('Y-m-d'),
             // ومن يرى الزرّ هو من يملك الفعل

@@ -5,6 +5,8 @@ import PageHeader from '@/Components/PageHeader';
 import SmartLink from '@/Components/SmartLink';
 import StatCard from '@/Components/StatCard';
 import DataTable, { type Column, type Filter, type ServerPagination } from '@/Components/DataTable';
+import ExportMenu from '@/Components/ExportMenu';
+import { exportLinks } from '@/lib/exportLink';
 import { Button } from '@/Components/ui/button';
 import { money, number } from '@/lib/format';
 import { useTranslate } from '@/lib/i18n';
@@ -34,6 +36,8 @@ interface Props {
     states: string[];
     statuses: string[];
     customers: { id: number; name: string }[];
+    /** الفروعُ التي يراها — ومن قُيّد بفروعٍ لا يُعرض له غيرُها */
+    branches?: { id: number; name: string }[];
     totals: { total: number; overdue: number; due_soon: number; credit: number; invoices: number; customers: number };
 }
 
@@ -57,6 +61,7 @@ export default function CustomerInvoicesIndex({
     states,
     statuses,
     customers,
+    branches,
     totals,
 }: Props) {
     const { context } = usePage<PageProps>().props;
@@ -154,6 +159,9 @@ export default function CustomerInvoicesIndex({
             param: 'customer_id',
             options: customers.map((c) => ({ label: c.name, value: String(c.id) })),
         },
+        ...((branches ?? []).length > 1
+            ? [{ label: 'الفرع', param: 'branch_id', options: (branches ?? []).map((b) => ({ label: b.name, value: String(b.id) })) }]
+            : []),
         { label: 'صدرت من', type: 'date', param: 'from' },
         { label: 'صدرت إلى', type: 'date', param: 'to' },
         { label: 'تستحق من', type: 'date', param: 'due_from' },
@@ -199,6 +207,8 @@ export default function CustomerInvoicesIndex({
                 filters={tableFilters}
                 empty="لا فواتير بعد"
                 server={{ pagination, params: filters }}
+                /* بتاريخ الإصدار ومرشّحات الشاشة — والإجماليُّ للصادرة وحدها (`Exports\CustomerInvoicesDataset`) */
+                toolbar={<ExportMenu {...exportLinks('admin.customerInvoices.export')} />}
             />
         </AdminLayout>
     );

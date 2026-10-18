@@ -123,6 +123,11 @@ interface DataTableProps<T> {
      */
     initialQuery?: string;
     /**
+     * يُبلَّغ بكلّ تغيّرٍ في نصّ البحث المحلّي — لشاشةٍ تكتبه في الرابط فيقرؤه
+     * الخادمُ وملفُّ تصديرها (أوامر الشراء)، والجدولُ يرشّح كما كان فورًا.
+     */
+    onQueryChange?: (query: string) => void;
+    /**
      * وضع خادمي: البحث والتصفية والترقيم تمرّ بالخادم عبر معاملات الرابط.
      *
      * لازم للقوائم التي تُرقّم على الخادم (المنتجات والعملاء): تمرير الصفحة
@@ -165,6 +170,7 @@ export default function DataTable<T>({
     toolbar,
     pageSize = 25,
     initialQuery,
+    onQueryChange,
     server,
     renderBody,
     views,
@@ -383,6 +389,7 @@ export default function DataTable<T>({
                                 onChange={(e) => {
                                     setQuery(e.target.value);
                                     setPage(0);
+                                    onQueryChange?.(e.target.value);
                                 }}
                                 placeholder={t(searchPlaceholder)}
                                 className="h-9 w-full min-w-0 border-0 bg-transparent text-sm text-[#111] placeholder:text-[#9ca3af] focus:outline-none"

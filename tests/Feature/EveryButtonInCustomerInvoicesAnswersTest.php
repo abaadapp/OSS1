@@ -105,6 +105,8 @@ class EveryButtonInCustomerInvoicesAnswersTest extends TestCase
             'note' => $note->id,
             'customer' => $this->customer->id,
             'attachment' => $attachment->id,
+            // وتصديرُ القائمة معاملُه صيغةُ الملفّ لا معرّف
+            'format' => 'csv',
         ];
         $checked = 0;
 

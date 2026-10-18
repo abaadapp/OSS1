@@ -21,6 +21,7 @@ use App\Support\CustomerContacts;
 use App\Support\DeliveryPackages;
 use App\Support\DeliveryReadiness;
 use App\Support\Demo;
+use App\Support\Exports\Dataset;
 use App\Support\Intelligence\ProjectProfitability;
 use App\Support\InventoryForecast;
 use App\Support\Messaging\Notifiers;
@@ -41,6 +42,7 @@ use App\Support\PublicDocument;
 use App\Support\Quotations;
 use App\Support\ScopesOfWork;
 use App\Support\Search;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
@@ -106,14 +108,15 @@ class ProjectController extends Controller
 
     /* ─────────────────────────── القائمة ─────────────────────────── */
 
-    public function index(Request $request): Response
+    /**
+     * المشاريعُ المرشَّحة — تقرؤها القائمةُ وملفُّ تصديرها معًا (`Exports\ProjectsDataset`).
+     *
+     * والمدّةُ بتاريخ **بداية المشروع** (`starts_at`): «مشاريعُ بدأت في الربع الأوّل»
+     * سؤالٌ واحدٌ له جوابٌ واحد في الشاشة وفي الملفّ.
+     */
+    public static function listQuery(Request $request, int $bid): Builder
     {
-        $bid = $this->bid();
-        $may = $this->may();
-        $per = (int) $request->integer('per_page');
-        $per = in_array($per, self::PER_PAGE, true) ? $per : self::PER_PAGE[0];
-
-        $page = Project::where('business_id', $bid)->with('customer', 'owner', 'quotation:id,number,issued_at')
+        return Project::where('business_id', $bid)->with('customer', 'owner', 'quotation:id,number,issued_at')
             // ومهامُّه على بطاقته: كم بقي منها، وكم تأخّر
             ->withCount([
                 'tasks as open_tasks' => fn ($t) => $t->where('status', ProjectTask::OPEN),
@@ -127,11 +130,23 @@ class ProjectController extends Controller
             ->when($request->integer('customer_id'), fn ($q, $id) => $q->where('customer_id', $id))
             ->when($request->string('status')->toString(), fn ($q, $s) => in_array($s, Project::STATUSES, true)
                 ? $q->where('status', $s) : $q->whereRaw('1 = 0'))
+            // ومدّةُ البداية والمسؤول — للقائمة ولتصديرها
+            ->when(Dataset::day($request, 'from'), fn ($q, $d) => $q->whereDate('starts_at', '>=', $d))
+            ->when(Dataset::day($request, 'to'), fn ($q, $d) => $q->whereDate('starts_at', '<=', $d))
+            ->when($request->integer('owner_id'), fn ($q, $id) => $q->where('owner_id', $id))
             // القائمُ قبل المُقفَل والملغى: ما يُعمل عليه أوّلُ ما يُرى
             ->orderByRaw('case when status in (?, ?) then 1 else 0 end', [Project::CLOSED, Project::CANCELLED])
-            ->orderByDesc('id')
-            ->paginate($per)
-            ->withQueryString();
+            ->orderByDesc('id');
+    }
+
+    public function index(Request $request): Response
+    {
+        $bid = $this->bid();
+        $may = $this->may();
+        $per = (int) $request->integer('per_page');
+        $per = in_array($per, self::PER_PAGE, true) ? $per : self::PER_PAGE[0];
+
+        $page = self::listQuery($request, $bid)->paginate($per)->withQueryString();
 
         $base = fn () => Project::where('business_id', $bid);
 
@@ -148,7 +163,7 @@ class ProjectController extends Controller
         $shortages = $may['inventory'] ? InventoryForecast::shortages(InventoryForecast::for($bid)) : [];
 
         return Inertia::render('Admin/Projects/Index', [
-            'projects' => collect($page->items())->map(fn (Project $p) => $this->row($p, $may['commercial']) + $this->links($p, $operations[$p->id] ?? collect(), $packages[$p->id] ?? collect()) + [
+            'projects' => collect($page->items())->map(fn (Project $p) => self::listRow($p, $may['commercial']) + $this->links($p, $operations[$p->id] ?? collect(), $packages[$p->id] ?? collect()) + [
                 'workflow' => self::compact($flows[$p->id]),
                 'inventory_shortages' => $shortages[$p->id] ?? 0,
             ])->all(),
@@ -156,7 +171,9 @@ class ProjectController extends Controller
             /* و«مسؤوليتي» على بطاقة ما يملكه الناظر */
             'me' => auth()->id(),
             'pagination' => Pagination::meta($page),
-            'filters' => $request->only('q', 'customer_id', 'status', 'per_page'),
+            'filters' => $request->only('q', 'customer_id', 'status', 'per_page', 'from', 'to', 'owner_id'),
+            // المسؤولون — لمرشّح «المسؤول» في القائمة وتصديرها
+            'owners' => User::where('business_id', $bid)->orderBy('name')->get(['id', 'name'])->map(fn ($u) => ['value' => (string) $u->id, 'label' => $u->name])->all(),
             'statuses' => Project::STATUSES,
             'customers' => Customer::where('business_id', $bid)->orderBy('name')->get(['id', 'name'])->all(),
             'totals' => [
@@ -255,7 +272,7 @@ class ProjectController extends Controller
     }
 
     /** @return array<string, mixed> */
-    private function row(Project $p, bool $commercial): array
+    public static function listRow(Project $p, bool $commercial): array
     {
         return [
             'id' => $p->id,
@@ -317,7 +334,7 @@ class ProjectController extends Controller
         $summary = ProjectFinancials::summary($project);
 
         return Inertia::render('Admin/Projects/Show', [
-            'project' => $this->row($project, $may['commercial']) + [
+            'project' => self::listRow($project, $may['commercial']) + [
                 'event_type' => $project->event_type,
                 'location' => $project->location,
                 'contact_person' => $project->contact_person,

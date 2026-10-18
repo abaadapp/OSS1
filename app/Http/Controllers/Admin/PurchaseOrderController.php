@@ -19,6 +19,8 @@ use App\Support\Demo;
 use App\Support\Document\PaperSize;
 use App\Support\DocumentPaper;
 use App\Support\DocumentRenderer;
+use App\Support\Exports\Dataset;
+use App\Support\Exports\PurchaseOrdersDataset;
 use App\Support\GoodsReceipts;
 use App\Support\InvoiceBranding;
 use App\Support\Money;
@@ -51,6 +53,9 @@ class PurchaseOrderController extends Controller
     {
         $s = Demo::purchaseOrderStats();
         $mayRead = (bool) auth()->user()?->may(Permissions::ATTACHMENT_VIEW);
+        $filtered = collect(['status', 'from', 'to', 'supplier_id'])->contains(fn ($k) => Dataset::param($request, $k) !== null)
+            || Search::term($request) !== '';
+        $kept = $filtered ? PurchaseOrdersDataset::query($request, $this->bid())->pluck('id')->flip()->all() : null;
 
         return Inertia::render('Admin/Purchases/Index', [
             /* والمشاريعُ القائمة — ليُنسَب الأمرُ إلى مشروعه */
@@ -67,13 +72,19 @@ class PurchaseOrderController extends Controller
              *
              * ومن لا يملك فتحَ المرفقات لا يُبنى له رابط.
              */
-            'orders' => array_map(function ($o) use ($mayRead) {
+            /*
+             * والبحثُ والحالُ والمدّةُ والمورّد (`q` · `status` · `from` · `to` · `supplier_id`)
+             * تُرشَّح في الخادم بالاستعلام نفسِه الذي يقرؤه ملفُّ التصدير
+             * (`Exports\PurchaseOrdersDataset::query`): فما في القائمة هو ما في الملفّ.
+             */
+            'orders' => array_values(array_map(function ($o) use ($mayRead) {
                 $o['receipt'] = $o['receipt'] && $mayRead
                     ? route('admin.purchases.receiptFile', $o['id'])
                     : null;
 
                 return $o;
-            }, Demo::purchaseOrders()),
+            }, array_filter(Demo::purchaseOrders(), fn ($o) => $kept === null || isset($kept[$o['id']])))),
+            'filters' => $request->only('status', 'from', 'to', 'supplier_id'),
             'reorder' => Demo::reorderSuggestions(),
             /*
              * بحثٌ يصل مع الرابط.

@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Support\Demo;
 use App\Support\ReportData;
+use App\Support\ReportPeriod;
 use App\Support\Reports;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -42,18 +43,19 @@ class ReportPageController extends Controller
         );
     }
 
-    /** الفترة تُردّ إلى المفهوم: مجهولةٌ تسقط إلى الشهر لا إلى «كل الفترات» */
-    private function range(Request $request): string
-    {
-        return Demo::range($request->query('range'));
-    }
-
-    /** ما تشترك فيه صفحات التقارير: الفترة واسمها وشريط التنقّل */
-    private function shell(string $range): array
+    /**
+     * ما تشترك فيه صفحات التقارير: الفترة واسمها وحدّاها.
+     *
+     * والفترةُ تُقرأ بلطف (`ReportPeriod::of`): مجهولةٌ تسقط إلى الشهر لا إلى
+     * «كل الفترات»، ومخصَّصةٌ خاطئةٌ تسقط إليه ومعها سببُها يُقال فوق الجدول —
+     * لا تُعرض فترةٌ غيرُ المطلوبة بصمت.
+     */
+    private function shell(ReportPeriod $period): array
     {
         return [
-            'range' => $range,
-            'rangeLabel' => Demo::rangeLabel($range),
+            'range' => $period->key,
+            'rangeLabel' => $period->label(),
+            'period' => $period->toArray(),
         ];
     }
 
@@ -68,16 +70,24 @@ class ReportPageController extends Controller
         $route = 'admin.reports.'.$key;
         $this->guard($route);
 
-        $range = $this->range($request);
-        $filters = ['range' => $range];
+        /*
+         * والرصيدُ الحاليّ (المخزون) بلا فترة: يقول تاريخَه («الرصيد الحالي بتاريخ …»)
+         * لا «هذا الشهر» — فلا يُقرأ رصيدُ اليوم كمّيّاتِ شهر، ولا تحمل روابطُ تصديره مدّة.
+         */
+        $snapshot = Reports::isSnapshot($key);
+        $period = ReportPeriod::of($request->query());
+        $filters = $snapshot ? [] : $period->query();
         foreach ($filterKeys as $name) {
             $value = $request->query($name);
             $filters[$name] = is_string($value) && $value !== '' ? $value : null;
         }
 
         $data = ReportData::$key(Demo::bid(), $filters);
+        $shell = $snapshot
+            ? ['range' => null, 'rangeLabel' => ReportPeriod::asOf(), 'period' => null]
+            : $this->shell($period);
 
-        return Inertia::render('Admin/Reports/'.$screen, array_merge($this->shell($range), $data, [
+        return Inertia::render('Admin/Reports/'.$screen, array_merge($shell, $data, [
             'filters' => $filters,
             'limit' => ReportData::LIMIT,
         ]));

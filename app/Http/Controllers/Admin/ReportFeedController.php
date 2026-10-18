@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Support\Reports;
 use Illuminate\Http\Request;
 
 /**
@@ -24,7 +25,7 @@ class ReportFeedController extends Controller
      */
     public function reports(Request $request)
     {
-        return $this->feed(\App\Support\Reports::salesReport($request->query('range')));
+        return $this->feed(Reports::salesReport($request->query()));
     }
 
     private function feed(array $payload)

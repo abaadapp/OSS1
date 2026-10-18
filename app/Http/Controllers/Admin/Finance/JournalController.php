@@ -7,10 +7,12 @@ use App\Models\Account;
 use App\Models\JournalEntry;
 use App\Support\Activity;
 use App\Support\Demo;
+use App\Support\Exports\Dataset;
 use App\Support\Ledger;
 use App\Support\Pagination;
 use App\Support\Search;
 use App\Support\Sort;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Validation\Rule;
@@ -46,11 +48,9 @@ class JournalController extends Controller
         return auth()->user()->business_id ?? Demo::bid();
     }
 
-    public function index(Request $request): Response
+    /** القيودُ المرشَّحة — تقرؤها الشاشةُ وملفُّ تصديرها معًا (`Exports\JournalDataset`) */
+    public static function listQuery(Request $request, int $bid): Builder
     {
-        $bid = $this->bid();
-        Ledger::ensureSystemAccounts($bid);
-
         $q = JournalEntry::where('business_id', $bid)->with(['lines.account', 'creator']);
 
         if ($s = Search::term($request)) {
@@ -61,16 +61,24 @@ class JournalController extends Controller
         if ($source = $request->query('source')) {
             $q->where('source', $source);
         }
-        if ($from = $request->query('from')) {
+        if ($from = Dataset::day($request, 'from')) {
             $q->whereDate('entry_date', '>=', $from);
         }
-        if ($to = $request->query('to')) {
+        if ($to = Dataset::day($request, 'to')) {
             $q->whereDate('entry_date', '<=', $to);
         }
 
         Sort::apply($q, $request, self::SORTS, fn ($w) => $w->orderByDesc('entry_date')->orderByDesc('id'));
 
-        $entries = $q->paginate(Pagination::perPage($request, 20))->withQueryString();
+        return $q;
+    }
+
+    public function index(Request $request): Response
+    {
+        $bid = $this->bid();
+        Ledger::ensureSystemAccounts($bid);
+
+        $entries = self::listQuery($request, $bid)->paginate(Pagination::perPage($request, 20))->withQueryString();
 
         return Inertia::render('Admin/Finance/Journal', [
             'entries' => collect($entries->items())->map(fn ($e) => [

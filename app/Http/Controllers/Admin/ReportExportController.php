@@ -47,7 +47,7 @@ class ReportExportController extends Controller
      * الورقة التي تُجمع على المتجر كلّه لا تنسب نفسها إلى فرعٍ مختارٍ في
      * الشريط، وإلا خرج ملفّان لفرعين يحملان الأرقام نفسها بترويستين.
      */
-    private function sheet(Spreadsheet $spreadsheet, string $reportTitle, ?string $range = null, bool $perBranch = false): array
+    private function sheet(Spreadsheet $spreadsheet, string $reportTitle, ?string $range = null, bool $perBranch = false, ?string $rangeLabel = null): array
     {
         $business = Demo::business(auth()->user()->business_id ?? Demo::bid());
 
@@ -63,7 +63,7 @@ class ReportExportController extends Controller
         // الفترة تُطبع دائمًا حتى في الأوراق التي لا فترة لها (جرد، منتجات):
         // سطرٌ ناقص أسهل أن يُقرأ على أنه «كل شيء» من سطرٍ مكتوب
         if ($range !== null) {
-            $sheet->setCellValue('A4', __('الفترة').': '.Demo::rangeLabel($range));
+            $sheet->setCellValue('A4', __('الفترة').': '.($rangeLabel ?? Demo::rangeLabel($range)));
             $sheet->getStyle('A4')->getFont()->setBold(true);
         }
 
@@ -126,11 +126,11 @@ class ReportExportController extends Controller
     /** تصدير المنتجات كملف Excel حقيقي (xlsx) */
     public function xlsx()
     {
-        $range = $this->range();
         // الورقة تُبنى من حمولة الشاشة نفسها — انظر Support\Reports::salesReport
-        $report = Reports::salesReport($range);
+        $report = Reports::salesReport(request()->query(), true);
+        $range = $report['range'];
         $spreadsheet = new Spreadsheet;
-        [$sheet, $title, $head] = $this->sheet($spreadsheet, __('تقرير الإيرادات'), $range);
+        [$sheet, $title, $head] = $this->sheet($spreadsheet, __('تقرير الإيرادات'), $range, false, $report['rangeLabel']);
         $money = [];
 
         /*
@@ -155,7 +155,7 @@ class ReportExportController extends Controller
 
         // المبيعات على محور الفترة — ساعاتٍ أو أيّامًا أو أشهرًا، وبعدد الطلبات
         $series = $report['salesSeries'];
-        $title(__('الإيرادات').' — '.Demo::rangeLabel($range));
+        $title(__('الإيرادات').' — '.$report['rangeLabel']);
         $head([__('الفترة'), $this->moneyHead('الإيرادات'), __('عدد الفواتير')]);
         foreach ($series['full'] as $i => $label) {
             // ما لم يأتِ بعدُ لا يُكتب: صفٌّ بصفرٍ عن يوم غدٍ رقمٌ لا واقعة
@@ -174,7 +174,7 @@ class ReportExportController extends Controller
         // وسائل الدفع — من الطلبات كما في مخطّط الشاشة، لا من دفتر المقبوضات
         $title(__('توزيع وسائل الدفع'));
         $head([__('الوسيلة'), $this->moneyHead('الإجمالي'), __('عدد العمليات')]);
-        foreach (Demo::paymentBreakdown($range) as $m) {
+        foreach (Reports::salesPayments($report) as $m) {
             $r = $this->row;
             $sheet->setCellValue("A{$r}", $m['name']);
             $sheet->setCellValue("B{$r}", $m['total']);
@@ -199,7 +199,7 @@ class ReportExportController extends Controller
 
         Activity::log('report', 'صدّر تقرير الإيرادات (Excel)');
 
-        return $this->download($spreadsheet, $sheet, $money, 'revenue-report-'.$range.'-'.now()->format('Y-m-d').'.xlsx');
+        return $this->download($spreadsheet, $sheet, $money, 'revenue-report-'.Reports::salesSlug($report).'-'.now()->format('Y-m-d').'.xlsx');
     }
 
     public function productsXlsx()
@@ -353,6 +353,4 @@ class ReportExportController extends Controller
 
         return $this->download($spreadsheet, $sheet, $money, 'expenses-'.now()->format('Y-m-d').'.xlsx');
     }
-    
-
 }

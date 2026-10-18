@@ -27,7 +27,7 @@ class PdfController extends Controller
         // الفترة تُورَث من الشاشة وتُطبع في الترويسة: ورقةٌ مطبوعة لا مبدّل
         // فوقها، فإن لم تقل فترتها قُرئت على أنها فترة قارئها
         // الورقة من حمولة الشاشة نفسها — انظر Support\Reports::salesReport
-        $report = Reports::salesReport(request()->query('range'));
+        $report = Reports::salesReport(request()->query(), true);
         $range = $report['range'];
 
         $html = view('pdf.sales-report', [
@@ -35,15 +35,15 @@ class PdfController extends Controller
             'branch' => Demo::scopeName(false),
             'stats' => Reports::summaryRows($report['summary']),
             'salesSeries' => $report['salesSeries'],
-            'payments' => Demo::paymentBreakdown($range),
+            'payments' => Reports::salesPayments($report),
             'topProducts' => $report['topSellingProducts'],
-            'rangeLabel' => Demo::rangeLabel($range),
+            'rangeLabel' => $report['rangeLabel'],
             'generatedAt' => now()->format('Y-m-d H:i'),
         ])->render();
 
         Activity::log('report', 'صدّر تقرير الإيرادات (PDF)');
 
-        return $this->pdf($html, 'revenue-report-'.$range.'-'.now()->format('Y-m-d'));
+        return $this->pdf($html, 'revenue-report-'.Reports::salesSlug($report).'-'.now()->format('Y-m-d'));
     }
 
     /** تقرير المنتجات (PDF) */
@@ -94,8 +94,6 @@ class PdfController extends Controller
 
         return $this->pdf($html, 'expenses-report-'.now()->format('Y-m-d'));
     }
-
-    
 
     /**
      * فاتورةُ عميل (PDF) — بالبنية القائمة لا بمحرّكٍ ثانٍ.

@@ -35,6 +35,7 @@ use App\Support\Quotations;
 use App\Support\Reports;
 use App\Support\Roles;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -532,7 +533,7 @@ class PageController extends Controller
     {
         // الحمولة من Support\Reports لا تُجمع هنا: الملفّات الثلاثة تقرأ
         // المصدر نفسه، فلا يخرج ملفٌّ بغير ما على الشاشة
-        return Inertia::render('Admin/Reports/Sales', Reports::salesReport($request->query('range')));
+        return Inertia::render('Admin/Reports/Sales', Reports::salesReport($request->query()));
     }
 
     public function settingsIndex(Request $request): Response
@@ -652,7 +653,6 @@ class PageController extends Controller
      *
      * @return array<string, mixed>
      */
-
     private function settingsSection(?string $section, Request $request): array
     {
         return match ($section) {
@@ -686,6 +686,6 @@ class PageController extends Controller
 
         return str_starts_with($logo, 'http')
             ? $logo
-            : \Illuminate\Support\Facades\Storage::disk('public')->url($logo);
+            : Storage::disk('public')->url($logo);
     }
 }

@@ -6,6 +6,8 @@ import PageHeader from '@/Components/PageHeader';
 import SectionTabs, { PURCHASE_TABS } from '@/Components/SectionTabs';
 import StatCard from '@/Components/StatCard';
 import DataTable, { type Column, type Filter, type ServerPagination } from '@/Components/DataTable';
+import ExportMenu from '@/Components/ExportMenu';
+import { exportLinks } from '@/lib/exportLink';
 import SmartLink from '@/Components/SmartLink';
 import Field, { Select } from '@/Components/Field';
 import { Badge } from '@/Components/ui/badge';
@@ -311,6 +313,9 @@ export default function SupplierInvoices() {
             ],
         },
         { label: 'كل الموردين', param: 'supplier', options: suppliers.map((s) => ({ label: s.label, value: String(s.value) })) },
+        /* المدّةُ بتاريخ السند — وتصديرُ المدفوعات يقرؤها بتاريخ الدفع ويقول ذلك في ترويسته */
+        { label: 'من تاريخ', type: 'date', param: 'from' },
+        { label: 'إلى تاريخ', type: 'date', param: 'to' },
     ];
 
     return (
@@ -404,6 +409,12 @@ export default function SupplierInvoices() {
                         filters={tableFilters}
                         empty="لا سندات بعد"
                         server={{ pagination, params: filters, sorts }}
+                        toolbar={
+                            <div className="flex flex-wrap gap-2">
+                                <ExportMenu {...exportLinks('admin.purchases.invoices.export')} />
+                                <ExportMenu label="تصدير المدفوعات" {...exportLinks('admin.purchases.payments.export')} />
+                            </div>
+                        }
                     />
                 </Card>
             )}

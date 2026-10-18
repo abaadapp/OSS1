@@ -3,6 +3,7 @@ import { router } from '@inertiajs/react';
 import Field, { Select } from '@/Components/Field';
 import { Button } from '@/Components/ui/button';
 import { Input } from '@/Components/ui/input';
+import { rangeProblem } from '@/Components/CustomDateRangePicker';
 import { useTranslate } from '@/lib/i18n';
 import type { PeriodInfo, PeriodOption } from '@/lib/management';
 
@@ -23,6 +24,8 @@ export default function PeriodPicker({ period, periods, routeName, extra = {}, a
     const [from, setFrom] = useState(period.from);
     const [to, setTo] = useState(period.to);
     const [custom, setCustom] = useState(period.key === 'custom');
+    /* «إلى» لا تسبق «من» — يُمنع في الحقل ويُقال قبل الإرسال، والخادمُ يردّها على كلّ حال */
+    const problem = rangeProblem(from, to);
 
     const go = (key: string) => {
         if (key === 'custom') {
@@ -45,9 +48,10 @@ export default function PeriodPicker({ period, periods, routeName, extra = {}, a
             </Field>
             {custom && (
                 <>
-                    <Field label="من" className="min-w-[150px]"><Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></Field>
-                    <Field label="إلى" className="min-w-[150px]"><Input type="date" value={to} onChange={(e) => setTo(e.target.value)} /></Field>
-                    <Button variant="outline" onClick={() => router.get(route(routeName), { ...extra, period: 'custom', from, to }, { preserveState: true, replace: true })}>{t('تطبيق')}</Button>
+                    <Field label="من" className="min-w-[150px]"><Input type="date" value={from} max={to || undefined} onChange={(e) => setFrom(e.target.value)} /></Field>
+                    <Field label="إلى" className="min-w-[150px]"><Input type="date" value={to} min={from || undefined} onChange={(e) => setTo(e.target.value)} /></Field>
+                    <Button variant="outline" disabled={problem !== null} onClick={() => router.get(route(routeName), { ...extra, period: 'custom', from, to }, { preserveState: true, replace: true })}>{t('تطبيق')}</Button>
+                    {problem && (from || to) && <p role="alert" className="w-full text-[12px] text-[#b91c1c]">{t(problem)}</p>}
                 </>
             )}
             <span className="pb-2 text-[12px] text-[#9ca3af]" dir="ltr">{period.from} → {period.to}</span>

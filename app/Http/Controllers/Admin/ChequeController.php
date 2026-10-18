@@ -7,6 +7,8 @@ use App\Models\BankAccount;
 use App\Models\CustomerPayment;
 use App\Support\Cheques;
 use App\Support\Demo;
+use App\Support\Exports\Dataset;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Validation\ValidationException;
@@ -35,49 +37,74 @@ class ChequeController extends Controller
             ->whereKey($id)->firstOrFail();
     }
 
+    /** الحالُ المطلوبة — وما سواها «تحت التحصيل» */
+    public static function status(Request $request): string
+    {
+        $status = $request->string('status')->toString();
+
+        return in_array($status, Cheques::STATUSES, true) ? $status : Cheques::PENDING;
+    }
+
+    /**
+     * الشيكاتُ المرشَّحة — تقرؤها الشاشةُ وملفُّ تصديرها معًا (`Exports\ChequesDataset`).
+     * والمدّةُ بيوم استلام الشيك (`occurred_at`).
+     */
+    public static function listQuery(Request $request, int $bid): Builder
+    {
+        return Cheques::query($bid, self::status($request))
+            ->with('customer:id,name')
+            ->when(Dataset::day($request, 'from'), fn ($q, $d) => $q->whereDate('occurred_at', '>=', $d))
+            ->when(Dataset::day($request, 'to'), fn ($q, $d) => $q->whereDate('occurred_at', '<=', $d))
+            ->orderByRaw('cheque_due_at is null')
+            ->orderBy('cheque_due_at')
+            ->orderByDesc('id');
+    }
+
+    /** صفُّ الشيك — للشاشة وللملفّ */
+    public static function listRow(CustomerPayment $p): array
+    {
+        $today = now()->startOfDay();
+
+        return [
+            'id' => $p->id,
+            'number' => $p->number,
+            'customer' => $p->customer?->name ?? '—',
+            'amount' => (float) $p->amount,
+            'reference' => $p->external_reference,
+            'received_at' => optional($p->occurred_at)->format('Y-m-d'),
+            'due_at' => $p->cheque_due_at ? Carbon::parse($p->cheque_due_at)->format('Y-m-d') : null,
+            /*
+             * وتأخّرُ الاستحقاق يُحسب في الخادم لا في المتصفّح.
+             *
+             * ساعةُ الجهاز تُضبط بيد صاحبها، وشاشةٌ تقرأ «متأخّر» من
+             * ساعةٍ مقدَّمةٍ يومين تُري التاجر تأخّرًا لم يقع.
+             */
+            'overdue' => $p->cheque_due_at !== null
+                && $p->cheque_status === Cheques::PENDING
+                && Carbon::parse($p->cheque_due_at)->lt($today),
+            'settled_at' => optional($p->cheque_settled_at)->format('Y-m-d'),
+            'note' => $p->cheque_note,
+            'status' => $p->cheque_status,
+        ];
+    }
+
     public function index(Request $request): Response
     {
         $bid = $this->bid();
 
-        $status = $request->string('status')->toString();
-        $status = in_array($status, Cheques::STATUSES, true) ? $status : Cheques::PENDING;
-
-        $rows = Cheques::query($bid, $status)
-            ->with('customer:id,name')
-            ->orderByRaw('cheque_due_at is null')
-            ->orderBy('cheque_due_at')
-            ->orderByDesc('id')
-            ->limit(300)
-            ->get();
-
-        $today = now()->startOfDay();
+        $status = self::status($request);
+        $query = self::listQuery($request, $bid);
+        $rows = (clone $query)->limit(300)->get();
 
         return Inertia::render('Admin/Finance/Cheques', [
             'status' => $status,
             'statuses' => Cheques::STATUSES,
             'summary' => Cheques::summary($bid),
             'soonDays' => Cheques::SOON_DAYS,
-            'cheques' => $rows->map(fn (CustomerPayment $p) => [
-                'id' => $p->id,
-                'number' => $p->number,
-                'customer' => $p->customer?->name ?? '—',
-                'amount' => (float) $p->amount,
-                'reference' => $p->external_reference,
-                'received_at' => optional($p->occurred_at)->format('Y-m-d'),
-                'due_at' => $p->cheque_due_at ? Carbon::parse($p->cheque_due_at)->format('Y-m-d') : null,
-                /*
-                 * وتأخّرُ الاستحقاق يُحسب في الخادم لا في المتصفّح.
-                 *
-                 * ساعةُ الجهاز تُضبط بيد صاحبها، وشاشةٌ تقرأ «متأخّر» من
-                 * ساعةٍ مقدَّمةٍ يومين تُري التاجر تأخّرًا لم يقع.
-                 */
-                'overdue' => $p->cheque_due_at !== null
-                    && $p->cheque_status === Cheques::PENDING
-                    && Carbon::parse($p->cheque_due_at)->lt($today),
-                'settled_at' => optional($p->cheque_settled_at)->format('Y-m-d'),
-                'note' => $p->cheque_note,
-                'status' => $p->cheque_status,
-            ])->all(),
+            'cheques' => $rows->map(fn (CustomerPayment $p) => self::listRow($p))->all(),
+            // الشاشةُ تعرض ثلاثمئة وتقول إن كان أكثر — والملفُّ يحمل الكلّ
+            'total' => (clone $query)->reorder()->count(),
+            'filters' => $request->only('status', 'from', 'to'),
             /*
              * والاسمُ من `displayName()` لا من عمودٍ اسمُه `name`.
              *
