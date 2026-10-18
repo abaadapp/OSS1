@@ -11,12 +11,24 @@
  *
  * وما في الرابط أولى بما فيه: مسارٌ كُتب له `range` صراحةً يعرف ما يريد.
  */
-export function withFilters(url: string): string {
+export function withFilters(url: string, current: Record<string, string | number | null | undefined> = {}): string {
     if (typeof window === 'undefined') return url;
 
     const here = new URLSearchParams(window.location.search);
     here.delete('page');
     here.delete('per_page');
+
+    /*
+     * وما على الشاشة الآن أولى بما في الرابط (`current`).
+     *
+     * بحثُ أوامر الشراء يُكتب في الرابط بعد توقّفٍ قصير — ومن كتب وضغط «تصدير»
+     * فورًا كان ملفُّه يحمل البحثَ السابق. فالقيمةُ الحاليّةُ تحلّ محلَّ ما في
+     * الرابط، والفارغةُ تُسقطه: حقلٌ مُسح لا يبقى فلترُه القديم في الملفّ.
+     */
+    for (const [key, value] of Object.entries(current)) {
+        if (value === null || value === undefined || value === '') here.delete(key);
+        else here.set(key, String(value));
+    }
     if (![...here].length) return url;
 
     const [base, own = ''] = url.split('?');

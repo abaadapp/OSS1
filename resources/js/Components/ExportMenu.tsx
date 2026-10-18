@@ -29,6 +29,12 @@ interface Props {
      * (القوائمُ والتقارير) يعرفانه؛ وغيرُهما يُفتح كما هو.
      */
     checkPdf?: boolean;
+    /**
+     * ما على الشاشة الآن ولم يبلغ الرابطَ بعد — يحلّ محلَّ قيمته في الرابط،
+     * والفارغُ يُسقطها (`withFilters`). بحثُ أوامر الشراء يُكتب في الرابط بعد
+     * توقّفٍ قصير، ومن ضغط «تصدير» قبله ينتظر ما كتب لا ما كان.
+     */
+    params?: Record<string, string | number | null | undefined>;
 }
 
 /** جوابُ الخادم: كم صفًّا سيحمل الملفّ، وحدُّ PDF */
@@ -51,7 +57,7 @@ interface Probe {
  * ينزّل شيئًا: كم النتائج، وكم يتّسع PDF، وزرّا إكسل وCSV الكاملين — ومعهما PDF
  * لأوّل الصفوف لمن أراده مطبوعًا، يقول اسمُه إنّه جزء.
  */
-export default function ExportMenu({ xlsx, pdf, csv, label = 'تصدير', checkPdf = false }: Props) {
+export default function ExportMenu({ xlsx, pdf, csv, label = 'تصدير', checkPdf = false, params }: Props) {
     const t = useTranslate();
     const [tooLong, setTooLong] = useState<Probe | null>(null);
     const [menuOpen, setMenuOpen] = useState(false);
@@ -59,7 +65,10 @@ export default function ExportMenu({ xlsx, pdf, csv, label = 'تصدير', check
 
     if (!xlsx && !pdf && !csv) return null;
 
-    const pdfUrl = pdf ? withFilters(pdf) : undefined;
+    // الروابطُ الثلاثة وسؤالُ PDF بالمرشّحات نفسِها: ما على الشاشة الآن فوق ما في الرابط
+    const xlsxUrl = xlsx ? withFilters(xlsx, params) : undefined;
+    const pdfUrl = pdf ? withFilters(pdf, params) : undefined;
+    const csvUrl = csv ? withFilters(csv, params) : undefined;
     const guarded = checkPdf && pdfUrl !== undefined;
 
     /* سؤالٌ واحدٌ لكلّ رابط — والرابطُ يتغيّر بتغيّر المرشّحات فيُسأل من جديد */
@@ -134,7 +143,7 @@ export default function ExportMenu({ xlsx, pdf, csv, label = 'تصدير', check
                 <DropdownMenuContent align="end" className="w-56">
                     {xlsx && (
                         <DropdownMenuItem asChild>
-                            <a href={withFilters(xlsx)}>
+                            <a href={xlsxUrl}>
                                 <FileSpreadsheet className="text-[#9ca3af]" />
                                 {t('تصدير كملف إكسل')}
                             </a>
@@ -150,7 +159,7 @@ export default function ExportMenu({ xlsx, pdf, csv, label = 'تصدير', check
                     )}
                     {csv && (
                         <DropdownMenuItem asChild>
-                            <a href={withFilters(csv)}>
+                            <a href={csvUrl}>
                                 <FileDown className="text-[#9ca3af]" />
                                 {t('تصدير كملف CSV')}
                             </a>
@@ -174,7 +183,7 @@ export default function ExportMenu({ xlsx, pdf, csv, label = 'تصدير', check
                     <div className="flex flex-col gap-2 px-5 pb-5 pt-1 sm:flex-row sm:flex-wrap">
                         {xlsx && (
                             <Button asChild className="w-full sm:w-auto">
-                                <a href={withFilters(xlsx)} onClick={close}>
+                                <a href={xlsxUrl} onClick={close}>
                                     <FileSpreadsheet />
                                     {t('تصدير Excel كاملًا')}
                                 </a>
@@ -182,7 +191,7 @@ export default function ExportMenu({ xlsx, pdf, csv, label = 'تصدير', check
                         )}
                         {csv && (
                             <Button asChild variant="outline" className="w-full sm:w-auto">
-                                <a href={withFilters(csv)} onClick={close}>
+                                <a href={csvUrl} onClick={close}>
                                     <FileDown />
                                     {t('تصدير CSV كاملًا')}
                                 </a>

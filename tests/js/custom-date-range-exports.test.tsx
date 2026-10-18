@@ -7,7 +7,7 @@ import CustomDateRangePicker, { rangeProblem } from '@/Components/CustomDateRang
 import ListDateRange from '@/Components/ListDateRange';
 import ExportMenu from '@/Components/ExportMenu';
 import ReportScreen from '@/Components/ReportScreen';
-import { exportLinks } from '@/lib/exportLink';
+import { exportLinks, withFilters } from '@/lib/exportLink';
 import { pageProps } from './setup';
 
 vi.mock('@/Layouts/AdminLayout', () => ({ default: ({ children }: { children: React.ReactNode }) => <div>{children}</div> }));
@@ -147,6 +147,20 @@ describe('ExportMenu and the export links', () => {
         for (const item of within(menu).getAllByRole('menuitem')) {
             expect(item.getAttribute('href')).toContain('/expenses/custom/2026-01-01/2026-03-31');
         }
+    });
+});
+
+describe('withFilters', () => {
+    afterEach(() => window.history.replaceState(null, '', '/'));
+
+    it('lets what the screen holds now override the address — and an empty value drop it', () => {
+        window.history.replaceState(null, '', '/x?q=old&status=open&page=3');
+
+        expect(withFilters('/export/csv', { q: 'new' })).toBe('/export/csv?q=new&status=open');
+        expect(withFilters('/export/csv', { q: '' })).toBe('/export/csv?status=open');
+        expect(withFilters('/export/csv', { q: null, status: null })).toBe('/export/csv');
+        // وما كتبه المسارُ صراحةً أولى بهما
+        expect(withFilters('/export/csv?status=closed', { q: 'new' })).toBe('/export/csv?status=closed&q=new');
     });
 });
 

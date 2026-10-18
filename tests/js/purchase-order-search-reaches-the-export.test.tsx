@@ -79,6 +79,81 @@ describe('أوامر الشراء — البحثُ في الرابط', () => {
         expect(lastVisit()?.[1]).toEqual(FILTERS);
     });
 
+    /* الرابطُ يحمل بحثًا قديمًا، والحقلُ يحمل ما كُتب للتوّ — والرابطُ لم يُحدَّث بعد */
+    const STALE = '/admin/purchases?q=%D9%82%D8%AF%D9%8A%D9%85&status=%D9%85%D9%8F%D8%B1%D8%B3%D9%84&supplier_id=4';
+
+    const exportNow = async (rows = 1) => {
+        const fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ rows, limit: 1000, fits: rows <= 1000 }) });
+        vi.stubGlobal('fetch', fetch);
+        const user = userEvent.setup();
+        const trigger = screen.getByRole('button', { name: /^تصدير$/ });
+        trigger.focus();
+        await user.keyboard('{Enter}');
+        const menu = await screen.findByRole('menu');
+        const hrefs = Object.fromEntries(
+            within(menu).getAllByRole('menuitem').map((item) => {
+                const href = new URL(item.getAttribute('href') ?? '', 'http://x');
+                return [href.pathname.split('/').pop(), href.searchParams];
+            }),
+        ) as Record<'xlsx' | 'pdf' | 'csv', URLSearchParams>;
+        await vi.waitFor(() => expect(fetch).toHaveBeenCalled());
+        const probe = new URL(String(fetch.mock.calls[0][0]), 'http://x').searchParams;
+
+        return { user, menu, hrefs, probe };
+    };
+
+    it('exports the words just typed — Excel, CSV and the PDF question — before they reach the address', async () => {
+        window.history.replaceState(null, '', STALE);
+        Object.assign(pageProps, { q: 'قديم' });
+        render(<PurchasesIndex />);
+
+        fireEvent.change(screen.getByPlaceholderText('ابحث بالرقم أو المورّد…'), { target: { value: 'الخليج' } });
+        expect(new URLSearchParams(window.location.search).get('q')).toBe('قديم'); // الرابطُ ما زال قديمًا
+
+        const { hrefs, probe } = await exportNow();
+        for (const format of ['xlsx', 'csv', 'pdf'] as const) {
+            expect(hrefs[format].get('q'), format).toBe('الخليج');
+            expect(hrefs[format].get('status'), format).toBe('مُرسل');
+            expect(hrefs[format].get('supplier_id'), format).toBe('4');
+        }
+        expect(probe.get('q')).toBe('الخليج');
+        expect(probe.get('probe')).toBe('1');
+    });
+
+    it('carries the words just typed into the full Excel and CSV offered by the PDF warning', async () => {
+        window.history.replaceState(null, '', STALE);
+        Object.assign(pageProps, { q: 'قديم' });
+        render(<PurchasesIndex />);
+
+        fireEvent.change(screen.getByPlaceholderText('ابحث بالرقم أو المورّد…'), { target: { value: 'النور' } });
+        const { user, menu, probe } = await exportNow(5000);
+        expect(probe.get('q')).toBe('النور');
+
+        await user.click(within(menu).getByRole('menuitem', { name: 'تصدير كملف PDF' }));
+        const dialog = await screen.findByRole('dialog');
+        for (const name of ['تصدير Excel كاملًا', 'تصدير CSV كاملًا', /PDF لأوّل/]) {
+            const href = new URL(within(dialog).getByRole('link', { name }).getAttribute('href') ?? '', 'http://x');
+            expect(href.searchParams.get('q'), String(name)).toBe('النور');
+        }
+    });
+
+    it('drops the old search at once when the field is emptied and «تصدير» is pressed', async () => {
+        window.history.replaceState(null, '', STALE);
+        Object.assign(pageProps, { q: 'قديم' });
+        render(<PurchasesIndex />);
+
+        fireEvent.change(screen.getByPlaceholderText('ابحث بالرقم أو المورّد…'), { target: { value: '' } });
+        expect(new URLSearchParams(window.location.search).get('q')).toBe('قديم');
+
+        const { hrefs, probe } = await exportNow();
+        for (const format of ['xlsx', 'csv', 'pdf'] as const) {
+            expect(hrefs[format].has('q'), format).toBe(false);
+            expect(hrefs[format].get('status'), format).toBe('مُرسل'); // وبقيّةُ المرشّحات باقية
+            expect(hrefs[format].get('supplier_id'), format).toBe('4');
+        }
+        expect(probe.has('q')).toBe(false);
+    });
+
     it('lets «تصدير» carry the search that is in the address', async () => {
         vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => ({ rows: 1, limit: 1000, fits: true }) }));
         window.history.replaceState(null, '', '/admin/purchases?q=%D8%A7%D9%84%D8%AE%D9%84%D9%8A%D8%AC&status=%D9%85%D9%8F%D8%B1%D8%B3%D9%84');

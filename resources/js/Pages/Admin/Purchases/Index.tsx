@@ -207,6 +207,11 @@ export default function PurchasesIndex() {
      * زرُّ «تصدير» كما يقرأ الحالَ والمدّة.
      */
     const typed = useRef(q ?? '');
+    /*
+     * وما كُتب الآن يصل إلى زرّ «تصدير» فورًا لا بعد التوقّف: من كتب وضغط «تصدير»
+     * قبل أن يُكتب البحثُ في الرابط ينتظر ملفًّا بما كتب — وحقلٌ مُسح لا يبقى بحثُه.
+     */
+    const [typedQ, setTypedQ] = useState(q ?? '');
     const searchTimer = useRef<number | undefined>(undefined);
     // آخرُ المرشّحات لا ما كانت عليه حين بدأ المؤقّت — فلا يُعيد البحثُ المتأخّرُ حالًا تغيّرت
     const shown = useRef({ status, filters });
@@ -224,6 +229,7 @@ export default function PurchasesIndex() {
     const goStatus = (next: string) => visit({ status: next || null });
     const search = (value: string) => {
         typed.current = value;
+        setTypedQ(value);
         window.clearTimeout(searchTimer.current);
         searchTimer.current = window.setTimeout(() => visit({}), 400);
     };
@@ -236,7 +242,7 @@ export default function PurchasesIndex() {
                 actions={
                     <>
                         {/* بالبحث والحال والمدّة المعروضة — والقيمةُ التزامٌ لا مصروفٌ محقَّق */}
-                        <ExportMenu {...exportLinks('admin.purchases.orders.export')} />
+                        <ExportMenu {...exportLinks('admin.purchases.orders.export')} params={{ q: typedQ.trim() }} />
                         <Button variant="outline" asChild>
                             <SmartLink routeName="admin.suppliers.index" href={route('admin.suppliers.index')}>
                                 <Truck />
@@ -337,7 +343,7 @@ export default function PurchasesIndex() {
                         />
                         <ListDateRange
                             routeName="admin.purchases.orders"
-                            params={{ status: status || null, q: q || null, supplier_id: filters?.supplier_id ?? null }}
+                            params={{ status: status || null, q: typedQ.trim() || null, supplier_id: filters?.supplier_id ?? null }}
                             from={filters?.from}
                             to={filters?.to}
                             label="تاريخ الأمر"
