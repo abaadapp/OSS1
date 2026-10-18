@@ -88,6 +88,7 @@ export default function ReportsStaff() {
                             xlsx={route('admin.reports.export.xlsx', { report: 'staff', ...periodQuery(period) })}
                             pdf={route('admin.reports.export.pdf', { report: 'staff', ...periodQuery(period) })}
                             csv={route('admin.reports.export.csv', { report: 'staff', ...periodQuery(period) })}
+                            checkPdf
                         />
                     }
                 />

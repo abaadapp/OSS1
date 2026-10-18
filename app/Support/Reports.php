@@ -40,6 +40,19 @@ class Reports
     ];
 
     /**
+     * تقاريرُ الرصيد الحاليّ — لقطةُ اليوم لا حركةُ مدّة.
+     *
+     * لا تُقرأ بفترة، ولا تُكتب فوقها فترة: شاشتُها وملفّاتُها تقول «الرصيد الحالي
+     * بتاريخ …» (`ReportPeriod::asOf`) — لا «هذا الشهر».
+     */
+    public const SNAPSHOTS = ['inventory'];
+
+    public static function isSnapshot(string $key): bool
+    {
+        return in_array($key, self::SNAPSHOTS, true);
+    }
+
+    /**
      * البنود. `icon` مفتاحٌ تترجمه الواجهة إلى أيقونة (خريطة صريحة في
      * Reports/Index.tsx — الاستيراد الشامل من lucide يضخّ المكتبة كاملة).
      */

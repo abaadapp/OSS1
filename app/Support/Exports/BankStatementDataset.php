@@ -68,15 +68,14 @@ final class BankStatementDataset extends Dataset
         return ['opening' => round($opening, 3), 'rows' => $rows, 'closing' => round($rows === [] ? $opening : (float) end($rows)['balance'], 3)];
     }
 
-    public function data(Request $request, int $bid, int $limit): array
+    public function data(Request $request, int $bid): array
     {
         ['opening' => $opening, 'rows' => $rows, 'closing' => $closing] = self::window(
             Demo::bankStatement($this->account($request, $bid)), self::day($request, 'from'), self::day($request, 'to'),
         );
 
         return [
-            'rows' => array_slice($rows, 0, $limit),
-            'total' => count($rows),
+            'rows' => $rows,
             'totals' => ['debit' => round(array_sum(array_column($rows, 'debit')), 3), 'credit' => round(array_sum(array_column($rows, 'credit')), 3)],
             'cards' => [
                 ['label' => __('رصيد أوّل المدّة'), 'value' => Demo::moneyBase($opening)],

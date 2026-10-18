@@ -11,6 +11,7 @@ use App\Support\Permissions;
 use App\Support\ProjectWorkflow;
 use App\Support\ReportPeriod;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 
 /**
  * المشاريع والمعارض — بتاريخ البداية، وبمرشّحات القائمة (البحث · العميل · الحال · المسؤول).
@@ -55,35 +56,32 @@ final class ProjectsDataset extends Dataset
         ]));
     }
 
-    public function data(Request $request, int $bid, int $limit): array
+    public function data(Request $request, int $bid): array
     {
         $commercial = $this->commercial();
         $query = ProjectController::listQuery($request, $bid);
-        $total = (clone $query)->toBase()->getCountForPagination();
-        $rows = [];
         $approved = 0.0;
         $current = 0.0;
 
-        for ($offset = 0, $want = min($total, $limit); $offset < $want; $offset += 200) {
-            $chunk = (clone $query)->offset($offset)->limit(min(200, $want - $offset))->get();
-            /* المرحلةُ من `ProjectWorkflow` دفعةً للدفعة — كما تقرؤها بطاقاتُ القائمة */
-            $flows = ProjectWorkflow::forMany($bid, $chunk);
-            foreach ($chunk as $project) {
-                $row = ProjectController::listRow($project, $commercial) + [
-                    'location' => $project->location,
-                    'status_label' => __(self::STATUS[$project->status] ?? $project->status),
-                    'stage' => __(ProjectWorkflow::LABELS[$flows[(int) $project->id]['focus'] ?? ''] ?? '—'),
-                ];
-                $approved += (float) ($row['approved_value'] ?? 0);
-                $current += (float) ($row['current_value'] ?? 0);
-                $rows[] = $row;
-            }
-        }
-
         return [
-            'rows' => $rows,
-            'total' => $total,
-            'totals' => $commercial ? ['approved_value' => round($approved, 3), 'current_value' => round($current, 3)] : null,
+            'rows' => Rows::chunked($query, function (Collection $chunk) use ($bid, $commercial, &$approved, &$current) {
+                /* المرحلةُ من `ProjectWorkflow` دفعةً للدفعة — كما تقرؤها بطاقاتُ القائمة */
+                $flows = ProjectWorkflow::forMany($bid, $chunk);
+
+                return $chunk->map(function (Project $project) use ($flows, $commercial, &$approved, &$current) {
+                    $row = ProjectController::listRow($project, $commercial) + [
+                        'location' => $project->location,
+                        'status_label' => __(self::STATUS[$project->status] ?? $project->status),
+                        'stage' => __(ProjectWorkflow::LABELS[$flows[(int) $project->id]['focus'] ?? ''] ?? '—'),
+                    ];
+                    $approved += (float) ($row['approved_value'] ?? 0);
+                    $current += (float) ($row['current_value'] ?? 0);
+
+                    return $row;
+                })->all();
+            }),
+            // القيمةُ الحاليّة تُحسب مشروعًا مشروعًا (`ProjectScope::currentValue`) — فتُجمع أثناء الكتابة وتُقرأ بعدها
+            'totals' => $commercial ? fn () => ['approved_value' => round($approved, 3), 'current_value' => round($current, 3)] : null,
         ];
     }
 

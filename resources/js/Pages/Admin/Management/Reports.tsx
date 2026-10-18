@@ -90,7 +90,7 @@ export default function ManagementReports({ period, periods, catalog, report, ti
                                     <p className="text-[12px] text-[#6b7280]">{data.periodLabel}</p>
                                 </div>
                                 {/* زرٌّ واحد «تصدير» كأخواته — والروابطُ من الخادم بمدّة الشاشة ومرشّحاتها */}
-                                {exp && <ExportMenu xlsx={exp.xlsx} pdf={exp.pdf} csv={exp.csv} />}
+                                {exp && <ExportMenu xlsx={exp.xlsx} pdf={exp.pdf} csv={exp.csv} checkPdf />}
                             </Card>
                             {data.sections.map((s) => (
                                 <Card key={s.title} className="overflow-hidden">

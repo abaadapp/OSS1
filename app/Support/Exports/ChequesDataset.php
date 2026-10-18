@@ -33,11 +33,11 @@ final class ChequesDataset extends Dataset
         ];
     }
 
-    public function data(Request $request, int $bid, int $limit): array
+    public function data(Request $request, int $bid): array
     {
         $query = ChequeController::listQuery($request, $bid);
 
-        return $this->fromQuery($query, $limit, fn (CustomerPayment $p) => ($row = ChequeController::listRow($p)) + [
+        return $this->fromQuery($query, fn (CustomerPayment $p) => ($row = ChequeController::listRow($p)) + [
             'late' => $row['overdue'] ? __('نعم') : null,
         ]) + ['totals' => ['amount' => round((float) (clone $query)->reorder()->sum('amount'), 3)]];
     }

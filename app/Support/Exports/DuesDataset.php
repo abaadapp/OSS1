@@ -5,6 +5,7 @@ namespace App\Support\Exports;
 use App\Models\Expense;
 use App\Models\PayrollRun;
 use App\Models\SupplierInvoice;
+use App\Support\ReportPeriod;
 use Illuminate\Http\Request;
 
 /**
@@ -36,7 +37,7 @@ final class DuesDataset extends Dataset
         ];
     }
 
-    public function data(Request $request, int $bid, int $limit): array
+    public function data(Request $request, int $bid): array
     {
         $today = now()->startOfDay();
         $rows = [];
@@ -69,17 +70,19 @@ final class DuesDataset extends Dataset
             }
         }
 
-        $total = count($rows);
-
         return [
-            'rows' => array_slice($rows, 0, $limit),
-            'total' => $total,
+            'rows' => $rows,
             'totals' => ['amount' => round(array_sum(array_column($rows, 'amount')), 3)],
         ];
     }
 
     public function periodLabel(Request $request): string
     {
-        return __('لقطة حاليّة حتى :date', ['date' => now()->toDateString()]);
+        return ReportPeriod::asOf();
+    }
+
+    public function periodLine(Request $request): ?string
+    {
+        return ReportPeriod::asOf();
     }
 }

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { router } from '@inertiajs/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -126,6 +126,7 @@ describe('ExportMenu and the export links', () => {
             xlsx: '/admin.finance.statement.export/xlsx/3',
             pdf: '/admin.finance.statement.export/pdf/3',
             csv: '/admin.finance.statement.export/csv/3',
+            checkPdf: true,
         });
     });
 
@@ -146,6 +147,79 @@ describe('ExportMenu and the export links', () => {
         for (const item of within(menu).getAllByRole('menuitem')) {
             expect(item.getAttribute('href')).toContain('/expenses/custom/2026-01-01/2026-03-31');
         }
+    });
+});
+
+describe('ExportMenu before a PDF', () => {
+    const answer = (rows: number) => vi.fn().mockResolvedValue({ ok: true, json: async () => ({ rows, limit: 1000, fits: rows <= 1000 }) });
+
+    afterEach(() => {
+        vi.unstubAllGlobals();
+    });
+
+    const openMenu = async (user: ReturnType<typeof userEvent.setup>) => {
+        const trigger = screen.getByRole('button', { name: /تصدير/ });
+        trigger.focus();
+        await user.keyboard('{Enter}');
+        return screen.findByRole('menu');
+    };
+
+    it('asks the server how long the PDF would be as soon as the menu opens', async () => {
+        const user = userEvent.setup();
+        const fetch = answer(20500);
+        vi.stubGlobal('fetch', fetch);
+        render(<ExportMenu {...exportLinks('admin.finance.transactions.export')} />);
+
+        await openMenu(user);
+        await waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
+        expect(fetch.mock.calls[0][0]).toBe('/admin.finance.transactions.export/pdf?probe=1');
+    });
+
+    it('warns before a PDF that cannot hold every result, and offers the full Excel and CSV', async () => {
+        const user = userEvent.setup();
+        vi.stubGlobal('fetch', answer(20500));
+        const open = vi.spyOn(window, 'open').mockReturnValue(null);
+        render(<ExportMenu {...exportLinks('admin.finance.transactions.export')} />);
+
+        const menu = await openMenu(user);
+        await waitFor(() => expect(fetch).toHaveBeenCalled());
+        await user.click(within(menu).getByRole('menuitem', { name: 'تصدير كملف PDF' }));
+
+        const dialog = await screen.findByRole('dialog');
+        expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+        expect(within(dialog).getByText('ملفّ PDF لا يتّسع لكلّ النتائج')).toBeInTheDocument();
+        expect(dialog).toHaveTextContent('النتائج 20,500 صفًّا، وملفّ PDF يتّسع لـ1,000 صفّ على الأكثر. لتحصل على كلّ النتائج صدّر Excel أو CSV.');
+        expect(within(dialog).getByRole('link', { name: 'تصدير Excel كاملًا' })).toHaveAttribute('href', '/admin.finance.transactions.export/xlsx');
+        expect(within(dialog).getByRole('link', { name: 'تصدير CSV كاملًا' })).toHaveAttribute('href', '/admin.finance.transactions.export/csv');
+        // والجزءُ لمن أراده — يقول اسمُه إنّه جزء، ويطلبه صراحةً
+        expect(within(dialog).getByRole('link', { name: 'PDF لأوّل 1,000 صفّ فقط' })).toHaveAttribute('href', '/admin.finance.transactions.export/pdf?partial=1');
+        expect(open).not.toHaveBeenCalled();
+        open.mockRestore();
+    });
+
+    it('lets a PDF that fits open as it always did', async () => {
+        const user = userEvent.setup();
+        vi.stubGlobal('fetch', answer(40));
+        render(<ExportMenu {...exportLinks('admin.finance.transactions.export')} />);
+
+        const menu = await openMenu(user);
+        await waitFor(() => expect(fetch).toHaveBeenCalled());
+        const pdf = within(menu).getByRole('menuitem', { name: 'تصدير كملف PDF' });
+        const click = new MouseEvent('click', { bubbles: true, cancelable: true });
+        pdf.dispatchEvent(click);
+
+        expect(click.defaultPrevented).toBe(false);
+        expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    });
+
+    it('leaves other PDF links alone — only the unified exports answer the question', async () => {
+        const user = userEvent.setup();
+        const fetch = answer(20500);
+        vi.stubGlobal('fetch', fetch);
+        render(<ExportMenu pdf="/admin/documents/7/pdf" />);
+
+        await openMenu(user);
+        expect(fetch).not.toHaveBeenCalled();
     });
 });
 

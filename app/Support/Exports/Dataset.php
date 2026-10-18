@@ -3,7 +3,7 @@
 namespace App\Support\Exports;
 
 use App\Support\ReportPeriod;
-use Illuminate\Contracts\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 
 /**
@@ -14,8 +14,8 @@ use Illuminate\Http\Request;
  * نفسِه. فلا يخرج ملفٌّ بفلترٍ غير الذي على الشاشة — كان ملفُّ «الحركة المالية»
  * يقرأ الشهرَ الجاري مهما كتب التاجرُ في البحث والتاريخ.
  *
- * والفرقُ الوحيد: الشاشةُ مرقَّمة (عشرون صفًّا)، والملفُّ يحمل كلَّ ما طابق حتى
- * سقف صيغته (`TableExport::limit`) — ويقول ذلك إن بُلغ.
+ * والفرقُ الوحيد: الشاشةُ مرقَّمة (عشرون صفًّا)، والملفُّ يحمل كلَّ ما طابق بلا
+ * سقف — دفعةً بعد دفعة (`Rows`). وPDF وحده له حدٌّ يُقال قبل التنزيل (`TableExport::pdfCut`).
  */
 abstract class Dataset
 {
@@ -26,11 +26,12 @@ abstract class Dataset
     abstract public function columns(Request $request): array;
 
     /**
-     * الصفوفُ ومجموعُها ومجاميعُها وبطاقاتُها.
+     * الصفوفُ ومجاميعُها وبطاقاتُها — والصفوفُ كلُّ ما طابق (`Rows` أو مصفوفة)،
+     * يُعدّ بـ`count()` قبل أن يُقرأ.
      *
-     * @return array{rows: iterable<array<string, mixed>>, total: int, shown?: int, totals?: ?array, cards?: list<array{label: string, value: string}>}
+     * @return array{rows: Rows|list<array<string, mixed>>, totals?: array|\Closure|null, cards?: list<array{label: string, value: string}>}
      */
-    abstract public function data(Request $request, int $bid, int $limit): array;
+    abstract public function data(Request $request, int $bid): array;
 
     /** الإذنُ فوق قسم المسار (حارسُ المسار يقيس القسمَ باسمه) — 403 */
     public function authorize(Request $request): void {}
@@ -58,6 +59,12 @@ abstract class Dataset
     public function periodLabel(Request $request): string
     {
         return ReportPeriod::openLabel(self::param($request, 'from'), self::param($request, 'to'));
+    }
+
+    /** سطرُ المدّة كاملًا لقائمةٍ بلا فترة — الرصيدُ الحاليّ (`TableExport::periodLine`) */
+    public function periodLine(Request $request): ?string
+    {
+        return null;
     }
 
     /** المرشّحاتُ المطبَّقة بأسمائها — @return list<string> */
@@ -88,26 +95,13 @@ abstract class Dataset
     }
 
     /**
-     * الصفوفُ من استعلامٍ مرشَّح — كلُّ ما طابق حتى السقف، دفعةً بعد دفعة.
+     * الصفوفُ من استعلامٍ مرشَّح — كلُّ ما طابق، دفعةً بعد دفعة بتحميلها المسبق (`with`).
      *
-     * @return array{rows: list<array<string, mixed>>, total: int}
+     * @return array{rows: Rows}
      */
-    protected function fromQuery(Builder $query, int $limit, callable $row): array
+    protected function fromQuery(Builder $query, callable $row): array
     {
-        $total = (clone $query)->toBase()->getCountForPagination();
-        $rows = [];
-
-        /*
-         * دفعاتٌ بإزاحةٍ يُكتب سقفُها بيد: `lazy()` يكتب حدَّه فوق حدّ الاستعلام
-         * فيضيع السقف، و`cursor()` يُسقط التحميلَ المسبق (`with`) فيسأل عن كلّ صفٍّ وحده.
-         */
-        for ($offset = 0, $want = min($total, $limit); $offset < $want; $offset += 500) {
-            foreach ((clone $query)->offset($offset)->limit(min(500, $want - $offset))->get() as $model) {
-                $rows[] = $row($model);
-            }
-        }
-
-        return ['rows' => $rows, 'total' => $total];
+        return ['rows' => Rows::each($query, $row)];
     }
 
     /** عمودٌ بوصفه */

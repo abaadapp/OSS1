@@ -34,12 +34,12 @@ final class TransactionsDataset extends Dataset
         ];
     }
 
-    public function data(Request $request, int $bid, int $limit): array
+    public function data(Request $request, int $bid): array
     {
         $query = FinanceController::listQuery($request, $bid);
         $summary = FinanceController::listTotals($query);
 
-        return $this->fromQuery($query, $limit, fn ($t) => FinanceController::listRow($t) + [
+        return $this->fromQuery($query, fn ($t) => FinanceController::listRow($t) + [
             'state' => $t->isCancelled() ? __('ملغاة') : __('سارية'),
         ]) + [
             'cards' => [

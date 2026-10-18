@@ -13,9 +13,8 @@ use App\Support\ReportPeriod;
 use App\Support\Reports;
 use App\Support\Sheet;
 use App\Support\TableExport;
+use App\Support\XlsxStream;
 use Illuminate\Http\Request;
-use PhpOffice\PhpSpreadsheet\Spreadsheet;
-use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use RuntimeException;
 use Symfony\Component\HttpFoundation\Response;
 
@@ -29,7 +28,8 @@ use Symfony\Component\HttpFoundation\Response;
  * والملفّ يقرأ ما تقرؤه الشاشة بعينه — `ReportData` نفسها بالمرشّحات نفسها
  * من سلسلة الاستعلام وبالفترة نفسها (`ReportPeriod`). فما في اليد هو ما كان
  * على الشاشة لحظة الضغط، لا فترةً أخرى ولا فرعًا آخر — ولا أوّلَ خمسمئة صفٍّ
- * منه: الشاشةُ تعرض سقفًا وتقوله، والملفُّ يحمل كلَّ ما طابق.
+ * منه: الشاشةُ تعرض سقفًا وتقوله، والملفُّ يحمل كلَّ ما طابق بلا سقف (`Rows`).
+ * وPDF وحده له حدٌّ يُسأل عنه قبل التنزيل (`?probe=1`) — انظر `TableExport::pdfCut`.
  */
 class ReportDownloadController extends Controller
 {
@@ -75,15 +75,19 @@ class ReportDownloadController extends Controller
         }
 
         $filters = $request->query();
-        $filters['_limit'] = TableExport::limit($format);
+        unset($filters['probe'], $filters['partial']);
+        $filters['_export'] = true;
 
         /*
          * والفترةُ لا تُفرض على تقريرٍ لا يعرفها: الهالك يُرشَّح بمدّةٍ بحدّين
-         * (`from` و`to`)، وتقاريرُ الإدارة بمدّتها (`period`). ولكلٍّ حارسُه:
-         * مدّةٌ خاطئةٌ تُردّ بـ422 لا بملفٍّ لمدّةٍ غير التي طُلبت.
+         * (`from` و`to`)، وتقاريرُ الإدارة بمدّتها (`period`)، والرصيدُ الحاليّ
+         * (المخزون) بلا مدّةٍ أصلًا. ولكلٍّ حارسُه: مدّةٌ خاطئةٌ تُردّ بـ422 لا بملفٍّ
+         * لمدّةٍ غير التي طُلبت.
          */
         $period = null;
-        if (ReportColumns::sectioned($report)) {
+        if (Reports::isSnapshot($report)) {
+            unset($filters['range'], $filters['from'], $filters['to']);
+        } elseif (ReportColumns::sectioned($report)) {
             $this->guardSectionedPeriod($report, $filters);
         } else {
             $period = ReportPeriod::strict($filters);
@@ -173,14 +177,23 @@ class ReportDownloadController extends Controller
         'due' => 'الصافي المستحقّ',
     ];
 
-    /** ما يُكتب في ترويسة الملفّ عن مدّته — مسمّاةً كانت أو بحدّين */
-    private function periodLabel(array $data, ?ReportPeriod $period): string
+    /** ما يُكتب في ترويسة الملفّ عن مدّته — مسمّاةً كانت أو بحدّين، أو رصيدًا بتاريخه */
+    private function periodLabel(string $report, array $data, ?ReportPeriod $period): string
     {
+        if (Reports::isSnapshot($report)) {
+            return ReportPeriod::asOf();
+        }
+
         return $period?->label() ?? $data['periodLabel'] ?? Demo::rangeLabel('month');
     }
 
     private function filename(string $report, array $filters, ?ReportPeriod $period): string
     {
+        // الرصيدُ الحاليّ باسم تاريخه: report-inventory-as-of-2026-10-18
+        if (Reports::isSnapshot($report)) {
+            return 'report-'.$report.'-as-of-'.ReportPeriod::today();
+        }
+
         $slug = $period?->slug()
             ?? match (true) {
                 $report === 'waste' => ($filters['from'] ?? now()->startOfMonth()->toDateString()).'_'.($filters['to'] ?? now()->toDateString()),
@@ -235,7 +248,9 @@ class ReportDownloadController extends Controller
         return [
             'business' => Demo::business(auth()->user()->business_id ?? Demo::bid())['name'] ?? 'Event Plus',
             'title' => $this->title($report),
-            'period' => $this->periodLabel($data, $period),
+            'period' => $this->periodLabel($report, $data, $period),
+            // الرصيدُ الحاليّ يقول تاريخَه سطرًا كاملًا — لا «الفترة: …»
+            'periodLine' => Reports::isSnapshot($report) ? ReportPeriod::asOf() : null,
             'filters' => $this->filterLines($filters, $data),
             'branch' => Demo::scopeName(false),
             'generated' => now()->format('Y-m-d H:i'),
@@ -248,10 +263,19 @@ class ReportDownloadController extends Controller
         TableExport::prepare($format);
         [$filters, $data, $period] = $this->load($request, $report, $format);
 
+        /* PDF يُسأل عن طوله قبل أن يُرسم: زرُّ «تصدير» يُنبّه إن جاوز حدَّه */
+        $count = ReportColumns::sectioned($report)
+            ? array_sum(array_map('count', $data['sections'] ?? []))
+            : count($data['rows'] ?? []);
+        if ($format === 'pdf' && $request->boolean('probe')) {
+            return TableExport::probe($count);
+        }
+        $cut = $format === 'pdf' ? TableExport::pdfCut($count, $request->boolean('partial')) : null;
+
         Activity::log('report', 'صدّر '.$this->title($report).' ('.['xlsx' => 'Excel', 'csv' => 'CSV', 'pdf' => 'PDF'][$format].')');
 
         if (ReportColumns::sectioned($report)) {
-            return $this->sectioned($format, $report, $filters, $data);
+            return $this->sectioned($format, $report, $filters, $data, $cut);
         }
 
         return TableExport::download(
@@ -262,7 +286,7 @@ class ReportDownloadController extends Controller
             $data['rows'] ?? [],
             $this->cards($data['summary'] ?? []),
             $data['totals'] ?? null,
-            $data['truncated'] ?? null,
+            $cut,
         );
     }
 
@@ -274,28 +298,20 @@ class ReportDownloadController extends Controller
      * من فتح الملفّ وجد ستّ ألسنةٍ يقرأ منها ما يريد ويجمع عمودَه — بدل ستّة
      * جداولَ ملصوقةٍ في ورقةٍ واحدة لا يُعرف أين ينتهي أوّلُها.
      */
-    private function sectioned(string $format, string $report, array $filters, array $data): Response
+    private function sectioned(string $format, string $report, array $filters, array $data, ?array $cut = null): Response
     {
         $meta = $this->meta($report, $filters, $data, null);
         $name = $this->filename($report, $filters, null);
 
         if ($format === 'xlsx') {
-            $spreadsheet = new Spreadsheet;
-            $first = true;
+            // لسانٌ لكلّ قسم — اسمُه يُقصّ عند ٣١ محرفًا ويُنظَّف مما يرفضه إكسل (`XlsxStream`)،
+            // واللسانُ الأوّل هو ما يُفتح عليه الملفّ
+            $book = new XlsxStream;
             foreach ($data['sections'] as $section => $rows) {
-                $sheet = $first ? $spreadsheet->getActiveSheet() : $spreadsheet->createSheet();
-                $first = false;
-                // اسمُ اللسان يُقصّ عند ٣١ محرفًا في إكسل، ويرفض بعض الرموز
-                $sheet->setTitle(mb_substr(str_replace(['/', '\\', '?', '*', '[', ']', ':'], ' ', __($section)), 0, 30));
-                TableExport::sheet($sheet, ['title' => $meta['title'].' — '.__($section)] + $meta, ReportColumns::sectionColumns($report, $section), $rows);
+                TableExport::sheet($book, __($section), ['title' => $meta['title'].' — '.__($section)] + $meta, ReportColumns::sectionColumns($report, $section), $rows);
             }
-            // اللسان الأوّل هو ما يُفتح عليه الملفّ لا آخرُ ما كُتب
-            $spreadsheet->setActiveSheetIndex(0);
-            $writer = new Xlsx($spreadsheet);
 
-            return response()->streamDownload(fn () => $writer->save('php://output'), $name.'.xlsx', [
-                'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-            ]);
+            return TableExport::book($book->finish(), $name);
         }
 
         if ($format === 'csv') {
@@ -306,7 +322,7 @@ class ReportDownloadController extends Controller
                 // BOM: بلا هذه تفتح إكسل العربيةَ رموزًا
                 fwrite($out, "\xEF\xBB\xBF");
                 $put = fn (array $line) => fputcsv($out, array_map([Sheet::class, 'guard'], $line), escape: '');
-                $put([$meta['title'], $meta['period']]);
+                $put([$meta['title'], TableExport::periodLine($meta)]);
                 foreach ($meta['filters'] as $line) {
                     $put([$line]);
                 }
@@ -332,7 +348,11 @@ class ReportDownloadController extends Controller
         }
 
         $sections = [];
+        $room = $cut['shown'] ?? PHP_INT_MAX;
         foreach ($data['sections'] as $section => $rows) {
+            // ورقةٌ جزئيّةٌ طُلبت صراحةً: الأقسامُ بترتيبها حتى حدّ PDF
+            $rows = array_slice($rows, 0, max(0, $room));
+            $room -= count($rows);
             $columns = ReportColumns::sectionColumns($report, $section);
             $sections[] = [
                 'title' => __($section),
@@ -346,6 +366,7 @@ class ReportDownloadController extends Controller
             'branch' => $meta['branch'],
             'title' => $meta['title'],
             'rangeLabel' => $meta['period'],
+            'periodLine' => $meta['periodLine'],
             'filters' => $meta['filters'],
             'generatedAt' => $meta['generated'],
             'cards' => $this->cards($data['summary'] ?? []),
@@ -353,7 +374,7 @@ class ReportDownloadController extends Controller
             'rows' => [],
             'totals' => null,
             'sections' => $sections,
-            'truncated' => $data['truncated'] ?? null,
+            'partial' => TableExport::partialNote($cut),
         ])->render();
 
         /*

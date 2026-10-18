@@ -2,13 +2,8 @@
 
 namespace App\Support;
 
-use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
-use PhpOffice\PhpSpreadsheet\Cell\DataType;
-use PhpOffice\PhpSpreadsheet\Spreadsheet;
-use PhpOffice\PhpSpreadsheet\Style\Alignment;
-use PhpOffice\PhpSpreadsheet\Style\Fill;
-use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
-use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
+use Closure;
+use Illuminate\Http\JsonResponse;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
@@ -20,9 +15,9 @@ use Symfony\Component\HttpFoundation\Response;
  *
  * ═══ والنصُّ نصٌّ في كلّ صيغة ═══
  *
- * إكسل يقرأ ما يبدأ بـ«=» معادلةً، وPhpSpreadsheet يكتبها معادلةً إن مُرّرت
- * كما هي: اسمُ عميلٍ كتبه أحدٌ «=HYPERLINK(…)» يصير رابطًا يُضغط. فخاناتُ
- * النصّ تُكتب نصًّا صريحًا في إكسل، وتُحرس بـ`Sheet::guard` في CSV.
+ * إكسل يقرأ ما يبدأ بـ«=» معادلةً: اسمُ عميلٍ كتبه أحدٌ «=HYPERLINK(…)» يصير
+ * رابطًا يُضغط. فخاناتُ النصّ تُكتب نصًّا مضمَّنًا في إكسل (`XlsxStream`)،
+ * وتُحرس بـ`Sheet::guard` في CSV.
  *
  * ═══ والمبلغُ رقمٌ يُجمع ═══
  *
@@ -33,44 +28,31 @@ use Symfony\Component\HttpFoundation\Response;
 final class TableExport
 {
     /*
-     * ═══ سقوفُ الصيغ — بما تحتمله الذاكرةُ لا بما يُتمنّى ═══
+     * ═══ كلُّ ما طابق — وحدُّ الورق وحده ═══
      *
-     * قيستْ على ألفِ صفٍّ من سجلّ النشاط: CSV يُكتب سطرًا سطرًا (~٣٤ م.ب للطلب
-     * كلّه)، وإكسل يبني خلاياه في الذاكرة (~٢٥ م.ب لكلّ ألف صفّ)، وPDF يرسم
-     * جدولَه كلَّه قبل أن يُخرجه (~١١٥ م.ب لكلّ ألف). فلكلّ صيغةٍ سقفُها، ويقول
-     * الملفُّ إن بُلغ — ومن أراد الكلَّ صدّر CSV.
+     * CSV وإكسل يُكتبان صفًّا صفًّا (`Rows` · `XlsxStream`): الذاكرةُ دفعةٌ واحدةٌ
+     * مهما طال الجدول، فلا سقفَ يبتر. وPDF يرسم جدولَه كلَّه قبل أن يُخرجه (~١١٥
+     * م.ب لكلّ ألف صفّ)، فله حدٌّ — وما فوقه لا يُقدَّم ملفًّا كاملًا: يُقال قبل
+     * التنزيل ويُقترح إكسل أو CSV، ولا يخرج جزؤه إلّا لمن طلبه صراحةً بعد أن قرأ.
      */
 
-    /** أقصى ما يحمله ملفُّ CSV */
-    public const CSV_LIMIT = 20000;
-
-    /** أقصى ما يحمله ملفُّ إكسل */
-    public const SHEET_LIMIT = 10000;
-
-    /** وأقصى ما تحمله ورقةُ PDF — أطولُ منها يُقرأ في إكسل لا على الورق */
+    /** أقصى ما تحمله ورقةُ PDF — أطولُ منها يُقرأ في إكسل لا على الورق */
     public const PDF_LIMIT = 1000;
 
-    /** ذاكرةُ طلب التصدير لإكسل وPDF — يُرفع إليها الحدُّ إن كان أدنى، ولا يُخفض */
+    /** ذاكرةُ طلب PDF — يُرفع إليها الحدُّ إن كان أدنى، ولا يُخفض */
     public const MEMORY = '512M';
 
-    public static function limit(string $format): int
-    {
-        return match ($format) {
-            'pdf' => self::PDF_LIMIT,
-            'csv' => self::CSV_LIMIT,
-            default => self::SHEET_LIMIT,
-        };
-    }
-
     /**
-     * يُهيّئ الطلبَ لملفٍّ كبير: ذاكرةٌ تتّسع لسقف الصيغة، ووقتٌ لا ينقطع في منتصفها.
+     * يُهيّئ الطلبَ لملفٍّ كبير: وقتٌ لا ينقطع في منتصفه، وذاكرةٌ تتّسع لورق PDF.
      *
      * كان ملفُّ PDF لألف صفٍّ يموت صامتًا عند حدّ ١٢٨ م.ب — استجابةٌ فارغة بلا خطأ
      * يُقرأ. والحدُّ يُرفع لطلب التصدير وحده ولا يمسّ غيرَه.
      */
     public static function prepare(string $format): void
     {
-        if ($format === 'csv') {
+        @set_time_limit($format === 'pdf' ? 180 : 900);
+
+        if ($format !== 'pdf') {
             return;
         }
 
@@ -78,7 +60,6 @@ final class TableExport
         if ($current !== -1 && $current < self::bytes(self::MEMORY)) {
             @ini_set('memory_limit', self::MEMORY);
         }
-        @set_time_limit(180);
     }
 
     private static function bytes(string $value): int
@@ -98,21 +79,58 @@ final class TableExport
     }
 
     /**
-     * @param  array{business: string, title: string, period: string, filters?: list<string>, generated?: string, branch?: string}  $meta
+     * عددُ صفوف الملفّ وحدُّ PDF — يسأل عنه زرُّ «تصدير» قبل أن ينزّل PDF (`?probe=1`).
+     */
+    public static function probe(int $rows): JsonResponse
+    {
+        return response()->json(['rows' => $rows, 'limit' => self::PDF_LIMIT, 'fits' => $rows <= self::PDF_LIMIT]);
+    }
+
+    /**
+     * PDF أطولُ من حدّه لا يُقدَّم ملفًّا كاملًا.
+     *
+     * يُردّ بشرحٍ (422) — إلّا أن يطلب صاحبُه أوّلَ الصفوف صراحةً (`partial=1`) بعد
+     * أن قرأ التنبيه في الشاشة، فيخرج الجزءُ ويقول ذلك في رأس ورقته.
+     *
+     * @return array{shown: int, total: int}|null
+     */
+    public static function pdfCut(int $rows, bool $partial): ?array
+    {
+        if ($rows <= self::PDF_LIMIT) {
+            return null;
+        }
+
+        abort_unless($partial, 422, self::tooLongForPdf($rows));
+
+        return ['shown' => self::PDF_LIMIT, 'total' => $rows];
+    }
+
+    /** لماذا لا يخرج PDF كاملًا — وما البديل */
+    public static function tooLongForPdf(int $rows): string
+    {
+        return __('النتائج :rows صفًّا، وملفّ PDF يتّسع لـ:limit صفّ على الأكثر. لتحصل على كلّ النتائج صدّر Excel أو CSV.', [
+            'rows' => number_format($rows),
+            'limit' => number_format(self::PDF_LIMIT),
+        ]);
+    }
+
+    /**
+     * @param  array{business: string, title: string, period: string, periodLine?: ?string, filters?: list<string>, generated?: string, branch?: string}  $meta
      * @param  list<array{key: string, label: string, kind: string}>  $columns
      * @param  iterable<array<string, mixed>>  $rows
      * @param  list<array{label: string, value: string}>  $cards
-     * @param  array<string, float|int>|null  $totals
+     * @param  array<string, float|int|string>|Closure(): array<string, float|int|string>|null  $totals  مصفوفةٌ — أو دالّةٌ تُقرأ بعد الصفوف لمجاميعَ تُجمع أثناءها
+     * @param  array{shown: int, total: int}|null  $cut  ملفُّ PDF جزئيٌّ طُلب صراحةً
      */
-    public static function download(string $format, string $filename, array $meta, array $columns, iterable $rows, array $cards = [], ?array $totals = null, ?array $truncated = null): Response
+    public static function download(string $format, string $filename, array $meta, array $columns, iterable $rows, array $cards = [], array|Closure|null $totals = null, ?array $cut = null): Response
     {
         $meta['generated'] ??= now()->format('Y-m-d H:i');
         self::prepare($format);
 
         return match ($format) {
-            'xlsx' => self::xlsx($filename, $meta, $columns, $rows, $cards, $totals, $truncated),
-            'csv' => self::csv($filename, $meta, $columns, $rows, $cards, $totals, $truncated),
-            'pdf' => self::pdf($filename, $meta, $columns, $rows, $cards, $totals, $truncated),
+            'xlsx' => self::xlsx($filename, $meta, $columns, $rows, $cards, $totals),
+            'csv' => self::csv($filename, $meta, $columns, $rows, $cards, $totals),
+            'pdf' => self::pdf($filename, $meta, $columns, $rows, $cards, $totals, $cut),
             default => abort(404),
         };
     }
@@ -131,6 +149,14 @@ final class TableExport
         }
 
         return $value === null || $value === '' ? '—' : (string) $value;
+    }
+
+    /** المجاميعُ بعد الصفوف — ما يُجمع أثناء الكتابة يُقرأ حين تنتهي */
+    private static function totals(array|Closure|null $totals): ?array
+    {
+        $totals = $totals instanceof Closure ? $totals() : $totals;
+
+        return $totals === null || $totals === [] ? null : $totals;
     }
 
     /** سطرُ الإجمالي: عنوانُه في أوّل عمودٍ نصّيّ، ومجموعُ كلّ عمودٍ له مجموع */
@@ -152,13 +178,24 @@ final class TableExport
         return $line;
     }
 
-    /** سطورُ الترويسة: الشركةُ والعنوانُ والفترةُ والمرشّحاتُ ووقتُ التصدير */
+    /**
+     * سطرُ المدّة في الترويسة.
+     *
+     * الرصيدُ الحاليّ (المخزون، الذمم) لا فترةَ له: يُكتب «الرصيد الحالي بتاريخ …»
+     * كما هو (`periodLine`) — لا «الفترة: هذا الشهر» فيُقرأ رصيدُ اليوم مجموعَ شهر.
+     */
+    public static function periodLine(array $meta): string
+    {
+        return $meta['periodLine'] ?? __('الفترة').': '.$meta['period'];
+    }
+
+    /** سطورُ الترويسة: الشركةُ والعنوانُ والمدّةُ والمرشّحاتُ ووقتُ التصدير */
     private static function header(array $meta): array
     {
         $lines = [
             [$meta['business']],
             [$meta['title']],
-            [__('الفترة').': '.$meta['period']],
+            [self::periodLine($meta)],
         ];
         foreach ($meta['filters'] ?? [] as $filter) {
             $lines[] = [$filter];
@@ -168,28 +205,41 @@ final class TableExport
         return $lines;
     }
 
-    private static function truncatedNote(?array $truncated): ?string
+    /** ورقةُ PDF الجزئيّة تقول ذلك في رأسها — والإجماليُّ تحتها لكلّ النتائج */
+    public static function partialNote(?array $cut): ?string
     {
-        return $truncated === null ? null : __('يحمل الملفّ :shown من :total صفًّا — ضيّق الفترة أو المرشّحات لتصدير الباقي.', [
-            'shown' => number_format((int) $truncated['shown']),
-            'total' => number_format((int) $truncated['total']),
+        return $cut === null ? null : __('ملفٌّ جزئيّ: يحمل أوّل :shown من :total صفًّا (حدّ ملفّ PDF). لكلّ النتائج صدّر Excel أو CSV.', [
+            'shown' => number_format((int) $cut['shown']),
+            'total' => number_format((int) $cut['total']),
         ]);
     }
 
     /* ============================== إكسل ============================== */
 
-    private static function xlsx(string $filename, array $meta, array $columns, iterable $rows, array $cards, ?array $totals, ?array $truncated): Response
+    private static function xlsx(string $filename, array $meta, array $columns, iterable $rows, array $cards, array|Closure|null $totals): Response
     {
-        $spreadsheet = new Spreadsheet;
-        self::sheet($spreadsheet->getActiveSheet(), $meta, $columns, $rows, $cards, $totals, $truncated);
+        $book = new XlsxStream;
+        self::sheet($book, mb_substr($meta['title'], 0, 31), $meta, $columns, $rows, $cards, $totals);
 
-        $writer = new Xlsx($spreadsheet);
+        return self::book($book->finish(), $filename);
+    }
 
-        return response()->streamDownload(function () use ($writer) {
-            $writer->save('php://output');
-        }, $filename.'.xlsx', [
+    /**
+     * الملفُّ المحزوم يُرسَل ثمّ يُحذف — يُبنى قبل الإرسال فيُعرف حجمُه، ويُردّ
+     * خطأُ بنائه صفحةً لا ملفًّا مكسورًا.
+     */
+    public static function book(string $path, string $filename): Response
+    {
+        $size = filesize($path);
+        register_shutdown_function(fn () => @unlink($path));
+
+        return response()->streamDownload(function () use ($path) {
+            readfile($path);
+            @unlink($path);
+        }, $filename.'.xlsx', array_filter([
             'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        ]);
+            'Content-Length' => $size !== false ? (string) $size : null,
+        ]));
     }
 
     /**
@@ -197,108 +247,78 @@ final class TableExport
      *
      * @param  iterable<array<string, mixed>>  $rows
      */
-    public static function sheet(Worksheet $sheet, array $meta, array $columns, iterable $rows, array $cards = [], ?array $totals = null, ?array $truncated = null): void
+    public static function sheet(XlsxStream $book, string $name, array $meta, array $columns, iterable $rows, array $cards = [], array|Closure|null $totals = null): void
     {
-        $sheet->setRightToLeft(true);
-        $last = Coordinate::stringFromColumnIndex(max(1, count($columns)));
+        $header = self::header($meta);
+        // رأسُ الجدول يبقى ظاهرًا حين تُمرَّر الصفوف: بعد الترويسة والمؤشّرات وسطرٍ فارغ
+        $head = count($header) + ($cards !== [] ? count($cards) + 1 : 0) + 2;
 
-        $row = 1;
-        foreach (self::header($meta) as $i => $line) {
-            $sheet->setCellValueExplicit('A'.$row, (string) $line[0], DataType::TYPE_STRING);
-            if ($i <= 2) {
-                $sheet->getStyle('A'.$row)->getFont()->setBold(true)->setSize($i === 0 ? 14 : 11);
-            }
-            $row++;
+        $book->open($name, array_map(fn ($column) => match ($column['kind']) {
+            'money' => 16,
+            'number' => 12,
+            default => min(48, max(14, mb_strlen((string) $column['label']) + 6)),
+        }, $columns), $head);
+
+        foreach ($header as $i => $line) {
+            $book->line([(string) $line[0]], match ($i) {
+                0 => XlsxStream::TITLE,
+                1, 2 => XlsxStream::BOLD,
+                default => XlsxStream::PLAIN,
+            });
         }
 
         // المؤشّرات فوق الجدول: من يفتح الورقة يقرأ الخلاصة قبل الصفوف
         if ($cards !== []) {
-            $row++;
+            $book->blank();
             foreach ($cards as $card) {
-                $sheet->setCellValueExplicit('A'.$row, (string) $card['label'], DataType::TYPE_STRING);
-                $sheet->setCellValueExplicit('B'.$row, (string) $card['value'], DataType::TYPE_STRING);
-                $row++;
+                $book->line([(string) $card['label'], (string) $card['value']]);
             }
         }
-        $row++;
+        $book->blank();
 
-        $head = $row;
-        foreach ($columns as $i => $column) {
-            $sheet->setCellValueExplicit(Coordinate::stringFromColumnIndex($i + 1).$row, (string) $column['label'], DataType::TYPE_STRING);
-        }
-        $style = $sheet->getStyle("A{$row}:{$last}{$row}");
-        $style->getFont()->setBold(true)->getColor()->setRGB('FFFFFF');
-        $style->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('111111');
-        $style->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
-        $row++;
+        $book->line(array_map(fn ($column) => (string) $column['label'], $columns), XlsxStream::HEAD);
 
-        $first = $row;
+        $kinds = array_map(fn ($column) => match ($column['kind']) {
+            'money' => XlsxStream::MONEY,
+            'number' => XlsxStream::NUMBER,
+            default => XlsxStream::PLAIN,
+        }, $columns);
+
+        $written = 0;
         foreach ($rows as $line) {
-            self::writeLine($sheet, $columns, $row, array_map(fn ($c) => self::cell($c, $line), $columns));
-            $row++;
+            $book->line(self::typed($columns, $line), $kinds);
+            $written++;
         }
         /* فترةٌ بلا صفوف تقول ذلك — ولو كتبت سطرَ إجماليٍّ أصفارًا تحته */
-        if ($row === $first) {
-            $sheet->setCellValueExplicit('A'.$row, __('لا بيانات في هذه الفترة'), DataType::TYPE_STRING);
-            $row++;
-            $first = $row;
+        if ($written === 0) {
+            $book->line([__('لا بيانات في هذه الفترة')]);
         }
 
-        if ($totals !== null && $totals !== []) {
-            self::writeLine($sheet, $columns, $row, self::totalsLine($columns, $totals));
-            $sheet->getStyle("A{$row}:{$last}{$row}")->getFont()->setBold(true);
-            $sheet->getStyle("A{$row}:{$last}{$row}")->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('F3F4F6');
-            $row++;
-        }
-
-        if ($row > $first) {
-            foreach ($columns as $i => $column) {
-                $letter = Coordinate::stringFromColumnIndex($i + 1);
-                if ($column['kind'] === 'money') {
-                    $sheet->getStyle("{$letter}{$first}:{$letter}".($row - 1))->getNumberFormat()->setFormatCode('#,##0.000');
-                } elseif ($column['kind'] === 'number') {
-                    $sheet->getStyle("{$letter}{$first}:{$letter}".($row - 1))->getNumberFormat()->setFormatCode('#,##0.###');
-                }
-            }
-        }
-
-        if (($note = self::truncatedNote($truncated)) !== null) {
-            $row++;
-            $sheet->setCellValueExplicit('A'.$row, $note, DataType::TYPE_STRING);
-            $sheet->getStyle('A'.$row)->getFont()->setBold(true)->getColor()->setRGB('9A3412');
-        }
-
-        // رأسُ الجدول يبقى ظاهرًا حين تُمرَّر الصفوف
-        $sheet->freezePane('A'.($head + 1));
-
-        foreach ($columns as $i => $column) {
-            $letter = Coordinate::stringFromColumnIndex($i + 1);
-            $sheet->getColumnDimension($letter)->setWidth(match ($column['kind']) {
-                'money' => 16,
-                'number' => 12,
-                default => min(48, max(14, mb_strlen((string) $column['label']) + 6)),
-            });
+        if (($sum = self::totals($totals)) !== null) {
+            $book->line(self::totalsLine($columns, $sum), array_map(fn ($kind) => match ($kind) {
+                XlsxStream::MONEY => XlsxStream::TOTAL_MONEY,
+                XlsxStream::NUMBER => XlsxStream::TOTAL_NUMBER,
+                default => XlsxStream::TOTAL,
+            }, $kinds));
         }
     }
 
-    /** سطرٌ بأنواع خاناته: النصُّ صريحٌ لا يُقرأ معادلة، والرقمُ رقم */
-    private static function writeLine(Worksheet $sheet, array $columns, int $row, array $cells): void
+    /** خاناتُ سطرٍ بأنواعها: المبلغُ رقمٌ يُجمع، والنصُّ نصّ */
+    private static function typed(array $columns, array $row): array
     {
-        foreach (array_values($cells) as $i => $value) {
-            $coordinate = Coordinate::stringFromColumnIndex($i + 1).$row;
-            if (is_int($value) || is_float($value)) {
-                $sheet->setCellValueExplicit($coordinate, $value, DataType::TYPE_NUMERIC);
-            } else {
-                $sheet->setCellValueExplicit($coordinate, (string) $value, DataType::TYPE_STRING);
-            }
-        }
+        return array_map(function ($column) use ($row) {
+            $value = self::cell($column, $row);
+            $numeric = $column['kind'] === 'money' || $column['kind'] === 'number';
+
+            return $numeric && is_string($value) && is_numeric($value) ? 0 + $value : $value;
+        }, $columns);
     }
 
     /* =============================== CSV =============================== */
 
-    private static function csv(string $filename, array $meta, array $columns, iterable $rows, array $cards, ?array $totals, ?array $truncated): Response
+    private static function csv(string $filename, array $meta, array $columns, iterable $rows, array $cards, array|Closure|null $totals): Response
     {
-        return response()->streamDownload(function () use ($meta, $columns, $rows, $cards, $totals, $truncated) {
+        return response()->streamDownload(function () use ($meta, $columns, $rows, $cards, $totals) {
             $out = fopen('php://output', 'w');
             // BOM: بلا هذه تفتح إكسل العربيةَ رموزًا
             fwrite($out, "\xEF\xBB\xBF");
@@ -315,17 +335,17 @@ final class TableExport
             $written = 0;
             foreach ($rows as $line) {
                 $put(array_map(fn ($c) => self::cell($c, $line), $columns));
-                $written++;
+                // يُدفع إلى المتصفّح دفعةً دفعة: التنزيلُ يبدأ ولا ينتظر آخرَ صفّ
+                if (++$written % 1000 === 0) {
+                    fflush($out);
+                    flush();
+                }
             }
             if ($written === 0) {
                 $put([__('لا بيانات في هذه الفترة')]);
             }
-            if ($totals !== null && $totals !== []) {
-                $put(self::totalsLine($columns, $totals));
-            }
-            if (($note = self::truncatedNote($truncated)) !== null) {
-                $put([]);
-                $put([$note]);
+            if (($sum = self::totals($totals)) !== null) {
+                $put(self::totalsLine($columns, $sum));
             }
             fclose($out);
         }, $filename.'.csv', ['Content-Type' => 'text/csv; charset=UTF-8']);
@@ -333,28 +353,35 @@ final class TableExport
 
     /* =============================== PDF =============================== */
 
-    private static function pdf(string $filename, array $meta, array $columns, iterable $rows, array $cards, ?array $totals, ?array $truncated): Response
+    private static function pdf(string $filename, array $meta, array $columns, iterable $rows, array $cards, array|Closure|null $totals, ?array $cut): Response
     {
         $lines = [];
         foreach ($rows as $line) {
+            if ($cut !== null && count($lines) >= $cut['shown']) {
+                break;
+            }
             $lines[] = array_map(fn ($c) => self::printable($c, self::cell($c, $line)), $columns);
         }
+
+        /* ومجاميعُ تُجمع أثناء الصفوف لا تُطبع تحت ورقةٍ جزئيّة: هي لما طُبع لا للكلّ */
+        $sum = $cut !== null && $totals instanceof Closure ? null : self::totals($totals);
 
         $html = view('pdf.report', [
             'business' => Demo::business(auth()->user()?->business_id ?? Demo::bid()) ?: ['name' => $meta['business']],
             'branch' => $meta['branch'] ?? '',
             'title' => $meta['title'],
             'rangeLabel' => $meta['period'],
+            'periodLine' => $meta['periodLine'] ?? null,
             'filters' => $meta['filters'] ?? [],
             'generatedAt' => $meta['generated'],
             'cards' => $cards,
             'headings' => array_column($columns, 'label'),
             'rows' => $lines,
-            'totals' => $totals !== null && $totals !== []
-                ? array_map(fn ($v, $c) => is_int($v) || is_float($v) ? self::printable($c, $v) : $v, self::totalsLine($columns, $totals), $columns)
+            'totals' => $sum !== null
+                ? array_map(fn ($v, $c) => is_int($v) || is_float($v) ? self::printable($c, $v) : $v, self::totalsLine($columns, $sum), $columns)
                 : null,
             'sections' => [],
-            'truncated' => $truncated,
+            'partial' => self::partialNote($cut),
         ])->render();
 
         // جدولٌ بسبعة أعمدةٍ أو أكثر يخرج عرضيًّا: الأعمدةُ لا تلتصق والأسماءُ لا تنكسر

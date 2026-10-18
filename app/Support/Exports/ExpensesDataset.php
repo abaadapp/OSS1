@@ -36,13 +36,13 @@ final class ExpensesDataset extends Dataset
         ];
     }
 
-    public function data(Request $request, int $bid, int $limit): array
+    public function data(Request $request, int $bid): array
     {
         $query = ExpenseController::listQuery($request, $bid)->with('project:id,code,name');
         $paid = (float) (clone $query)->reorder()->paid()->sum('amount');
         $unpaid = (float) (clone $query)->reorder()->unpaid()->sum('amount');
 
-        return $this->fromQuery($query, $limit, fn (Expense $e) => [
+        return $this->fromQuery($query, fn (Expense $e) => [
             'date' => optional($e->spent_at)->format('Y-m-d'),
             'reference' => $e->reference,
             'type' => $e->type,

@@ -37,7 +37,7 @@ final class PayrollPaymentsDataset extends Dataset
         ];
     }
 
-    public function data(Request $request, int $bid, int $limit): array
+    public function data(Request $request, int $bid): array
     {
         $query = PayrollLine::query()->join('payroll_runs', 'payroll_runs.id', '=', 'payroll_lines.payroll_run_id')
             ->where('payroll_runs.business_id', $bid)
@@ -48,7 +48,7 @@ final class PayrollPaymentsDataset extends Dataset
             ->select('payroll_lines.*', 'payroll_runs.number as run_number', 'payroll_runs.period as run_period')
             ->orderByDesc('payroll_lines.paid_at')->orderBy('payroll_lines.id');
 
-        return $this->fromQuery($query, $limit, fn (PayrollLine $l) => [
+        return $this->fromQuery($query, fn (PayrollLine $l) => [
             'paid_at' => optional($l->paid_at)->format('Y-m-d'),
             'run' => $l->run_number,
             'period' => $l->run_period ? substr((string) $l->run_period, 0, 7) : null,

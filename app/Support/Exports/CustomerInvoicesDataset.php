@@ -49,13 +49,13 @@ final class CustomerInvoicesDataset extends Dataset
         ];
     }
 
-    public function data(Request $request, int $bid, int $limit): array
+    public function data(Request $request, int $bid): array
     {
         $query = CustomerInvoiceController::listQuery($request, $bid);
         $issued = (clone $query)->reorder()->where('customer_invoices.status', CustomerInvoice::ISSUED);
         $sum = fn (string $sql) => round((float) (clone $issued)->select(DB::raw('COALESCE(SUM('.$sql.'), 0) as v'))->value('v'), 3);
 
-        return $this->fromQuery($query, $limit, fn (CustomerInvoice $i) => [
+        return $this->fromQuery($query, fn (CustomerInvoice $i) => [
             'project' => $i->project ? $i->project->code.' — '.$i->project->name : null,
         ] + CustomerInvoiceController::listRow($i)) + [
             'totals' => [

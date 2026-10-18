@@ -115,6 +115,7 @@ export default function WasteAnalytics() {
                         xlsx={route('admin.reports.export.xlsx', 'waste')}
                         pdf={route('admin.reports.export.pdf', 'waste')}
                         csv={route('admin.reports.export.csv', 'waste')}
+                        checkPdf
                     />
                 }
             />

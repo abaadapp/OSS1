@@ -22,7 +22,6 @@ use App\Models\User;
 use App\Support\ReportColumns;
 use App\Support\ReportPeriod;
 use App\Support\SupplierInvoices;
-use App\Support\TableExport;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use PhpOffice\PhpSpreadsheet\IOFactory;
@@ -336,7 +335,6 @@ class EveryReportReadsACustomPeriodTest extends TestCase
         $this->assertStringNotContainsString('مصروف IN', $csv, 'وبمرشّح النوع نفسِه');
         $this->assertStringContainsString('النوع: وقود', $csv, 'والمرشّحُ مكتوبٌ في الترويسة');
         $this->assertSame(520, collect(explode("\n", $csv))->filter(fn ($l) => str_contains($l, 'BULK-'))->unique()->count(), 'ولا صفٌّ مكرَّر');
-        $this->assertLessThanOrEqual(TableExport::SHEET_LIMIT, 520);
     }
 
     public function test_another_company_never_leaks_into_the_period(): void

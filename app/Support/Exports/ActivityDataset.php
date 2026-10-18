@@ -47,9 +47,9 @@ final class ActivityDataset extends Dataset
         ];
     }
 
-    public function data(Request $request, int $bid, int $limit): array
+    public function data(Request $request, int $bid): array
     {
-        return $this->fromQuery(ActivityController::listQuery($request, $bid), $limit, fn (ActivityLog $l) => [
+        return $this->fromQuery(ActivityController::listQuery($request, $bid), fn (ActivityLog $l) => [
             'time' => optional($l->created_at)->format('Y-m-d H:i'),
             'user' => $l->user_name,
             'action' => __(self::ACTIONS[$l->action] ?? $l->action),

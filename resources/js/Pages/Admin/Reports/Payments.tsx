@@ -81,6 +81,7 @@ export default function ReportsPayments() {
                             xlsx={route('admin.reports.export.xlsx', { report: 'payments', ...periodQuery(period) })}
                             pdf={route('admin.reports.export.pdf', { report: 'payments', ...periodQuery(period) })}
                             csv={route('admin.reports.export.csv', { report: 'payments', ...periodQuery(period) })}
+                            checkPdf
                         />
                     }
                 />

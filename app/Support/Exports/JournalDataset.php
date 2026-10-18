@@ -4,7 +4,9 @@ namespace App\Support\Exports;
 
 use App\Http\Controllers\Admin\Finance\JournalController;
 use App\Models\JournalEntry;
+use App\Models\JournalLine;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 
 /**
  * القيود اليومية — سطرًا سطرًا، بمرشّحات شاشتها (البحث · المصدر · من · إلى).
@@ -34,43 +36,28 @@ final class JournalDataset extends Dataset
         ];
     }
 
-    public function data(Request $request, int $bid, int $limit): array
+    public function data(Request $request, int $bid): array
     {
         $query = JournalController::listQuery($request, $bid);
-        $total = (clone $query)->toBase()->getCountForPagination();
-        $rows = [];
-        $debit = 0.0;
-        $credit = 0.0;
-        $entries = 0;
-
-        /* السقفُ على القيود لا على السطور: قيدٌ لا يُقطع نصفين بين ملفّين */
-        for ($offset = 0, $want = min($total, $limit); $offset < $want; $offset += 200) {
-            foreach ((clone $query)->offset($offset)->limit(min(200, $want - $offset))->get() as $entry) {
-                $entries++;
-                foreach ($entry->lines as $line) {
-                    $rows[] = [
-                        'date' => optional($entry->entry_date)->format('Y-m-d'),
-                        'number' => $entry->number,
-                        'description' => $entry->description,
-                        'source' => $entry->source,
-                        'account' => trim(($line->account?->code ?? '').' — '.($line->account?->name ?? ''), ' —'),
-                        'memo' => $line->memo,
-                        'debit' => round((float) $line->debit, 3),
-                        'credit' => round((float) $line->credit, 3),
-                        'state' => $this->state($entry),
-                    ];
-                    $debit += (float) $line->debit;
-                    $credit += (float) $line->credit;
-                }
-            }
-        }
+        /* سطورُ القيود المطابقة — يُعدّ بها الملفّ ويُجمع مدينُه ودائنُه قبل أن يُقرأ */
+        $lines = fn () => JournalLine::whereIn('journal_entry_id', (clone $query)->reorder()->select('journal_entries.id'));
+        $sums = $lines()->selectRaw('COALESCE(SUM(debit), 0) as d, COALESCE(SUM(credit), 0) as c')->first();
 
         return [
-            'rows' => $rows,
-            'total' => $total,
-            'shown' => $entries,
-            'totals' => ['debit' => round($debit, 3), 'credit' => round($credit, 3)],
-            'cards' => [['label' => __('القيود'), 'value' => number_format($entries)]],
+            // قيدٌ بسطوره كلِّها في الدفعة نفسِها: لا يُقطع نصفين
+            'rows' => Rows::chunked($query, fn (Collection $entries) => $entries->flatMap(fn (JournalEntry $entry) => $entry->lines->map(fn ($line) => [
+                'date' => optional($entry->entry_date)->format('Y-m-d'),
+                'number' => $entry->number,
+                'description' => $entry->description,
+                'source' => $entry->source,
+                'account' => trim(($line->account?->code ?? '').' — '.($line->account?->name ?? ''), ' —'),
+                'memo' => $line->memo,
+                'debit' => round((float) $line->debit, 3),
+                'credit' => round((float) $line->credit, 3),
+                'state' => $this->state($entry),
+            ]))->all(), fn () => $lines()->count()),
+            'totals' => ['debit' => round((float) $sums->d, 3), 'credit' => round((float) $sums->c, 3)],
+            'cards' => [['label' => __('القيود'), 'value' => number_format((clone $query)->toBase()->getCountForPagination())]],
         ];
     }
 

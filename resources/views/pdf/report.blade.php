@@ -11,8 +11,13 @@
 
 @section('meta')
     <div>{{ $branch }}</div>
-    {{-- الفترة تُطبع دائمًا: ورقةٌ لا تقول مدّتها تُقرأ على أنها عمر المتجر --}}
-    <div><span class="k">{{ __('الفترة') }}:</span> {{ $rangeLabel }}</div>
+    {{-- الفترة تُطبع دائمًا: ورقةٌ لا تقول مدّتها تُقرأ على أنها عمر المتجر.
+         والرصيدُ الحاليّ يقول تاريخَه («الرصيد الحالي بتاريخ …») لا فترةً ليست له --}}
+    @if (! empty($periodLine))
+        <div><strong>{{ $periodLine }}</strong></div>
+    @else
+        <div><span class="k">{{ __('الفترة') }}:</span> {{ $rangeLabel }}</div>
+    @endif
     @foreach ($filters ?? [] as $filter)
         <div>{{ $filter }}</div>
     @endforeach
@@ -20,6 +25,10 @@
 @endsection
 
 @section('body')
+    {{-- الورقةُ الجزئيّة تقول ذلك قبل جدولها لا بعده — وإلّا قُرئت على أنها الكلّ --}}
+    @if (! empty($partial))
+        <p style="color:#9a3412; font-weight:bold; margin:0 0 8px">{{ $partial }}</p>
+    @endif
     @if (count($cards))
         <table class="cards"><tr>
             @foreach ($cards as $card)
@@ -67,12 +76,6 @@
         </table>
     @endif
 
-    {{-- البتر يُقال على الورق كما يُقال على الشاشة، وإلّا قُرئت الورقة على أنها الكلّ --}}
-    @if ($truncated)
-        <p class="small" style="color:#9a3412">
-            {{ __('يحمل الملفّ :shown من :total صفًّا — ضيّق الفترة أو المرشّحات لتصدير الباقي.', ['shown' => number_format((int) $truncated['shown']), 'total' => number_format((int) $truncated['total'])]) }}
-        </p>
-    @endif
 @endsection
 
 @section('foot')

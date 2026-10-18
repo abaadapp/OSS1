@@ -73,6 +73,7 @@ export default function ReportsCustomers() {
                             xlsx={route('admin.reports.export.xlsx', { report: 'customers', ...periodQuery(period) })}
                             pdf={route('admin.reports.export.pdf', { report: 'customers', ...periodQuery(period) })}
                             csv={route('admin.reports.export.csv', { report: 'customers', ...periodQuery(period) })}
+                            checkPdf
                         />
                     }
                 />

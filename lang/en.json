@@ -6708,7 +6708,6 @@
     "حتى :to": "Until :to",
     "مسيرة رواتب": "Payroll run",
     "رواتب :period — :n موظفين": "Salaries :period — :n employees",
-    "لقطة حاليّة حتى :date": "Current snapshot as of :date",
     "شهر :month": "Month :month",
     "البحث": "Search",
     "الإجمالي (الصادرة فقط)": "Total (issued only)",
@@ -6721,8 +6720,14 @@
     "القيود": "Entries",
     "مرحَّل": "Posted",
     "تاريخ التصدير": "Exported on",
-    "يحمل الملفّ :shown من :total صفًّا — ضيّق الفترة أو المرشّحات لتصدير الباقي.": "This file carries :shown of :total rows — narrow the period or filters to export the rest.",
     "تصدير المدفوعات": "Export payments",
     "يبدأ من": "Starts from",
-    "يبدأ إلى": "Starts until"
+    "يبدأ إلى": "Starts until",
+    "الرصيد الحالي بتاريخ :date": "Current balance as of :date",
+    "النتائج :rows صفًّا، وملفّ PDF يتّسع لـ:limit صفّ على الأكثر. لتحصل على كلّ النتائج صدّر Excel أو CSV.": "The results are :rows rows, and a PDF file holds at most :limit rows. To get every result, export to Excel or CSV.",
+    "ملفٌّ جزئيّ: يحمل أوّل :shown من :total صفًّا (حدّ ملفّ PDF). لكلّ النتائج صدّر Excel أو CSV.": "Partial file: it holds the first :shown of :total rows (the PDF limit). For every result, export to Excel or CSV.",
+    "ملفّ PDF لا يتّسع لكلّ النتائج": "The PDF file cannot hold every result",
+    "تصدير Excel كاملًا": "Export full Excel",
+    "تصدير CSV كاملًا": "Export full CSV",
+    "PDF لأوّل :limit صفّ فقط": "PDF of the first :limit rows only"
 }

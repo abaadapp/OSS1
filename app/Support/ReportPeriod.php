@@ -134,6 +134,23 @@ final class ReportPeriod
         return null;
     }
 
+    /** اليومُ بتوقيت الشركة — لا بتوقيت الخادم */
+    public static function today(?int $businessId = null): string
+    {
+        return now(AutomationSettings::for($businessId ?? Demo::bid())->timezone)->toDateString();
+    }
+
+    /**
+     * ما يُكتب فوق رصيدٍ حاليّ (المخزون، الذمم) بدل الفترة.
+     *
+     * الرصيدُ رقمُ اليوم لا مجموعُ مدّة: «الفترة: هذا الشهر» فوق المخزون تُقرأ
+     * على أنّها كمّيّاتُ الشهر، فيُبنى على فرقٍ لا وجود له.
+     */
+    public static function asOf(?int $businessId = null): string
+    {
+        return __('الرصيد الحالي بتاريخ :date', ['date' => self::today($businessId)]);
+    }
+
     /** وصفُ حدّين اختياريّين للترويسة */
     public static function openLabel(?string $from, ?string $to, ?string $none = null): string
     {

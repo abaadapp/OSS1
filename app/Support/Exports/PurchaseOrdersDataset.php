@@ -47,12 +47,12 @@ final class PurchaseOrdersDataset extends Dataset
         ];
     }
 
-    public function data(Request $request, int $bid, int $limit): array
+    public function data(Request $request, int $bid): array
     {
         $query = self::query($request, $bid)->with(['supplier:id,name', 'project:id,code,name', 'branch:id,name'])
             ->orderByDesc('ordered_at')->orderByDesc('id');
 
-        return $this->fromQuery($query, $limit, fn (PurchaseOrder $p) => [
+        return $this->fromQuery($query, fn (PurchaseOrder $p) => [
             'ordered' => optional($p->ordered_at)->format('Y-m-d'),
             'number' => $p->number,
             'supplier' => $p->supplier_name ?? $p->supplier?->name,

@@ -15,7 +15,9 @@ use App\Models\Supplier;
 use App\Models\SupplierInvoice;
 use App\Models\Transaction;
 use App\Models\User;
+use App\Support\Exports\Rows;
 use App\Support\Intelligence\ManagementReports;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 
@@ -53,14 +55,35 @@ class ReportData
     }
 
     /**
-     * سقفُ صفوف الجدول — للشاشة `LIMIT`، وللتنزيل ما يطلبه (`_limit`).
+     * أهذه قراءةٌ لملفّ؟ (`_export` — يضعه باب التنزيل وحده)
      *
-     * الملفُّ يحمل كلَّ ما طابق الفترةَ والمرشّحات لا أوّلَ خمسمئة: محاسبٌ يجمع
-     * عمودًا مبتورًا لا يعرف أنّه مبتور. وسقفُ التنزيل نفسُه يُقال في الملفّ إن بُلغ.
+     * الشاشةُ تعرض أوّلَ `LIMIT` وتقول إنّها بُترت؛ والملفُّ يحمل كلَّ ما طابق
+     * الفترةَ والمرشّحات بلا سقف: محاسبٌ يجمع عمودًا مبتورًا لا يعرف أنّه مبتور.
      */
-    private static function limit(array $filters): int
+    private static function exporting(array $filters): bool
     {
-        return max(1, (int) ($filters['_limit'] ?? self::LIMIT));
+        return ! empty($filters['_export']);
+    }
+
+    /**
+     * صفوفُ الجدول من استعلامٍ مرتَّب: للشاشة أوّلُ `LIMIT` بخبر بترها، وللملفّ
+     * كلُّ ما طابق دفعةً بعد دفعة (`Rows`) — لا يُحمَّل في الذاكرة جملةً.
+     */
+    private static function table(array $filters, Builder $ordered, int $total, callable $row): array
+    {
+        if (self::exporting($filters)) {
+            return ['rows' => Rows::each($ordered, $row), 'truncated' => null];
+        }
+
+        return self::capped((clone $ordered)->limit(self::LIMIT)->get()->map($row(...)), $total);
+    }
+
+    /** ومن صفوفٍ مجمَّعةٍ في الذاكرة (صنفٌ صنفٌ، مورّدٌ مورّد): للملفّ كلُّها */
+    private static function listed(array $filters, Collection $rows): array
+    {
+        return self::exporting($filters)
+            ? ['rows' => $rows->values()->all(), 'truncated' => null]
+            : self::capped($rows->take(self::LIMIT), $rows->count());
     }
 
     /** قيمةُ منتقًى إن كانت غير فارغة — و«الكل» ليست قيمة */
@@ -311,7 +334,7 @@ class ReportData
     public static function customers(int $bid, array $filters): array
     {
         // سقفٌ يُقال على الشاشة لا يُخفى: قائمةُ «الأكثر إنفاقًا» مبتورةٌ عمدًا — والتنزيلُ يحمل الترتيبَ كاملًا
-        $limit = isset($filters['_limit']) ? self::limit($filters) : 50;
+        $limit = self::exporting($filters) ? PHP_INT_MAX : 50;
         $rows = collect(Demo::topCustomers($limit, self::period($filters), $bid))
             ->map(fn ($c, $i) => ['id' => $i + 1] + $c);
 
@@ -319,7 +342,7 @@ class ReportData
         $invoices = (int) $rows->sum('invoices');
 
         return array_merge(self::capped($rows, $rows->count()), [
-            'limit' => $limit,
+            'limit' => self::exporting($filters) ? null : $limit,
             'summary' => [
                 'total' => round($total, 3),
                 'customers' => $rows->count(),
@@ -420,9 +443,8 @@ class ReportData
         $outgo = (float) (clone $live)->where('type', '!=', 'دخل')->sum('amount');
         $total = (clone $base)->count();
 
-        $rows = (clone $base)->with('order:id,status')
-            ->orderByDesc('occurred_at')->orderByDesc('id')->limit(self::limit($filters))->get()
-            ->map(fn ($t) => [
+        $table = self::table($filters, (clone $base)->with('order:id,status')
+            ->orderByDesc('occurred_at')->orderByDesc('id'), $total, fn ($t) => [
                 'id' => $t->id,
                 'reference' => $t->reference,
                 'description' => $t->description,
@@ -434,7 +456,7 @@ class ReportData
                 'cancelled' => $t->isCancelled(),
             ]);
 
-        return array_merge(self::capped($rows, $total), [
+        return array_merge($table, [
             'summary' => [
                 'income' => round($income, 3),
                 'outgo' => round($outgo, 3),
@@ -468,18 +490,17 @@ class ReportData
         $byType = (clone $base)->selectRaw('type, SUM(amount) as s, COUNT(*) as c')
             ->groupBy('type')->orderByDesc('s')->get();
 
-        $rows = (clone $base)->orderByDesc('spent_at')->orderByDesc('id')->limit(self::limit($filters))->get()
-            ->map(fn ($e) => [
-                'id' => $e->id,
-                'type' => $e->type,
-                'description' => $e->description,
-                'method' => $e->method,
-                'status' => $e->status,
-                'amount' => round((float) $e->amount, 3),
-                'at' => optional($e->spent_at)->format('Y-m-d'),
-            ]);
+        $table = self::table($filters, (clone $base)->orderByDesc('spent_at')->orderByDesc('id'), $count, fn ($e) => [
+            'id' => $e->id,
+            'type' => $e->type,
+            'description' => $e->description,
+            'method' => $e->method,
+            'status' => $e->status,
+            'amount' => round((float) $e->amount, 3),
+            'at' => optional($e->spent_at)->format('Y-m-d'),
+        ]);
 
-        return array_merge(self::capped($rows, $count), [
+        return array_merge($table, [
             'summary' => [
                 'total' => round($total, 3),
                 'count' => $count,
@@ -523,17 +544,16 @@ class ReportData
 
         $matched = (clone $scope)->where('match_status', BankStatementLine::MATCHED)->count();
 
-        $rows = (clone $base)->orderByDesc('date')->orderByDesc('id')->limit(self::limit($filters))->get()
-            ->map(fn ($l) => [
-                'id' => $l->id,
-                'description' => $l->description,
-                'reference' => $l->reference,
-                'status' => $l->match_status,
-                'amount' => round((float) $l->amount, 3),
-                'at' => optional($l->date)->format('Y-m-d'),
-            ]);
+        $table = self::table($filters, (clone $base)->orderByDesc('date')->orderByDesc('id'), $count, fn ($l) => [
+            'id' => $l->id,
+            'description' => $l->description,
+            'reference' => $l->reference,
+            'status' => $l->match_status,
+            'amount' => round((float) $l->amount, 3),
+            'at' => optional($l->date)->format('Y-m-d'),
+        ]);
 
-        return array_merge(self::capped($rows, $count), [
+        return array_merge($table, [
             'summary' => [
                 'lines' => (clone $scope)->count(),
                 'matched' => $matched,
@@ -609,21 +629,20 @@ class ReportData
 
         $branches = Branch::where('business_id', $bid)->pluck('name', 'id');
 
-        $rows = (clone $base)->withMoney()->orderByDesc('issued_at')->orderByDesc('id')->limit(self::limit($filters))->get()
-            ->map(fn ($i) => [
-                'id' => $i->id,
-                'number' => $i->number,
-                'customer' => $i->customer_name,
-                'branch' => $branches[$i->branch_id] ?? '—',
-                'status' => $i->paymentState(),
-                'total' => round((float) $i->total, 3),
-                'paid' => $i->paidTotal(),
-                'outstanding' => $i->outstanding(),
-                'at' => optional($i->issued_at)->format('Y-m-d'),
-                'due' => optional($i->due_at)->format('Y-m-d'),
-            ]);
+        $table = self::table($filters, (clone $base)->withMoney()->orderByDesc('issued_at')->orderByDesc('id'), $count, fn ($i) => [
+            'id' => $i->id,
+            'number' => $i->number,
+            'customer' => $i->customer_name,
+            'branch' => $branches[$i->branch_id] ?? '—',
+            'status' => $i->paymentState(),
+            'total' => round((float) $i->total, 3),
+            'paid' => $i->paidTotal(),
+            'outstanding' => $i->outstanding(),
+            'at' => optional($i->issued_at)->format('Y-m-d'),
+            'due' => optional($i->due_at)->format('Y-m-d'),
+        ]);
 
-        return array_merge(self::capped($rows, $count), [
+        return array_merge($table, [
             'summary' => [
                 'count' => $count,
                 'total' => round($issuedSum, 3),
@@ -699,7 +718,7 @@ class ReportData
 
         $total = $products->count();
 
-        return array_merge(self::capped($rows->take(self::limit($filters)), $total), [
+        return array_merge(self::listed($filters, $rows), [
             'summary' => [
                 'products' => $total,
                 'revenue' => round((float) $rows->sum('revenue'), 3),
@@ -748,7 +767,7 @@ class ReportData
 
         $shown = $only === '1' ? $rows->where('below', true) : $rows;
 
-        return array_merge(self::capped($shown->take(self::limit($filters)), $shown->count()), [
+        return array_merge(self::listed($filters, $shown), [
             'summary' => $summary,
             'totals' => ['quantity' => (int) $shown->sum('quantity'), 'value' => round((float) $shown->sum('value'), 3)],
             'options' => ['categories' => self::categoryOptions($bid)],
@@ -773,18 +792,17 @@ class ReportData
         $count = (clone $base)->count();
         $total = (float) (clone $base)->sum('total');
 
-        $rows = (clone $base)->orderByDesc('ordered_at')->orderByDesc('id')->limit(self::limit($filters))->get()
-            ->map(fn ($p) => [
-                'id' => $p->id,
-                'number' => $p->number,
-                'supplier' => $p->supplier_name,
-                'status' => $p->status,
-                'total' => round((float) $p->total, 3),
-                'at' => optional($p->ordered_at)->format('Y-m-d'),
-                'received' => optional($p->received_at)->format('Y-m-d'),
-            ]);
+        $table = self::table($filters, (clone $base)->orderByDesc('ordered_at')->orderByDesc('id'), $count, fn ($p) => [
+            'id' => $p->id,
+            'number' => $p->number,
+            'supplier' => $p->supplier_name,
+            'status' => $p->status,
+            'total' => round((float) $p->total, 3),
+            'at' => optional($p->ordered_at)->format('Y-m-d'),
+            'received' => optional($p->received_at)->format('Y-m-d'),
+        ]);
 
-        return array_merge(self::capped($rows, $count), [
+        return array_merge($table, [
             'summary' => [
                 'count' => $count,
                 'total' => round($total, 3),
@@ -826,7 +844,7 @@ class ReportData
                 ];
             })->sortByDesc('total');
 
-        return array_merge(self::capped($rows->take(self::limit($filters)), $rows->count()), [
+        return array_merge(self::listed($filters, $rows), [
             'summary' => [
                 'suppliers' => $rows->count(),
                 'active' => $rows->where('orders', '>', 0)->count(),
@@ -856,16 +874,15 @@ class ReportData
         $byAction = (clone $base)->selectRaw('action, COUNT(*) as c')
             ->groupBy('action')->orderByDesc('c')->get();
 
-        $rows = (clone $base)->orderByDesc('created_at')->orderByDesc('id')->limit(self::limit($filters))->get()
-            ->map(fn ($a) => [
-                'id' => $a->id,
-                'user' => $a->user_name,
-                'action' => $a->action,
-                'description' => $a->description,
-                'at' => optional($a->created_at)->format('Y-m-d H:i'),
-            ]);
+        $table = self::table($filters, (clone $base)->orderByDesc('created_at')->orderByDesc('id'), $count, fn ($a) => [
+            'id' => $a->id,
+            'user' => $a->user_name,
+            'action' => $a->action,
+            'description' => $a->description,
+            'at' => optional($a->created_at)->format('Y-m-d H:i'),
+        ]);
 
-        return array_merge(self::capped($rows, $count), [
+        return array_merge($table, [
             'summary' => [
                 'count' => $count,
                 'users' => (int) (clone $base)->distinct()->count('user_id'),
@@ -949,9 +966,8 @@ class ReportData
             ->map(fn ($a) => $a->branch_id.'|'.$a->adjusted_at)
             ->unique()->count();
 
-        $rows = (clone $base)->with(['product:id,name', 'branch:id,name'])
-            ->orderByDesc('adjusted_at')->orderByDesc('id')->limit(self::limit($filters))->get()
-            ->map(fn ($a) => [
+        $table = self::table($filters, (clone $base)->with(['product:id,name', 'branch:id,name'])
+            ->orderByDesc('adjusted_at')->orderByDesc('id'), $count, fn ($a) => [
                 'id' => $a->id,
                 'number' => $a->number,
                 'product' => $a->product?->name,
@@ -964,7 +980,7 @@ class ReportData
                 'at' => optional($a->adjusted_at)->format('Y-m-d H:i'),
             ]);
 
-        return array_merge(self::capped($rows, $count), [
+        return array_merge($table, [
             'summary' => [
                 'operations' => $operations,
                 'items' => $count,

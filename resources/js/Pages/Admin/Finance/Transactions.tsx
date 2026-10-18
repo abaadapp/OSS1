@@ -172,7 +172,7 @@ export default function Transactions() {
                 subtitle={t('كلّ ما دخل وما خرج — ولكلّ حركةٍ قيدُها في الدفتر')}
                 actions={
                     <div className="flex flex-wrap items-center gap-2">
-                        /* الملفّ بمرشّحات الشاشة نفسِها — البحث والحركة والتاريخان (`Exports\TransactionsDataset`) */
+                        {/* الملفّ بمرشّحات الشاشة نفسِها — البحث والحركة والتاريخان (`Exports\TransactionsDataset`) */}
                         <ExportMenu label="تصدير" {...exportLinks('admin.finance.transactions.export')} />
                         <Button onClick={() => setAdding(true)}>
                             <Plus />

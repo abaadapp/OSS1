@@ -41,7 +41,7 @@ final class SupplierPaymentsDataset extends Dataset
         ];
     }
 
-    public function data(Request $request, int $bid, int $limit): array
+    public function data(Request $request, int $bid): array
     {
         $query = BranchAccess::limitThrough(SupplierInvoicePayment::where('supplier_invoice_payments.business_id', $bid), 'invoice.purchaseOrder')
             ->with(['invoice.supplier:id,name', 'invoice.project:id,code,name'])
@@ -50,7 +50,7 @@ final class SupplierPaymentsDataset extends Dataset
             ->when(self::day($request, 'to'), fn ($q, $d) => $q->whereDate('paid_at', '<=', $d))
             ->orderByDesc('paid_at')->orderByDesc('id');
 
-        return $this->fromQuery($query, $limit, fn (SupplierInvoicePayment $p) => [
+        return $this->fromQuery($query, fn (SupplierInvoicePayment $p) => [
             'paid_at' => optional($p->paid_at)->format('Y-m-d'),
             'supplier' => $p->invoice?->supplier?->name,
             'reference' => $p->invoice?->supplier_ref,

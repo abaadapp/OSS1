@@ -70,16 +70,24 @@ class ReportPageController extends Controller
         $route = 'admin.reports.'.$key;
         $this->guard($route);
 
+        /*
+         * والرصيدُ الحاليّ (المخزون) بلا فترة: يقول تاريخَه («الرصيد الحالي بتاريخ …»)
+         * لا «هذا الشهر» — فلا يُقرأ رصيدُ اليوم كمّيّاتِ شهر، ولا تحمل روابطُ تصديره مدّة.
+         */
+        $snapshot = Reports::isSnapshot($key);
         $period = ReportPeriod::of($request->query());
-        $filters = $period->query();
+        $filters = $snapshot ? [] : $period->query();
         foreach ($filterKeys as $name) {
             $value = $request->query($name);
             $filters[$name] = is_string($value) && $value !== '' ? $value : null;
         }
 
         $data = ReportData::$key(Demo::bid(), $filters);
+        $shell = $snapshot
+            ? ['range' => null, 'rangeLabel' => ReportPeriod::asOf(), 'period' => null]
+            : $this->shell($period);
 
-        return Inertia::render('Admin/Reports/'.$screen, array_merge($this->shell($period), $data, [
+        return Inertia::render('Admin/Reports/'.$screen, array_merge($shell, $data, [
             'filters' => $filters,
             'limit' => ReportData::LIMIT,
         ]));

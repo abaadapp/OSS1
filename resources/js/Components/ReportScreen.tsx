@@ -114,6 +114,7 @@ export default function ReportScreen({
                             xlsx={route('admin.reports.export.xlsx', exportParams)}
                             pdf={route('admin.reports.export.pdf', exportParams)}
                             csv={route('admin.reports.export.csv', exportParams)}
+                            checkPdf
                         />
                     }
                 />

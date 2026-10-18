@@ -18,6 +18,10 @@ use Symfony\Component\HttpFoundation\Response;
  * يقيسه بصلاحية القسم كما يقيس الشاشة، والقائمةُ تسأل فوق ذلك عن إذنها
  * (`Dataset::authorize` — الرواتبُ وسنداتُ المورّدين). ومن كتب الرابطَ بيده
  * بلا صلاحيّةٍ رُدّ — لا يكفي أن يُخفى الزرّ.
+ *
+ * والملفُّ يحمل كلَّ ما طابق بلا سقف في CSV وإكسل. وPDF وحده له حدٌّ
+ * (`TableExport::PDF_LIMIT`): يُسأل عنه قبل التنزيل (`?probe=1`)، وما جاوزه
+ * يُردّ بشرحٍ إلّا أن يُطلب جزؤه صراحةً (`partial=1`).
  */
 class ListExportController extends Controller
 {
@@ -30,10 +34,14 @@ class ListExportController extends Controller
         $dataset->validate($request);
 
         TableExport::prepare($format);
-        $limit = TableExport::limit($format);
-        $data = $dataset->data($request, (int) (auth()->user()->business_id ?? Demo::bid()), $limit);
-        /* والمعدودُ ما يُعدّ به المجموع: قيدٌ لا سطورُه، ومشروعٌ لا مهامُّه */
-        $shown = $data['shown'] ?? (is_countable($data['rows']) ? count($data['rows']) : min($data['total'], $limit));
+        $data = $dataset->data($request, (int) (auth()->user()->business_id ?? Demo::bid()));
+        $rows = $data['rows'];
+
+        /* PDF يُسأل عن طوله قبل أن يُرسم: زرُّ «تصدير» يُنبّه إن جاوز حدَّه */
+        if ($format === 'pdf' && $request->boolean('probe')) {
+            return TableExport::probe(count($rows));
+        }
+        $cut = $format === 'pdf' ? TableExport::pdfCut(count($rows), $request->boolean('partial')) : null;
 
         Activity::log('report', 'صدّر '.$dataset->title().' ('.['xlsx' => 'Excel', 'csv' => 'CSV', 'pdf' => 'PDF'][$format].')');
 
@@ -44,14 +52,15 @@ class ListExportController extends Controller
                 'business' => Demo::business(auth()->user()->business_id ?? Demo::bid())['name'] ?? 'Event Plus',
                 'title' => $dataset->title(),
                 'period' => $dataset->periodLabel($request),
+                'periodLine' => $dataset->periodLine($request),
                 'filters' => $dataset->filterLines($request),
                 'branch' => Demo::scopeName(false),
             ],
             $dataset->columns($request),
-            $data['rows'],
+            $rows,
             $data['cards'] ?? [],
             $data['totals'] ?? null,
-            $data['total'] > $shown ? ['shown' => $shown, 'total' => $data['total']] : null,
+            $cut,
         );
     }
 }

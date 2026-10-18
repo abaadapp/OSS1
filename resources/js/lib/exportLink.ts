@@ -28,18 +28,32 @@ export function withFilters(url: string): string {
     return `${base}?${merged.toString()}`;
 }
 
+/** معاملٌ واحدٌ يُضاف إلى رابطٍ أو يُستبدل — وبقيّةُ الرابط كما هي */
+export function withParam(url: string, key: string, value: string): string {
+    const [base, own = ''] = url.split('?');
+    const params = new URLSearchParams(own);
+    params.set(key, value);
+
+    return `${base}?${params.toString()}`;
+}
+
 /**
  * روابطُ الصيغ الثلاث لقائمةٍ تشغيليّة — مسارٌ واحدٌ بصيغته معاملًا (`{format}`).
  *
  * والمرشّحاتُ المعروضةُ تلحقها `ExportMenu` من الرابط (`withFilters`)، وما يُمرَّر
- * هنا صراحةً أولى بها: حسابُ الكشف المفتوح، أو حالٌ تُختار في الصفحة.
+ * هنا صراحةً أولى بها: حسابُ الكشف المفتوح، أو حالٌ تُختار في الصفحة. وPDF منها
+ * يُسأل عن طوله قبل أن يُنزَّل (`checkPdf`) — بابُ القوائم يجيب.
  */
-export function exportLinks(name: string, params: Record<string, string | number | null | undefined> = {}): { xlsx: string; pdf: string; csv: string } {
+export function exportLinks(
+    name: string,
+    params: Record<string, string | number | null | undefined> = {},
+): { xlsx: string; pdf: string; csv: string; checkPdf: true } {
     const clean = Object.fromEntries(Object.entries(params).filter(([, v]) => v !== null && v !== undefined && v !== ''));
 
     return {
         xlsx: route(name, { format: 'xlsx', ...clean }),
         pdf: route(name, { format: 'pdf', ...clean }),
         csv: route(name, { format: 'csv', ...clean }),
+        checkPdf: true,
     };
 }

@@ -44,14 +44,14 @@ final class SupplierInvoicesDataset extends Dataset
         ];
     }
 
-    public function data(Request $request, int $bid, int $limit): array
+    public function data(Request $request, int $bid): array
     {
         $query = SupplierInvoiceController::listQuery($request, $bid);
         $owed = (clone $query)->reorder()->where('approval_status', SupplierInvoices::APPROVED);
         $total = round((float) (clone $owed)->sum('total'), 3);
         $paid = round((float) (clone $owed)->sum('paid'), 3);
 
-        return $this->fromQuery($query, $limit, fn (SupplierInvoice $i) => [
+        return $this->fromQuery($query, fn (SupplierInvoice $i) => [
             'reference' => $i->supplier_ref,
             'issued_at' => optional($i->issued_at)->format('Y-m-d'),
             'supplier' => $i->supplier?->name,
